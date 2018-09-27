@@ -1,0 +1,1769 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/dominance.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - dominance.c<span style="font-size: 80%;"> (source / <a href="dominance.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">639</td>
+            <td class="headerCovTableEntry">687</td>
+            <td class="headerCovTableEntryHi">93.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">47</td>
+            <td class="headerCovTableEntry">51</td>
+            <td class="headerCovTableEntryHi">92.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Calculate (post)dominators in slightly super-linear time.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2000-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Michael Matz (matz@ifh.de).
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            :    This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            :    GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       8 </span>            :    under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            :    the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            :    any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            :    GCC is distributed in the hope that it will be useful, but WITHOUT
+<span class="lineNum">      13 </span>            :    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+<span class="lineNum">      14 </span>            :    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+<span class="lineNum">      15 </span>            :    License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            :    You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            :    along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            :    &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : /* This file implements the well known algorithm from Lengauer and Tarjan
+<span class="lineNum">      22 </span>            :    to compute the dominators in a control flow graph.  A basic block D is said
+<span class="lineNum">      23 </span>            :    to dominate another block X, when all paths from the entry node of the CFG
+<span class="lineNum">      24 </span>            :    to X go also over D.  The dominance relation is a transitive reflexive
+<span class="lineNum">      25 </span>            :    relation and its minimal transitive reduction is a tree, called the
+<span class="lineNum">      26 </span>            :    dominator tree.  So for each block X besides the entry block exists a
+<span class="lineNum">      27 </span>            :    block I(X), called the immediate dominator of X, which is the parent of X
+<span class="lineNum">      28 </span>            :    in the dominator tree.
+<span class="lineNum">      29 </span>            : 
+<span class="lineNum">      30 </span>            :    The algorithm computes this dominator tree implicitly by computing for
+<span class="lineNum">      31 </span>            :    each block its immediate dominator.  We use tree balancing and path
+<span class="lineNum">      32 </span>            :    compression, so it's the O(e*a(e,v)) variant, where a(e,v) is the very
+<span class="lineNum">      33 </span>            :    slowly growing functional inverse of the Ackerman function.  */
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;et-forest.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;graphds.h&quot;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : /* We name our nodes with integers, beginning with 1.  Zero is reserved for
+<span class="lineNum">      46 </span>            :    'undefined' or 'end of list'.  The name of each node is given by the dfs
+<span class="lineNum">      47 </span>            :    number of the corresponding basic block.  Please note, that we include the
+<span class="lineNum">      48 </span>            :    artificial ENTRY_BLOCK (or EXIT_BLOCK in the post-dom case) in our lists to
+<span class="lineNum">      49 </span>            :    support multiple entry points.  Its dfs number is of course 1.  */
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : /* Type of Basic Block aka. TBB */
+<span class="lineNum">      52 </span>            : typedef unsigned int TBB;
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            : namespace {
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : /* This class holds various arrays reflecting the (sub)structure of the
+<span class="lineNum">      57 </span>            :    flowgraph.  Most of them are of type TBB and are also indexed by TBB.  */
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            : class dom_info
+<span class="lineNum">      60 </span>            : {
+<span class="lineNum">      61 </span>            : public:
+<span class="lineNum">      62 </span>            :   dom_info (function *, cdi_direction);
+<span class="lineNum">      63 </span>            :   dom_info (vec &lt;basic_block&gt;, cdi_direction);
+<span class="lineNum">      64 </span>            :   ~dom_info ();
+<span class="lineNum">      65 </span>            :   void calc_dfs_tree ();
+<span class="lineNum">      66 </span>            :   void calc_idoms ();
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            :   inline basic_block get_idom (basic_block);
+<span class="lineNum">      69 </span>            : private:
+<span class="lineNum">      70 </span>            :   void calc_dfs_tree_nonrec (basic_block);
+<span class="lineNum">      71 </span>            :   void compress (TBB);
+<span class="lineNum">      72 </span>            :   void dom_init (void);
+<span class="lineNum">      73 </span>            :   TBB eval (TBB);
+<span class="lineNum">      74 </span>            :   void link_roots (TBB, TBB);
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            :   /* The parent of a node in the DFS tree.  */
+<span class="lineNum">      77 </span>            :   TBB *m_dfs_parent;
+<span class="lineNum">      78 </span>            :   /* For a node x m_key[x] is roughly the node nearest to the root from which
+<span class="lineNum">      79 </span>            :      exists a way to x only over nodes behind x.  Such a node is also called
+<span class="lineNum">      80 </span>            :      semidominator.  */
+<span class="lineNum">      81 </span>            :   TBB *m_key;
+<span class="lineNum">      82 </span>            :   /* The value in m_path_min[x] is the node y on the path from x to the root of
+<span class="lineNum">      83 </span>            :      the tree x is in with the smallest m_key[y].  */
+<span class="lineNum">      84 </span>            :   TBB *m_path_min;
+<span class="lineNum">      85 </span>            :   /* m_bucket[x] points to the first node of the set of nodes having x as
+<span class="lineNum">      86 </span>            :      key.  */
+<span class="lineNum">      87 </span>            :   TBB *m_bucket;
+<span class="lineNum">      88 </span>            :   /* And m_next_bucket[x] points to the next node.  */
+<span class="lineNum">      89 </span>            :   TBB *m_next_bucket;
+<span class="lineNum">      90 </span>            :   /* After the algorithm is done, m_dom[x] contains the immediate dominator
+<span class="lineNum">      91 </span>            :      of x.  */
+<span class="lineNum">      92 </span>            :   TBB *m_dom;
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            :   /* The following few fields implement the structures needed for disjoint
+<span class="lineNum">      95 </span>            :      sets.  */
+<span class="lineNum">      96 </span>            :   /* m_set_chain[x] is the next node on the path from x to the representative
+<span class="lineNum">      97 </span>            :      of the set containing x.  If m_set_chain[x]==0 then x is a root.  */
+<span class="lineNum">      98 </span>            :   TBB *m_set_chain;
+<span class="lineNum">      99 </span>            :   /* m_set_size[x] is the number of elements in the set named by x.  */
+<span class="lineNum">     100 </span>            :   unsigned int *m_set_size;
+<span class="lineNum">     101 </span>            :   /* m_set_child[x] is used for balancing the tree representing a set.  It can
+<span class="lineNum">     102 </span>            :      be understood as the next sibling of x.  */
+<span class="lineNum">     103 </span>            :   TBB *m_set_child;
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            :   /* If b is the number of a basic block (BB-&gt;index), m_dfs_order[b] is the
+<span class="lineNum">     106 </span>            :      number of that node in DFS order counted from 1.  This is an index
+<span class="lineNum">     107 </span>            :      into most of the other arrays in this structure.  */
+<span class="lineNum">     108 </span>            :   TBB *m_dfs_order;
+<span class="lineNum">     109 </span>            :   /* Points to last element in m_dfs_order array.  */
+<span class="lineNum">     110 </span>            :   TBB *m_dfs_last;
+<span class="lineNum">     111 </span>            :   /* If x is the DFS-index of a node which corresponds with a basic block,
+<span class="lineNum">     112 </span>            :      m_dfs_to_bb[x] is that basic block.  Note, that in our structure there are
+<span class="lineNum">     113 </span>            :      more nodes that basic blocks, so only
+<span class="lineNum">     114 </span>            :      m_dfs_to_bb[m_dfs_order[bb-&gt;index]]==bb is true for every basic block bb,
+<span class="lineNum">     115 </span>            :      but not the opposite.  */
+<span class="lineNum">     116 </span>            :   basic_block *m_dfs_to_bb;
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            :   /* This is the next free DFS number when creating the DFS tree.  */
+<span class="lineNum">     119 </span>            :   unsigned int m_dfsnum;
+<span class="lineNum">     120 </span>            :   /* The number of nodes in the DFS tree (==m_dfsnum-1).  */
+<span class="lineNum">     121 </span>            :   unsigned int m_nodes;
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span>            :   /* Blocks with bits set here have a fake edge to EXIT.  These are used
+<span class="lineNum">     124 </span>            :      to turn a DFS forest into a proper tree.  */
+<span class="lineNum">     125 </span>            :   bitmap m_fake_exit_edge;
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span>            :   /* Number of basic blocks in the function being compiled.  */
+<span class="lineNum">     128 </span>            :   unsigned m_n_basic_blocks;
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            :   /* True, if we are computing postdominators (rather than dominators).  */
+<span class="lineNum">     131 </span>            :   bool m_reverse;
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span>            :   /* Start block (the entry block for forward problem, exit block for backward
+<span class="lineNum">     134 </span>            :      problem).  */
+<span class="lineNum">     135 </span>            :   basic_block m_start_block;
+<span class="lineNum">     136 </span>            :   /* Ending block.  */
+<span class="lineNum">     137 </span>            :   basic_block m_end_block;
+<span class="lineNum">     138 </span>            : };
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            : } // anonymous namespace
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            : void debug_dominance_info (cdi_direction);
+<span class="lineNum">     143 </span>            : void debug_dominance_tree (cdi_direction, basic_block);
+<span class="lineNum">     144 </span>            : 
+<span class="lineNum">     145 </span>            : /* Allocate and zero-initialize NUM elements of type T (T must be a
+<span class="lineNum">     146 </span>            :    POD-type).  Note: after transition to C++11 or later,
+<span class="lineNum">     147 </span>            :    `x = new_zero_array &lt;T&gt; (num);' can be replaced with
+<span class="lineNum">     148 </span>            :    `x = new T[num] {};'.  */
+<a name="149"><span class="lineNum">     149 </span>            : </a>
+<span class="lineNum">     150 </span>            : template&lt;typename T&gt;
+<span class="lineNum">     151 </span><span class="lineCov"> 4100925528 : inline T *new_zero_array (unsigned num)</span>
+<span class="lineNum">     152 </span>            : {
+<span class="lineNum">     153 </span><span class="lineCov"> 4100925528 :   T *result = new T[num];</span>
+<span class="lineNum">     154 </span><span class="lineCov"> 4100925528 :   memset (result, 0, sizeof (T) * num);</span>
+<span class="lineNum">     155 </span><span class="lineCov"> 4100925528 :   return result;</span>
+<span class="lineNum">     156 </span>            : }
+<span class="lineNum">     157 </span><span class="lineCov">  512615691 : </span>
+<span class="lineNum">     158 </span>            : /* Helper function for constructors to initialize a part of class members.  */
+<a name="159"><span class="lineNum">     159 </span><span class="lineCov">  512615691 : </span></a>
+<span class="lineNum">     160 </span><span class="lineCov">  512615691 : void</span>
+<span class="lineNum">     161 </span><span class="lineCov">  512615691 : dom_info::dom_init (void)</span>
+<span class="lineNum">     162 </span>            : {
+<span class="lineNum">     163 </span><span class="lineCov"> 3588309837 :   unsigned num = m_n_basic_blocks;</span>
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineCov"> 3588309837 :   m_dfs_parent = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     166 </span><span class="lineCov"> 3588309837 :   m_dom = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     167 </span><span class="lineCov"> 3588309837 : </span>
+<span class="lineNum">     168 </span>            :   m_path_min = new TBB[num];
+<span class="lineNum">     169 </span>            :   m_key = new TBB[num];
+<span class="lineNum">     170 </span>            :   m_set_size = new unsigned int[num];
+<span class="lineNum">     171 </span>            :   for (unsigned i = 0; i &lt; num; i++)
+<span class="lineNum">     172 </span>            :     {
+<span class="lineNum">     173 </span><span class="lineCov">  512615691 :       m_path_min[i] = m_key[i] = i;</span>
+<span class="lineNum">     174 </span>            :       m_set_size[i] = 1;
+<span class="lineNum">     175 </span><span class="lineCov">  512615691 :     }</span>
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span><span class="lineCov">  512615691 :   m_bucket = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     178 </span><span class="lineCov">  512615691 :   m_next_bucket = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span><span class="lineCov">  512615691 :   m_set_chain = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     181 </span><span class="lineCov">  512615691 :   m_set_child = new_zero_array &lt;TBB&gt; (num);</span>
+<span class="lineNum">     182 </span><span class="lineCov">  512615691 : </span>
+<span class="lineNum">     183 </span><span class="lineCov"> 6106642099 :   m_dfs_to_bb = new_zero_array &lt;basic_block&gt; (num);</span>
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span><span class="lineCov"> 5594026408 :   m_dfsnum = 1;</span>
+<span class="lineNum">     186 </span><span class="lineCov"> 5594026408 :   m_nodes = 0;</span>
+<span class="lineNum">     187 </span>            : }
+<span class="lineNum">     188 </span>            : 
+<a name="189"><span class="lineNum">     189 </span><span class="lineCov">  512615691 : /* Allocate all needed memory in a pessimistic fashion (so we round up).  */</span></a>
+<span class="lineNum">     190 </span><span class="lineCov">  512615691 : </span>
+<span class="lineNum">     191 </span>            : dom_info::dom_info (function *fn, cdi_direction dir)
+<span class="lineNum">     192 </span><span class="lineCov">  512615691 : {</span>
+<span class="lineNum">     193 </span><span class="lineCov">  512615691 :   m_n_basic_blocks = n_basic_blocks_for_fn (fn);</span>
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span><span class="lineCov">  512615691 :   dom_init ();</span>
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">  512615691 :   unsigned last_bb_index = last_basic_block_for_fn (fn);</span>
+<span class="lineNum">     198 </span><span class="lineCov">  512615691 :   m_dfs_order = new_zero_array &lt;TBB&gt; (last_bb_index + 1);</span>
+<span class="lineNum">     199 </span><span class="lineCov">  512615691 :   m_dfs_last = &amp;m_dfs_order[last_bb_index];</span>
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span>            :   switch (dir)
+<span class="lineNum">     202 </span>            :     {
+<span class="lineNum">     203 </span><span class="lineCov">  512611374 :       case CDI_DOMINATORS:</span>
+<span class="lineNum">     204 </span>            :         m_reverse = false;
+<span class="lineNum">     205 </span><span class="lineCov">  512611374 :         m_fake_exit_edge = NULL;</span>
+<span class="lineNum">     206 </span>            :         m_start_block = ENTRY_BLOCK_PTR_FOR_FN (fn);
+<span class="lineNum">     207 </span><span class="lineCov">  512611374 :         m_end_block = EXIT_BLOCK_PTR_FOR_FN (fn);</span>
+<span class="lineNum">     208 </span>            :         break;
+<span class="lineNum">     209 </span><span class="lineCov">  512611374 :       case CDI_POST_DOMINATORS:</span>
+<span class="lineNum">     210 </span><span class="lineCov">  512611374 :         m_reverse = true;</span>
+<span class="lineNum">     211 </span><span class="lineCov">  512611374 :         m_fake_exit_edge = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     212 </span>            :         m_start_block = EXIT_BLOCK_PTR_FOR_FN (fn);
+<span class="lineNum">     213 </span><span class="lineCov">  512611374 :         m_end_block = ENTRY_BLOCK_PTR_FOR_FN (fn);</span>
+<span class="lineNum">     214 </span>            :         break;
+<span class="lineNum">     215 </span><span class="lineCov">  501868656 :       default:</span>
+<span class="lineNum">     216 </span><span class="lineCov">  501868656 :         gcc_unreachable ();</span>
+<span class="lineNum">     217 </span><span class="lineCov">  501868656 :     }</span>
+<span class="lineNum">     218 </span><span class="lineCov">  501868656 : }</span>
+<span class="lineNum">     219 </span><span class="lineCov">  501868656 : </span>
+<a name="220"><span class="lineNum">     220 </span><span class="lineCov">  501868656 : /* Constructor for reducible region REGION.  */</span></a>
+<span class="lineNum">     221 </span><span class="lineCov">   10742718 : </span>
+<span class="lineNum">     222 </span><span class="lineCov">   10742718 : dom_info::dom_info (vec&lt;basic_block&gt; region, cdi_direction dir)</span>
+<span class="lineNum">     223 </span><span class="lineCov">   10742718 : {</span>
+<span class="lineNum">     224 </span><span class="lineCov">   10742718 :   m_n_basic_blocks = region.length ();</span>
+<span class="lineNum">     225 </span><span class="lineCov">   10742718 :   unsigned nm1 = m_n_basic_blocks - 1;</span>
+<span class="lineNum">     226 </span><span class="lineCov">   10742718 : </span>
+<span class="lineNum">     227 </span><span class="lineNoCov">          0 :   dom_init ();</span>
+<span class="lineNum">     228 </span><span class="lineNoCov">          0 : </span>
+<span class="lineNum">     229 </span>            :   /* Determine max basic block index in region.  */
+<span class="lineNum">     230 </span><span class="lineCov">  512611374 :   int max_index = region[0]-&gt;index;</span>
+<span class="lineNum">     231 </span>            :   for (unsigned i = 1; i &lt;= nm1; i++)
+<span class="lineNum">     232 </span>            :     if (region[i]-&gt;index &gt; max_index)
+<span class="lineNum">     233 </span>            :       max_index = region[i]-&gt;index;
+<span class="lineNum">     234 </span><span class="lineCov">       4317 :   max_index += 1;  /* set index on the first bb out of region.  */</span>
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span><span class="lineCov">       4317 :   m_dfs_order = new_zero_array &lt;TBB&gt; (max_index + 1);</span>
+<span class="lineNum">     237 </span><span class="lineCov">       4317 :   m_dfs_last = &amp;m_dfs_order[max_index];</span>
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span><span class="lineCov">       4317 :   m_fake_exit_edge = NULL; /* Assume that region is reducible.  */</span>
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            :   switch (dir)
+<span class="lineNum">     242 </span><span class="lineCov">       4317 :     {</span>
+<span class="lineNum">     243 </span><span class="lineCov">      32177 :       case CDI_DOMINATORS:</span>
+<span class="lineNum">     244 </span><span class="lineCov">      27860 :         m_reverse = false;</span>
+<span class="lineNum">     245 </span><span class="lineCov">      24002 :         m_start_block = region[0];</span>
+<span class="lineNum">     246 </span><span class="lineCov">       4317 :         m_end_block = region[nm1];</span>
+<span class="lineNum">     247 </span>            :         break;
+<span class="lineNum">     248 </span><span class="lineCov">       4317 :       case CDI_POST_DOMINATORS:</span>
+<span class="lineNum">     249 </span><span class="lineCov">       4317 :         m_reverse = true;</span>
+<span class="lineNum">     250 </span>            :         m_start_block = region[nm1];
+<span class="lineNum">     251 </span><span class="lineCov">       4317 :         m_end_block = region[0];</span>
+<span class="lineNum">     252 </span>            :         break;
+<span class="lineNum">     253 </span><span class="lineCov">       4317 :       default:</span>
+<span class="lineNum">     254 </span>            :         gcc_unreachable ();
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :     }</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 : }</span>
+<a name="257"><span class="lineNum">     257 </span><span class="lineNoCov">          0 : </span></a>
+<span class="lineNum">     258 </span><span class="lineNoCov">          0 : inline basic_block</span>
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 : dom_info::get_idom (basic_block bb)</span>
+<span class="lineNum">     260 </span><span class="lineCov">       4317 : {</span>
+<span class="lineNum">     261 </span><span class="lineCov">       4317 :   TBB d = m_dom[m_dfs_order[bb-&gt;index]];</span>
+<span class="lineNum">     262 </span><span class="lineCov">       4317 :   return m_dfs_to_bb[d];</span>
+<span class="lineNum">     263 </span><span class="lineCov">       4317 : }</span>
+<span class="lineNum">     264 </span><span class="lineCov">       4317 : </span>
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 : /* Map dominance calculation type to array index used for various</span>
+<span class="lineNum">     266 </span><span class="lineNoCov">          0 :    dominance information arrays.  This version is simple -- it will need</span>
+<span class="lineNum">     267 </span>            :    to be modified, obviously, if additional values are added to
+<span class="lineNum">     268 </span><span class="lineCov">       4317 :    cdi_direction.  */</span>
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : static inline unsigned int
+<span class="lineNum">     271 </span><span class="lineNoCov">          0 : dom_convert_dir_to_idx (cdi_direction dir)</span>
+<span class="lineNum">     272 </span>            : {
+<span class="lineNum">     273 </span><span class="lineCov"> 4568803660 :   gcc_checking_assert (dir == CDI_DOMINATORS || dir == CDI_POST_DOMINATORS);</span>
+<span class="lineNum">     274 </span><span class="lineCov"> 4568803660 :   return dir - 1;</span>
+<span class="lineNum">     275 </span>            : }
+<span class="lineNum">     276 </span>            : 
+<a name="277"><span class="lineNum">     277 </span>            : /* Free all allocated memory in dom_info.  */</a>
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : dom_info::~dom_info ()
+<span class="lineNum">     280 </span>            : {
+<span class="lineNum">     281 </span>            :   delete[] m_dfs_parent;
+<span class="lineNum">     282 </span>            :   delete[] m_path_min;
+<span class="lineNum">     283 </span>            :   delete[] m_key;
+<span class="lineNum">     284 </span>            :   delete[] m_dom;
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :   delete[] m_bucket;</span>
+<span class="lineNum">     286 </span><span class="lineCov">17728963831 :   delete[] m_next_bucket;</span>
+<span class="lineNum">     287 </span>            :   delete[] m_set_chain;
+<span class="lineNum">     288 </span>            :   delete[] m_set_size;
+<span class="lineNum">     289 </span>            :   delete[] m_set_child;
+<span class="lineNum">     290 </span>            :   delete[] m_dfs_order;
+<span class="lineNum">     291 </span><span class="lineCov"> 1025231382 :   delete[] m_dfs_to_bb;</span>
+<span class="lineNum">     292 </span>            :   BITMAP_FREE (m_fake_exit_edge);
+<span class="lineNum">     293 </span><span class="lineCov">  512615691 : }</span>
+<span class="lineNum">     294 </span><span class="lineCov">  512615691 : </span>
+<span class="lineNum">     295 </span><span class="lineCov">  512615691 : /* The nonrecursive variant of creating a DFS tree.  BB is the starting basic</span>
+<span class="lineNum">     296 </span><span class="lineCov">  512615691 :    block for this tree and m_reverse is true, if predecessors should be visited</span>
+<span class="lineNum">     297 </span><span class="lineCov">  512615691 :    instead of successors of a node.  After this is done all nodes reachable</span>
+<span class="lineNum">     298 </span><span class="lineCov">  512615691 :    from BB were visited, have assigned their dfs number and are linked together</span>
+<span class="lineNum">     299 </span><span class="lineCov">  512615691 :    to form a tree.  */</span>
+<a name="300"><span class="lineNum">     300 </span><span class="lineCov">  512615691 : </span></a>
+<span class="lineNum">     301 </span><span class="lineCov">  512615691 : void</span>
+<span class="lineNum">     302 </span><span class="lineCov">  512615691 : dom_info::calc_dfs_tree_nonrec (basic_block bb)</span>
+<span class="lineNum">     303 </span><span class="lineCov">  512615691 : {</span>
+<span class="lineNum">     304 </span><span class="lineCov">  512615691 :   edge_iterator *stack = new edge_iterator[m_n_basic_blocks + 1];</span>
+<span class="lineNum">     305 </span><span class="lineCov">  512615691 :   int sp = 0;</span>
+<span class="lineNum">     306 </span>            :   unsigned d_i = dom_convert_dir_to_idx (m_reverse ? CDI_POST_DOMINATORS
+<span class="lineNum">     307 </span>            :                                          : CDI_DOMINATORS);
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span>            :   /* Initialize the first edge.  */
+<span class="lineNum">     310 </span>            :   edge_iterator ei = m_reverse ? ei_start (bb-&gt;preds)
+<span class="lineNum">     311 </span>            :                                : ei_start (bb-&gt;succs);
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span>            :   /* When the stack is empty we break out of this loop.  */
+<span class="lineNum">     314 </span><span class="lineCov">  517247878 :   while (1)</span>
+<span class="lineNum">     315 </span>            :     {
+<span class="lineNum">     316 </span><span class="lineCov">  517247878 :       basic_block bn;</span>
+<span class="lineNum">     317 </span><span class="lineCov">  517247878 :       edge_iterator einext;</span>
+<span class="lineNum">     318 </span><span class="lineCov">  517247878 : </span>
+<span class="lineNum">     319 </span>            :       /* This loop traverses edges e in depth first manner, and fills the
+<span class="lineNum">     320 </span>            :          stack.  */
+<span class="lineNum">     321 </span>            :       while (!ei_end_p (ei))
+<span class="lineNum">     322 </span><span class="lineCov">   30758444 :         {</span>
+<span class="lineNum">     323 </span><span class="lineCov">  517247878 :           edge e = ei_edge (ei);</span>
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            :           /* Deduce from E the current and the next block (BB and BN), and the
+<span class="lineNum">     326 </span><span class="lineCov">12070522814 :              next edge.  */</span>
+<span class="lineNum">     327 </span>            :           if (m_reverse)
+<span class="lineNum">     328 </span><span class="lineCov">12070522814 :             {</span>
+<span class="lineNum">     329 </span><span class="lineCov">12070522814 :               bn = e-&gt;src;</span>
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span>            :               /* If the next node BN is either already visited or a border
+<span class="lineNum">     332 </span>            :                  block or out of region the current edge is useless, and simply
+<span class="lineNum">     333 </span><span class="lineCov">24141045628 :                  overwritten with the next edge out of the current node.  */</span>
+<span class="lineNum">     334 </span>            :               if (bn == m_end_block || bn-&gt;dom[d_i] == NULL
+<span class="lineNum">     335 </span><span class="lineCov"> 6989112097 :                   || m_dfs_order[bn-&gt;index])</span>
+<span class="lineNum">     336 </span>            :                 {
+<span class="lineNum">     337 </span>            :                   ei_next (&amp;ei);
+<span class="lineNum">     338 </span>            :                   continue;
+<span class="lineNum">     339 </span><span class="lineCov"> 6989112097 :                 }</span>
+<span class="lineNum">     340 </span>            :               bb = e-&gt;dest;
+<span class="lineNum">     341 </span><span class="lineCov">  138051067 :               einext = ei_start (bn-&gt;preds);</span>
+<span class="lineNum">     342 </span>            :             }
+<span class="lineNum">     343 </span>            :           else
+<span class="lineNum">     344 </span>            :             {
+<span class="lineNum">     345 </span>            :               bn = e-&gt;dest;
+<span class="lineNum">     346 </span><span class="lineCov">  138051067 :               if (bn == m_end_block || bn-&gt;dom[d_i] == NULL</span>
+<span class="lineNum">     347 </span><span class="lineCov">  127303055 :                   || m_dfs_order[bn-&gt;index])</span>
+<span class="lineNum">     348 </span>            :                 {
+<span class="lineNum">     349 </span><span class="lineCov">   53397180 :                   ei_next (&amp;ei);</span>
+<span class="lineNum">     350 </span><span class="lineCov">   53397180 :                   continue;</span>
+<span class="lineNum">     351 </span>            :                 }
+<span class="lineNum">     352 </span><span class="lineCov">   84653887 :               bb = e-&gt;src;</span>
+<span class="lineNum">     353 </span><span class="lineCov">  169307774 :               einext = ei_start (bn-&gt;succs);</span>
+<span class="lineNum">     354 </span>            :             }
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span>            :           gcc_assert (bn != m_start_block);
+<span class="lineNum">     357 </span><span class="lineCov"> 6851061030 : </span>
+<span class="lineNum">     358 </span><span class="lineCov"> 6851061030 :           /* Fill the DFS tree info calculatable _before_ recursing.  */</span>
+<span class="lineNum">     359 </span><span class="lineCov"> 6356721638 :           TBB my_i;</span>
+<span class="lineNum">     360 </span>            :           if (bb != m_start_block)
+<span class="lineNum">     361 </span><span class="lineCov"> 2371552078 :             my_i = m_dfs_order[bb-&gt;index];</span>
+<span class="lineNum">     362 </span><span class="lineCov"> 2371552078 :           else</span>
+<span class="lineNum">     363 </span>            :             my_i = *m_dfs_last;
+<span class="lineNum">     364 </span><span class="lineCov"> 4479508952 :           TBB child_i = m_dfs_order[bn-&gt;index] = m_dfsnum++;</span>
+<span class="lineNum">     365 </span><span class="lineCov"> 8959017904 :           m_dfs_to_bb[child_i] = bn;</span>
+<span class="lineNum">     366 </span>            :           m_dfs_parent[child_i] = my_i;
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineCov"> 4564162839 :           /* Save the current point in the CFG on the stack, and recurse.  */</span>
+<span class="lineNum">     369 </span>            :           stack[sp++] = ei;
+<span class="lineNum">     370 </span>            :           ei = einext;
+<span class="lineNum">     371 </span><span class="lineCov"> 4564162839 :         }</span>
+<span class="lineNum">     372 </span><span class="lineCov"> 4564162839 : </span>
+<span class="lineNum">     373 </span><span class="lineCov"> 4051340372 :       if (!sp)</span>
+<span class="lineNum">     374 </span>            :         break;
+<span class="lineNum">     375 </span><span class="lineCov">  512822467 :       ei = stack[--sp];</span>
+<span class="lineNum">     376 </span><span class="lineCov"> 4564162839 : </span>
+<span class="lineNum">     377 </span><span class="lineCov"> 4564162839 :       /* OK.  The edge-list was exhausted, meaning normally we would</span>
+<span class="lineNum">     378 </span><span class="lineCov"> 4564162839 :          end the recursion.  After returning from the recursive call,</span>
+<span class="lineNum">     379 </span>            :          there were (may be) other statements which were run after a
+<span class="lineNum">     380 </span>            :          child node was completely considered by DFS.  Here is the
+<span class="lineNum">     381 </span><span class="lineCov"> 4564162839 :          point to do it in the non-recursive variant.</span>
+<span class="lineNum">     382 </span><span class="lineCov"> 4564162839 :          E.g. The block just completed is in e-&gt;dest for forward DFS,</span>
+<span class="lineNum">     383 </span>            :          the block not yet completed (the parent of the one above)
+<span class="lineNum">     384 </span>            :          in e-&gt;src.  This could be used e.g. for computing the number of
+<span class="lineNum">     385 </span><span class="lineCov"> 5081410717 :          descendants or the tree depth.  */</span>
+<span class="lineNum">     386 </span>            :       ei_next (&amp;ei);
+<span class="lineNum">     387 </span><span class="lineCov"> 4564162839 :     }</span>
+<span class="lineNum">     388 </span>            :   delete[] stack;
+<span class="lineNum">     389 </span>            : }
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span>            : /* The main entry for calculating the DFS tree or forest.  m_reverse is true,
+<span class="lineNum">     392 </span>            :    if we are interested in the reverse flow graph.  In that case the result is
+<span class="lineNum">     393 </span>            :    not necessarily a tree but a forest, because there may be nodes from which
+<span class="lineNum">     394 </span>            :    the EXIT_BLOCK is unreachable.  */
+<a name="395"><span class="lineNum">     395 </span>            : </a>
+<span class="lineNum">     396 </span>            : void
+<span class="lineNum">     397 </span>            : dom_info::calc_dfs_tree ()
+<span class="lineNum">     398 </span><span class="lineCov"> 4564162839 : {</span>
+<span class="lineNum">     399 </span><span class="lineCov"> 4564162839 :   *m_dfs_last = m_dfsnum;</span>
+<span class="lineNum">     400 </span><span class="lineCov">  517247878 :   m_dfs_to_bb[m_dfsnum] = m_start_block;</span>
+<span class="lineNum">     401 </span><span class="lineCov">  517247878 :   m_dfsnum++;</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            :   calc_dfs_tree_nonrec (m_start_block);
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            :   if (m_fake_exit_edge)
+<span class="lineNum">     406 </span>            :     {
+<span class="lineNum">     407 </span>            :       /* In the post-dom case we may have nodes without a path to EXIT_BLOCK.
+<span class="lineNum">     408 </span>            :          They are reverse-unreachable.  In the dom-case we disallow such
+<span class="lineNum">     409 </span><span class="lineCov">  512615691 :          nodes, but in post-dom we have to deal with them.</span>
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span><span class="lineCov">  512615691 :          There are two situations in which this occurs.  First, noreturn</span>
+<span class="lineNum">     412 </span><span class="lineCov">  512615691 :          functions.  Second, infinite loops.  In the first case we need to</span>
+<span class="lineNum">     413 </span><span class="lineCov">  512615691 :          pretend that there is an edge to the exit block.  In the second</span>
+<span class="lineNum">     414 </span>            :          case, we wind up with a forest.  We need to process all noreturn
+<span class="lineNum">     415 </span><span class="lineCov">  512615691 :          blocks before we know if we've got any infinite loops.  */</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span><span class="lineCov">  512615691 :       basic_block b;</span>
+<span class="lineNum">     418 </span>            :       bool saw_unconnected = false;
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span>            :       FOR_BB_BETWEEN (b, m_start_block-&gt;prev_bb, m_end_block, prev_bb)
+<span class="lineNum">     421 </span>            :         {
+<span class="lineNum">     422 </span>            :           if (EDGE_COUNT (b-&gt;succs) &gt; 0)
+<span class="lineNum">     423 </span>            :             {
+<span class="lineNum">     424 </span>            :               if (m_dfs_order[b-&gt;index] == 0)
+<span class="lineNum">     425 </span>            :                 saw_unconnected = true;
+<span class="lineNum">     426 </span>            :               continue;
+<span class="lineNum">     427 </span>            :             }
+<span class="lineNum">     428 </span>            :           bitmap_set_bit (m_fake_exit_edge, b-&gt;index);
+<span class="lineNum">     429 </span><span class="lineCov">   10742718 :           m_dfs_order[b-&gt;index] = m_dfsnum;</span>
+<span class="lineNum">     430 </span><span class="lineCov">   10742718 :           m_dfs_to_bb[m_dfsnum] = b;</span>
+<span class="lineNum">     431 </span>            :           m_dfs_parent[m_dfsnum] = *m_dfs_last;
+<span class="lineNum">     432 </span><span class="lineCov">  100005249 :           m_dfsnum++;</span>
+<span class="lineNum">     433 </span>            :           calc_dfs_tree_nonrec (b);
+<span class="lineNum">     434 </span><span class="lineCov">   89262531 :         }</span>
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span><span class="lineCov">   84669050 :       if (saw_unconnected)</span>
+<span class="lineNum">     437 </span><span class="lineCov">     272789 :         {</span>
+<span class="lineNum">     438 </span><span class="lineCov">   84669050 :           FOR_BB_BETWEEN (b, m_start_block-&gt;prev_bb, m_end_block, prev_bb)</span>
+<span class="lineNum">     439 </span>            :             {
+<span class="lineNum">     440 </span><span class="lineCov">    4593481 :               if (m_dfs_order[b-&gt;index])</span>
+<span class="lineNum">     441 </span><span class="lineCov">    4593481 :                 continue;</span>
+<span class="lineNum">     442 </span><span class="lineCov">    4593481 :               basic_block b2 = dfs_find_deadend (b);</span>
+<span class="lineNum">     443 </span><span class="lineCov">    4593481 :               gcc_checking_assert (m_dfs_order[b2-&gt;index] == 0);</span>
+<span class="lineNum">     444 </span><span class="lineCov">    4593481 :               bitmap_set_bit (m_fake_exit_edge, b2-&gt;index);</span>
+<span class="lineNum">     445 </span><span class="lineCov">    4593481 :               m_dfs_order[b2-&gt;index] = m_dfsnum;</span>
+<span class="lineNum">     446 </span>            :               m_dfs_to_bb[m_dfsnum] = b2;
+<span class="lineNum">     447 </span>            :               m_dfs_parent[m_dfsnum] = *m_dfs_last;
+<span class="lineNum">     448 </span><span class="lineCov">   10742718 :               m_dfsnum++;</span>
+<span class="lineNum">     449 </span>            :               calc_dfs_tree_nonrec (b2);
+<span class="lineNum">     450 </span><span class="lineCov">    3138195 :               gcc_checking_assert (m_dfs_order[b-&gt;index]);</span>
+<span class="lineNum">     451 </span>            :             }
+<span class="lineNum">     452 </span><span class="lineCov">    3069786 :         }</span>
+<span class="lineNum">     453 </span>            :     }
+<span class="lineNum">     454 </span><span class="lineCov">      38706 : </span>
+<span class="lineNum">     455 </span><span class="lineCov">      38706 :   m_nodes = m_dfsnum - 1;</span>
+<span class="lineNum">     456 </span><span class="lineCov">      38706 : </span>
+<span class="lineNum">     457 </span><span class="lineCov">      38706 :   /* This aborts e.g. when there is _no_ path from ENTRY to EXIT at all.  */</span>
+<span class="lineNum">     458 </span><span class="lineCov">      38706 :   gcc_assert (m_nodes == (unsigned int) m_n_basic_blocks - 1);</span>
+<span class="lineNum">     459 </span><span class="lineCov">      38706 : }</span>
+<span class="lineNum">     460 </span><span class="lineCov">      38706 : </span>
+<span class="lineNum">     461 </span><span class="lineCov">      38706 : /* Compress the path from V to the root of its set and update path_min at the</span>
+<span class="lineNum">     462 </span><span class="lineCov">      38706 :    same time.  After compress(di, V) set_chain[V] is the root of the set V is</span>
+<span class="lineNum">     463 </span>            :    in and path_min[V] is the node with the smallest key[] value on the path
+<span class="lineNum">     464 </span>            :    from V to that root.  */
+<a name="465"><span class="lineNum">     465 </span>            : </a>
+<span class="lineNum">     466 </span>            : void
+<span class="lineNum">     467 </span><span class="lineCov">  512615691 : dom_info::compress (TBB v)</span>
+<span class="lineNum">     468 </span>            : {
+<span class="lineNum">     469 </span>            :   /* Btw. It's not worth to unrecurse compress() as the depth is usually not
+<span class="lineNum">     470 </span><span class="lineCov">  512615691 :      greater than 5 even for huge graphs (I've not seen call depth &gt; 4).</span>
+<span class="lineNum">     471 </span><span class="lineCov">  512615691 :      Also performance wise compress() ranges _far_ behind eval().  */</span>
+<span class="lineNum">     472 </span>            :   TBB parent = m_set_chain[v];
+<span class="lineNum">     473 </span>            :   if (m_set_chain[parent])
+<span class="lineNum">     474 </span>            :     {
+<span class="lineNum">     475 </span>            :       compress (parent);
+<span class="lineNum">     476 </span>            :       if (m_key[m_path_min[parent]] &lt; m_key[m_path_min[v]])
+<span class="lineNum">     477 </span>            :         m_path_min[v] = m_path_min[parent];
+<span class="lineNum">     478 </span>            :       m_set_chain[v] = m_set_chain[parent];
+<span class="lineNum">     479 </span><span class="lineCov"> 1777714048 :     }</span>
+<span class="lineNum">     480 </span>            : }
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            : /* Compress the path from V to the set root of V if needed (when the root has
+<span class="lineNum">     483 </span>            :    changed since the last call).  Returns the node with the smallest key[]
+<span class="lineNum">     484 </span><span class="lineCov"> 1777714048 :    value on the path from V to the root.  */</span>
+<a name="485"><span class="lineNum">     485 </span><span class="lineCov"> 1777714048 : </span></a>
+<span class="lineNum">     486 </span>            : inline TBB
+<span class="lineNum">     487 </span><span class="lineCov">  993994216 : dom_info::eval (TBB v)</span>
+<span class="lineNum">     488 </span><span class="lineCov">  993994216 : {</span>
+<span class="lineNum">     489 </span><span class="lineCov">  692445874 :   /* The representative of the set V is in, also called root (as the set</span>
+<span class="lineNum">     490 </span><span class="lineCov">  993994216 :      representation is a tree).  */</span>
+<span class="lineNum">     491 </span>            :   TBB rep = m_set_chain[v];
+<span class="lineNum">     492 </span><span class="lineCov"> 1777714048 : </span>
+<span class="lineNum">     493 </span>            :   /* V itself is the root.  */
+<span class="lineNum">     494 </span>            :   if (!rep)
+<span class="lineNum">     495 </span>            :     return m_path_min[v];
+<span class="lineNum">     496 </span>            : 
+<span class="lineNum">     497 </span>            :   /* Compress only if necessary.  */
+<span class="lineNum">     498 </span>            :   if (m_set_chain[rep])
+<span class="lineNum">     499 </span><span class="lineCov"> 6032582304 :     {</span>
+<span class="lineNum">     500 </span>            :       compress (v);
+<span class="lineNum">     501 </span>            :       rep = m_set_chain[v];
+<span class="lineNum">     502 </span>            :     }
+<span class="lineNum">     503 </span><span class="lineCov"> 6032582304 : </span>
+<span class="lineNum">     504 </span>            :   if (m_key[m_path_min[rep]] &gt;= m_key[m_path_min[v]])
+<span class="lineNum">     505 </span>            :     return m_path_min[v];
+<span class="lineNum">     506 </span><span class="lineCov"> 6032582304 :   else</span>
+<span class="lineNum">     507 </span><span class="lineCov"> 1330573983 :     return m_path_min[rep];</span>
+<span class="lineNum">     508 </span>            : }
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span><span class="lineCov"> 4702008321 : /* This essentially merges the two sets of V and W, giving a single set with</span>
+<span class="lineNum">     511 </span>            :    the new root V.  The internal representation of these disjoint sets is a
+<span class="lineNum">     512 </span><span class="lineCov">  783719832 :    balanced tree.  Currently link(V,W) is only used with V being the parent</span>
+<span class="lineNum">     513 </span><span class="lineCov">  783719832 :    of W.  */</span>
+<a name="514"><span class="lineNum">     514 </span>            : </a>
+<span class="lineNum">     515 </span>            : void
+<span class="lineNum">     516 </span><span class="lineCov"> 4702008321 : dom_info::link_roots (TBB v, TBB w)</span>
+<span class="lineNum">     517 </span>            : {
+<span class="lineNum">     518 </span>            :   TBB s = w;
+<span class="lineNum">     519 </span><span class="lineCov">  893051473 : </span>
+<span class="lineNum">     520 </span>            :   /* Rebalance the tree.  */
+<span class="lineNum">     521 </span>            :   while (m_key[m_path_min[w]] &lt; m_key[m_path_min[m_set_child[s]]])
+<span class="lineNum">     522 </span>            :     {
+<span class="lineNum">     523 </span>            :       if (m_set_size[s] + m_set_size[m_set_child[m_set_child[s]]]
+<span class="lineNum">     524 </span>            :           &gt;= 2 * m_set_size[m_set_child[s]])
+<span class="lineNum">     525 </span>            :         {
+<span class="lineNum">     526 </span>            :           m_set_chain[m_set_child[s]] = s;
+<span class="lineNum">     527 </span>            :           m_set_child[s] = m_set_child[m_set_child[s]];
+<span class="lineNum">     528 </span><span class="lineCov"> 4568795026 :         }</span>
+<span class="lineNum">     529 </span>            :       else
+<span class="lineNum">     530 </span><span class="lineCov"> 4568795026 :         {</span>
+<span class="lineNum">     531 </span>            :           m_set_size[m_set_child[s]] = m_set_size[s];
+<span class="lineNum">     532 </span>            :           s = m_set_chain[s] = m_set_child[s];
+<span class="lineNum">     533 </span><span class="lineCov"> 6854941289 :         }</span>
+<span class="lineNum">     534 </span>            :     }
+<span class="lineNum">     535 </span><span class="lineCov"> 4572292526 : </span>
+<span class="lineNum">     536 </span><span class="lineCov"> 2286146263 :   m_path_min[s] = m_path_min[w];</span>
+<span class="lineNum">     537 </span>            :   m_set_size[v] += m_set_size[w];
+<span class="lineNum">     538 </span><span class="lineCov">  756210932 :   if (m_set_size[v] &lt; 2 * m_set_size[w])</span>
+<span class="lineNum">     539 </span><span class="lineCov">  756210932 :     std::swap (m_set_child[v], s);</span>
+<span class="lineNum">     540 </span>            : 
+<span class="lineNum">     541 </span>            :   /* Merge all subtrees.  */
+<span class="lineNum">     542 </span>            :   while (s)
+<span class="lineNum">     543 </span><span class="lineCov"> 1529935331 :     {</span>
+<span class="lineNum">     544 </span><span class="lineCov"> 1529935331 :       m_set_chain[s] = v;</span>
+<span class="lineNum">     545 </span>            :       s = m_set_child[s];
+<span class="lineNum">     546 </span>            :     }
+<span class="lineNum">     547 </span>            : }
+<span class="lineNum">     548 </span><span class="lineCov"> 4568795026 : </span>
+<span class="lineNum">     549 </span><span class="lineCov"> 4568795026 : /* This calculates the immediate dominators (or post-dominators). THIS is our</span>
+<span class="lineNum">     550 </span><span class="lineCov"> 4568795026 :    working structure and should hold the DFS forest.</span>
+<span class="lineNum">     551 </span><span class="lineCov"> 2724409256 :    On return the immediate dominator to node V is in m_dom[V].  */</span>
+<a name="552"><span class="lineNum">     552 </span>            : </a>
+<span class="lineNum">     553 </span>            : void
+<span class="lineNum">     554 </span><span class="lineCov"> 6571496570 : dom_info::calc_idoms ()</span>
+<span class="lineNum">     555 </span>            : {
+<span class="lineNum">     556 </span><span class="lineCov"> 2002701544 :   /* Go backwards in DFS order, to first look at the leafs.  */</span>
+<span class="lineNum">     557 </span><span class="lineCov"> 2002701544 :   for (TBB v = m_nodes; v &gt; 1; v--)</span>
+<span class="lineNum">     558 </span>            :     {
+<span class="lineNum">     559 </span><span class="lineCov"> 4568795026 :       basic_block bb = m_dfs_to_bb[v];</span>
+<span class="lineNum">     560 </span>            :       edge e;
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span>            :       TBB par = m_dfs_parent[v];
+<span class="lineNum">     563 </span>            :       TBB k = v;
+<span class="lineNum">     564 </span>            : 
+<span class="lineNum">     565 </span>            :       edge_iterator ei = m_reverse ? ei_start (bb-&gt;succs)
+<span class="lineNum">     566 </span><span class="lineCov">  512615691 :                                    : ei_start (bb-&gt;preds);</span>
+<span class="lineNum">     567 </span>            :       edge_iterator einext;
+<span class="lineNum">     568 </span>            : 
+<span class="lineNum">     569 </span><span class="lineCov"> 5081410717 :       if (m_fake_exit_edge)</span>
+<span class="lineNum">     570 </span>            :         {
+<span class="lineNum">     571 </span><span class="lineCov"> 4568795026 :           /* If this block has a fake edge to exit, process that first.  */</span>
+<span class="lineNum">     572 </span><span class="lineCov"> 4568795026 :           if (bitmap_bit_p (m_fake_exit_edge, bb-&gt;index))</span>
+<span class="lineNum">     573 </span>            :             {
+<span class="lineNum">     574 </span><span class="lineCov"> 4568795026 :               einext = ei;</span>
+<span class="lineNum">     575 </span><span class="lineCov"> 4568795026 :               einext.index = 0;</span>
+<span class="lineNum">     576 </span>            :               goto do_fake_exit_edge;
+<span class="lineNum">     577 </span><span class="lineCov">  178572148 :             }</span>
+<span class="lineNum">     578 </span><span class="lineCov"> 4568795026 :         }</span>
+<span class="lineNum">     579 </span><span class="lineCov"> 4568795026 : </span>
+<span class="lineNum">     580 </span>            :       /* Search all direct predecessors for the smallest node with a path
+<span class="lineNum">     581 </span><span class="lineCov"> 4568795026 :          to them.  That way we have the smallest node with also a path to</span>
+<span class="lineNum">     582 </span>            :          us only over nodes behind us.  In effect we search for our
+<span class="lineNum">     583 </span>            :          semidominator.  */
+<span class="lineNum">     584 </span><span class="lineCov">   89262531 :       while (!ei_end_p (ei))</span>
+<span class="lineNum">     585 </span>            :         {
+<span class="lineNum">     586 </span><span class="lineCov">    4632187 :           basic_block b;</span>
+<span class="lineNum">     587 </span><span class="lineCov">    4632187 :           TBB k1;</span>
+<span class="lineNum">     588 </span><span class="lineCov">    4632187 : </span>
+<span class="lineNum">     589 </span>            :           e = ei_edge (ei);
+<span class="lineNum">     590 </span>            :           b = m_reverse ? e-&gt;dest : e-&gt;src;
+<span class="lineNum">     591 </span>            :           einext = ei;
+<span class="lineNum">     592 </span>            :           ei_next (&amp;einext);
+<span class="lineNum">     593 </span>            : 
+<span class="lineNum">     594 </span>            :           if (b == m_start_block)
+<span class="lineNum">     595 </span>            :             {
+<span class="lineNum">     596 </span><span class="lineCov">22105639438 :             do_fake_exit_edge:</span>
+<span class="lineNum">     597 </span>            :               k1 = *m_dfs_last;
+<span class="lineNum">     598 </span><span class="lineCov"> 6484024693 :             }</span>
+<span class="lineNum">     599 </span><span class="lineCov"> 6484024693 :           else</span>
+<span class="lineNum">     600 </span>            :             k1 = m_dfs_order[b-&gt;index];
+<span class="lineNum">     601 </span><span class="lineCov"> 6484024693 : </span>
+<span class="lineNum">     602 </span><span class="lineCov"> 6484024693 :           /* Call eval() only if really needed.  If k1 is above V in DFS tree,</span>
+<span class="lineNum">     603 </span><span class="lineCov"> 6484024693 :              then we know, that eval(k1) == k1 and key[k1] == k1.  */</span>
+<span class="lineNum">     604 </span><span class="lineCov"> 6484024693 :           if (k1 &gt; v)</span>
+<span class="lineNum">     605 </span>            :             k1 = m_key[eval (k1)];
+<span class="lineNum">     606 </span><span class="lineCov"> 6484024693 :           if (k1 &lt; k)</span>
+<span class="lineNum">     607 </span>            :             k = k1;
+<span class="lineNum">     608 </span><span class="lineCov">  512822468 : </span>
+<span class="lineNum">     609 </span><span class="lineCov">  517454655 :           ei = einext;</span>
+<span class="lineNum">     610 </span>            :         }
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span><span class="lineCov"> 5971202225 :       m_key[v] = k;</span>
+<span class="lineNum">     613 </span>            :       link_roots (par, v);
+<span class="lineNum">     614 </span>            :       m_next_bucket[v] = m_bucket[k];
+<span class="lineNum">     615 </span>            :       m_bucket[k] = v;
+<span class="lineNum">     616 </span><span class="lineCov"> 6488656880 : </span>
+<span class="lineNum">     617 </span><span class="lineCov"> 1463787278 :       /* Transform semidominators into dominators.  */</span>
+<span class="lineNum">     618 </span><span class="lineCov"> 6488656880 :       for (TBB w = m_bucket[par]; w; w = m_next_bucket[w])</span>
+<span class="lineNum">     619 </span><span class="lineCov"> 4908167598 :         {</span>
+<span class="lineNum">     620 </span>            :           k = eval (w);
+<span class="lineNum">     621 </span><span class="lineCov"> 6488656880 :           if (m_key[k] &lt; m_key[w])</span>
+<span class="lineNum">     622 </span>            :             m_dom[w] = k;
+<span class="lineNum">     623 </span>            :           else
+<span class="lineNum">     624 </span><span class="lineCov"> 4568795026 :             m_dom[w] = par;</span>
+<span class="lineNum">     625 </span><span class="lineCov"> 4568795026 :         }</span>
+<span class="lineNum">     626 </span><span class="lineCov"> 4568795026 :       /* We don't need to cleanup next_bucket[].  */</span>
+<span class="lineNum">     627 </span><span class="lineCov"> 4568795026 :       m_bucket[par] = 0;</span>
+<span class="lineNum">     628 </span>            :     }
+<span class="lineNum">     629 </span>            : 
+<span class="lineNum">     630 </span><span class="lineCov"> 9137590052 :   /* Explicitly define the dominators.  */</span>
+<span class="lineNum">     631 </span>            :   m_dom[1] = 0;
+<span class="lineNum">     632 </span><span class="lineCov"> 4568795026 :   for (TBB v = 2; v &lt;= m_nodes; v++)</span>
+<span class="lineNum">     633 </span><span class="lineCov"> 4568795026 :     if (m_dom[v] != m_key[v])</span>
+<span class="lineNum">     634 </span><span class="lineCov">   16616640 :       m_dom[v] = m_dom[m_dom[v]];</span>
+<span class="lineNum">     635 </span>            : }
+<span class="lineNum">     636 </span><span class="lineCov"> 4552178386 : </span>
+<span class="lineNum">     637 </span>            : /* Assign dfs numbers starting from NUM to NODE and its sons.  */
+<a name="638"><span class="lineNum">     638 </span>            : </a>
+<span class="lineNum">     639 </span><span class="lineCov"> 4568795026 : static void</span>
+<span class="lineNum">     640 </span>            : assign_dfs_numbers (struct et_node *node, int *num)
+<span class="lineNum">     641 </span>            : {
+<span class="lineNum">     642 </span>            :   struct et_node *son;
+<span class="lineNum">     643 </span><span class="lineCov">  512615691 : </span>
+<span class="lineNum">     644 </span><span class="lineCov"> 5081410717 :   node-&gt;dfs_num_in = (*num)++;</span>
+<span class="lineNum">     645 </span><span class="lineCov"> 4568795026 : </span>
+<span class="lineNum">     646 </span><span class="lineCov">   16616640 :   if (node-&gt;son)</span>
+<span class="lineNum">     647 </span><span class="lineCov">  512615691 :     {</span>
+<span class="lineNum">     648 </span>            :       assign_dfs_numbers (node-&gt;son, num);
+<span class="lineNum">     649 </span>            :       for (son = node-&gt;son-&gt;right; son != node-&gt;son; son = son-&gt;right)
+<span class="lineNum">     650 </span>            :         assign_dfs_numbers (son, num);
+<span class="lineNum">     651 </span>            :     }
+<span class="lineNum">     652 </span><span class="lineCov"> 1280122057 : </span>
+<span class="lineNum">     653 </span>            :   node-&gt;dfs_num_out = (*num)++;
+<span class="lineNum">     654 </span><span class="lineCov"> 1280122057 : }</span>
+<span class="lineNum">     655 </span>            : 
+<span class="lineNum">     656 </span><span class="lineCov"> 1280122057 : /* Compute the data necessary for fast resolving of dominator queries in a</span>
+<span class="lineNum">     657 </span>            :    static dominator tree.  */
+<a name="658"><span class="lineNum">     658 </span><span class="lineCov"> 1280122057 : </span></a>
+<span class="lineNum">     659 </span>            : static void
+<span class="lineNum">     660 </span><span class="lineCov">  646633822 : compute_dom_fast_query (enum cdi_direction dir)</span>
+<span class="lineNum">     661 </span><span class="lineCov"> 1047822727 : {</span>
+<span class="lineNum">     662 </span><span class="lineCov">  401188905 :   int num = 0;</span>
+<span class="lineNum">     663 </span>            :   basic_block bb;
+<span class="lineNum">     664 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">     665 </span><span class="lineCov"> 1280122057 : </span>
+<span class="lineNum">     666 </span><span class="lineCov"> 1280122057 :   gcc_checking_assert (dom_info_available_p (dir));</span>
+<span class="lineNum">     667 </span>            : 
+<span class="lineNum">     668 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">     669 </span>            :     return;
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            :   FOR_ALL_BB_FN (bb, cfun)
+<span class="lineNum">     672 </span><span class="lineCov">  116149665 :     {</span>
+<span class="lineNum">     673 </span>            :       if (!bb-&gt;dom[dir_index]-&gt;father)
+<span class="lineNum">     674 </span><span class="lineCov">  116149665 :         assign_dfs_numbers (bb-&gt;dom[dir_index], &amp;num);</span>
+<span class="lineNum">     675 </span><span class="lineCov">  116149665 :     }</span>
+<span class="lineNum">     676 </span><span class="lineCov">  116149665 : </span>
+<span class="lineNum">     677 </span>            :   dom_computed[dir_index] = DOM_OK;
+<span class="lineNum">     678 </span><span class="lineCov">  116149665 : }</span>
+<span class="lineNum">     679 </span>            : 
+<span class="lineNum">     680 </span><span class="lineCov">  116149665 : /* Analogous to the previous function but compute the data for reducible</span>
+<span class="lineNum">     681 </span><span class="lineNoCov">          0 :    region REGION.  */</span>
+<a name="682"><span class="lineNum">     682 </span>            : </a>
+<span class="lineNum">     683 </span><span class="lineCov"> 1396271722 : static void</span>
+<span class="lineNum">     684 </span>            : compute_dom_fast_query_in_region (enum cdi_direction dir,
+<span class="lineNum">     685 </span><span class="lineCov"> 1280122057 :                                   vec&lt;basic_block&gt; region)</span>
+<span class="lineNum">     686 </span><span class="lineCov">  232299330 : {</span>
+<span class="lineNum">     687 </span>            :   int num = 0;
+<span class="lineNum">     688 </span>            :   basic_block bb;
+<span class="lineNum">     689 </span><span class="lineCov">  116149665 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">     690 </span>            : 
+<span class="lineNum">     691 </span>            :   gcc_checking_assert (dom_info_available_p (dir));
+<span class="lineNum">     692 </span>            : 
+<span class="lineNum">     693 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">     694 </span>            :     return;
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span><span class="lineCov">       4317 :   /* Assign dfs numbers for region nodes except for entry and exit nodes.  */</span>
+<span class="lineNum">     697 </span>            :   for (unsigned int i = 1; i &lt; region.length () - 1; i++)
+<span class="lineNum">     698 </span>            :     {
+<span class="lineNum">     699 </span><span class="lineCov">       4317 :       bb = region[i];</span>
+<span class="lineNum">     700 </span><span class="lineCov">       4317 :       if (!bb-&gt;dom[dir_index]-&gt;father)</span>
+<span class="lineNum">     701 </span><span class="lineCov">       4317 :         assign_dfs_numbers (bb-&gt;dom[dir_index], &amp;num);</span>
+<span class="lineNum">     702 </span>            :     }
+<span class="lineNum">     703 </span><span class="lineCov">       4317 : </span>
+<span class="lineNum">     704 </span>            :   dom_computed[dir_index] = DOM_OK;
+<span class="lineNum">     705 </span><span class="lineCov">       4317 : }</span>
+<span class="lineNum">     706 </span><span class="lineNoCov">          0 : </span>
+<span class="lineNum">     707 </span>            : /* The main entry point into this module.  DIR is set depending on whether
+<span class="lineNum">     708 </span>            :    we want to compute dominators or postdominators.  */
+<a name="709"><span class="lineNum">     709 </span><span class="lineCov">      55720 : </span></a>
+<span class="lineNum">     710 </span>            : void
+<span class="lineNum">     711 </span><span class="lineCov">      23543 : calculate_dominance_info (cdi_direction dir)</span>
+<span class="lineNum">     712 </span><span class="lineCov">      23543 : {</span>
+<span class="lineNum">     713 </span><span class="lineNoCov">          0 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">     714 </span>            : 
+<span class="lineNum">     715 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">     716 </span><span class="lineCov">       4317 :     {</span>
+<span class="lineNum">     717 </span>            :       checking_verify_dominators (dir);
+<span class="lineNum">     718 </span>            :       return;
+<span class="lineNum">     719 </span>            :     }
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span>            :   timevar_push (TV_DOMINANCE);
+<span class="lineNum">     722 </span>            :   if (!dom_info_available_p (dir))
+<span class="lineNum">     723 </span><span class="lineCov">  255785115 :     {</span>
+<span class="lineNum">     724 </span>            :       gcc_assert (!n_bbs_in_dom_tree[dir_index]);
+<span class="lineNum">     725 </span><span class="lineCov">  255785115 : </span>
+<span class="lineNum">     726 </span>            :       basic_block b;
+<span class="lineNum">     727 </span><span class="lineCov">  255785115 :       FOR_ALL_BB_FN (b, cfun)</span>
+<span class="lineNum">     728 </span>            :         {
+<span class="lineNum">     729 </span><span class="lineCov">  139635450 :           b-&gt;dom[dir_index] = et_new_tree (b);</span>
+<span class="lineNum">     730 </span><span class="lineCov">  139635450 :         }</span>
+<span class="lineNum">     731 </span>            :       n_bbs_in_dom_tree[dir_index] = n_basic_blocks_for_fn (cfun);
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span><span class="lineCov">  116149665 :       dom_info di (cfun, dir);</span>
+<span class="lineNum">     734 </span><span class="lineCov">  116149665 :       di.calc_dfs_tree ();</span>
+<span class="lineNum">     735 </span>            :       di.calc_idoms ();
+<span class="lineNum">     736 </span><span class="lineCov">  108734380 : </span>
+<span class="lineNum">     737 </span>            :       FOR_EACH_BB_FN (b, cfun)
+<span class="lineNum">     738 </span><span class="lineCov">  108734380 :         {</span>
+<span class="lineNum">     739 </span><span class="lineCov"> 1179497961 :           if (basic_block d = di.get_idom (b))</span>
+<span class="lineNum">     740 </span>            :             et_set_father (b-&gt;dom[dir_index], d-&gt;dom[dir_index]);
+<span class="lineNum">     741 </span><span class="lineCov"> 1070763581 :         }</span>
+<span class="lineNum">     742 </span>            : 
+<span class="lineNum">     743 </span><span class="lineCov">  108734380 :       dom_computed[dir_index] = DOM_NO_FAST_QUERY;</span>
+<span class="lineNum">     744 </span>            :     }
+<span class="lineNum">     745 </span><span class="lineCov">  108734380 :   else</span>
+<span class="lineNum">     746 </span><span class="lineCov">  108734380 :     checking_verify_dominators (dir);</span>
+<span class="lineNum">     747 </span><span class="lineCov">  108734380 : </span>
+<span class="lineNum">     748 </span>            :   compute_dom_fast_query (dir);
+<span class="lineNum">     749 </span><span class="lineCov">  962029201 : </span>
+<span class="lineNum">     750 </span>            :   timevar_pop (TV_DOMINANCE);
+<span class="lineNum">     751 </span><span class="lineCov">  853294821 : }</span>
+<span class="lineNum">     752 </span><span class="lineCov">  853294821 : </span>
+<span class="lineNum">     753 </span>            : /* Analogous to the previous function but compute dominance info for regions
+<span class="lineNum">     754 </span>            :    which are single entry, multiple exit regions for CDI_DOMINATORs and
+<span class="lineNum">     755 </span><span class="lineCov">  108734380 :    multiple entry, single exit regions for CDI_POST_DOMINATORs.  */</span>
+<a name="756"><span class="lineNum">     756 </span>            : </a>
+<span class="lineNum">     757 </span>            : void
+<span class="lineNum">     758 </span><span class="lineCov">    7415285 : calculate_dominance_info_for_region (cdi_direction dir,</span>
+<span class="lineNum">     759 </span>            :                                      vec&lt;basic_block&gt; region)
+<span class="lineNum">     760 </span><span class="lineCov">  116149665 : {</span>
+<span class="lineNum">     761 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">     762 </span><span class="lineCov">  116149665 :   basic_block bb;</span>
+<span class="lineNum">     763 </span>            :   unsigned int i;
+<span class="lineNum">     764 </span>            : 
+<span class="lineNum">     765 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">     766 </span>            :     return;
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span>            :   timevar_push (TV_DOMINANCE);
+<span class="lineNum">     769 </span>            :   /* Assume that dom info is not partially computed.  */
+<span class="lineNum">     770 </span><span class="lineCov">       4317 :   gcc_assert (!dom_info_available_p (dir));</span>
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span>            :   FOR_EACH_VEC_ELT (region, i, bb)
+<span class="lineNum">     773 </span><span class="lineCov">       4317 :     {</span>
+<span class="lineNum">     774 </span><span class="lineCov">       4317 :       bb-&gt;dom[dir_index] = et_new_tree (bb);</span>
+<span class="lineNum">     775 </span><span class="lineCov">       4317 :     }</span>
+<span class="lineNum">     776 </span>            :   dom_info di (region, dir);
+<span class="lineNum">     777 </span><span class="lineCov">       4317 :   di.calc_dfs_tree ();</span>
+<span class="lineNum">     778 </span><span class="lineNoCov">          0 :   di.calc_idoms ();</span>
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span><span class="lineCov">       4317 :   FOR_EACH_VEC_ELT (region, i, bb)</span>
+<span class="lineNum">     781 </span>            :     if (basic_block d = di.get_idom (bb))
+<span class="lineNum">     782 </span><span class="lineCov">       4317 :       et_set_father (bb-&gt;dom[dir_index], d-&gt;dom[dir_index]);</span>
+<span class="lineNum">     783 </span>            : 
+<span class="lineNum">     784 </span><span class="lineCov">      36494 :   dom_computed[dir_index] = DOM_NO_FAST_QUERY;</span>
+<span class="lineNum">     785 </span>            :   compute_dom_fast_query_in_region (dir, region);
+<span class="lineNum">     786 </span><span class="lineCov">      32177 : </span>
+<span class="lineNum">     787 </span>            :   timevar_pop (TV_DOMINANCE);
+<span class="lineNum">     788 </span><span class="lineCov">       4317 : }</span>
+<span class="lineNum">     789 </span><span class="lineCov">       4317 : </span>
+<a name="790"><span class="lineNum">     790 </span><span class="lineCov">       4317 : /* Free dominance information for direction DIR.  */</span></a>
+<span class="lineNum">     791 </span>            : void
+<span class="lineNum">     792 </span><span class="lineCov">      36494 : free_dominance_info (function *fn, enum cdi_direction dir)</span>
+<span class="lineNum">     793 </span><span class="lineCov">      32177 : {</span>
+<span class="lineNum">     794 </span><span class="lineCov">      23543 :   basic_block bb;</span>
+<span class="lineNum">     795 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">     796 </span><span class="lineCov">       4317 : </span>
+<span class="lineNum">     797 </span><span class="lineCov">       4317 :   if (!dom_info_available_p (fn, dir))</span>
+<span class="lineNum">     798 </span>            :     return;
+<span class="lineNum">     799 </span><span class="lineCov">       4317 : </span>
+<span class="lineNum">     800 </span>            :   FOR_ALL_BB_FN (bb, fn)
+<span class="lineNum">     801 </span>            :     {
+<span class="lineNum">     802 </span>            :       et_free_tree_force (bb-&gt;dom[dir_index]);
+<span class="lineNum">     803 </span>            :       bb-&gt;dom[dir_index] = NULL;
+<span class="lineNum">     804 </span><span class="lineCov">  208192825 :     }</span>
+<span class="lineNum">     805 </span>            :   et_free_pools ();
+<span class="lineNum">     806 </span><span class="lineCov">  208192825 : </span>
+<span class="lineNum">     807 </span><span class="lineCov">  208192825 :   fn-&gt;cfg-&gt;x_n_bbs_in_dom_tree[dir_index] = 0;</span>
+<span class="lineNum">     808 </span>            : 
+<span class="lineNum">     809 </span><span class="lineCov">  208192825 :   fn-&gt;cfg-&gt;x_dom_computed[dir_index] = DOM_NONE;</span>
+<span class="lineNum">     810 </span>            : }
+<a name="811"><span class="lineNum">     811 </span>            : </a>
+<span class="lineNum">     812 </span><span class="lineCov"> 1171084402 : void</span>
+<span class="lineNum">     813 </span>            : free_dominance_info (enum cdi_direction dir)
+<span class="lineNum">     814 </span><span class="lineCov"> 1062396681 : {</span>
+<span class="lineNum">     815 </span><span class="lineCov"> 1062396681 :   free_dominance_info (cfun, dir);</span>
+<span class="lineNum">     816 </span>            : }
+<span class="lineNum">     817 </span><span class="lineCov">  108687721 : </span>
+<span class="lineNum">     818 </span>            : /* Free dominance information for direction DIR in region REGION.  */
+<a name="819"><span class="lineNum">     819 </span><span class="lineCov">  108687721 : </span></a>
+<span class="lineNum">     820 </span>            : void
+<span class="lineNum">     821 </span><span class="lineCov">  108687721 : free_dominance_info_for_region (function *fn,</span>
+<span class="lineNum">     822 </span>            :                                 enum cdi_direction dir,
+<span class="lineNum">     823 </span>            :                                 vec&lt;basic_block&gt; region)
+<span class="lineNum">     824 </span>            : {
+<span class="lineNum">     825 </span><span class="lineCov">  130455465 :   basic_block bb;</span>
+<span class="lineNum">     826 </span>            :   unsigned int i;
+<span class="lineNum">     827 </span><span class="lineCov">  130455465 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">     828 </span><span class="lineCov">  130455465 : </span>
+<span class="lineNum">     829 </span>            :   if (!dom_info_available_p (dir))
+<span class="lineNum">     830 </span>            :     return;
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span>            :   FOR_EACH_VEC_ELT (region, i, bb)
+<span class="lineNum">     833 </span><span class="lineCov">       4317 :     {</span>
+<span class="lineNum">     834 </span>            :       et_free_tree_force (bb-&gt;dom[dir_index]);
+<span class="lineNum">     835 </span>            :       bb-&gt;dom[dir_index] = NULL;
+<span class="lineNum">     836 </span>            :     }
+<span class="lineNum">     837 </span><span class="lineCov">       4317 :   et_free_pools ();</span>
+<span class="lineNum">     838 </span><span class="lineCov">       4317 : </span>
+<span class="lineNum">     839 </span><span class="lineCov">       4317 :   fn-&gt;cfg-&gt;x_dom_computed[dir_index] = DOM_NONE;</span>
+<span class="lineNum">     840 </span>            : 
+<span class="lineNum">     841 </span><span class="lineCov">       4317 :   fn-&gt;cfg-&gt;x_n_bbs_in_dom_tree[dir_index] = 0;</span>
+<span class="lineNum">     842 </span>            : }
+<span class="lineNum">     843 </span>            : 
+<a name="844"><span class="lineNum">     844 </span><span class="lineCov">      36494 : /* Return the immediate dominator of basic block BB.  */</span></a>
+<span class="lineNum">     845 </span>            : basic_block
+<span class="lineNum">     846 </span><span class="lineCov">      32177 : get_immediate_dominator (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">     847 </span><span class="lineCov">      32177 : {</span>
+<span class="lineNum">     848 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">     849 </span><span class="lineCov">       4317 :   struct et_node *node = bb-&gt;dom[dir_index];</span>
+<span class="lineNum">     850 </span>            : 
+<span class="lineNum">     851 </span><span class="lineCov">       4317 :   gcc_checking_assert (dom_computed[dir_index]);</span>
+<span class="lineNum">     852 </span>            : 
+<span class="lineNum">     853 </span><span class="lineCov">       4317 :   if (!node-&gt;father)</span>
+<span class="lineNum">     854 </span>            :     return NULL;
+<span class="lineNum">     855 </span>            : 
+<span class="lineNum">     856 </span>            :   return (basic_block) node-&gt;father-&gt;data;
+<span class="lineNum">     857 </span>            : }
+<span class="lineNum">     858 </span><span class="lineCov"> 4160626461 : </span>
+<span class="lineNum">     859 </span>            : /* Set the immediate dominator of the block possibly removing
+<a name="860"><span class="lineNum">     860 </span><span class="lineCov"> 4160626461 :    existing edge.  NULL can be used to remove any edge.  */</span></a>
+<span class="lineNum">     861 </span><span class="lineCov"> 4160626461 : void</span>
+<span class="lineNum">     862 </span>            : set_immediate_dominator (enum cdi_direction dir, basic_block bb,
+<span class="lineNum">     863 </span><span class="lineCov"> 4160626461 :                          basic_block dominated_by)</span>
+<span class="lineNum">     864 </span>            : {
+<span class="lineNum">     865 </span><span class="lineCov"> 4160626461 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">     866 </span>            :   struct et_node *node = bb-&gt;dom[dir_index];
+<span class="lineNum">     867 </span>            : 
+<span class="lineNum">     868 </span><span class="lineCov"> 4153380707 :   gcc_checking_assert (dom_computed[dir_index]);</span>
+<span class="lineNum">     869 </span>            : 
+<span class="lineNum">     870 </span>            :   if (node-&gt;father)
+<span class="lineNum">     871 </span>            :     {
+<span class="lineNum">     872 </span>            :       if (node-&gt;father-&gt;data == dominated_by)
+<span class="lineNum">     873 </span>            :         return;
+<span class="lineNum">     874 </span><span class="lineCov">   30486466 :       et_split (node);</span>
+<span class="lineNum">     875 </span>            :     }
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span><span class="lineCov">   30486466 :   if (dominated_by)</span>
+<span class="lineNum">     878 </span><span class="lineCov">   30486466 :     et_set_father (node, dominated_by-&gt;dom[dir_index]);</span>
+<span class="lineNum">     879 </span>            : 
+<span class="lineNum">     880 </span><span class="lineCov">   30486466 :   if (dom_computed[dir_index] == DOM_OK)</span>
+<span class="lineNum">     881 </span>            :     dom_computed[dir_index] = DOM_NO_FAST_QUERY;
+<span class="lineNum">     882 </span><span class="lineCov">   30486466 : }</span>
+<span class="lineNum">     883 </span>            : 
+<span class="lineNum">     884 </span><span class="lineCov">   16360865 : /* Returns the list of basic blocks immediately dominated by BB, in the</span>
+<a name="885"><span class="lineNum">     885 </span>            :    direction DIR.  */</a>
+<span class="lineNum">     886 </span><span class="lineCov">    7017258 : vec&lt;basic_block&gt; </span>
+<span class="lineNum">     887 </span>            : get_dominated_by (enum cdi_direction dir, basic_block bb)
+<span class="lineNum">     888 </span>            : {
+<span class="lineNum">     889 </span><span class="lineCov">   21142859 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">     890 </span><span class="lineCov">   20359955 :   struct et_node *node = bb-&gt;dom[dir_index], *son = node-&gt;son, *ason;</span>
+<span class="lineNum">     891 </span>            :   vec&lt;basic_block&gt; bbs = vNULL;
+<span class="lineNum">     892 </span><span class="lineCov">   21142859 : </span>
+<span class="lineNum">     893 </span><span class="lineCov">     683241 :   gcc_checking_assert (dom_computed[dir_index]);</span>
+<span class="lineNum">     894 </span>            : 
+<span class="lineNum">     895 </span>            :   if (!son)
+<span class="lineNum">     896 </span>            :     return vNULL;
+<span class="lineNum">     897 </span>            : 
+<span class="lineNum">     898 </span>            :   bbs.safe_push ((basic_block) son-&gt;data);
+<span class="lineNum">     899 </span><span class="lineCov">     303388 :   for (ason = son-&gt;right; ason != son; ason = ason-&gt;right)</span>
+<span class="lineNum">     900 </span>            :     bbs.safe_push ((basic_block) ason-&gt;data);
+<span class="lineNum">     901 </span><span class="lineCov">     303388 : </span>
+<span class="lineNum">     902 </span><span class="lineCov">     303388 :   return bbs;</span>
+<span class="lineNum">     903 </span><span class="lineCov">     303388 : }</span>
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span><span class="lineCov">     303388 : /* Returns the list of basic blocks that are immediately dominated (in</span>
+<span class="lineNum">     906 </span>            :    direction DIR) by some block between N_REGION ones stored in REGION,
+<span class="lineNum">     907 </span><span class="lineCov">     303388 :    except for blocks in the REGION itself.  */</span>
+<a name="908"><span class="lineNum">     908 </span><span class="lineCov">     127358 : </span></a>
+<span class="lineNum">     909 </span>            : vec&lt;basic_block&gt; 
+<span class="lineNum">     910 </span><span class="lineCov">     176030 : get_dominated_by_region (enum cdi_direction dir, basic_block *region,</span>
+<span class="lineNum">     911 </span><span class="lineCov">     283181 :                          unsigned n_region)</span>
+<span class="lineNum">     912 </span><span class="lineCov">     107151 : {</span>
+<span class="lineNum">     913 </span>            :   unsigned i;
+<span class="lineNum">     914 </span><span class="lineCov">     176030 :   basic_block dom;</span>
+<span class="lineNum">     915 </span>            :   vec&lt;basic_block&gt; doms = vNULL;
+<span class="lineNum">     916 </span>            : 
+<span class="lineNum">     917 </span>            :   for (i = 0; i &lt; n_region; i++)
+<span class="lineNum">     918 </span>            :     region[i]-&gt;flags |= BB_DUPLICATED;
+<span class="lineNum">     919 </span>            :   for (i = 0; i &lt; n_region; i++)
+<span class="lineNum">     920 </span>            :     for (dom = first_dom_son (dir, region[i]);
+<span class="lineNum">     921 </span>            :          dom;
+<span class="lineNum">     922 </span><span class="lineCov">     183448 :          dom = next_dom_son (dir, dom))</span>
+<span class="lineNum">     923 </span>            :       if (!(dom-&gt;flags &amp; BB_DUPLICATED))
+<span class="lineNum">     924 </span>            :         doms.safe_push (dom);
+<span class="lineNum">     925 </span><span class="lineCov">     183448 :   for (i = 0; i &lt; n_region; i++)</span>
+<span class="lineNum">     926 </span><span class="lineCov">     183448 :     region[i]-&gt;flags &amp;= ~BB_DUPLICATED;</span>
+<span class="lineNum">     927 </span><span class="lineCov">     183448 : </span>
+<span class="lineNum">     928 </span>            :   return doms;
+<span class="lineNum">     929 </span><span class="lineCov">     629626 : }</span>
+<span class="lineNum">     930 </span><span class="lineCov">     446178 : </span>
+<span class="lineNum">     931 </span><span class="lineCov">     629626 : /* Returns the list of basic blocks including BB dominated by BB, in the</span>
+<span class="lineNum">     932 </span><span class="lineCov">     446178 :    direction DIR up to DEPTH in the dominator tree.  The DEPTH of zero will</span>
+<span class="lineNum">     933 </span><span class="lineCov">    1045800 :    produce a vector containing all dominated blocks.  The vector will be sorted</span>
+<span class="lineNum">     934 </span><span class="lineCov">     599622 :    in preorder.  */</span>
+<a name="935"><span class="lineNum">     935 </span><span class="lineCov">     599622 : </span></a>
+<span class="lineNum">     936 </span><span class="lineCov">     336892 : vec&lt;basic_block&gt; </span>
+<span class="lineNum">     937 </span><span class="lineCov">     629626 : get_dominated_to_depth (enum cdi_direction dir, basic_block bb, int depth)</span>
+<span class="lineNum">     938 </span><span class="lineCov">     446178 : {</span>
+<span class="lineNum">     939 </span>            :   vec&lt;basic_block&gt; bbs = vNULL;
+<span class="lineNum">     940 </span><span class="lineCov">     183448 :   unsigned i;</span>
+<span class="lineNum">     941 </span>            :   unsigned next_level_start;
+<span class="lineNum">     942 </span>            : 
+<span class="lineNum">     943 </span>            :   i = 0;
+<span class="lineNum">     944 </span>            :   bbs.safe_push (bb);
+<span class="lineNum">     945 </span>            :   next_level_start = 1; /* = bbs.length (); */
+<span class="lineNum">     946 </span>            : 
+<span class="lineNum">     947 </span>            :   do
+<span class="lineNum">     948 </span>            :     {
+<span class="lineNum">     949 </span><span class="lineCov">    5513066 :       basic_block son;</span>
+<span class="lineNum">     950 </span>            : 
+<span class="lineNum">     951 </span><span class="lineCov">    5513066 :       bb = bbs[i++];</span>
+<span class="lineNum">     952 </span><span class="lineCov">    5513066 :       for (son = first_dom_son (dir, bb);</span>
+<span class="lineNum">     953 </span><span class="lineCov">    5513066 :            son;</span>
+<span class="lineNum">     954 </span>            :            son = next_dom_son (dir, son))
+<span class="lineNum">     955 </span><span class="lineCov">    5513066 :         bbs.safe_push (son);</span>
+<span class="lineNum">     956 </span><span class="lineCov">    5513066 : </span>
+<span class="lineNum">     957 </span><span class="lineCov">    5513066 :       if (i == next_level_start &amp;&amp; --depth)</span>
+<span class="lineNum">     958 </span>            :         next_level_start = bbs.length ();
+<span class="lineNum">     959 </span><span class="lineCov">   53377417 :     }</span>
+<span class="lineNum">     960 </span>            :   while (i &lt; next_level_start);
+<span class="lineNum">     961 </span><span class="lineCov">   53377417 : </span>
+<span class="lineNum">     962 </span>            :   return bbs;
+<span class="lineNum">     963 </span><span class="lineCov">   53377417 : }</span>
+<span class="lineNum">     964 </span><span class="lineCov">   53377417 : </span>
+<span class="lineNum">     965 </span><span class="lineCov">  101330789 : /* Returns the list of basic blocks including BB dominated by BB, in the</span>
+<span class="lineNum">     966 </span><span class="lineCov">   47953372 :    direction DIR.  The vector will be sorted in preorder.  */</span>
+<a name="967"><span class="lineNum">     967 </span><span class="lineCov">   47953372 : </span></a>
+<span class="lineNum">     968 </span>            : vec&lt;basic_block&gt; 
+<span class="lineNum">     969 </span><span class="lineCov">   53377417 : get_all_dominated_blocks (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">     970 </span><span class="lineCov">   24334789 : {</span>
+<span class="lineNum">     971 </span>            :   return get_dominated_to_depth (dir, bb, 0);
+<span class="lineNum">     972 </span><span class="lineCov">   53377417 : }</span>
+<span class="lineNum">     973 </span>            : 
+<a name="974"><span class="lineNum">     974 </span><span class="lineCov">    5513066 : /* Redirect all edges pointing to BB to TO.  */</span></a>
+<span class="lineNum">     975 </span>            : void
+<span class="lineNum">     976 </span>            : redirect_immediate_dominators (enum cdi_direction dir, basic_block bb,
+<span class="lineNum">     977 </span>            :                                basic_block to)
+<span class="lineNum">     978 </span>            : {
+<span class="lineNum">     979 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">     980 </span>            :   struct et_node *bb_node, *to_node, *son;
+<span class="lineNum">     981 </span><span class="lineCov">    5309691 : </span>
+<span class="lineNum">     982 </span>            :   bb_node = bb-&gt;dom[dir_index];
+<span class="lineNum">     983 </span><span class="lineCov">    5309691 :   to_node = to-&gt;dom[dir_index];</span>
+<span class="lineNum">     984 </span>            : 
+<span class="lineNum">     985 </span>            :   gcc_checking_assert (dom_computed[dir_index]);
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span>            :   if (!bb_node-&gt;son)
+<span class="lineNum">     988 </span><span class="lineCov">    8250150 :     return;</span>
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span>            :   while (bb_node-&gt;son)
+<span class="lineNum">     991 </span><span class="lineCov">    8250150 :     {</span>
+<span class="lineNum">     992 </span><span class="lineCov">    8250150 :       son = bb_node-&gt;son;</span>
+<span class="lineNum">     993 </span>            : 
+<span class="lineNum">     994 </span><span class="lineCov">    8250150 :       et_split (son);</span>
+<span class="lineNum">     995 </span><span class="lineCov">    8250150 :       et_set_father (son, to_node);</span>
+<span class="lineNum">     996 </span>            :     }
+<span class="lineNum">     997 </span><span class="lineCov">    8250150 : </span>
+<span class="lineNum">     998 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">     999 </span><span class="lineCov">    8250150 :     dom_computed[dir_index] = DOM_NO_FAST_QUERY;</span>
+<span class="lineNum">    1000 </span>            : }
+<span class="lineNum">    1001 </span>            : 
+<a name="1002"><span class="lineNum">    1002 </span><span class="lineCov">   14158386 : /* Find first basic block in the tree dominating both BB1 and BB2.  */</span></a>
+<span class="lineNum">    1003 </span>            : basic_block
+<span class="lineNum">    1004 </span><span class="lineCov">    8145742 : nearest_common_dominator (enum cdi_direction dir, basic_block bb1, basic_block bb2)</span>
+<span class="lineNum">    1005 </span>            : {
+<span class="lineNum">    1006 </span><span class="lineCov">    8145742 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1007 </span><span class="lineCov">    8145742 : </span>
+<span class="lineNum">    1008 </span>            :   gcc_checking_assert (dom_computed[dir_index]);
+<span class="lineNum">    1009 </span>            : 
+<span class="lineNum">    1010 </span><span class="lineCov">    6012644 :   if (!bb1)</span>
+<span class="lineNum">    1011 </span><span class="lineCov">    1254403 :     return bb2;</span>
+<span class="lineNum">    1012 </span>            :   if (!bb2)
+<span class="lineNum">    1013 </span>            :     return bb1;
+<span class="lineNum">    1014 </span>            : 
+<span class="lineNum">    1015 </span>            :   return (basic_block) et_nca (bb1-&gt;dom[dir_index], bb2-&gt;dom[dir_index])-&gt;data;
+<span class="lineNum">    1016 </span><span class="lineCov">   47395662 : }</span>
+<span class="lineNum">    1017 </span>            : 
+<span class="lineNum">    1018 </span><span class="lineCov">   47395662 : </span>
+<span class="lineNum">    1019 </span>            : /* Find the nearest common dominator for the basic blocks in BLOCKS,
+<span class="lineNum">    1020 </span><span class="lineCov">   47395662 :    using dominance direction DIR.  */</span>
+<a name="1021"><span class="lineNum">    1021 </span>            : </a>
+<span class="lineNum">    1022 </span><span class="lineCov">   47395662 : basic_block</span>
+<span class="lineNum">    1023 </span>            : nearest_common_dominator_for_set (enum cdi_direction dir, bitmap blocks)
+<span class="lineNum">    1024 </span><span class="lineCov">   46303469 : {</span>
+<span class="lineNum">    1025 </span>            :   unsigned i, first;
+<span class="lineNum">    1026 </span>            :   bitmap_iterator bi;
+<span class="lineNum">    1027 </span><span class="lineCov">   46303469 :   basic_block dom;</span>
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span>            :   first = bitmap_first_set_bit (blocks);
+<span class="lineNum">    1030 </span>            :   dom = BASIC_BLOCK_FOR_FN (cfun, first);
+<span class="lineNum">    1031 </span>            :   EXECUTE_IF_SET_IN_BITMAP (blocks, 0, i, bi)
+<span class="lineNum">    1032 </span>            :     if (dom != BASIC_BLOCK_FOR_FN (cfun, i))
+<span class="lineNum">    1033 </span>            :       dom = nearest_common_dominator (dir, dom, BASIC_BLOCK_FOR_FN (cfun, i));
+<span class="lineNum">    1034 </span>            : 
+<span class="lineNum">    1035 </span><span class="lineCov">    5728688 :   return dom;</span>
+<span class="lineNum">    1036 </span>            : }
+<span class="lineNum">    1037 </span><span class="lineCov">    5728688 : </span>
+<span class="lineNum">    1038 </span><span class="lineCov">    5728688 : /*  Given a dominator tree, we can determine whether one thing</span>
+<span class="lineNum">    1039 </span><span class="lineCov">    5728688 :     dominates another in constant time by using two DFS numbers:</span>
+<span class="lineNum">    1040 </span>            : 
+<span class="lineNum">    1041 </span><span class="lineCov">    5728688 :     1. The number for when we visit a node on the way down the tree</span>
+<span class="lineNum">    1042 </span><span class="lineCov">    5728688 :     2. The number for when we visit a node on the way back up the tree</span>
+<span class="lineNum">    1043 </span><span class="lineCov">   35184942 : </span>
+<span class="lineNum">    1044 </span><span class="lineCov">   29456254 :     You can view these as bounds for the range of dfs numbers the</span>
+<span class="lineNum">    1045 </span><span class="lineCov">   23587525 :     nodes in the subtree of the dominator tree rooted at that node</span>
+<span class="lineNum">    1046 </span>            :     will contain.
+<span class="lineNum">    1047 </span><span class="lineCov">    5728688 : </span>
+<span class="lineNum">    1048 </span>            :     The dominator tree is always a simple acyclic tree, so there are
+<span class="lineNum">    1049 </span>            :     only three possible relations two nodes in the dominator tree have
+<span class="lineNum">    1050 </span>            :     to each other:
+<span class="lineNum">    1051 </span>            : 
+<span class="lineNum">    1052 </span>            :     1. Node A is above Node B (and thus, Node A dominates node B)
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span>            :      A
+<span class="lineNum">    1055 </span>            :      |
+<span class="lineNum">    1056 </span>            :      C
+<span class="lineNum">    1057 </span>            :     / \
+<span class="lineNum">    1058 </span>            :    B   D
+<span class="lineNum">    1059 </span>            : 
+<span class="lineNum">    1060 </span>            : 
+<span class="lineNum">    1061 </span>            :    In the above case, DFS_Number_In of A will be &lt;= DFS_Number_In of
+<span class="lineNum">    1062 </span>            :    B, and DFS_Number_Out of A will be &gt;= DFS_Number_Out of B.  This is
+<span class="lineNum">    1063 </span>            :    because we must hit A in the dominator tree *before* B on the walk
+<span class="lineNum">    1064 </span>            :    down, and we will hit A *after* B on the walk back up
+<span class="lineNum">    1065 </span>            : 
+<span class="lineNum">    1066 </span>            :    2. Node A is below node B (and thus, node B dominates node A)
+<span class="lineNum">    1067 </span>            : 
+<span class="lineNum">    1068 </span>            : 
+<span class="lineNum">    1069 </span>            :      B
+<span class="lineNum">    1070 </span>            :      |
+<span class="lineNum">    1071 </span>            :      A
+<span class="lineNum">    1072 </span>            :     / \
+<span class="lineNum">    1073 </span>            :    C   D
+<span class="lineNum">    1074 </span>            : 
+<span class="lineNum">    1075 </span>            :    In the above case, DFS_Number_In of A will be &gt;= DFS_Number_In of
+<span class="lineNum">    1076 </span>            :    B, and DFS_Number_Out of A will be &lt;= DFS_Number_Out of B.
+<span class="lineNum">    1077 </span>            : 
+<span class="lineNum">    1078 </span>            :    This is because we must hit A in the dominator tree *after* B on
+<span class="lineNum">    1079 </span>            :    the walk down, and we will hit A *before* B on the walk back up
+<span class="lineNum">    1080 </span>            : 
+<span class="lineNum">    1081 </span>            :    3. Node A and B are siblings (and thus, neither dominates the other)
+<span class="lineNum">    1082 </span>            : 
+<span class="lineNum">    1083 </span>            :      C
+<span class="lineNum">    1084 </span>            :      |
+<span class="lineNum">    1085 </span>            :      D
+<span class="lineNum">    1086 </span>            :     / \
+<span class="lineNum">    1087 </span>            :    A   B
+<span class="lineNum">    1088 </span>            : 
+<span class="lineNum">    1089 </span>            :    In the above case, DFS_Number_In of A will *always* be &lt;=
+<span class="lineNum">    1090 </span>            :    DFS_Number_In of B, and DFS_Number_Out of A will *always* be &lt;=
+<span class="lineNum">    1091 </span>            :    DFS_Number_Out of B.  This is because we will always finish the dfs
+<span class="lineNum">    1092 </span>            :    walk of one of the subtrees before the other, and thus, the dfs
+<span class="lineNum">    1093 </span>            :    numbers for one subtree can't intersect with the range of dfs
+<span class="lineNum">    1094 </span>            :    numbers for the other subtree.  If you swap A and B's position in
+<span class="lineNum">    1095 </span>            :    the dominator tree, the comparison changes direction, but the point
+<span class="lineNum">    1096 </span>            :    is that both comparisons will always go the same way if there is no
+<span class="lineNum">    1097 </span>            :    dominance relationship.
+<span class="lineNum">    1098 </span>            : 
+<span class="lineNum">    1099 </span>            :    Thus, it is sufficient to write
+<span class="lineNum">    1100 </span>            : 
+<span class="lineNum">    1101 </span>            :    A_Dominates_B (node A, node B)
+<span class="lineNum">    1102 </span>            :    {
+<span class="lineNum">    1103 </span>            :      return DFS_Number_In(A) &lt;= DFS_Number_In(B)
+<span class="lineNum">    1104 </span>            :             &amp;&amp; DFS_Number_Out (A) &gt;= DFS_Number_Out(B);
+<span class="lineNum">    1105 </span>            :    }
+<span class="lineNum">    1106 </span>            : 
+<span class="lineNum">    1107 </span>            :    A_Dominated_by_B (node A, node B)
+<span class="lineNum">    1108 </span>            :    {
+<span class="lineNum">    1109 </span>            :      return DFS_Number_In(A) &gt;= DFS_Number_In(B)
+<span class="lineNum">    1110 </span>            :             &amp;&amp; DFS_Number_Out (A) &lt;= DFS_Number_Out(B);
+<span class="lineNum">    1111 </span>            :    }  */
+<span class="lineNum">    1112 </span>            : 
+<a name="1113"><span class="lineNum">    1113 </span>            : /* Return TRUE in case BB1 is dominated by BB2.  */</a>
+<span class="lineNum">    1114 </span>            : bool
+<span class="lineNum">    1115 </span>            : dominated_by_p (enum cdi_direction dir, const_basic_block bb1, const_basic_block bb2)
+<span class="lineNum">    1116 </span>            : {
+<span class="lineNum">    1117 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1118 </span>            :   struct et_node *n1 = bb1-&gt;dom[dir_index], *n2 = bb2-&gt;dom[dir_index];
+<span class="lineNum">    1119 </span>            : 
+<span class="lineNum">    1120 </span>            :   gcc_checking_assert (dom_computed[dir_index]);
+<span class="lineNum">    1121 </span>            : 
+<span class="lineNum">    1122 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">    1123 </span>            :     return (n1-&gt;dfs_num_in &gt;= n2-&gt;dfs_num_in
+<span class="lineNum">    1124 </span>            :             &amp;&amp; n1-&gt;dfs_num_out &lt;= n2-&gt;dfs_num_out);
+<span class="lineNum">    1125 </span>            : 
+<span class="lineNum">    1126 </span>            :   return et_below (n1, n2);
+<span class="lineNum">    1127 </span><span class="lineCov"> 8232502095 : }</span>
+<span class="lineNum">    1128 </span>            : 
+<span class="lineNum">    1129 </span><span class="lineCov"> 8232502095 : /* Returns the entry dfs number for basic block BB, in the direction DIR.  */</span>
+<a name="1130"><span class="lineNum">    1130 </span><span class="lineCov"> 8232502095 : </span></a>
+<span class="lineNum">    1131 </span>            : unsigned
+<span class="lineNum">    1132 </span><span class="lineCov"> 8232502095 : bb_dom_dfs_in (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">    1133 </span>            : {
+<span class="lineNum">    1134 </span><span class="lineCov"> 8232502095 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1135 </span><span class="lineCov"> 7930709952 :   struct et_node *n = bb-&gt;dom[dir_index];</span>
+<span class="lineNum">    1136 </span><span class="lineCov">13640281417 : </span>
+<span class="lineNum">    1137 </span>            :   gcc_checking_assert (dom_computed[dir_index] == DOM_OK);
+<span class="lineNum">    1138 </span><span class="lineCov">  301792143 :   return n-&gt;dfs_num_in;</span>
+<span class="lineNum">    1139 </span>            : }
+<span class="lineNum">    1140 </span>            : 
+<span class="lineNum">    1141 </span>            : /* Returns the exit dfs number for basic block BB, in the direction DIR.  */
+<a name="1142"><span class="lineNum">    1142 </span>            : </a>
+<span class="lineNum">    1143 </span>            : unsigned
+<span class="lineNum">    1144 </span><span class="lineCov">   38720969 : bb_dom_dfs_out (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">    1145 </span>            : {
+<span class="lineNum">    1146 </span><span class="lineCov">   38720969 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1147 </span><span class="lineCov">   38720969 :   struct et_node *n = bb-&gt;dom[dir_index];</span>
+<span class="lineNum">    1148 </span>            : 
+<span class="lineNum">    1149 </span><span class="lineCov">   38720969 :   gcc_checking_assert (dom_computed[dir_index] == DOM_OK);</span>
+<span class="lineNum">    1150 </span><span class="lineCov">   38720969 :   return n-&gt;dfs_num_out;</span>
+<span class="lineNum">    1151 </span>            : }
+<span class="lineNum">    1152 </span>            : 
+<a name="1153"><span class="lineNum">    1153 </span>            : /* Verify invariants of dominator structure.  */</a>
+<span class="lineNum">    1154 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1155 </span>            : verify_dominators (cdi_direction dir)
+<span class="lineNum">    1156 </span><span class="lineCov">   21806777 : {</span>
+<span class="lineNum">    1157 </span>            :   gcc_assert (dom_info_available_p (dir));
+<span class="lineNum">    1158 </span><span class="lineCov">   21806777 : </span>
+<span class="lineNum">    1159 </span><span class="lineCov">   21806777 :   dom_info di (cfun, dir);</span>
+<span class="lineNum">    1160 </span>            :   di.calc_dfs_tree ();
+<span class="lineNum">    1161 </span><span class="lineCov">   21806777 :   di.calc_idoms ();</span>
+<span class="lineNum">    1162 </span><span class="lineCov">   21806777 : </span>
+<span class="lineNum">    1163 </span>            :   bool err = false;
+<span class="lineNum">    1164 </span>            :   basic_block bb;
+<span class="lineNum">    1165 </span>            :   FOR_EACH_BB_FN (bb, cfun)
+<span class="lineNum">    1166 </span>            :     {
+<span class="lineNum">    1167 </span><span class="lineCov">  403876994 :       basic_block imm_bb = get_immediate_dominator (dir, bb);</span>
+<span class="lineNum">    1168 </span>            :       if (!imm_bb)
+<span class="lineNum">    1169 </span><span class="lineCov">  403876994 :         {</span>
+<span class="lineNum">    1170 </span>            :           error (&quot;dominator of %d status unknown&quot;, bb-&gt;index);
+<span class="lineNum">    1171 </span><span class="lineCov">  807753988 :           err = true;</span>
+<span class="lineNum">    1172 </span><span class="lineCov">  403876994 :           continue;</span>
+<span class="lineNum">    1173 </span><span class="lineCov">  403876994 :         }</span>
+<span class="lineNum">    1174 </span>            : 
+<span class="lineNum">    1175 </span><span class="lineCov">  403876994 :       basic_block imm_bb_correct = di.get_idom (bb);</span>
+<span class="lineNum">    1176 </span><span class="lineCov">  403876994 :       if (imm_bb != imm_bb_correct)</span>
+<span class="lineNum">    1177 </span><span class="lineCov"> 4119353656 :         {</span>
+<span class="lineNum">    1178 </span>            :           error (&quot;dominator of %d should be %d, not %d&quot;,
+<span class="lineNum">    1179 </span><span class="lineCov"> 3715476662 :                  bb-&gt;index, imm_bb_correct-&gt;index, imm_bb-&gt;index);</span>
+<span class="lineNum">    1180 </span><span class="lineCov"> 3715476662 :           err = true;</span>
+<span class="lineNum">    1181 </span>            :         }
+<span class="lineNum">    1182 </span><span class="lineNoCov">          0 :     }</span>
+<span class="lineNum">    1183 </span><span class="lineNoCov">          0 : </span>
+<span class="lineNum">    1184 </span><span class="lineNoCov">          0 :   gcc_assert (!err);</span>
+<span class="lineNum">    1185 </span>            : }
+<span class="lineNum">    1186 </span>            : 
+<span class="lineNum">    1187 </span><span class="lineCov"> 7430953324 : /* Determine immediate dominator (or postdominator, according to DIR) of BB,</span>
+<span class="lineNum">    1188 </span><span class="lineCov"> 3715476662 :    assuming that dominators of other blocks are correct.  We also use it to</span>
+<span class="lineNum">    1189 </span>            :    recompute the dominators in a restricted area, by iterating it until it
+<span class="lineNum">    1190 </span><span class="lineNoCov">          0 :    reaches a fixed point.  */</span>
+<a name="1191"><span class="lineNum">    1191 </span>            : </a>
+<span class="lineNum">    1192 </span><span class="lineNoCov">          0 : basic_block</span>
+<span class="lineNum">    1193 </span>            : recompute_dominator (enum cdi_direction dir, basic_block bb)
+<span class="lineNum">    1194 </span>            : {
+<span class="lineNum">    1195 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1196 </span><span class="lineCov">  403876994 :   basic_block dom_bb = NULL;</span>
+<span class="lineNum">    1197 </span><span class="lineCov">  403876994 :   edge e;</span>
+<span class="lineNum">    1198 </span>            :   edge_iterator ei;
+<span class="lineNum">    1199 </span>            : 
+<span class="lineNum">    1200 </span>            :   gcc_checking_assert (dom_computed[dir_index]);
+<span class="lineNum">    1201 </span>            : 
+<span class="lineNum">    1202 </span>            :   if (dir == CDI_DOMINATORS)
+<span class="lineNum">    1203 </span>            :     {
+<span class="lineNum">    1204 </span>            :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)
+<span class="lineNum">    1205 </span><span class="lineCov">     385976 :         {</span>
+<span class="lineNum">    1206 </span>            :           if (!dominated_by_p (dir, e-&gt;src, bb))
+<span class="lineNum">    1207 </span><span class="lineCov">     385976 :             dom_bb = nearest_common_dominator (dir, dom_bb, e-&gt;src);</span>
+<span class="lineNum">    1208 </span><span class="lineCov">     385976 :         }</span>
+<span class="lineNum">    1209 </span><span class="lineCov">     385976 :     }</span>
+<span class="lineNum">    1210 </span><span class="lineCov">     385976 :   else</span>
+<span class="lineNum">    1211 </span>            :     {
+<span class="lineNum">    1212 </span><span class="lineCov">     385976 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1213 </span>            :         {
+<span class="lineNum">    1214 </span><span class="lineCov">     385976 :           if (!dominated_by_p (dir, e-&gt;dest, bb))</span>
+<span class="lineNum">    1215 </span>            :             dom_bb = nearest_common_dominator (dir, dom_bb, e-&gt;dest);
+<span class="lineNum">    1216 </span><span class="lineCov">    2344805 :         }</span>
+<span class="lineNum">    1217 </span>            :     }
+<span class="lineNum">    1218 </span><span class="lineCov">    1572853 : </span>
+<span class="lineNum">    1219 </span><span class="lineCov">    1405165 :   return dom_bb;</span>
+<span class="lineNum">    1220 </span>            : }
+<span class="lineNum">    1221 </span>            : 
+<span class="lineNum">    1222 </span>            : /* Use simple heuristics (see iterate_fix_dominators) to determine dominators
+<span class="lineNum">    1223 </span>            :    of BBS.  We assume that all the immediate dominators except for those of the
+<span class="lineNum">    1224 </span><span class="lineNoCov">          0 :    blocks in BBS are correct.  If CONSERVATIVE is true, we also assume that the</span>
+<span class="lineNum">    1225 </span>            :    currently recorded immediate dominators of blocks in BBS really dominate the
+<span class="lineNum">    1226 </span><span class="lineNoCov">          0 :    blocks.  The basic blocks for that we determine the dominator are removed</span>
+<span class="lineNum">    1227 </span><span class="lineNoCov">          0 :    from BBS.  */</span>
+<a name="1228"><span class="lineNum">    1228 </span>            : </a>
+<span class="lineNum">    1229 </span>            : static void
+<span class="lineNum">    1230 </span>            : prune_bbs_to_update_dominators (vec&lt;basic_block&gt; bbs,
+<span class="lineNum">    1231 </span><span class="lineCov">     385976 :                                 bool conservative)</span>
+<span class="lineNum">    1232 </span>            : {
+<span class="lineNum">    1233 </span>            :   unsigned i;
+<span class="lineNum">    1234 </span>            :   bool single;
+<span class="lineNum">    1235 </span>            :   basic_block bb, dom = NULL;
+<span class="lineNum">    1236 </span>            :   edge_iterator ei;
+<span class="lineNum">    1237 </span>            :   edge e;
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span>            :   for (i = 0; bbs.iterate (i, &amp;bb);)
+<span class="lineNum">    1240 </span>            :     {
+<span class="lineNum">    1241 </span>            :       if (bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+<span class="lineNum">    1242 </span><span class="lineCov">     596538 :         goto succeed;</span>
+<span class="lineNum">    1243 </span>            : 
+<span class="lineNum">    1244 </span>            :       if (single_pred_p (bb))
+<span class="lineNum">    1245 </span><span class="lineCov">     596538 :         {</span>
+<span class="lineNum">    1246 </span><span class="lineCov">     596538 :           set_immediate_dominator (CDI_DOMINATORS, bb, single_pred (bb));</span>
+<span class="lineNum">    1247 </span><span class="lineCov">     596538 :           goto succeed;</span>
+<span class="lineNum">    1248 </span><span class="lineCov">     596538 :         }</span>
+<span class="lineNum">    1249 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1250 </span>            :       if (!conservative)
+<span class="lineNum">    1251 </span><span class="lineCov">    1925671 :         goto fail;</span>
+<span class="lineNum">    1252 </span>            : 
+<span class="lineNum">    1253 </span><span class="lineCov">    1329133 :       single = true;</span>
+<span class="lineNum">    1254 </span>            :       dom = NULL;
+<span class="lineNum">    1255 </span>            :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)
+<span class="lineNum">    1256 </span><span class="lineCov">    1329133 :         {</span>
+<span class="lineNum">    1257 </span>            :           if (dominated_by_p (CDI_DOMINATORS, e-&gt;src, bb))
+<span class="lineNum">    1258 </span><span class="lineCov">     454897 :             continue;</span>
+<span class="lineNum">    1259 </span><span class="lineCov">     454897 : </span>
+<span class="lineNum">    1260 </span>            :           if (!dom)
+<span class="lineNum">    1261 </span>            :             dom = e-&gt;src;
+<span class="lineNum">    1262 </span><span class="lineCov">     874236 :           else</span>
+<span class="lineNum">    1263 </span>            :             {
+<span class="lineNum">    1264 </span>            :               single = false;
+<span class="lineNum">    1265 </span><span class="lineCov">     277015 :               dom = nearest_common_dominator (CDI_DOMINATORS, dom, e-&gt;src);</span>
+<span class="lineNum">    1266 </span><span class="lineCov">     277015 :             }</span>
+<span class="lineNum">    1267 </span><span class="lineCov">    3611822 :         }</span>
+<span class="lineNum">    1268 </span>            : 
+<span class="lineNum">    1269 </span><span class="lineCov">    3057792 :       gcc_assert (dom != NULL);</span>
+<span class="lineNum">    1270 </span>            :       if (single
+<span class="lineNum">    1271 </span>            :           || find_edge (dom, bb))
+<span class="lineNum">    1272 </span><span class="lineCov">    3039464 :         {</span>
+<span class="lineNum">    1273 </span><span class="lineCov">     277015 :           set_immediate_dominator (CDI_DOMINATORS, bb, dom);</span>
+<span class="lineNum">    1274 </span>            :           goto succeed;
+<span class="lineNum">    1275 </span>            :         }
+<span class="lineNum">    1276 </span><span class="lineCov">    2762449 : </span>
+<span class="lineNum">    1277 </span><span class="lineCov">    2762449 : fail:</span>
+<span class="lineNum">    1278 </span>            :       i++;
+<span class="lineNum">    1279 </span>            :       continue;
+<span class="lineNum">    1280 </span>            : 
+<span class="lineNum">    1281 </span><span class="lineCov">     277015 : succeed:</span>
+<span class="lineNum">    1282 </span><span class="lineCov">     277015 :       bbs.unordered_remove (i);</span>
+<span class="lineNum">    1283 </span><span class="lineCov">     277015 :     }</span>
+<span class="lineNum">    1284 </span>            : }
+<span class="lineNum">    1285 </span><span class="lineCov">     203326 : </span>
+<span class="lineNum">    1286 </span><span class="lineCov">     203326 : /* Returns root of the dominance tree in the direction DIR that contains</span>
+<span class="lineNum">    1287 </span>            :    BB.  */
+<a name="1288"><span class="lineNum">    1288 </span>            : </a>
+<span class="lineNum">    1289 </span><span class="lineCov">     670910 : static basic_block</span>
+<span class="lineNum">    1290 </span><span class="lineCov">     670910 : root_of_dom_tree (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">    1291 </span><span class="lineCov">     670910 : {</span>
+<span class="lineNum">    1292 </span>            :   return (basic_block) et_root (bb-&gt;dom[dom_convert_dir_to_idx (dir)])-&gt;data;
+<span class="lineNum">    1293 </span><span class="lineCov">     658223 : }</span>
+<span class="lineNum">    1294 </span><span class="lineCov">     658223 : </span>
+<span class="lineNum">    1295 </span>            : /* See the comment in iterate_fix_dominators.  Finds the immediate dominators
+<span class="lineNum">    1296 </span><span class="lineCov">     596538 :    for the sons of Y, found using the SON and BROTHER arrays representing</span>
+<span class="lineNum">    1297 </span>            :    the dominance tree of graph G.  BBS maps the vertices of G to the basic
+<span class="lineNum">    1298 </span>            :    blocks.  */
+<a name="1299"><span class="lineNum">    1299 </span>            : </a>
+<span class="lineNum">    1300 </span>            : static void
+<span class="lineNum">    1301 </span>            : determine_dominators_for_sons (struct graph *g, vec&lt;basic_block&gt; bbs,
+<span class="lineNum">    1302 </span><span class="lineCov">    2309386 :                                int y, int *son, int *brother)</span>
+<span class="lineNum">    1303 </span>            : {
+<span class="lineNum">    1304 </span><span class="lineCov">    2309386 :   bitmap gprime;</span>
+<span class="lineNum">    1305 </span>            :   int i, a, nc;
+<span class="lineNum">    1306 </span>            :   vec&lt;int&gt; *sccs;
+<span class="lineNum">    1307 </span>            :   basic_block bb, dom, ybb;
+<span class="lineNum">    1308 </span>            :   unsigned si;
+<span class="lineNum">    1309 </span>            :   edge e;
+<span class="lineNum">    1310 </span>            :   edge_iterator ei;
+<span class="lineNum">    1311 </span>            : 
+<span class="lineNum">    1312 </span>            :   if (son[y] == -1)
+<span class="lineNum">    1313 </span><span class="lineCov">     864276 :     return;</span>
+<span class="lineNum">    1314 </span>            :   if (y == (int) bbs.length ())
+<span class="lineNum">    1315 </span>            :     ybb = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+<span class="lineNum">    1316 </span><span class="lineCov">     864276 :   else</span>
+<span class="lineNum">    1317 </span><span class="lineCov">     864276 :     ybb = bbs[y];</span>
+<span class="lineNum">    1318 </span><span class="lineCov">     864276 : </span>
+<span class="lineNum">    1319 </span><span class="lineCov">     864276 :   if (brother[son[y]] == -1)</span>
+<span class="lineNum">    1320 </span><span class="lineCov">     864276 :     {</span>
+<span class="lineNum">    1321 </span><span class="lineCov">     864276 :       /* Handle the common case Y has just one son specially.  */</span>
+<span class="lineNum">    1322 </span><span class="lineCov">     864276 :       bb = bbs[son[y]];</span>
+<span class="lineNum">    1323 </span>            :       set_immediate_dominator (CDI_DOMINATORS, bb,
+<span class="lineNum">    1324 </span><span class="lineCov">     864276 :                                recompute_dominator (CDI_DOMINATORS, bb));</span>
+<span class="lineNum">    1325 </span><span class="lineCov">     712552 :       identify_vertices (g, y, son[y]);</span>
+<span class="lineNum">    1326 </span><span class="lineCov">     827464 :       return;</span>
+<span class="lineNum">    1327 </span><span class="lineCov">     282720 :     }</span>
+<span class="lineNum">    1328 </span>            : 
+<span class="lineNum">    1329 </span><span class="lineCov">     131012 :   gprime = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">    1330 </span>            :   for (a = son[y]; a != -1; a = brother[a])
+<span class="lineNum">    1331 </span><span class="lineCov">     413732 :     bitmap_set_bit (gprime, a);</span>
+<span class="lineNum">    1332 </span>            : 
+<span class="lineNum">    1333 </span>            :   nc = graphds_scc (g, gprime);
+<span class="lineNum">    1334 </span><span class="lineCov">     262008 :   BITMAP_FREE (gprime);</span>
+<span class="lineNum">    1335 </span><span class="lineCov">     262008 : </span>
+<span class="lineNum">    1336 </span>            :   /* ???  Needed to work around the pre-processor confusion with
+<span class="lineNum">    1337 </span><span class="lineCov">     262008 :      using a multi-argument template type as macro argument.  */</span>
+<span class="lineNum">    1338 </span><span class="lineCov">     262008 :   typedef vec&lt;int&gt; vec_int_heap;</span>
+<span class="lineNum">    1339 </span>            :   sccs = XCNEWVEC (vec_int_heap, nc);
+<span class="lineNum">    1340 </span>            :   for (a = son[y]; a != -1; a = brother[a])
+<span class="lineNum">    1341 </span><span class="lineCov">     151724 :     sccs[g-&gt;vertices[a].component].safe_push (a);</span>
+<span class="lineNum">    1342 </span><span class="lineCov">     471272 : </span>
+<span class="lineNum">    1343 </span><span class="lineCov">     319548 :   for (i = nc - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">    1344 </span>            :     {
+<span class="lineNum">    1345 </span><span class="lineCov">     151724 :       dom = NULL;</span>
+<span class="lineNum">    1346 </span><span class="lineCov">     151724 :       FOR_EACH_VEC_ELT (sccs[i], si, a)</span>
+<span class="lineNum">    1347 </span>            :         {
+<span class="lineNum">    1348 </span>            :           bb = bbs[a];
+<span class="lineNum">    1349 </span>            :           FOR_EACH_EDGE (e, ei, bb-&gt;preds)
+<span class="lineNum">    1350 </span><span class="lineCov">     151724 :             {</span>
+<span class="lineNum">    1351 </span><span class="lineCov">     151724 :               if (root_of_dom_tree (CDI_DOMINATORS, e-&gt;src) != ybb)</span>
+<span class="lineNum">    1352 </span><span class="lineCov">     471272 :                 continue;</span>
+<span class="lineNum">    1353 </span><span class="lineCov">     319548 : </span>
+<span class="lineNum">    1354 </span>            :               dom = nearest_common_dominator (CDI_DOMINATORS, dom, e-&gt;src);
+<span class="lineNum">    1355 </span><span class="lineCov">     471269 :             }</span>
+<span class="lineNum">    1356 </span>            :         }
+<span class="lineNum">    1357 </span>            : 
+<span class="lineNum">    1358 </span><span class="lineCov">     958638 :       gcc_assert (dom != NULL);</span>
+<span class="lineNum">    1359 </span>            :       FOR_EACH_VEC_ELT (sccs[i], si, a)
+<span class="lineNum">    1360 </span><span class="lineCov">     319548 :         {</span>
+<span class="lineNum">    1361 </span><span class="lineCov">    1505043 :           bb = bbs[a];</span>
+<span class="lineNum">    1362 </span>            :           set_immediate_dominator (CDI_DOMINATORS, bb, dom);
+<span class="lineNum">    1363 </span><span class="lineCov">     865947 :         }</span>
+<span class="lineNum">    1364 </span>            :     }
+<span class="lineNum">    1365 </span>            : 
+<span class="lineNum">    1366 </span><span class="lineCov">     721147 :   for (i = 0; i &lt; nc; i++)</span>
+<span class="lineNum">    1367 </span>            :     sccs[i].release ();
+<span class="lineNum">    1368 </span>            :   free (sccs);
+<span class="lineNum">    1369 </span>            : 
+<span class="lineNum">    1370 </span><span class="lineCov">     319545 :   for (a = son[y]; a != -1; a = brother[a])</span>
+<span class="lineNum">    1371 </span><span class="lineCov">     958638 :     identify_vertices (g, y, a);</span>
+<span class="lineNum">    1372 </span>            : }
+<span class="lineNum">    1373 </span><span class="lineCov">     319548 : </span>
+<span class="lineNum">    1374 </span><span class="lineCov">     319548 : /* Recompute dominance information for basic blocks in the set BBS.  The</span>
+<span class="lineNum">    1375 </span>            :    function assumes that the immediate dominators of all the other blocks
+<span class="lineNum">    1376 </span>            :    in CFG are correct, and that there are no unreachable blocks.
+<span class="lineNum">    1377 </span>            : 
+<span class="lineNum">    1378 </span><span class="lineCov">     471269 :    If CONSERVATIVE is true, we additionally assume that all the ancestors of</span>
+<span class="lineNum">    1379 </span><span class="lineCov">     639090 :    a block of BBS in the current dominance tree dominate it.  */</span>
+<a name="1380"><span class="lineNum">    1380 </span><span class="lineCov">     151724 : </span></a>
+<span class="lineNum">    1381 </span>            : void
+<span class="lineNum">    1382 </span><span class="lineCov">     471272 : iterate_fix_dominators (enum cdi_direction dir, vec&lt;basic_block&gt; bbs,</span>
+<span class="lineNum">    1383 </span><span class="lineCov">     319548 :                         bool conservative)</span>
+<span class="lineNum">    1384 </span>            : {
+<span class="lineNum">    1385 </span>            :   unsigned i;
+<span class="lineNum">    1386 </span>            :   basic_block bb, dom;
+<span class="lineNum">    1387 </span>            :   struct graph *g;
+<span class="lineNum">    1388 </span>            :   int n, y;
+<span class="lineNum">    1389 </span>            :   size_t dom_i;
+<span class="lineNum">    1390 </span>            :   edge e;
+<span class="lineNum">    1391 </span>            :   edge_iterator ei;
+<span class="lineNum">    1392 </span>            :   int *parent, *son, *brother;
+<span class="lineNum">    1393 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1394 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1395 </span>            :   /* We only support updating dominators.  There are some problems with
+<span class="lineNum">    1396 </span>            :      updating postdominators (need to add fake edges from infinite loops
+<span class="lineNum">    1397 </span><span class="lineCov">     596538 :      and noreturn functions), and since we do not currently use</span>
+<span class="lineNum">    1398 </span><span class="lineCov">     596538 :      iterate_fix_dominators for postdominators, any attempt to handle these</span>
+<span class="lineNum">    1399 </span><span class="lineCov">     596538 :      problems would be unused, untested, and almost surely buggy.  We keep</span>
+<span class="lineNum">    1400 </span><span class="lineCov">     596538 :      the DIR argument for consistency with the rest of the dominator analysis</span>
+<span class="lineNum">    1401 </span><span class="lineCov">     596538 :      interface.  */</span>
+<span class="lineNum">    1402 </span><span class="lineCov">     596538 :   gcc_checking_assert (dir == CDI_DOMINATORS &amp;&amp; dom_computed[dir_index]);</span>
+<span class="lineNum">    1403 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1404 </span><span class="lineCov">     596538 :   /* The algorithm we use takes inspiration from the following papers, although</span>
+<span class="lineNum">    1405 </span><span class="lineCov">     596538 :      the details are quite different from any of them:</span>
+<span class="lineNum">    1406 </span>            : 
+<span class="lineNum">    1407 </span>            :      [1] G. Ramalingam, T. Reps, An Incremental Algorithm for Maintaining the
+<span class="lineNum">    1408 </span>            :          Dominator Tree of a Reducible Flowgraph
+<span class="lineNum">    1409 </span>            :      [2]  V. C. Sreedhar, G. R. Gao, Y.-F. Lee: Incremental computation of
+<span class="lineNum">    1410 </span>            :           dominator trees
+<span class="lineNum">    1411 </span>            :      [3]  K. D. Cooper, T. J. Harvey and K. Kennedy: A Simple, Fast Dominance
+<span class="lineNum">    1412 </span>            :           Algorithm
+<span class="lineNum">    1413 </span>            : 
+<span class="lineNum">    1414 </span><span class="lineCov">     596538 :      First, we use the following heuristics to decrease the size of the BBS</span>
+<span class="lineNum">    1415 </span>            :      set:
+<span class="lineNum">    1416 </span>            :        a) if BB has a single predecessor, then its immediate dominator is this
+<span class="lineNum">    1417 </span>            :           predecessor
+<span class="lineNum">    1418 </span>            :        additionally, if CONSERVATIVE is true:
+<span class="lineNum">    1419 </span>            :        b) if all the predecessors of BB except for one (X) are dominated by BB,
+<span class="lineNum">    1420 </span>            :           then X is the immediate dominator of BB
+<span class="lineNum">    1421 </span>            :        c) if the nearest common ancestor of the predecessors of BB is X and
+<span class="lineNum">    1422 </span>            :           X -&gt; BB is an edge in CFG, then X is the immediate dominator of BB
+<span class="lineNum">    1423 </span>            : 
+<span class="lineNum">    1424 </span>            :      Then, we need to establish the dominance relation among the basic blocks
+<span class="lineNum">    1425 </span>            :      in BBS.  We split the dominance tree by removing the immediate dominator
+<span class="lineNum">    1426 </span>            :      edges from BBS, creating a forest F.  We form a graph G whose vertices
+<span class="lineNum">    1427 </span>            :      are BBS and ENTRY and X -&gt; Y is an edge of G if there exists an edge
+<span class="lineNum">    1428 </span>            :      X' -&gt; Y in CFG such that X' belongs to the tree of the dominance forest
+<span class="lineNum">    1429 </span>            :      whose root is X.  We then determine dominance tree of G.  Note that
+<span class="lineNum">    1430 </span>            :      for X, Y in BBS, X dominates Y in CFG if and only if X dominates Y in G.
+<span class="lineNum">    1431 </span>            :      In this step, we can use arbitrary algorithm to determine dominators.
+<span class="lineNum">    1432 </span>            :      We decided to prefer the algorithm [3] to the algorithm of
+<span class="lineNum">    1433 </span>            :      Lengauer and Tarjan, since the set BBS is usually small (rarely exceeding
+<span class="lineNum">    1434 </span>            :      10 during gcc bootstrap), and [3] should perform better in this case.
+<span class="lineNum">    1435 </span>            : 
+<span class="lineNum">    1436 </span>            :      Finally, we need to determine the immediate dominators for the basic
+<span class="lineNum">    1437 </span>            :      blocks of BBS.  If the immediate dominator of X in G is Y, then
+<span class="lineNum">    1438 </span>            :      the immediate dominator of X in CFG belongs to the tree of F rooted in
+<span class="lineNum">    1439 </span>            :      Y.  We process the dominator tree T of G recursively, starting from leaves.
+<span class="lineNum">    1440 </span>            :      Suppose that X_1, X_2, ..., X_k are the sons of Y in T, and that the
+<span class="lineNum">    1441 </span>            :      subtrees of the dominance tree of CFG rooted in X_i are already correct.
+<span class="lineNum">    1442 </span>            :      Let G' be the subgraph of G induced by {X_1, X_2, ..., X_k}.  We make
+<span class="lineNum">    1443 </span>            :      the following observations:
+<span class="lineNum">    1444 </span>            :        (i) the immediate dominator of all blocks in a strongly connected
+<span class="lineNum">    1445 </span>            :            component of G' is the same
+<span class="lineNum">    1446 </span>            :        (ii) if X has no predecessors in G', then the immediate dominator of X
+<span class="lineNum">    1447 </span>            :             is the nearest common ancestor of the predecessors of X in the
+<span class="lineNum">    1448 </span>            :             subtree of F rooted in Y
+<span class="lineNum">    1449 </span>            :      Therefore, it suffices to find the topological ordering of G', and
+<span class="lineNum">    1450 </span>            :      process the nodes X_i in this order using the rules (i) and (ii).
+<span class="lineNum">    1451 </span>            :      Then, we contract all the nodes X_i with Y in G, so that the further
+<span class="lineNum">    1452 </span>            :      steps work correctly.  */
+<span class="lineNum">    1453 </span>            : 
+<span class="lineNum">    1454 </span>            :   if (!conservative)
+<span class="lineNum">    1455 </span>            :     {
+<span class="lineNum">    1456 </span>            :       /* Split the tree now.  If the idoms of blocks in BBS are not
+<span class="lineNum">    1457 </span>            :          conservatively correct, setting the dominators using the
+<span class="lineNum">    1458 </span>            :          heuristics in prune_bbs_to_update_dominators could
+<span class="lineNum">    1459 </span>            :          create cycles in the dominance &quot;tree&quot;, and cause ICE.  */
+<span class="lineNum">    1460 </span>            :       FOR_EACH_VEC_ELT (bbs, i, bb)
+<span class="lineNum">    1461 </span>            :         set_immediate_dominator (CDI_DOMINATORS, bb, NULL);
+<span class="lineNum">    1462 </span>            :     }
+<span class="lineNum">    1463 </span>            : 
+<span class="lineNum">    1464 </span>            :   prune_bbs_to_update_dominators (bbs, conservative);
+<span class="lineNum">    1465 </span>            :   n = bbs.length ();
+<span class="lineNum">    1466 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1467 </span>            :   if (n == 0)
+<span class="lineNum">    1468 </span>            :     return;
+<span class="lineNum">    1469 </span>            : 
+<span class="lineNum">    1470 </span>            :   if (n == 1)
+<span class="lineNum">    1471 </span>            :     {
+<span class="lineNum">    1472 </span><span class="lineCov">    1387708 :       bb = bbs[0];</span>
+<span class="lineNum">    1473 </span><span class="lineCov">     764015 :       set_immediate_dominator (CDI_DOMINATORS, bb,</span>
+<span class="lineNum">    1474 </span>            :                                recompute_dominator (CDI_DOMINATORS, bb));
+<span class="lineNum">    1475 </span>            :       return;
+<span class="lineNum">    1476 </span><span class="lineCov">     596538 :     }</span>
+<span class="lineNum">    1477 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1478 </span>            :   timevar_push (TV_DOMINANCE);
+<span class="lineNum">    1479 </span><span class="lineCov">     596538 : </span>
+<span class="lineNum">    1480 </span><span class="lineCov">     313818 :   /* Construct the graph G.  */</span>
+<span class="lineNum">    1481 </span>            :   hash_map&lt;basic_block, int&gt; map (251);
+<span class="lineNum">    1482 </span><span class="lineCov">     372074 :   FOR_EACH_VEC_ELT (bbs, i, bb)</span>
+<span class="lineNum">    1483 </span>            :     {
+<span class="lineNum">    1484 </span><span class="lineCov">      89354 :       /* If the dominance tree is conservatively correct, split it now.  */</span>
+<span class="lineNum">    1485 </span><span class="lineCov">      89354 :       if (conservative)</span>
+<span class="lineNum">    1486 </span>            :         set_immediate_dominator (CDI_DOMINATORS, bb, NULL);
+<span class="lineNum">    1487 </span><span class="lineCov">      89354 :       map.put (bb, i);</span>
+<span class="lineNum">    1488 </span>            :     }
+<span class="lineNum">    1489 </span>            :   map.put (ENTRY_BLOCK_PTR_FOR_FN (cfun), n);
+<span class="lineNum">    1490 </span><span class="lineCov">     282720 : </span>
+<span class="lineNum">    1491 </span>            :   g = new_graph (n + 1);
+<span class="lineNum">    1492 </span>            :   for (y = 0; y &lt; g-&gt;n_vertices; y++)
+<span class="lineNum">    1493 </span><span class="lineCov">     565440 :     g-&gt;vertices[y].data = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">    1494 </span><span class="lineCov">    1146996 :   FOR_EACH_VEC_ELT (bbs, i, bb)</span>
+<span class="lineNum">    1495 </span>            :     {
+<span class="lineNum">    1496 </span>            :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)
+<span class="lineNum">    1497 </span><span class="lineCov">     581556 :         {</span>
+<span class="lineNum">    1498 </span><span class="lineCov">      18889 :           dom = root_of_dom_tree (CDI_DOMINATORS, e-&gt;src);</span>
+<span class="lineNum">    1499 </span><span class="lineCov">     581556 :           if (dom == bb)</span>
+<span class="lineNum">    1500 </span>            :             continue;
+<span class="lineNum">    1501 </span><span class="lineCov">     282720 : </span>
+<span class="lineNum">    1502 </span>            :           dom_i = *map.get (dom);
+<span class="lineNum">    1503 </span><span class="lineCov">     282720 : </span>
+<span class="lineNum">    1504 </span><span class="lineCov">    1146996 :           /* Do not include parallel edges to G.  */</span>
+<span class="lineNum">    1505 </span><span class="lineCov">     864276 :           if (!bitmap_set_bit ((bitmap) g-&gt;vertices[dom_i].data, i))</span>
+<span class="lineNum">    1506 </span><span class="lineCov">    1146996 :             continue;</span>
+<span class="lineNum">    1507 </span>            : 
+<span class="lineNum">    1508 </span><span class="lineCov">    2606551 :           add_edge (g, dom_i, i);</span>
+<span class="lineNum">    1509 </span>            :         }
+<span class="lineNum">    1510 </span><span class="lineCov">    1443439 :     }</span>
+<span class="lineNum">    1511 </span><span class="lineCov">    1443439 :   for (y = 0; y &lt; g-&gt;n_vertices; y++)</span>
+<span class="lineNum">    1512 </span>            :     BITMAP_FREE (g-&gt;vertices[y].data);
+<span class="lineNum">    1513 </span>            : 
+<span class="lineNum">    1514 </span><span class="lineCov">    1230032 :   /* Find the dominator tree of G.  */</span>
+<span class="lineNum">    1515 </span>            :   son = XNEWVEC (int, n + 1);
+<span class="lineNum">    1516 </span>            :   brother = XNEWVEC (int, n + 1);
+<span class="lineNum">    1517 </span><span class="lineCov">    1230032 :   parent = XNEWVEC (int, n + 1);</span>
+<span class="lineNum">    1518 </span>            :   graphds_domtree (g, n, parent, son, brother);
+<span class="lineNum">    1519 </span>            : 
+<span class="lineNum">    1520 </span><span class="lineCov">     814902 :   /* Finally, traverse the tree and find the immediate dominators.  */</span>
+<span class="lineNum">    1521 </span>            :   for (y = n; son[y] != -1; y = son[y])
+<span class="lineNum">    1522 </span>            :     continue;
+<span class="lineNum">    1523 </span><span class="lineCov">    1146996 :   while (y != -1)</span>
+<span class="lineNum">    1524 </span><span class="lineCov">     864276 :     {</span>
+<span class="lineNum">    1525 </span>            :       determine_dominators_for_sons (g, bbs, y, son, brother);
+<span class="lineNum">    1526 </span>            : 
+<span class="lineNum">    1527 </span><span class="lineCov">     282720 :       if (brother[y] != -1)</span>
+<span class="lineNum">    1528 </span><span class="lineCov">     282720 :         {</span>
+<span class="lineNum">    1529 </span><span class="lineCov">     282720 :           y = brother[y];</span>
+<span class="lineNum">    1530 </span><span class="lineCov">     282720 :           while (son[y] != -1)</span>
+<span class="lineNum">    1531 </span>            :             y = son[y];
+<span class="lineNum">    1532 </span>            :         }
+<span class="lineNum">    1533 </span><span class="lineCov">     696442 :       else</span>
+<span class="lineNum">    1534 </span>            :         y = parent[y];
+<span class="lineNum">    1535 </span><span class="lineCov">    1146996 :     }</span>
+<span class="lineNum">    1536 </span>            : 
+<span class="lineNum">    1537 </span><span class="lineCov">     864276 :   free (son);</span>
+<span class="lineNum">    1538 </span>            :   free (brother);
+<span class="lineNum">    1539 </span><span class="lineCov">     864276 :   free (parent);</span>
+<span class="lineNum">    1540 </span>            : 
+<span class="lineNum">    1541 </span>            :   free_graph (g);
+<span class="lineNum">    1542 </span><span class="lineCov">     167834 : </span>
+<span class="lineNum">    1543 </span>            :   timevar_pop (TV_DOMINANCE);
+<span class="lineNum">    1544 </span>            : }
+<a name="1545"><span class="lineNum">    1545 </span>            : </a>
+<span class="lineNum">    1546 </span><span class="lineCov">     696452 : void</span>
+<span class="lineNum">    1547 </span>            : add_to_dominance_info (enum cdi_direction dir, basic_block bb)
+<span class="lineNum">    1548 </span>            : {
+<span class="lineNum">    1549 </span><span class="lineCov">     282720 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1550 </span><span class="lineCov">     282720 : </span>
+<span class="lineNum">    1551 </span><span class="lineCov">     282720 :   gcc_checking_assert (dom_computed[dir_index] &amp;&amp; !bb-&gt;dom[dir_index]);</span>
+<span class="lineNum">    1552 </span>            : 
+<span class="lineNum">    1553 </span><span class="lineCov">     282720 :   n_bbs_in_dom_tree[dir_index]++;</span>
+<span class="lineNum">    1554 </span>            : 
+<span class="lineNum">    1555 </span><span class="lineCov">     283020 :   bb-&gt;dom[dir_index] = et_new_tree (bb);</span>
+<span class="lineNum">    1556 </span>            : 
+<span class="lineNum">    1557 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">    1558 </span>            :     dom_computed[dir_index] = DOM_NO_FAST_QUERY;
+<span class="lineNum">    1559 </span><span class="lineCov">   14218509 : }</span>
+<a name="1560"><span class="lineNum">    1560 </span>            : </a>
+<span class="lineNum">    1561 </span><span class="lineCov">   14218509 : void</span>
+<span class="lineNum">    1562 </span>            : delete_from_dominance_info (enum cdi_direction dir, basic_block bb)
+<span class="lineNum">    1563 </span><span class="lineCov">   14218509 : {</span>
+<span class="lineNum">    1564 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1565 </span><span class="lineCov">   14218509 : </span>
+<span class="lineNum">    1566 </span>            :   gcc_checking_assert (dom_computed[dir_index]);
+<span class="lineNum">    1567 </span><span class="lineCov">   14218509 : </span>
+<span class="lineNum">    1568 </span>            :   et_free_tree (bb-&gt;dom[dir_index]);
+<span class="lineNum">    1569 </span><span class="lineCov">   14218509 :   bb-&gt;dom[dir_index] = NULL;</span>
+<span class="lineNum">    1570 </span><span class="lineCov">    2430699 :   n_bbs_in_dom_tree[dir_index]--;</span>
+<span class="lineNum">    1571 </span><span class="lineCov">   14218509 : </span>
+<span class="lineNum">    1572 </span>            :   if (dom_computed[dir_index] == DOM_OK)
+<span class="lineNum">    1573 </span>            :     dom_computed[dir_index] = DOM_NO_FAST_QUERY;
+<span class="lineNum">    1574 </span><span class="lineCov">   22276706 : }</span>
+<span class="lineNum">    1575 </span>            : 
+<span class="lineNum">    1576 </span><span class="lineCov">   22276706 : /* Returns the first son of BB in the dominator or postdominator tree</span>
+<span class="lineNum">    1577 </span>            :    as determined by DIR.  */
+<a name="1578"><span class="lineNum">    1578 </span><span class="lineCov">   22276706 : </span></a>
+<span class="lineNum">    1579 </span>            : basic_block
+<span class="lineNum">    1580 </span><span class="lineCov">   22276706 : first_dom_son (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">    1581 </span><span class="lineCov">   22276706 : {</span>
+<span class="lineNum">    1582 </span><span class="lineCov">   22276706 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1583 </span>            :   struct et_node *son = bb-&gt;dom[dir_index]-&gt;son;
+<span class="lineNum">    1584 </span><span class="lineCov">   22276706 : </span>
+<span class="lineNum">    1585 </span><span class="lineCov">    2319799 :   return (basic_block) (son ? son-&gt;data : NULL);</span>
+<span class="lineNum">    1586 </span><span class="lineCov">   22276706 : }</span>
+<span class="lineNum">    1587 </span>            : 
+<span class="lineNum">    1588 </span>            : /* Returns the next dominance son after BB in the dominator or postdominator
+<span class="lineNum">    1589 </span>            :    tree as determined by DIR, or NULL if it was the last one.  */
+<a name="1590"><span class="lineNum">    1590 </span>            : </a>
+<span class="lineNum">    1591 </span>            : basic_block
+<span class="lineNum">    1592 </span><span class="lineCov">  450276950 : next_dom_son (enum cdi_direction dir, basic_block bb)</span>
+<span class="lineNum">    1593 </span>            : {
+<span class="lineNum">    1594 </span><span class="lineCov">  450276950 :   unsigned int dir_index = dom_convert_dir_to_idx (dir);</span>
+<span class="lineNum">    1595 </span><span class="lineCov">  450276950 :   struct et_node *next = bb-&gt;dom[dir_index]-&gt;right;</span>
+<span class="lineNum">    1596 </span>            : 
+<span class="lineNum">    1597 </span><span class="lineCov">  450276950 :   return (basic_block) (next-&gt;father-&gt;son == next ? NULL : next-&gt;data);</span>
+<span class="lineNum">    1598 </span>            : }
+<span class="lineNum">    1599 </span>            : 
+<span class="lineNum">    1600 </span>            : /* Return dominance availability for dominance info DIR.  */
+<a name="1601"><span class="lineNum">    1601 </span>            : </a>
+<span class="lineNum">    1602 </span>            : enum dom_state
+<span class="lineNum">    1603 </span>            : dom_info_state (function *fn, enum cdi_direction dir)
+<span class="lineNum">    1604 </span><span class="lineCov">  402273723 : {</span>
+<span class="lineNum">    1605 </span>            :   if (!fn-&gt;cfg)
+<span class="lineNum">    1606 </span><span class="lineCov">  402273723 :     return DOM_NONE;</span>
+<span class="lineNum">    1607 </span><span class="lineCov">  402273723 : </span>
+<span class="lineNum">    1608 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1609 </span><span class="lineCov">  402273723 :   return fn-&gt;cfg-&gt;x_dom_computed[dir_index];</span>
+<span class="lineNum">    1610 </span>            : }
+<a name="1611"><span class="lineNum">    1611 </span>            : </a>
+<span class="lineNum">    1612 </span>            : enum dom_state
+<span class="lineNum">    1613 </span>            : dom_info_state (enum cdi_direction dir)
+<span class="lineNum">    1614 </span>            : {
+<span class="lineNum">    1615 </span><span class="lineCov"> 3175851785 :   return dom_info_state (cfun, dir);</span>
+<span class="lineNum">    1616 </span>            : }
+<span class="lineNum">    1617 </span><span class="lineCov"> 3175851785 : </span>
+<span class="lineNum">    1618 </span>            : /* Set the dominance availability for dominance info DIR to NEW_STATE.  */
+<a name="1619"><span class="lineNum">    1619 </span>            : </a>
+<span class="lineNum">    1620 </span><span class="lineCov"> 3089886633 : void</span>
+<span class="lineNum">    1621 </span><span class="lineCov"> 3089886633 : set_dom_info_availability (enum cdi_direction dir, enum dom_state new_state)</span>
+<span class="lineNum">    1622 </span>            : {
+<span class="lineNum">    1623 </span>            :   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+<span class="lineNum">    1624 </span>            : 
+<span class="lineNum">    1625 </span><span class="lineCov">  267432630 :   dom_computed[dir_index] = new_state;</span>
+<span class="lineNum">    1626 </span>            : }
+<span class="lineNum">    1627 </span><span class="lineCov">  267432630 : </span>
+<span class="lineNum">    1628 </span>            : /* Returns true if dominance information for direction DIR is available.  */
+<a name="1629"><span class="lineNum">    1629 </span>            : </a>
+<span class="lineNum">    1630 </span>            : bool
+<span class="lineNum">    1631 </span>            : dom_info_available_p (function *fn, enum cdi_direction dir)
+<span class="lineNum">    1632 </span>            : {
+<span class="lineNum">    1633 </span><span class="lineCov">  109259008 :   return dom_info_state (fn, dir) != DOM_NONE;</span>
+<span class="lineNum">    1634 </span>            : }
+<a name="1635"><span class="lineNum">    1635 </span><span class="lineCov">  109259008 : </span></a>
+<span class="lineNum">    1636 </span>            : bool
+<span class="lineNum">    1637 </span><span class="lineCov">  109259008 : dom_info_available_p (enum cdi_direction dir)</span>
+<span class="lineNum">    1638 </span><span class="lineCov">  109259008 : {</span>
+<span class="lineNum">    1639 </span>            :   return dom_info_available_p (cfun, dir);
+<span class="lineNum">    1640 </span>            : }
+<a name="1641"><span class="lineNum">    1641 </span>            : </a>
+<span class="lineNum">    1642 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1643 </span><span class="lineCov"> 1295026506 : debug_dominance_info (enum cdi_direction dir)</span>
+<span class="lineNum">    1644 </span>            : {
+<span class="lineNum">    1645 </span><span class="lineCov"> 1295026506 :   basic_block bb, bb2;</span>
+<span class="lineNum">    1646 </span>            :   FOR_EACH_BB_FN (bb, cfun)
+<span class="lineNum">    1647 </span>            :     if ((bb2 = get_immediate_dominator (dir, bb)))
+<span class="lineNum">    1648 </span>            :       fprintf (stderr, &quot;%i %i\n&quot;, bb-&gt;index, bb2-&gt;index);
+<span class="lineNum">    1649 </span><span class="lineCov"> 1084633423 : }</span>
+<span class="lineNum">    1650 </span>            : 
+<span class="lineNum">    1651 </span><span class="lineCov"> 1084633423 : /* Prints to stderr representation of the dominance tree (for direction DIR)</span>
+<span class="lineNum">    1652 </span>            :    rooted in ROOT, indented by INDENT tabulators.  If INDENT_FIRST is false,
+<span class="lineNum">    1653 </span>            :    the first line of the output is not indented.  */
+<a name="1654"><span class="lineNum">    1654 </span>            : </a>
+<span class="lineNum">    1655 </span><span class="lineNoCov">          0 : static void</span>
+<span class="lineNum">    1656 </span>            : debug_dominance_tree_1 (enum cdi_direction dir, basic_block root,
+<span class="lineNum">    1657 </span><span class="lineNoCov">          0 :                         unsigned indent, bool indent_first)</span>
+<span class="lineNum">    1658 </span><span class="lineNoCov">          0 : {</span>
+<span class="lineNum">    1659 </span><span class="lineNoCov">          0 :   basic_block son;</span>
+<span class="lineNum">    1660 </span><span class="lineNoCov">          0 :   unsigned i;</span>
+<span class="lineNum">    1661 </span><span class="lineNoCov">          0 :   bool first = true;</span>
+<span class="lineNum">    1662 </span>            : 
+<span class="lineNum">    1663 </span>            :   if (indent_first)
+<span class="lineNum">    1664 </span>            :     for (i = 0; i &lt; indent; i++)
+<span class="lineNum">    1665 </span>            :       fprintf (stderr, &quot;\t&quot;);
+<span class="lineNum">    1666 </span>            :   fprintf (stderr, &quot;%d\t&quot;, root-&gt;index);
+<span class="lineNum">    1667 </span>            : 
+<span class="lineNum">    1668 </span><span class="lineNoCov">          0 :   for (son = first_dom_son (dir, root);</span>
+<span class="lineNum">    1669 </span>            :        son;
+<span class="lineNum">    1670 </span>            :        son = next_dom_son (dir, son))
+<span class="lineNum">    1671 </span><span class="lineNoCov">          0 :     {</span>
+<span class="lineNum">    1672 </span><span class="lineNoCov">          0 :       debug_dominance_tree_1 (dir, son, indent + 1, !first);</span>
+<span class="lineNum">    1673 </span><span class="lineNoCov">          0 :       first = false;</span>
+<span class="lineNum">    1674 </span>            :     }
+<span class="lineNum">    1675 </span><span class="lineNoCov">          0 : </span>
+<span class="lineNum">    1676 </span><span class="lineNoCov">          0 :   if (first)</span>
+<span class="lineNum">    1677 </span><span class="lineNoCov">          0 :     fprintf (stderr, &quot;\n&quot;);</span>
+<span class="lineNum">    1678 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1679 </span>            : 
+<span class="lineNum">    1680 </span><span class="lineNoCov">          0 : /* Prints to stderr representation of the dominance tree (for direction DIR)</span>
+<span class="lineNum">    1681 </span><span class="lineNoCov">          0 :    rooted in ROOT.  */</span>
+<a name="1682"><span class="lineNum">    1682 </span><span class="lineNoCov">          0 : </span></a>
+<span class="lineNum">    1683 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1684 </span><span class="lineNoCov">          0 : debug_dominance_tree (enum cdi_direction dir, basic_block root)</span>
+<span class="lineNum">    1685 </span><span class="lineNoCov">          0 : {</span>
+<span class="lineNum">    1686 </span>            :   debug_dominance_tree_1 (dir, root, 0, false);
+<span class="lineNum">    1687 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,1511 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/caller-save.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - caller-save.c<span style="font-size: 80%;"> (source / <a href="caller-save.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">614</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Save and restore call-clobbered registers which are live across a call.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1989-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;reload.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;alias.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;addresses.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;rtl-iter.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : #define MOVE_MAX_WORDS (MOVE_MAX / UNITS_PER_WORD)
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            : #define regno_save_mode \
+<span class="lineNum">      44 </span>            :   (this_target_reload-&gt;x_regno_save_mode)
+<span class="lineNum">      45 </span>            : #define cached_reg_save_code \
+<span class="lineNum">      46 </span>            :   (this_target_reload-&gt;x_cached_reg_save_code)
+<span class="lineNum">      47 </span>            : #define cached_reg_restore_code \
+<span class="lineNum">      48 </span>            :   (this_target_reload-&gt;x_cached_reg_restore_code)
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            : /* For each hard register, a place on the stack where it can be saved,
+<span class="lineNum">      51 </span>            :    if needed.  */
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            : static rtx
+<span class="lineNum">      54 </span>            :   regno_save_mem[FIRST_PSEUDO_REGISTER][MAX_MOVE_MAX / MIN_UNITS_PER_WORD + 1];
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : /* The number of elements in the subsequent array.  */
+<span class="lineNum">      57 </span>            : static int save_slots_num;
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            : /* Allocated slots so far.  */
+<span class="lineNum">      60 </span>            : static rtx save_slots[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            : /* Set of hard regs currently residing in save area (during insn scan).  */
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : static HARD_REG_SET hard_regs_saved;
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            : /* Number of registers currently in hard_regs_saved.  */
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : static int n_regs_saved;
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            : /* Computed by mark_referenced_regs, all regs referenced in a given
+<span class="lineNum">      71 </span>            :    insn.  */
+<span class="lineNum">      72 </span>            : static HARD_REG_SET referenced_regs;
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : typedef void refmarker_fn (rtx *loc, machine_mode mode, int hardregno,
+<span class="lineNum">      76 </span>            :                            void *mark_arg);
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : static int reg_save_code (int, machine_mode);
+<span class="lineNum">      79 </span>            : static int reg_restore_code (int, machine_mode);
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : struct saved_hard_reg;
+<span class="lineNum">      82 </span>            : static void initiate_saved_hard_regs (void);
+<span class="lineNum">      83 </span>            : static void new_saved_hard_reg (int, int);
+<span class="lineNum">      84 </span>            : static void finish_saved_hard_regs (void);
+<span class="lineNum">      85 </span>            : static int saved_hard_reg_compare_func (const void *, const void *);
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            : static void mark_set_regs (rtx, const_rtx, void *);
+<span class="lineNum">      88 </span>            : static void mark_referenced_regs (rtx *, refmarker_fn *mark, void *mark_arg);
+<span class="lineNum">      89 </span>            : static refmarker_fn mark_reg_as_referenced;
+<span class="lineNum">      90 </span>            : static refmarker_fn replace_reg_with_saved_mem;
+<span class="lineNum">      91 </span>            : static int insert_save (struct insn_chain *, int, HARD_REG_SET *,
+<span class="lineNum">      92 </span>            :                         machine_mode *);
+<span class="lineNum">      93 </span>            : static int insert_restore (struct insn_chain *, int, int, int,
+<span class="lineNum">      94 </span>            :                            machine_mode *);
+<span class="lineNum">      95 </span>            : static struct insn_chain *insert_one_insn (struct insn_chain *, int, int,
+<span class="lineNum">      96 </span>            :                                            rtx);
+<span class="lineNum">      97 </span>            : static void add_stored_regs (rtx, const_rtx, void *);
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            : 
+<span class="lineNum">     101 </span>            : static GTY(()) rtx savepat;
+<span class="lineNum">     102 </span>            : static GTY(()) rtx restpat;
+<span class="lineNum">     103 </span>            : static GTY(()) rtx test_reg;
+<span class="lineNum">     104 </span>            : static GTY(()) rtx test_mem;
+<span class="lineNum">     105 </span>            : static GTY(()) rtx_insn *saveinsn;
+<span class="lineNum">     106 </span>            : static GTY(()) rtx_insn *restinsn;
+<span class="lineNum">     107 </span>            : 
+<a name="108"><span class="lineNum">     108 </span>            : /* Return the INSN_CODE used to save register REG in mode MODE.  */</a>
+<span class="lineNum">     109 </span>            : static int
+<span class="lineNum">     110 </span><span class="lineNoCov">          0 : reg_save_code (int reg, machine_mode mode)</span>
+<span class="lineNum">     111 </span>            : {
+<span class="lineNum">     112 </span><span class="lineNoCov">          0 :   bool ok;</span>
+<span class="lineNum">     113 </span><span class="lineNoCov">          0 :   if (cached_reg_save_code[reg][mode])</span>
+<span class="lineNum">     114 </span>            :      return cached_reg_save_code[reg][mode];
+<span class="lineNum">     115 </span><span class="lineNoCov">          0 :   if (!targetm.hard_regno_mode_ok (reg, mode))</span>
+<span class="lineNum">     116 </span>            :     {
+<span class="lineNum">     117 </span>            :       /* Depending on how targetm.hard_regno_mode_ok is defined, range
+<span class="lineNum">     118 </span>            :          propagation might deduce here that reg &gt;= FIRST_PSEUDO_REGISTER.
+<span class="lineNum">     119 </span>            :          So the assert below silences a warning.  */
+<span class="lineNum">     120 </span><span class="lineNoCov">          0 :       gcc_assert (reg &lt; FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     121 </span><span class="lineNoCov">          0 :       cached_reg_save_code[reg][mode] = -1;</span>
+<span class="lineNum">     122 </span><span class="lineNoCov">          0 :       cached_reg_restore_code[reg][mode] = -1;</span>
+<span class="lineNum">     123 </span><span class="lineNoCov">          0 :       return -1;</span>
+<span class="lineNum">     124 </span>            :     }
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span>            :   /* Update the register number and modes of the register
+<span class="lineNum">     127 </span>            :      and memory operand.  */
+<span class="lineNum">     128 </span><span class="lineNoCov">          0 :   set_mode_and_regno (test_reg, mode, reg);</span>
+<span class="lineNum">     129 </span><span class="lineNoCov">          0 :   PUT_MODE (test_mem, mode);</span>
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span>            :   /* Force re-recognition of the modified insns.  */
+<span class="lineNum">     132 </span><span class="lineNoCov">          0 :   INSN_CODE (saveinsn) = -1;</span>
+<span class="lineNum">     133 </span><span class="lineNoCov">          0 :   INSN_CODE (restinsn) = -1;</span>
+<span class="lineNum">     134 </span>            : 
+<span class="lineNum">     135 </span><span class="lineNoCov">          0 :   cached_reg_save_code[reg][mode] = recog_memoized (saveinsn);</span>
+<span class="lineNum">     136 </span><span class="lineNoCov">          0 :   cached_reg_restore_code[reg][mode] = recog_memoized (restinsn);</span>
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span>            :   /* Now extract both insns and see if we can meet their
+<span class="lineNum">     139 </span>            :      constraints.  We don't know here whether the save and restore will
+<span class="lineNum">     140 </span>            :      be in size- or speed-tuned code, so just use the set of enabled
+<span class="lineNum">     141 </span>            :      alternatives.  */
+<span class="lineNum">     142 </span><span class="lineNoCov">          0 :   ok = (cached_reg_save_code[reg][mode] != -1</span>
+<span class="lineNum">     143 </span><span class="lineNoCov">          0 :         &amp;&amp; cached_reg_restore_code[reg][mode] != -1);</span>
+<span class="lineNum">     144 </span><span class="lineNoCov">          0 :   if (ok)</span>
+<span class="lineNum">     145 </span>            :     {
+<span class="lineNum">     146 </span><span class="lineNoCov">          0 :       extract_insn (saveinsn);</span>
+<span class="lineNum">     147 </span><span class="lineNoCov">          0 :       ok = constrain_operands (1, get_enabled_alternatives (saveinsn));</span>
+<span class="lineNum">     148 </span><span class="lineNoCov">          0 :       extract_insn (restinsn);</span>
+<span class="lineNum">     149 </span><span class="lineNoCov">          0 :       ok &amp;= constrain_operands (1, get_enabled_alternatives (restinsn));</span>
+<span class="lineNum">     150 </span>            :     }
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span><span class="lineNoCov">          0 :   if (! ok)</span>
+<span class="lineNum">     153 </span>            :     {
+<span class="lineNum">     154 </span><span class="lineNoCov">          0 :       cached_reg_save_code[reg][mode] = -1;</span>
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 :       cached_reg_restore_code[reg][mode] = -1;</span>
+<span class="lineNum">     156 </span>            :     }
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :   gcc_assert (cached_reg_save_code[reg][mode]);</span>
+<span class="lineNum">     158 </span>            :   return cached_reg_save_code[reg][mode];
+<span class="lineNum">     159 </span>            : }
+<span class="lineNum">     160 </span>            : 
+<a name="161"><span class="lineNum">     161 </span>            : /* Return the INSN_CODE used to restore register REG in mode MODE.  */</a>
+<span class="lineNum">     162 </span>            : static int
+<span class="lineNum">     163 </span><span class="lineNoCov">          0 : reg_restore_code (int reg, machine_mode mode)</span>
+<span class="lineNum">     164 </span>            : {
+<span class="lineNum">     165 </span><span class="lineNoCov">          0 :   if (cached_reg_restore_code[reg][mode])</span>
+<span class="lineNum">     166 </span>            :      return cached_reg_restore_code[reg][mode];
+<span class="lineNum">     167 </span>            :   /* Populate our cache.  */
+<span class="lineNum">     168 </span><span class="lineNoCov">          0 :   reg_save_code (reg, mode);</span>
+<span class="lineNum">     169 </span><span class="lineNoCov">          0 :   return cached_reg_restore_code[reg][mode];</span>
+<span class="lineNum">     170 </span>            : }
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span>            : /* Initialize for caller-save.
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span>            :    Look at all the hard registers that are used by a call and for which
+<span class="lineNum">     175 </span>            :    reginfo.c has not already excluded from being used across a call.
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            :    Ensure that we can find a mode to save the register and that there is a
+<span class="lineNum">     178 </span>            :    simple insn to save and restore the register.  This latter check avoids
+<span class="lineNum">     179 </span>            :    problems that would occur if we tried to save the MQ register of some
+<span class="lineNum">     180 </span>            :    machines directly into memory.  */
+<a name="181"><span class="lineNum">     181 </span>            : </a>
+<span class="lineNum">     182 </span>            : void
+<span class="lineNum">     183 </span><span class="lineNoCov">          0 : init_caller_save (void)</span>
+<span class="lineNum">     184 </span>            : {
+<span class="lineNum">     185 </span><span class="lineNoCov">          0 :   rtx addr_reg;</span>
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 :   int offset;</span>
+<span class="lineNum">     187 </span><span class="lineNoCov">          0 :   rtx address;</span>
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 :   int i, j;</span>
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span><span class="lineNoCov">          0 :   if (caller_save_initialized_p)</span>
+<span class="lineNum">     191 </span>            :     return;
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span><span class="lineNoCov">          0 :   caller_save_initialized_p = true;</span>
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span><span class="lineNoCov">          0 :   CLEAR_HARD_REG_SET (no_caller_save_reg_set);</span>
+<span class="lineNum">     196 </span>            :   /* First find all the registers that we need to deal with and all
+<span class="lineNum">     197 </span>            :      the modes that they can have.  If we can't find a mode to use,
+<span class="lineNum">     198 </span>            :      we can't have the register live over calls.  */
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     201 </span>            :     {
+<span class="lineNum">     202 </span><span class="lineNoCov">          0 :       if (call_used_regs[i]</span>
+<span class="lineNum">     203 </span><span class="lineNoCov">          0 :           &amp;&amp; !TEST_HARD_REG_BIT (call_fixed_reg_set, i))</span>
+<span class="lineNum">     204 </span>            :         {
+<span class="lineNum">     205 </span><span class="lineNoCov">          0 :           for (j = 1; j &lt;= MOVE_MAX_WORDS; j++)</span>
+<span class="lineNum">     206 </span>            :             {
+<span class="lineNum">     207 </span><span class="lineNoCov">          0 :               regno_save_mode[i][j] = HARD_REGNO_CALLER_SAVE_MODE (i, j,</span>
+<span class="lineNum">     208 </span>            :                                                                    VOIDmode);
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :               if (regno_save_mode[i][j] == VOIDmode &amp;&amp; j == 1)</span>
+<span class="lineNum">     210 </span>            :                 {
+<span class="lineNum">     211 </span><span class="lineNoCov">          0 :                   SET_HARD_REG_BIT (call_fixed_reg_set, i);</span>
+<span class="lineNum">     212 </span>            :                 }
+<span class="lineNum">     213 </span>            :             }
+<span class="lineNum">     214 </span>            :         }
+<span class="lineNum">     215 </span>            :       else
+<span class="lineNum">     216 </span><span class="lineNoCov">          0 :         regno_save_mode[i][1] = VOIDmode;</span>
+<span class="lineNum">     217 </span>            :     }
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   /* The following code tries to approximate the conditions under which
+<span class="lineNum">     220 </span>            :      we can easily save and restore a register without scratch registers or
+<span class="lineNum">     221 </span>            :      other complexities.  It will usually work, except under conditions where
+<span class="lineNum">     222 </span>            :      the validity of an insn operand is dependent on the address offset.
+<span class="lineNum">     223 </span>            :      No such cases are currently known.
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            :      We first find a typical offset from some BASE_REG_CLASS register.
+<span class="lineNum">     226 </span>            :      This address is chosen by finding the first register in the class
+<span class="lineNum">     227 </span>            :      and by finding the smallest power of two that is a valid offset from
+<span class="lineNum">     228 </span>            :      that register in every mode we will use to save registers.  */
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     231 </span><span class="lineNoCov">          0 :     if (TEST_HARD_REG_BIT</span>
+<span class="lineNum">     232 </span>            :         (reg_class_contents
+<span class="lineNum">     233 </span>            :          [(int) base_reg_class (regno_save_mode[i][1], ADDR_SPACE_GENERIC,
+<span class="lineNum">     234 </span>            :                                 PLUS, CONST_INT)], i))
+<span class="lineNum">     235 </span>            :       break;
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span><span class="lineNoCov">          0 :   gcc_assert (i &lt; FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 :   addr_reg = gen_rtx_REG (Pmode, i);</span>
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span><span class="lineNoCov">          0 :   for (offset = 1 &lt;&lt; (HOST_BITS_PER_INT / 2); offset; offset &gt;&gt;= 1)</span>
+<span class="lineNum">     242 </span>            :     {
+<span class="lineNum">     243 </span><span class="lineNoCov">          0 :       address = gen_rtx_PLUS (Pmode, addr_reg, gen_int_mode (offset, Pmode));</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 :         if (regno_save_mode[i][1] != VOIDmode</span>
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 :           &amp;&amp; ! strict_memory_address_p (regno_save_mode[i][1], address))</span>
+<span class="lineNum">     248 </span>            :           break;
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span><span class="lineNoCov">          0 :       if (i == FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     251 </span>            :         break;
+<span class="lineNum">     252 </span>            :     }
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            :   /* If we didn't find a valid address, we must use register indirect.  */
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :   if (offset == 0)</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 :     address = addr_reg;</span>
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span>            :   /* Next we try to form an insn to save and restore the register.  We
+<span class="lineNum">     259 </span>            :      see if such an insn is recognized and meets its constraints.
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span>            :      To avoid lots of unnecessary RTL allocation, we construct all the RTL
+<span class="lineNum">     262 </span>            :      once, then modify the memory and register operands in-place.  */
+<span class="lineNum">     263 </span>            : 
+<span class="lineNum">     264 </span><span class="lineNoCov">          0 :   test_reg = gen_rtx_REG (word_mode, LAST_VIRTUAL_REGISTER + 1);</span>
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 :   test_mem = gen_rtx_MEM (word_mode, address);</span>
+<span class="lineNum">     266 </span><span class="lineNoCov">          0 :   savepat = gen_rtx_SET (test_mem, test_reg);</span>
+<span class="lineNum">     267 </span><span class="lineNoCov">          0 :   restpat = gen_rtx_SET (test_reg, test_mem);</span>
+<span class="lineNum">     268 </span>            : 
+<span class="lineNum">     269 </span><span class="lineNoCov">          0 :   saveinsn = gen_rtx_INSN (VOIDmode, 0, 0, 0, savepat, 0, -1, 0);</span>
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 :   restinsn = gen_rtx_INSN (VOIDmode, 0, 0, 0, restpat, 0, -1, 0);</span>
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :     for (j = 1; j &lt;= MOVE_MAX_WORDS; j++)</span>
+<span class="lineNum">     274 </span><span class="lineNoCov">          0 :       if (reg_save_code (i,regno_save_mode[i][j]) == -1)</span>
+<span class="lineNum">     275 </span>            :         {
+<span class="lineNum">     276 </span><span class="lineNoCov">          0 :           regno_save_mode[i][j] = VOIDmode;</span>
+<span class="lineNum">     277 </span><span class="lineNoCov">          0 :           if (j == 1)</span>
+<span class="lineNum">     278 </span>            :             {
+<span class="lineNum">     279 </span><span class="lineNoCov">          0 :               SET_HARD_REG_BIT (call_fixed_reg_set, i);</span>
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :               if (call_used_regs[i])</span>
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :                 SET_HARD_REG_BIT (no_caller_save_reg_set, i);</span>
+<span class="lineNum">     282 </span>            :             }
+<span class="lineNum">     283 </span>            :         }
+<span class="lineNum">     284 </span>            : }
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            : 
+<span class="lineNum">     288 </span>            : /* Initialize save areas by showing that we haven't allocated any yet.  */
+<a name="289"><span class="lineNum">     289 </span>            : </a>
+<span class="lineNum">     290 </span>            : void
+<span class="lineNum">     291 </span><span class="lineNoCov">          0 : init_save_areas (void)</span>
+<span class="lineNum">     292 </span>            : {
+<span class="lineNum">     293 </span><span class="lineNoCov">          0 :   int i, j;</span>
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 :     for (j = 1; j &lt;= MOVE_MAX_WORDS; j++)</span>
+<span class="lineNum">     297 </span><span class="lineNoCov">          0 :       regno_save_mem[i][j] = 0;</span>
+<span class="lineNum">     298 </span><span class="lineNoCov">          0 :   save_slots_num = 0;</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     301 </span>            : 
+<span class="lineNum">     302 </span>            : /* The structure represents a hard register which should be saved
+<span class="lineNum">     303 </span>            :    through the call.  It is used when the integrated register
+<span class="lineNum">     304 </span>            :    allocator (IRA) is used and sharing save slots is on.  */
+<span class="lineNum">     305 </span>            : struct saved_hard_reg
+<span class="lineNum">     306 </span>            : {
+<span class="lineNum">     307 </span>            :   /* Order number starting with 0.  */
+<span class="lineNum">     308 </span>            :   int num;
+<span class="lineNum">     309 </span>            :   /* The hard regno.  */
+<span class="lineNum">     310 </span>            :   int hard_regno;
+<span class="lineNum">     311 </span>            :   /* Execution frequency of all calls through which given hard
+<span class="lineNum">     312 </span>            :      register should be saved.  */
+<span class="lineNum">     313 </span>            :   int call_freq;
+<span class="lineNum">     314 </span>            :   /* Stack slot reserved to save the hard register through calls.  */
+<span class="lineNum">     315 </span>            :   rtx slot;
+<span class="lineNum">     316 </span>            :   /* True if it is first hard register in the chain of hard registers
+<span class="lineNum">     317 </span>            :      sharing the same stack slot.  */
+<span class="lineNum">     318 </span>            :   int first_p;
+<span class="lineNum">     319 </span>            :   /* Order number of the next hard register structure with the same
+<span class="lineNum">     320 </span>            :      slot in the chain.  -1 represents end of the chain.  */
+<span class="lineNum">     321 </span>            :   int next;
+<span class="lineNum">     322 </span>            : };
+<span class="lineNum">     323 </span>            : 
+<span class="lineNum">     324 </span>            : /* Map: hard register number to the corresponding structure.  */
+<span class="lineNum">     325 </span>            : static struct saved_hard_reg *hard_reg_map[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            : /* The number of all structures representing hard registers should be
+<span class="lineNum">     328 </span>            :    saved, in order words, the number of used elements in the following
+<span class="lineNum">     329 </span>            :    array.  */
+<span class="lineNum">     330 </span>            : static int saved_regs_num;
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span>            : /* Pointers to all the structures.  Index is the order number of the
+<span class="lineNum">     333 </span>            :    corresponding structure.  */
+<span class="lineNum">     334 </span>            : static struct saved_hard_reg *all_saved_regs[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">     335 </span>            : 
+<a name="336"><span class="lineNum">     336 </span>            : /* First called function for work with saved hard registers.  */</a>
+<span class="lineNum">     337 </span>            : static void
+<span class="lineNum">     338 </span><span class="lineNoCov">          0 : initiate_saved_hard_regs (void)</span>
+<span class="lineNum">     339 </span>            : {
+<span class="lineNum">     340 </span><span class="lineNoCov">          0 :   int i;</span>
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span><span class="lineNoCov">          0 :   saved_regs_num = 0;</span>
+<span class="lineNum">     343 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     344 </span><span class="lineNoCov">          0 :     hard_reg_map[i] = NULL;</span>
+<span class="lineNum">     345 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     346 </span>            : 
+<span class="lineNum">     347 </span>            : /* Allocate and return new saved hard register with given REGNO and
+<a name="348"><span class="lineNum">     348 </span>            :    CALL_FREQ.  */</a>
+<span class="lineNum">     349 </span>            : static void
+<span class="lineNum">     350 </span><span class="lineNoCov">          0 : new_saved_hard_reg (int regno, int call_freq)</span>
+<span class="lineNum">     351 </span>            : {
+<span class="lineNum">     352 </span><span class="lineNoCov">          0 :   struct saved_hard_reg *saved_reg;</span>
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span><span class="lineNoCov">          0 :   saved_reg</span>
+<span class="lineNum">     355 </span><span class="lineNoCov">          0 :     = (struct saved_hard_reg *) xmalloc (sizeof (struct saved_hard_reg));</span>
+<span class="lineNum">     356 </span><span class="lineNoCov">          0 :   hard_reg_map[regno] = all_saved_regs[saved_regs_num] = saved_reg;</span>
+<span class="lineNum">     357 </span><span class="lineNoCov">          0 :   saved_reg-&gt;num = saved_regs_num++;</span>
+<span class="lineNum">     358 </span><span class="lineNoCov">          0 :   saved_reg-&gt;hard_regno = regno;</span>
+<span class="lineNum">     359 </span><span class="lineNoCov">          0 :   saved_reg-&gt;call_freq = call_freq;</span>
+<span class="lineNum">     360 </span><span class="lineNoCov">          0 :   saved_reg-&gt;first_p = FALSE;</span>
+<span class="lineNum">     361 </span><span class="lineNoCov">          0 :   saved_reg-&gt;next = -1;</span>
+<span class="lineNum">     362 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     363 </span>            : 
+<a name="364"><span class="lineNum">     364 </span>            : /* Free memory allocated for the saved hard registers.  */</a>
+<span class="lineNum">     365 </span>            : static void
+<span class="lineNum">     366 </span><span class="lineNoCov">          0 : finish_saved_hard_regs (void)</span>
+<span class="lineNum">     367 </span>            : {
+<span class="lineNum">     368 </span><span class="lineNoCov">          0 :   int i;</span>
+<span class="lineNum">     369 </span>            : 
+<span class="lineNum">     370 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; saved_regs_num; i++)</span>
+<span class="lineNum">     371 </span><span class="lineNoCov">          0 :     free (all_saved_regs[i]);</span>
+<span class="lineNum">     372 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span>            : /* The function is used to sort the saved hard register structures
+<a name="375"><span class="lineNum">     375 </span>            :    according their frequency.  */</a>
+<span class="lineNum">     376 </span>            : static int
+<span class="lineNum">     377 </span><span class="lineNoCov">          0 : saved_hard_reg_compare_func (const void *v1p, const void *v2p)</span>
+<span class="lineNum">     378 </span>            : {
+<span class="lineNum">     379 </span><span class="lineNoCov">          0 :   const struct saved_hard_reg *p1 = *(struct saved_hard_reg * const *) v1p;</span>
+<span class="lineNum">     380 </span><span class="lineNoCov">          0 :   const struct saved_hard_reg *p2 = *(struct saved_hard_reg * const *) v2p;</span>
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span><span class="lineNoCov">          0 :   if (flag_omit_frame_pointer)</span>
+<span class="lineNum">     383 </span>            :     {
+<span class="lineNum">     384 </span><span class="lineNoCov">          0 :       if (p1-&gt;call_freq - p2-&gt;call_freq != 0)</span>
+<span class="lineNum">     385 </span><span class="lineNoCov">          0 :         return p1-&gt;call_freq - p2-&gt;call_freq;</span>
+<span class="lineNum">     386 </span>            :     }
+<span class="lineNum">     387 </span><span class="lineNoCov">          0 :   else if (p2-&gt;call_freq - p1-&gt;call_freq != 0)</span>
+<span class="lineNum">     388 </span><span class="lineNoCov">          0 :     return p2-&gt;call_freq - p1-&gt;call_freq;</span>
+<span class="lineNum">     389 </span>            : 
+<span class="lineNum">     390 </span><span class="lineNoCov">          0 :   return p1-&gt;num - p2-&gt;num;</span>
+<span class="lineNum">     391 </span>            : }
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span>            : /* Allocate save areas for any hard registers that might need saving.
+<span class="lineNum">     394 </span>            :    We take a conservative approach here and look for call-clobbered hard
+<span class="lineNum">     395 </span>            :    registers that are assigned to pseudos that cross calls.  This may
+<span class="lineNum">     396 </span>            :    overestimate slightly (especially if some of these registers are later
+<span class="lineNum">     397 </span>            :    used as spill registers), but it should not be significant.
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span>            :    For IRA we use priority coloring to decrease stack slots needed for
+<span class="lineNum">     400 </span>            :    saving hard registers through calls.  We build conflicts for them
+<span class="lineNum">     401 </span>            :    to do coloring.
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            :    Future work:
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            :      In the fallback case we should iterate backwards across all possible
+<span class="lineNum">     406 </span>            :      modes for the save, choosing the largest available one instead of
+<span class="lineNum">     407 </span>            :      falling back to the smallest mode immediately.  (eg TF -&gt; DF -&gt; SF).
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span>            :      We do not try to use &quot;move multiple&quot; instructions that exist
+<span class="lineNum">     410 </span>            :      on some machines (such as the 68k moveml).  It could be a win to try
+<span class="lineNum">     411 </span>            :      and use them when possible.  The hard part is doing it in a way that is
+<span class="lineNum">     412 </span>            :      machine independent since they might be saving non-consecutive
+<span class="lineNum">     413 </span>            :      registers. (imagine caller-saving d0,d1,a0,a1 on the 68k) */
+<a name="414"><span class="lineNum">     414 </span>            : </a>
+<span class="lineNum">     415 </span>            : void
+<span class="lineNum">     416 </span><span class="lineNoCov">          0 : setup_save_areas (void)</span>
+<span class="lineNum">     417 </span>            : {
+<span class="lineNum">     418 </span><span class="lineNoCov">          0 :   int i, j, k, freq;</span>
+<span class="lineNum">     419 </span><span class="lineNoCov">          0 :   HARD_REG_SET hard_regs_used;</span>
+<span class="lineNum">     420 </span><span class="lineNoCov">          0 :   struct saved_hard_reg *saved_reg;</span>
+<span class="lineNum">     421 </span><span class="lineNoCov">          0 :   rtx_insn *insn;</span>
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :   struct insn_chain *chain, *next;</span>
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :   unsigned int regno;</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :   HARD_REG_SET hard_regs_to_save, used_regs, this_insn_sets;</span>
+<span class="lineNum">     425 </span><span class="lineNoCov">          0 :   reg_set_iterator rsi;</span>
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span><span class="lineNoCov">          0 :   CLEAR_HARD_REG_SET (hard_regs_used);</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            :   /* Find every CALL_INSN and record which hard regs are live across the
+<span class="lineNum">     430 </span>            :      call into HARD_REG_MAP and HARD_REGS_USED.  */
+<span class="lineNum">     431 </span><span class="lineNoCov">          0 :   initiate_saved_hard_regs ();</span>
+<span class="lineNum">     432 </span>            :   /* Create hard reg saved regs.  */
+<span class="lineNum">     433 </span><span class="lineNoCov">          0 :   for (chain = reload_insn_chain; chain != 0; chain = next)</span>
+<span class="lineNum">     434 </span>            :     {
+<span class="lineNum">     435 </span><span class="lineNoCov">          0 :       rtx cheap;</span>
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span><span class="lineNoCov">          0 :       insn = chain-&gt;insn;</span>
+<span class="lineNum">     438 </span><span class="lineNoCov">          0 :       next = chain-&gt;next;</span>
+<span class="lineNum">     439 </span><span class="lineNoCov">          0 :       if (!CALL_P (insn)</span>
+<span class="lineNum">     440 </span><span class="lineNoCov">          0 :           || find_reg_note (insn, REG_NORETURN, NULL))</span>
+<span class="lineNum">     441 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">     442 </span><span class="lineNoCov">          0 :       freq = REG_FREQ_FROM_BB (BLOCK_FOR_INSN (insn));</span>
+<span class="lineNum">     443 </span><span class="lineNoCov">          0 :       REG_SET_TO_HARD_REG_SET (hard_regs_to_save,</span>
+<span class="lineNum">     444 </span>            :                                &amp;chain-&gt;live_throughout);
+<span class="lineNum">     445 </span><span class="lineNoCov">          0 :       get_call_reg_set_usage (insn, &amp;used_regs, call_used_reg_set);</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :       /* Record all registers set in this call insn.  These don't
+<span class="lineNum">     448 </span>            :          need to be saved.  N.B. the call insn might set a subreg
+<span class="lineNum">     449 </span>            :          of a multi-hard-reg pseudo; then the pseudo is considered
+<span class="lineNum">     450 </span>            :          live during the call, but the subreg that is set
+<span class="lineNum">     451 </span>            :          isn't.  */
+<span class="lineNum">     452 </span><span class="lineNoCov">          0 :       CLEAR_HARD_REG_SET (this_insn_sets);</span>
+<span class="lineNum">     453 </span><span class="lineNoCov">          0 :       note_stores (PATTERN (insn), mark_set_regs, &amp;this_insn_sets);</span>
+<span class="lineNum">     454 </span>            :       /* Sibcalls are considered to set the return value.  */
+<span class="lineNum">     455 </span><span class="lineNoCov">          0 :       if (SIBLING_CALL_P (insn) &amp;&amp; crtl-&gt;return_rtx)</span>
+<span class="lineNum">     456 </span><span class="lineNoCov">          0 :         mark_set_regs (crtl-&gt;return_rtx, NULL_RTX, &amp;this_insn_sets);</span>
+<span class="lineNum">     457 </span>            : 
+<span class="lineNum">     458 </span><span class="lineNoCov">          0 :       AND_COMPL_HARD_REG_SET (used_regs, call_fixed_reg_set);</span>
+<span class="lineNum">     459 </span><span class="lineNoCov">          0 :       AND_COMPL_HARD_REG_SET (used_regs, this_insn_sets);</span>
+<span class="lineNum">     460 </span><span class="lineNoCov">          0 :       AND_HARD_REG_SET (hard_regs_to_save, used_regs);</span>
+<span class="lineNum">     461 </span><span class="lineNoCov">          0 :       for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     462 </span><span class="lineNoCov">          0 :         if (TEST_HARD_REG_BIT (hard_regs_to_save, regno))</span>
+<span class="lineNum">     463 </span>            :           {
+<span class="lineNum">     464 </span><span class="lineNoCov">          0 :             if (hard_reg_map[regno] != NULL)</span>
+<span class="lineNum">     465 </span><span class="lineNoCov">          0 :               hard_reg_map[regno]-&gt;call_freq += freq;</span>
+<span class="lineNum">     466 </span>            :             else
+<span class="lineNum">     467 </span><span class="lineNoCov">          0 :               new_saved_hard_reg (regno, freq);</span>
+<span class="lineNum">     468 </span><span class="lineNoCov">          0 :             SET_HARD_REG_BIT (hard_regs_used, regno);</span>
+<span class="lineNum">     469 </span>            :           }
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :       cheap = find_reg_note (insn, REG_RETURNED, NULL);</span>
+<span class="lineNum">     471 </span><span class="lineNoCov">          0 :       if (cheap)</span>
+<span class="lineNum">     472 </span><span class="lineNoCov">          0 :         cheap = XEXP (cheap, 0);</span>
+<span class="lineNum">     473 </span>            :       /* Look through all live pseudos, mark their hard registers.  */
+<span class="lineNum">     474 </span><span class="lineNoCov">          0 :       EXECUTE_IF_SET_IN_REG_SET</span>
+<span class="lineNum">     475 </span>            :         (&amp;chain-&gt;live_throughout, FIRST_PSEUDO_REGISTER, regno, rsi)
+<span class="lineNum">     476 </span>            :         {
+<span class="lineNum">     477 </span><span class="lineNoCov">          0 :           int r = reg_renumber[regno];</span>
+<span class="lineNum">     478 </span><span class="lineNoCov">          0 :           int bound;</span>
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span><span class="lineNoCov">          0 :           if (r &lt; 0 || regno_reg_rtx[regno] == cheap)</span>
+<span class="lineNum">     481 </span>            :             continue;
+<span class="lineNum">     482 </span>            : 
+<span class="lineNum">     483 </span><span class="lineNoCov">          0 :           bound = r + hard_regno_nregs (r, PSEUDO_REGNO_MODE (regno));</span>
+<span class="lineNum">     484 </span><span class="lineNoCov">          0 :           for (; r &lt; bound; r++)</span>
+<span class="lineNum">     485 </span><span class="lineNoCov">          0 :             if (TEST_HARD_REG_BIT (used_regs, r))</span>
+<span class="lineNum">     486 </span>            :               {
+<span class="lineNum">     487 </span><span class="lineNoCov">          0 :                 if (hard_reg_map[r] != NULL)</span>
+<span class="lineNum">     488 </span><span class="lineNoCov">          0 :                   hard_reg_map[r]-&gt;call_freq += freq;</span>
+<span class="lineNum">     489 </span>            :                 else
+<span class="lineNum">     490 </span><span class="lineNoCov">          0 :                   new_saved_hard_reg (r, freq);</span>
+<span class="lineNum">     491 </span><span class="lineNoCov">          0 :                  SET_HARD_REG_BIT (hard_regs_to_save, r);</span>
+<span class="lineNum">     492 </span><span class="lineNoCov">          0 :                  SET_HARD_REG_BIT (hard_regs_used, r);</span>
+<span class="lineNum">     493 </span>            :               }
+<span class="lineNum">     494 </span>            :         }
+<span class="lineNum">     495 </span>            :     }
+<span class="lineNum">     496 </span>            : 
+<span class="lineNum">     497 </span>            :   /* If requested, figure out which hard regs can share save slots.  */
+<span class="lineNum">     498 </span><span class="lineNoCov">          0 :   if (optimize &amp;&amp; flag_ira_share_save_slots)</span>
+<span class="lineNum">     499 </span>            :     {
+<span class="lineNum">     500 </span><span class="lineNoCov">          0 :       rtx slot;</span>
+<span class="lineNum">     501 </span><span class="lineNoCov">          0 :       char *saved_reg_conflicts;</span>
+<span class="lineNum">     502 </span><span class="lineNoCov">          0 :       int next_k;</span>
+<span class="lineNum">     503 </span><span class="lineNoCov">          0 :       struct saved_hard_reg *saved_reg2, *saved_reg3;</span>
+<span class="lineNum">     504 </span><span class="lineNoCov">          0 :       int call_saved_regs_num;</span>
+<span class="lineNum">     505 </span><span class="lineNoCov">          0 :       struct saved_hard_reg *call_saved_regs[FIRST_PSEUDO_REGISTER];</span>
+<span class="lineNum">     506 </span><span class="lineNoCov">          0 :       int best_slot_num;</span>
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 :       int prev_save_slots_num;</span>
+<span class="lineNum">     508 </span><span class="lineNoCov">          0 :       rtx prev_save_slots[FIRST_PSEUDO_REGISTER];</span>
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span>            :       /* Find saved hard register conflicts.  */
+<span class="lineNum">     511 </span><span class="lineNoCov">          0 :       saved_reg_conflicts = (char *) xmalloc (saved_regs_num * saved_regs_num);</span>
+<span class="lineNum">     512 </span><span class="lineNoCov">          0 :       memset (saved_reg_conflicts, 0, saved_regs_num * saved_regs_num);</span>
+<span class="lineNum">     513 </span><span class="lineNoCov">          0 :       for (chain = reload_insn_chain; chain != 0; chain = next)</span>
+<span class="lineNum">     514 </span>            :         {
+<span class="lineNum">     515 </span><span class="lineNoCov">          0 :           rtx cheap;</span>
+<span class="lineNum">     516 </span><span class="lineNoCov">          0 :           call_saved_regs_num = 0;</span>
+<span class="lineNum">     517 </span><span class="lineNoCov">          0 :           insn = chain-&gt;insn;</span>
+<span class="lineNum">     518 </span><span class="lineNoCov">          0 :           next = chain-&gt;next;</span>
+<span class="lineNum">     519 </span><span class="lineNoCov">          0 :           if (!CALL_P (insn)</span>
+<span class="lineNum">     520 </span><span class="lineNoCov">          0 :               || find_reg_note (insn, REG_NORETURN, NULL))</span>
+<span class="lineNum">     521 </span><span class="lineNoCov">          0 :             continue;</span>
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span><span class="lineNoCov">          0 :           cheap = find_reg_note (insn, REG_RETURNED, NULL);</span>
+<span class="lineNum">     524 </span><span class="lineNoCov">          0 :           if (cheap)</span>
+<span class="lineNum">     525 </span><span class="lineNoCov">          0 :             cheap = XEXP (cheap, 0);</span>
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span><span class="lineNoCov">          0 :           REG_SET_TO_HARD_REG_SET (hard_regs_to_save,</span>
+<span class="lineNum">     528 </span>            :                                    &amp;chain-&gt;live_throughout);
+<span class="lineNum">     529 </span><span class="lineNoCov">          0 :           get_call_reg_set_usage (insn, &amp;used_regs, call_used_reg_set);</span>
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span>            :           /* Record all registers set in this call insn.  These don't
+<span class="lineNum">     532 </span>            :              need to be saved.  N.B. the call insn might set a subreg
+<span class="lineNum">     533 </span>            :              of a multi-hard-reg pseudo; then the pseudo is considered
+<span class="lineNum">     534 </span>            :              live during the call, but the subreg that is set
+<span class="lineNum">     535 </span>            :              isn't.  */
+<span class="lineNum">     536 </span><span class="lineNoCov">          0 :           CLEAR_HARD_REG_SET (this_insn_sets);</span>
+<span class="lineNum">     537 </span><span class="lineNoCov">          0 :           note_stores (PATTERN (insn), mark_set_regs, &amp;this_insn_sets);</span>
+<span class="lineNum">     538 </span>            :           /* Sibcalls are considered to set the return value,
+<span class="lineNum">     539 </span>            :              compare df-scan.c:df_get_call_refs.  */
+<span class="lineNum">     540 </span><span class="lineNoCov">          0 :           if (SIBLING_CALL_P (insn) &amp;&amp; crtl-&gt;return_rtx)</span>
+<span class="lineNum">     541 </span><span class="lineNoCov">          0 :             mark_set_regs (crtl-&gt;return_rtx, NULL_RTX, &amp;this_insn_sets);</span>
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span><span class="lineNoCov">          0 :           AND_COMPL_HARD_REG_SET (used_regs, call_fixed_reg_set);</span>
+<span class="lineNum">     544 </span><span class="lineNoCov">          0 :           AND_COMPL_HARD_REG_SET (used_regs, this_insn_sets);</span>
+<span class="lineNum">     545 </span><span class="lineNoCov">          0 :           AND_HARD_REG_SET (hard_regs_to_save, used_regs);</span>
+<span class="lineNum">     546 </span><span class="lineNoCov">          0 :           for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     547 </span><span class="lineNoCov">          0 :             if (TEST_HARD_REG_BIT (hard_regs_to_save, regno))</span>
+<span class="lineNum">     548 </span>            :               {
+<span class="lineNum">     549 </span><span class="lineNoCov">          0 :                 gcc_assert (hard_reg_map[regno] != NULL);</span>
+<span class="lineNum">     550 </span><span class="lineNoCov">          0 :                 call_saved_regs[call_saved_regs_num++] = hard_reg_map[regno];</span>
+<span class="lineNum">     551 </span>            :               }
+<span class="lineNum">     552 </span>            :           /* Look through all live pseudos, mark their hard registers.  */
+<span class="lineNum">     553 </span><span class="lineNoCov">          0 :           EXECUTE_IF_SET_IN_REG_SET</span>
+<span class="lineNum">     554 </span>            :             (&amp;chain-&gt;live_throughout, FIRST_PSEUDO_REGISTER, regno, rsi)
+<span class="lineNum">     555 </span>            :             {
+<span class="lineNum">     556 </span><span class="lineNoCov">          0 :               int r = reg_renumber[regno];</span>
+<span class="lineNum">     557 </span><span class="lineNoCov">          0 :               int bound;</span>
+<span class="lineNum">     558 </span>            : 
+<span class="lineNum">     559 </span><span class="lineNoCov">          0 :               if (r &lt; 0 || regno_reg_rtx[regno] == cheap)</span>
+<span class="lineNum">     560 </span>            :                 continue;
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span><span class="lineNoCov">          0 :               bound = r + hard_regno_nregs (r, PSEUDO_REGNO_MODE (regno));</span>
+<span class="lineNum">     563 </span><span class="lineNoCov">          0 :               for (; r &lt; bound; r++)</span>
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :                 if (TEST_HARD_REG_BIT (used_regs, r))</span>
+<span class="lineNum">     565 </span><span class="lineNoCov">          0 :                   call_saved_regs[call_saved_regs_num++] = hard_reg_map[r];</span>
+<span class="lineNum">     566 </span>            :             }
+<span class="lineNum">     567 </span><span class="lineNoCov">          0 :           for (i = 0; i &lt; call_saved_regs_num; i++)</span>
+<span class="lineNum">     568 </span>            :             {
+<span class="lineNum">     569 </span><span class="lineNoCov">          0 :               saved_reg = call_saved_regs[i];</span>
+<span class="lineNum">     570 </span><span class="lineNoCov">          0 :               for (j = 0; j &lt; call_saved_regs_num; j++)</span>
+<span class="lineNum">     571 </span><span class="lineNoCov">          0 :                 if (i != j)</span>
+<span class="lineNum">     572 </span>            :                   {
+<span class="lineNum">     573 </span><span class="lineNoCov">          0 :                     saved_reg2 = call_saved_regs[j];</span>
+<span class="lineNum">     574 </span><span class="lineNoCov">          0 :                     saved_reg_conflicts[saved_reg-&gt;num * saved_regs_num</span>
+<span class="lineNum">     575 </span><span class="lineNoCov">          0 :                                         + saved_reg2-&gt;num]</span>
+<span class="lineNum">     576 </span><span class="lineNoCov">          0 :                       = saved_reg_conflicts[saved_reg2-&gt;num * saved_regs_num</span>
+<span class="lineNum">     577 </span><span class="lineNoCov">          0 :                                             + saved_reg-&gt;num]</span>
+<span class="lineNum">     578 </span><span class="lineNoCov">          0 :                       = TRUE;</span>
+<span class="lineNum">     579 </span>            :                   }
+<span class="lineNum">     580 </span>            :             }
+<span class="lineNum">     581 </span>            :         }
+<span class="lineNum">     582 </span>            :       /* Sort saved hard regs.  */
+<span class="lineNum">     583 </span><span class="lineNoCov">          0 :       qsort (all_saved_regs, saved_regs_num, sizeof (struct saved_hard_reg *),</span>
+<span class="lineNum">     584 </span>            :              saved_hard_reg_compare_func);
+<span class="lineNum">     585 </span>            :       /* Initiate slots available from the previous reload
+<span class="lineNum">     586 </span>            :          iteration.  */
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :       prev_save_slots_num = save_slots_num;</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :       memcpy (prev_save_slots, save_slots, save_slots_num * sizeof (rtx));</span>
+<span class="lineNum">     589 </span><span class="lineNoCov">          0 :       save_slots_num = 0;</span>
+<span class="lineNum">     590 </span>            :       /* Allocate stack slots for the saved hard registers.  */
+<span class="lineNum">     591 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; saved_regs_num; i++)</span>
+<span class="lineNum">     592 </span>            :         {
+<span class="lineNum">     593 </span><span class="lineNoCov">          0 :           saved_reg = all_saved_regs[i];</span>
+<span class="lineNum">     594 </span><span class="lineNoCov">          0 :           regno = saved_reg-&gt;hard_regno;</span>
+<span class="lineNum">     595 </span><span class="lineNoCov">          0 :           for (j = 0; j &lt; i; j++)</span>
+<span class="lineNum">     596 </span>            :             {
+<span class="lineNum">     597 </span><span class="lineNoCov">          0 :               saved_reg2 = all_saved_regs[j];</span>
+<span class="lineNum">     598 </span><span class="lineNoCov">          0 :               if (! saved_reg2-&gt;first_p)</span>
+<span class="lineNum">     599 </span>            :                 continue;
+<span class="lineNum">     600 </span><span class="lineNoCov">          0 :               slot = saved_reg2-&gt;slot;</span>
+<span class="lineNum">     601 </span><span class="lineNoCov">          0 :               for (k = j; k &gt;= 0; k = next_k)</span>
+<span class="lineNum">     602 </span>            :                 {
+<span class="lineNum">     603 </span><span class="lineNoCov">          0 :                   saved_reg3 = all_saved_regs[k];</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :                   next_k = saved_reg3-&gt;next;</span>
+<span class="lineNum">     605 </span><span class="lineNoCov">          0 :                   if (saved_reg_conflicts[saved_reg-&gt;num * saved_regs_num</span>
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :                                           + saved_reg3-&gt;num])</span>
+<span class="lineNum">     607 </span>            :                     break;
+<span class="lineNum">     608 </span>            :                 }
+<span class="lineNum">     609 </span><span class="lineNoCov">          0 :               if (k &lt; 0</span>
+<span class="lineNum">     610 </span><span class="lineNoCov">          0 :                   &amp;&amp; known_le (GET_MODE_SIZE (regno_save_mode[regno][1]),</span>
+<span class="lineNum">     611 </span>            :                                GET_MODE_SIZE (regno_save_mode
+<span class="lineNum">     612 </span>            :                                               [saved_reg2-&gt;hard_regno][1])))
+<span class="lineNum">     613 </span>            :                 {
+<span class="lineNum">     614 </span><span class="lineNoCov">          0 :                   saved_reg-&gt;slot</span>
+<span class="lineNum">     615 </span><span class="lineNoCov">          0 :                     = adjust_address_nv</span>
+<span class="lineNum">     616 </span>            :                       (slot, regno_save_mode[saved_reg-&gt;hard_regno][1], 0);
+<span class="lineNum">     617 </span><span class="lineNoCov">          0 :                   regno_save_mem[regno][1] = saved_reg-&gt;slot;</span>
+<span class="lineNum">     618 </span><span class="lineNoCov">          0 :                   saved_reg-&gt;next = saved_reg2-&gt;next;</span>
+<span class="lineNum">     619 </span><span class="lineNoCov">          0 :                   saved_reg2-&gt;next = i;</span>
+<span class="lineNum">     620 </span><span class="lineNoCov">          0 :                   if (dump_file != NULL)</span>
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :                     fprintf (dump_file, &quot;%d uses slot of %d\n&quot;,</span>
+<span class="lineNum">     622 </span>            :                              regno, saved_reg2-&gt;hard_regno);
+<span class="lineNum">     623 </span>            :                   break;
+<span class="lineNum">     624 </span>            :                 }
+<span class="lineNum">     625 </span>            :             }
+<span class="lineNum">     626 </span><span class="lineNoCov">          0 :           if (j == i)</span>
+<span class="lineNum">     627 </span>            :             {
+<span class="lineNum">     628 </span><span class="lineNoCov">          0 :               saved_reg-&gt;first_p = TRUE;</span>
+<span class="lineNum">     629 </span><span class="lineNoCov">          0 :               for (best_slot_num = -1, j = 0; j &lt; prev_save_slots_num; j++)</span>
+<span class="lineNum">     630 </span>            :                 {
+<span class="lineNum">     631 </span><span class="lineNoCov">          0 :                   slot = prev_save_slots[j];</span>
+<span class="lineNum">     632 </span><span class="lineNoCov">          0 :                   if (slot == NULL_RTX)</span>
+<span class="lineNum">     633 </span>            :                     continue;
+<span class="lineNum">     634 </span><span class="lineNoCov">          0 :                   if (known_le (GET_MODE_SIZE (regno_save_mode[regno][1]),</span>
+<span class="lineNum">     635 </span>            :                                 GET_MODE_SIZE (GET_MODE (slot)))
+<span class="lineNum">     636 </span><span class="lineNoCov">          0 :                       &amp;&amp; best_slot_num &lt; 0)</span>
+<span class="lineNum">     637 </span><span class="lineNoCov">          0 :                     best_slot_num = j;</span>
+<span class="lineNum">     638 </span><span class="lineNoCov">          0 :                   if (GET_MODE (slot) == regno_save_mode[regno][1])</span>
+<span class="lineNum">     639 </span>            :                     break;
+<span class="lineNum">     640 </span>            :                 }
+<span class="lineNum">     641 </span><span class="lineNoCov">          0 :               if (best_slot_num &gt;= 0)</span>
+<span class="lineNum">     642 </span>            :                 {
+<span class="lineNum">     643 </span><span class="lineNoCov">          0 :                   saved_reg-&gt;slot = prev_save_slots[best_slot_num];</span>
+<span class="lineNum">     644 </span><span class="lineNoCov">          0 :                   saved_reg-&gt;slot</span>
+<span class="lineNum">     645 </span><span class="lineNoCov">          0 :                     = adjust_address_nv</span>
+<span class="lineNum">     646 </span>            :                       (saved_reg-&gt;slot,
+<span class="lineNum">     647 </span>            :                        regno_save_mode[saved_reg-&gt;hard_regno][1], 0);
+<span class="lineNum">     648 </span><span class="lineNoCov">          0 :                   if (dump_file != NULL)</span>
+<span class="lineNum">     649 </span><span class="lineNoCov">          0 :                     fprintf (dump_file,</span>
+<span class="lineNum">     650 </span>            :                              &quot;%d uses a slot from prev iteration\n&quot;, regno);
+<span class="lineNum">     651 </span><span class="lineNoCov">          0 :                   prev_save_slots[best_slot_num] = NULL_RTX;</span>
+<span class="lineNum">     652 </span><span class="lineNoCov">          0 :                   if (best_slot_num + 1 == prev_save_slots_num)</span>
+<span class="lineNum">     653 </span><span class="lineNoCov">          0 :                     prev_save_slots_num--;</span>
+<span class="lineNum">     654 </span>            :                 }
+<span class="lineNum">     655 </span>            :               else
+<span class="lineNum">     656 </span>            :                 {
+<span class="lineNum">     657 </span><span class="lineNoCov">          0 :                   saved_reg-&gt;slot</span>
+<span class="lineNum">     658 </span><span class="lineNoCov">          0 :                     = assign_stack_local_1</span>
+<span class="lineNum">     659 </span><span class="lineNoCov">          0 :                       (regno_save_mode[regno][1],</span>
+<span class="lineNum">     660 </span><span class="lineNoCov">          0 :                        GET_MODE_SIZE (regno_save_mode[regno][1]), 0,</span>
+<span class="lineNum">     661 </span>            :                        ASLK_REDUCE_ALIGN);
+<span class="lineNum">     662 </span><span class="lineNoCov">          0 :                   if (dump_file != NULL)</span>
+<span class="lineNum">     663 </span><span class="lineNoCov">          0 :                     fprintf (dump_file, &quot;%d uses a new slot\n&quot;, regno);</span>
+<span class="lineNum">     664 </span>            :                 }
+<span class="lineNum">     665 </span><span class="lineNoCov">          0 :               regno_save_mem[regno][1] = saved_reg-&gt;slot;</span>
+<span class="lineNum">     666 </span><span class="lineNoCov">          0 :               save_slots[save_slots_num++] = saved_reg-&gt;slot;</span>
+<span class="lineNum">     667 </span>            :             }
+<span class="lineNum">     668 </span>            :         }
+<span class="lineNum">     669 </span><span class="lineNoCov">          0 :       free (saved_reg_conflicts);</span>
+<span class="lineNum">     670 </span><span class="lineNoCov">          0 :       finish_saved_hard_regs ();</span>
+<span class="lineNum">     671 </span>            :     }
+<span class="lineNum">     672 </span>            :   else
+<span class="lineNum">     673 </span>            :     {
+<span class="lineNum">     674 </span>            :       /* We are not sharing slots. 
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span>            :          Run through all the call-used hard-registers and allocate
+<span class="lineNum">     677 </span>            :          space for each in the caller-save area.  Try to allocate space
+<span class="lineNum">     678 </span>            :          in a manner which allows multi-register saves/restores to be done.  */
+<span class="lineNum">     679 </span>            : 
+<span class="lineNum">     680 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     681 </span><span class="lineNoCov">          0 :         for (j = MOVE_MAX_WORDS; j &gt; 0; j--)</span>
+<span class="lineNum">     682 </span>            :           {
+<span class="lineNum">     683 </span><span class="lineNoCov">          0 :             int do_save = 1;</span>
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span>            :             /* If no mode exists for this size, try another.  Also break out
+<span class="lineNum">     686 </span>            :                if we have already saved this hard register.  */
+<span class="lineNum">     687 </span><span class="lineNoCov">          0 :             if (regno_save_mode[i][j] == VOIDmode || regno_save_mem[i][1] != 0)</span>
+<span class="lineNum">     688 </span>            :               continue;
+<span class="lineNum">     689 </span>            : 
+<span class="lineNum">     690 </span>            :             /* See if any register in this group has been saved.  */
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :             for (k = 0; k &lt; j; k++)</span>
+<span class="lineNum">     692 </span><span class="lineNoCov">          0 :               if (regno_save_mem[i + k][1])</span>
+<span class="lineNum">     693 </span>            :                 {
+<span class="lineNum">     694 </span>            :                   do_save = 0;
+<span class="lineNum">     695 </span>            :                   break;
+<span class="lineNum">     696 </span>            :                 }
+<span class="lineNum">     697 </span><span class="lineNoCov">          0 :             if (! do_save)</span>
+<span class="lineNum">     698 </span>            :               continue;
+<span class="lineNum">     699 </span>            : 
+<span class="lineNum">     700 </span><span class="lineNoCov">          0 :             for (k = 0; k &lt; j; k++)</span>
+<span class="lineNum">     701 </span><span class="lineNoCov">          0 :               if (! TEST_HARD_REG_BIT (hard_regs_used, i + k))</span>
+<span class="lineNum">     702 </span>            :                 {
+<span class="lineNum">     703 </span>            :                   do_save = 0;
+<span class="lineNum">     704 </span>            :                   break;
+<span class="lineNum">     705 </span>            :                 }
+<span class="lineNum">     706 </span><span class="lineNoCov">          0 :             if (! do_save)</span>
+<span class="lineNum">     707 </span>            :               continue;
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span>            :             /* We have found an acceptable mode to store in.  Since
+<span class="lineNum">     710 </span>            :                hard register is always saved in the widest mode
+<span class="lineNum">     711 </span>            :                available, the mode may be wider than necessary, it is
+<span class="lineNum">     712 </span>            :                OK to reduce the alignment of spill space.  We will
+<span class="lineNum">     713 </span>            :                verify that it is equal to or greater than required
+<span class="lineNum">     714 </span>            :                when we restore and save the hard register in
+<span class="lineNum">     715 </span>            :                insert_restore and insert_save.  */
+<span class="lineNum">     716 </span><span class="lineNoCov">          0 :             regno_save_mem[i][j]</span>
+<span class="lineNum">     717 </span><span class="lineNoCov">          0 :               = assign_stack_local_1 (regno_save_mode[i][j],</span>
+<span class="lineNum">     718 </span><span class="lineNoCov">          0 :                                       GET_MODE_SIZE (regno_save_mode[i][j]),</span>
+<span class="lineNum">     719 </span>            :                                       0, ASLK_REDUCE_ALIGN);
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span>            :             /* Setup single word save area just in case...  */
+<span class="lineNum">     722 </span><span class="lineNoCov">          0 :             for (k = 0; k &lt; j; k++)</span>
+<span class="lineNum">     723 </span>            :               /* This should not depend on WORDS_BIG_ENDIAN.
+<span class="lineNum">     724 </span>            :                  The order of words in regs is the same as in memory.  */
+<span class="lineNum">     725 </span><span class="lineNoCov">          0 :               regno_save_mem[i + k][1]</span>
+<span class="lineNum">     726 </span><span class="lineNoCov">          0 :                 = adjust_address_nv (regno_save_mem[i][j],</span>
+<span class="lineNum">     727 </span>            :                                      regno_save_mode[i + k][1],
+<span class="lineNum">     728 </span>            :                                      k * UNITS_PER_WORD);
+<span class="lineNum">     729 </span>            :           }
+<span class="lineNum">     730 </span>            :     }
+<span class="lineNum">     731 </span>            : 
+<span class="lineNum">     732 </span>            :   /* Now loop again and set the alias set of any save areas we made to
+<span class="lineNum">     733 </span>            :      the alias set used to represent frame objects.  */
+<span class="lineNum">     734 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     735 </span><span class="lineNoCov">          0 :     for (j = MOVE_MAX_WORDS; j &gt; 0; j--)</span>
+<span class="lineNum">     736 </span><span class="lineNoCov">          0 :       if (regno_save_mem[i][j] != 0)</span>
+<span class="lineNum">     737 </span><span class="lineNoCov">          0 :         set_mem_alias_set (regno_save_mem[i][j], get_frame_alias_set ());</span>
+<span class="lineNum">     738 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span>            : 
+<span class="lineNum">     741 </span>            : 
+<span class="lineNum">     742 </span>            : /* Find the places where hard regs are live across calls and save them.  */
+<a name="743"><span class="lineNum">     743 </span>            : </a>
+<span class="lineNum">     744 </span>            : void
+<span class="lineNum">     745 </span><span class="lineNoCov">          0 : save_call_clobbered_regs (void)</span>
+<span class="lineNum">     746 </span>            : {
+<span class="lineNum">     747 </span><span class="lineNoCov">          0 :   struct insn_chain *chain, *next, *last = NULL;</span>
+<span class="lineNum">     748 </span><span class="lineNoCov">          0 :   machine_mode save_mode [FIRST_PSEUDO_REGISTER];</span>
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span>            :   /* Computed in mark_set_regs, holds all registers set by the current
+<span class="lineNum">     751 </span>            :      instruction.  */
+<span class="lineNum">     752 </span><span class="lineNoCov">          0 :   HARD_REG_SET this_insn_sets;</span>
+<span class="lineNum">     753 </span>            : 
+<span class="lineNum">     754 </span><span class="lineNoCov">          0 :   CLEAR_HARD_REG_SET (hard_regs_saved);</span>
+<span class="lineNum">     755 </span><span class="lineNoCov">          0 :   n_regs_saved = 0;</span>
+<span class="lineNum">     756 </span>            : 
+<span class="lineNum">     757 </span><span class="lineNoCov">          0 :   for (chain = reload_insn_chain; chain != 0; chain = next)</span>
+<span class="lineNum">     758 </span>            :     {
+<span class="lineNum">     759 </span><span class="lineNoCov">          0 :       rtx_insn *insn = chain-&gt;insn;</span>
+<span class="lineNum">     760 </span><span class="lineNoCov">          0 :       enum rtx_code code = GET_CODE (insn);</span>
+<span class="lineNum">     761 </span>            : 
+<span class="lineNum">     762 </span><span class="lineNoCov">          0 :       next = chain-&gt;next;</span>
+<span class="lineNum">     763 </span>            : 
+<span class="lineNum">     764 </span><span class="lineNoCov">          0 :       gcc_assert (!chain-&gt;is_caller_save_insn);</span>
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span><span class="lineNoCov">          0 :       if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     767 </span>            :         {
+<span class="lineNum">     768 </span>            :           /* If some registers have been saved, see if INSN references
+<span class="lineNum">     769 </span>            :              any of them.  We must restore them before the insn if so.  */
+<span class="lineNum">     770 </span>            : 
+<span class="lineNum">     771 </span><span class="lineNoCov">          0 :           if (n_regs_saved)</span>
+<span class="lineNum">     772 </span>            :             {
+<span class="lineNum">     773 </span><span class="lineNoCov">          0 :               int regno;</span>
+<span class="lineNum">     774 </span><span class="lineNoCov">          0 :               HARD_REG_SET this_insn_sets;</span>
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span><span class="lineNoCov">          0 :               if (code == JUMP_INSN)</span>
+<span class="lineNum">     777 </span>            :                 /* Restore all registers if this is a JUMP_INSN.  */
+<span class="lineNum">     778 </span><span class="lineNoCov">          0 :                 COPY_HARD_REG_SET (referenced_regs, hard_regs_saved);</span>
+<span class="lineNum">     779 </span>            :               else
+<span class="lineNum">     780 </span>            :                 {
+<span class="lineNum">     781 </span><span class="lineNoCov">          0 :                   CLEAR_HARD_REG_SET (referenced_regs);</span>
+<span class="lineNum">     782 </span><span class="lineNoCov">          0 :                   mark_referenced_regs (&amp;PATTERN (insn),</span>
+<span class="lineNum">     783 </span>            :                                         mark_reg_as_referenced, NULL);
+<span class="lineNum">     784 </span><span class="lineNoCov">          0 :                   AND_HARD_REG_SET (referenced_regs, hard_regs_saved);</span>
+<span class="lineNum">     785 </span>            :                 }
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span><span class="lineNoCov">          0 :               for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     788 </span><span class="lineNoCov">          0 :                 if (TEST_HARD_REG_BIT (referenced_regs, regno))</span>
+<span class="lineNum">     789 </span><span class="lineNoCov">          0 :                   regno += insert_restore (chain, 1, regno, MOVE_MAX_WORDS,</span>
+<span class="lineNum">     790 </span>            :                                            save_mode);
+<span class="lineNum">     791 </span>            :               /* If a saved register is set after the call, this means we no
+<span class="lineNum">     792 </span>            :                  longer should restore it.  This can happen when parts of a
+<span class="lineNum">     793 </span>            :                  multi-word pseudo do not conflict with other pseudos, so
+<span class="lineNum">     794 </span>            :                  IRA may allocate the same hard register for both.  One may
+<span class="lineNum">     795 </span>            :                  be live across the call, while the other is set
+<span class="lineNum">     796 </span>            :                  afterwards.  */
+<span class="lineNum">     797 </span><span class="lineNoCov">          0 :               CLEAR_HARD_REG_SET (this_insn_sets);</span>
+<span class="lineNum">     798 </span><span class="lineNoCov">          0 :               note_stores (PATTERN (insn), mark_set_regs, &amp;this_insn_sets);</span>
+<span class="lineNum">     799 </span><span class="lineNoCov">          0 :               AND_COMPL_HARD_REG_SET (hard_regs_saved, this_insn_sets);</span>
+<span class="lineNum">     800 </span>            :             }
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span><span class="lineNoCov">          0 :           if (code == CALL_INSN</span>
+<span class="lineNum">     803 </span><span class="lineNoCov">          0 :               &amp;&amp; ! SIBLING_CALL_P (insn)</span>
+<span class="lineNum">     804 </span><span class="lineNoCov">          0 :               &amp;&amp; ! find_reg_note (insn, REG_NORETURN, NULL))</span>
+<span class="lineNum">     805 </span>            :             {
+<span class="lineNum">     806 </span><span class="lineNoCov">          0 :               unsigned regno;</span>
+<span class="lineNum">     807 </span><span class="lineNoCov">          0 :               HARD_REG_SET hard_regs_to_save;</span>
+<span class="lineNum">     808 </span><span class="lineNoCov">          0 :               HARD_REG_SET call_def_reg_set;</span>
+<span class="lineNum">     809 </span><span class="lineNoCov">          0 :               reg_set_iterator rsi;</span>
+<span class="lineNum">     810 </span><span class="lineNoCov">          0 :               rtx cheap;</span>
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span><span class="lineNoCov">          0 :               cheap = find_reg_note (insn, REG_RETURNED, NULL);</span>
+<span class="lineNum">     813 </span><span class="lineNoCov">          0 :               if (cheap)</span>
+<span class="lineNum">     814 </span><span class="lineNoCov">          0 :                 cheap = XEXP (cheap, 0);</span>
+<span class="lineNum">     815 </span>            : 
+<span class="lineNum">     816 </span>            :               /* Use the register life information in CHAIN to compute which
+<span class="lineNum">     817 </span>            :                  regs are live during the call.  */
+<span class="lineNum">     818 </span><span class="lineNoCov">          0 :               REG_SET_TO_HARD_REG_SET (hard_regs_to_save,</span>
+<span class="lineNum">     819 </span>            :                                        &amp;chain-&gt;live_throughout);
+<span class="lineNum">     820 </span>            :               /* Save hard registers always in the widest mode available.  */
+<span class="lineNum">     821 </span><span class="lineNoCov">          0 :               for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     822 </span><span class="lineNoCov">          0 :                 if (TEST_HARD_REG_BIT (hard_regs_to_save, regno))</span>
+<span class="lineNum">     823 </span><span class="lineNoCov">          0 :                   save_mode [regno] = regno_save_mode [regno][1];</span>
+<span class="lineNum">     824 </span>            :                 else
+<span class="lineNum">     825 </span><span class="lineNoCov">          0 :                   save_mode [regno] = VOIDmode;</span>
+<span class="lineNum">     826 </span>            : 
+<span class="lineNum">     827 </span>            :               /* Look through all live pseudos, mark their hard registers
+<span class="lineNum">     828 </span>            :                  and choose proper mode for saving.  */
+<span class="lineNum">     829 </span><span class="lineNoCov">          0 :               EXECUTE_IF_SET_IN_REG_SET</span>
+<span class="lineNum">     830 </span>            :                 (&amp;chain-&gt;live_throughout, FIRST_PSEUDO_REGISTER, regno, rsi)
+<span class="lineNum">     831 </span>            :                 {
+<span class="lineNum">     832 </span><span class="lineNoCov">          0 :                   int r = reg_renumber[regno];</span>
+<span class="lineNum">     833 </span><span class="lineNoCov">          0 :                   int nregs;</span>
+<span class="lineNum">     834 </span><span class="lineNoCov">          0 :                   machine_mode mode;</span>
+<span class="lineNum">     835 </span>            : 
+<span class="lineNum">     836 </span><span class="lineNoCov">          0 :                   if (r &lt; 0 || regno_reg_rtx[regno] == cheap)</span>
+<span class="lineNum">     837 </span>            :                     continue;
+<span class="lineNum">     838 </span><span class="lineNoCov">          0 :                   nregs = hard_regno_nregs (r, PSEUDO_REGNO_MODE (regno));</span>
+<span class="lineNum">     839 </span><span class="lineNoCov">          0 :                   mode = HARD_REGNO_CALLER_SAVE_MODE</span>
+<span class="lineNum">     840 </span>            :                     (r, nregs, PSEUDO_REGNO_MODE (regno));
+<span class="lineNum">     841 </span><span class="lineNoCov">          0 :                   if (partial_subreg_p (save_mode[r], mode))</span>
+<span class="lineNum">     842 </span><span class="lineNoCov">          0 :                     save_mode[r] = mode;</span>
+<span class="lineNum">     843 </span><span class="lineNoCov">          0 :                   while (nregs-- &gt; 0)</span>
+<span class="lineNum">     844 </span><span class="lineNoCov">          0 :                     SET_HARD_REG_BIT (hard_regs_to_save, r + nregs);</span>
+<span class="lineNum">     845 </span>            :                 }
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span>            :               /* Record all registers set in this call insn.  These don't need
+<span class="lineNum">     848 </span>            :                  to be saved.  N.B. the call insn might set a subreg of a
+<span class="lineNum">     849 </span>            :                  multi-hard-reg pseudo; then the pseudo is considered live
+<span class="lineNum">     850 </span>            :                  during the call, but the subreg that is set isn't.  */
+<span class="lineNum">     851 </span><span class="lineNoCov">          0 :               CLEAR_HARD_REG_SET (this_insn_sets);</span>
+<span class="lineNum">     852 </span><span class="lineNoCov">          0 :               note_stores (PATTERN (insn), mark_set_regs, &amp;this_insn_sets);</span>
+<span class="lineNum">     853 </span>            : 
+<span class="lineNum">     854 </span>            :               /* Compute which hard regs must be saved before this call.  */
+<span class="lineNum">     855 </span><span class="lineNoCov">          0 :               AND_COMPL_HARD_REG_SET (hard_regs_to_save, call_fixed_reg_set);</span>
+<span class="lineNum">     856 </span><span class="lineNoCov">          0 :               AND_COMPL_HARD_REG_SET (hard_regs_to_save, this_insn_sets);</span>
+<span class="lineNum">     857 </span><span class="lineNoCov">          0 :               AND_COMPL_HARD_REG_SET (hard_regs_to_save, hard_regs_saved);</span>
+<span class="lineNum">     858 </span><span class="lineNoCov">          0 :               get_call_reg_set_usage (insn, &amp;call_def_reg_set,</span>
+<span class="lineNum">     859 </span><span class="lineNoCov">          0 :                                       call_used_reg_set);</span>
+<span class="lineNum">     860 </span><span class="lineNoCov">          0 :               AND_HARD_REG_SET (hard_regs_to_save, call_def_reg_set);</span>
+<span class="lineNum">     861 </span>            : 
+<span class="lineNum">     862 </span><span class="lineNoCov">          0 :               for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     863 </span><span class="lineNoCov">          0 :                 if (TEST_HARD_REG_BIT (hard_regs_to_save, regno))</span>
+<span class="lineNum">     864 </span><span class="lineNoCov">          0 :                   regno += insert_save (chain, regno,</span>
+<span class="lineNum">     865 </span>            :                                         &amp;hard_regs_to_save, save_mode);
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span>            :               /* Must recompute n_regs_saved.  */
+<span class="lineNum">     868 </span><span class="lineNoCov">          0 :               n_regs_saved = 0;</span>
+<span class="lineNum">     869 </span><span class="lineNoCov">          0 :               for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     870 </span><span class="lineNoCov">          0 :                 if (TEST_HARD_REG_BIT (hard_regs_saved, regno))</span>
+<span class="lineNum">     871 </span><span class="lineNoCov">          0 :                   n_regs_saved++;</span>
+<span class="lineNum">     872 </span>            :               
+<span class="lineNum">     873 </span><span class="lineNoCov">          0 :               if (cheap</span>
+<span class="lineNum">     874 </span><span class="lineNoCov">          0 :                   &amp;&amp; HARD_REGISTER_P (cheap)</span>
+<span class="lineNum">     875 </span><span class="lineNoCov">          0 :                   &amp;&amp; TEST_HARD_REG_BIT (call_used_reg_set, REGNO (cheap)))</span>
+<span class="lineNum">     876 </span>            :                 {
+<span class="lineNum">     877 </span><span class="lineNoCov">          0 :                   rtx dest, newpat;</span>
+<span class="lineNum">     878 </span><span class="lineNoCov">          0 :                   rtx pat = PATTERN (insn);</span>
+<span class="lineNum">     879 </span><span class="lineNoCov">          0 :                   if (GET_CODE (pat) == PARALLEL)</span>
+<span class="lineNum">     880 </span><span class="lineNoCov">          0 :                     pat = XVECEXP (pat, 0, 0);</span>
+<span class="lineNum">     881 </span><span class="lineNoCov">          0 :                   dest = SET_DEST (pat);</span>
+<span class="lineNum">     882 </span>            :                   /* For multiple return values dest is PARALLEL.
+<span class="lineNum">     883 </span>            :                      Currently we handle only single return value case.  */
+<span class="lineNum">     884 </span><span class="lineNoCov">          0 :                   if (REG_P (dest))</span>
+<span class="lineNum">     885 </span>            :                     {
+<span class="lineNum">     886 </span><span class="lineNoCov">          0 :                       newpat = gen_rtx_SET (cheap, copy_rtx (dest));</span>
+<span class="lineNum">     887 </span><span class="lineNoCov">          0 :                       chain = insert_one_insn (chain, 0, -1, newpat);</span>
+<span class="lineNum">     888 </span>            :                     }
+<span class="lineNum">     889 </span>            :                 }
+<span class="lineNum">     890 </span>            :             }
+<span class="lineNum">     891 </span>            :           last = chain;
+<span class="lineNum">     892 </span>            :         }
+<span class="lineNum">     893 </span><span class="lineNoCov">          0 :       else if (DEBUG_INSN_P (insn) &amp;&amp; n_regs_saved)</span>
+<span class="lineNum">     894 </span><span class="lineNoCov">          0 :         mark_referenced_regs (&amp;PATTERN (insn),</span>
+<span class="lineNum">     895 </span>            :                               replace_reg_with_saved_mem,
+<span class="lineNum">     896 </span>            :                               save_mode);
+<span class="lineNum">     897 </span>            : 
+<span class="lineNum">     898 </span><span class="lineNoCov">          0 :       if (chain-&gt;next == 0 || chain-&gt;next-&gt;block != chain-&gt;block)</span>
+<span class="lineNum">     899 </span>            :         {
+<span class="lineNum">     900 </span><span class="lineNoCov">          0 :           int regno;</span>
+<span class="lineNum">     901 </span>            :           /* At the end of the basic block, we must restore any registers that
+<span class="lineNum">     902 </span>            :              remain saved.  If the last insn in the block is a JUMP_INSN, put
+<span class="lineNum">     903 </span>            :              the restore before the insn, otherwise, put it after the insn.  */
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span><span class="lineNoCov">          0 :           if (n_regs_saved</span>
+<span class="lineNum">     906 </span><span class="lineNoCov">          0 :               &amp;&amp; DEBUG_INSN_P (insn)</span>
+<span class="lineNum">     907 </span><span class="lineNoCov">          0 :               &amp;&amp; last</span>
+<span class="lineNum">     908 </span><span class="lineNoCov">          0 :               &amp;&amp; last-&gt;block == chain-&gt;block)</span>
+<span class="lineNum">     909 </span>            :             {
+<span class="lineNum">     910 </span><span class="lineNoCov">          0 :               rtx_insn *ins, *prev;</span>
+<span class="lineNum">     911 </span><span class="lineNoCov">          0 :               basic_block bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">     912 </span>            : 
+<span class="lineNum">     913 </span>            :               /* When adding hard reg restores after a DEBUG_INSN, move
+<span class="lineNum">     914 </span>            :                  all notes between last real insn and this DEBUG_INSN after
+<span class="lineNum">     915 </span>            :                  the DEBUG_INSN, otherwise we could get code
+<span class="lineNum">     916 </span>            :                  -g/-g0 differences.  */
+<span class="lineNum">     917 </span><span class="lineNoCov">          0 :               for (ins = PREV_INSN (insn); ins != last-&gt;insn; ins = prev)</span>
+<span class="lineNum">     918 </span>            :                 {
+<span class="lineNum">     919 </span><span class="lineNoCov">          0 :                   prev = PREV_INSN (ins);</span>
+<span class="lineNum">     920 </span><span class="lineNoCov">          0 :                   if (NOTE_P (ins))</span>
+<span class="lineNum">     921 </span>            :                     {
+<span class="lineNum">     922 </span><span class="lineNoCov">          0 :                       SET_NEXT_INSN (prev) = NEXT_INSN (ins);</span>
+<span class="lineNum">     923 </span><span class="lineNoCov">          0 :                       SET_PREV_INSN (NEXT_INSN (ins)) = prev;</span>
+<span class="lineNum">     924 </span><span class="lineNoCov">          0 :                       SET_PREV_INSN (ins) = insn;</span>
+<span class="lineNum">     925 </span><span class="lineNoCov">          0 :                       SET_NEXT_INSN (ins) = NEXT_INSN (insn);</span>
+<span class="lineNum">     926 </span><span class="lineNoCov">          0 :                       SET_NEXT_INSN (insn) = ins;</span>
+<span class="lineNum">     927 </span><span class="lineNoCov">          0 :                       if (NEXT_INSN (ins))</span>
+<span class="lineNum">     928 </span><span class="lineNoCov">          0 :                         SET_PREV_INSN (NEXT_INSN (ins)) = ins;</span>
+<span class="lineNum">     929 </span><span class="lineNoCov">          0 :                       if (BB_END (bb) == insn)</span>
+<span class="lineNum">     930 </span><span class="lineNoCov">          0 :                         BB_END (bb) = ins;</span>
+<span class="lineNum">     931 </span>            :                     }
+<span class="lineNum">     932 </span>            :                   else
+<span class="lineNum">     933 </span><span class="lineNoCov">          0 :                     gcc_assert (DEBUG_INSN_P (ins));</span>
+<span class="lineNum">     934 </span>            :                 }
+<span class="lineNum">     935 </span>            :             }
+<span class="lineNum">     936 </span><span class="lineNoCov">          0 :           last = NULL;</span>
+<span class="lineNum">     937 </span>            : 
+<span class="lineNum">     938 </span><span class="lineNoCov">          0 :           if (n_regs_saved)</span>
+<span class="lineNum">     939 </span><span class="lineNoCov">          0 :             for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     940 </span><span class="lineNoCov">          0 :               if (TEST_HARD_REG_BIT (hard_regs_saved, regno))</span>
+<span class="lineNum">     941 </span><span class="lineNoCov">          0 :                 regno += insert_restore (chain, JUMP_P (insn),</span>
+<span class="lineNum">     942 </span><span class="lineNoCov">          0 :                                          regno, MOVE_MAX_WORDS, save_mode);</span>
+<span class="lineNum">     943 </span>            :         }
+<span class="lineNum">     944 </span>            :     }
+<span class="lineNum">     945 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     946 </span>            : 
+<span class="lineNum">     947 </span>            : /* Here from note_stores, or directly from save_call_clobbered_regs, when
+<span class="lineNum">     948 </span>            :    an insn stores a value in a register.
+<span class="lineNum">     949 </span>            :    Set the proper bit or bits in this_insn_sets.  All pseudos that have
+<span class="lineNum">     950 </span>            :    been assigned hard regs have had their register number changed already,
+<a name="951"><span class="lineNum">     951 </span>            :    so we can ignore pseudos.  */</a>
+<span class="lineNum">     952 </span>            : static void
+<span class="lineNum">     953 </span><span class="lineNoCov">          0 : mark_set_regs (rtx reg, const_rtx setter ATTRIBUTE_UNUSED, void *data)</span>
+<span class="lineNum">     954 </span>            : {
+<span class="lineNum">     955 </span><span class="lineNoCov">          0 :   int regno, endregno, i;</span>
+<span class="lineNum">     956 </span><span class="lineNoCov">          0 :   HARD_REG_SET *this_insn_sets = (HARD_REG_SET *) data;</span>
+<span class="lineNum">     957 </span>            : 
+<span class="lineNum">     958 </span><span class="lineNoCov">          0 :   if (GET_CODE (reg) == SUBREG)</span>
+<span class="lineNum">     959 </span>            :     {
+<span class="lineNum">     960 </span><span class="lineNoCov">          0 :       rtx inner = SUBREG_REG (reg);</span>
+<span class="lineNum">     961 </span><span class="lineNoCov">          0 :       if (!REG_P (inner) || REGNO (inner) &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     962 </span>            :         return;
+<span class="lineNum">     963 </span><span class="lineNoCov">          0 :       regno = subreg_regno (reg);</span>
+<span class="lineNum">     964 </span><span class="lineNoCov">          0 :       endregno = regno + subreg_nregs (reg);</span>
+<span class="lineNum">     965 </span>            :     }
+<span class="lineNum">     966 </span><span class="lineNoCov">          0 :   else if (REG_P (reg)</span>
+<span class="lineNum">     967 </span><span class="lineNoCov">          0 :            &amp;&amp; REGNO (reg) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     968 </span>            :     {
+<span class="lineNum">     969 </span><span class="lineNoCov">          0 :       regno = REGNO (reg);</span>
+<span class="lineNum">     970 </span><span class="lineNoCov">          0 :       endregno = END_REGNO (reg);</span>
+<span class="lineNum">     971 </span>            :     }
+<span class="lineNum">     972 </span>            :   else
+<span class="lineNum">     973 </span>            :     return;
+<span class="lineNum">     974 </span>            : 
+<span class="lineNum">     975 </span><span class="lineNoCov">          0 :   for (i = regno; i &lt; endregno; i++)</span>
+<span class="lineNum">     976 </span><span class="lineNoCov">          0 :     SET_HARD_REG_BIT (*this_insn_sets, i);</span>
+<span class="lineNum">     977 </span>            : }
+<span class="lineNum">     978 </span>            : 
+<span class="lineNum">     979 </span>            : /* Here from note_stores when an insn stores a value in a register.
+<span class="lineNum">     980 </span>            :    Set the proper bit or bits in the passed regset.  All pseudos that have
+<span class="lineNum">     981 </span>            :    been assigned hard regs have had their register number changed already,
+<a name="982"><span class="lineNum">     982 </span>            :    so we can ignore pseudos.  */</a>
+<span class="lineNum">     983 </span>            : static void
+<span class="lineNum">     984 </span><span class="lineNoCov">          0 : add_stored_regs (rtx reg, const_rtx setter, void *data)</span>
+<span class="lineNum">     985 </span>            : {
+<span class="lineNum">     986 </span><span class="lineNoCov">          0 :   int regno, endregno, i;</span>
+<span class="lineNum">     987 </span><span class="lineNoCov">          0 :   machine_mode mode = GET_MODE (reg);</span>
+<span class="lineNum">     988 </span><span class="lineNoCov">          0 :   int offset = 0;</span>
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span><span class="lineNoCov">          0 :   if (GET_CODE (setter) == CLOBBER)</span>
+<span class="lineNum">     991 </span>            :     return;
+<span class="lineNum">     992 </span>            : 
+<span class="lineNum">     993 </span><span class="lineNoCov">          0 :   if (GET_CODE (reg) == SUBREG</span>
+<span class="lineNum">     994 </span><span class="lineNoCov">          0 :       &amp;&amp; REG_P (SUBREG_REG (reg))</span>
+<span class="lineNum">     995 </span><span class="lineNoCov">          0 :       &amp;&amp; REGNO (SUBREG_REG (reg)) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     996 </span>            :     {
+<span class="lineNum">     997 </span><span class="lineNoCov">          0 :       offset = subreg_regno_offset (REGNO (SUBREG_REG (reg)),</span>
+<span class="lineNum">     998 </span><span class="lineNoCov">          0 :                                     GET_MODE (SUBREG_REG (reg)),</span>
+<span class="lineNum">     999 </span><span class="lineNoCov">          0 :                                     SUBREG_BYTE (reg),</span>
+<span class="lineNum">    1000 </span>            :                                     GET_MODE (reg));
+<span class="lineNum">    1001 </span><span class="lineNoCov">          0 :       regno = REGNO (SUBREG_REG (reg)) + offset;</span>
+<span class="lineNum">    1002 </span><span class="lineNoCov">          0 :       endregno = regno + subreg_nregs (reg);</span>
+<span class="lineNum">    1003 </span>            :     }
+<span class="lineNum">    1004 </span>            :   else
+<span class="lineNum">    1005 </span>            :     {
+<span class="lineNum">    1006 </span><span class="lineNoCov">          0 :       if (!REG_P (reg) || REGNO (reg) &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">    1007 </span>            :         return;
+<span class="lineNum">    1008 </span>            : 
+<span class="lineNum">    1009 </span><span class="lineNoCov">          0 :       regno = REGNO (reg) + offset;</span>
+<span class="lineNum">    1010 </span><span class="lineNoCov">          0 :       endregno = end_hard_regno (mode, regno);</span>
+<span class="lineNum">    1011 </span>            :     }
+<span class="lineNum">    1012 </span>            : 
+<span class="lineNum">    1013 </span><span class="lineNoCov">          0 :   for (i = regno; i &lt; endregno; i++)</span>
+<span class="lineNum">    1014 </span><span class="lineNoCov">          0 :     SET_REGNO_REG_SET ((regset) data, i);</span>
+<span class="lineNum">    1015 </span>            : }
+<span class="lineNum">    1016 </span>            : 
+<a name="1017"><span class="lineNum">    1017 </span>            : /* Walk X and record all referenced registers in REFERENCED_REGS.  */</a>
+<span class="lineNum">    1018 </span>            : static void
+<span class="lineNum">    1019 </span><span class="lineNoCov">          0 : mark_referenced_regs (rtx *loc, refmarker_fn *mark, void *arg)</span>
+<span class="lineNum">    1020 </span>            : {
+<span class="lineNum">    1021 </span><span class="lineNoCov">          0 :   enum rtx_code code = GET_CODE (*loc);</span>
+<span class="lineNum">    1022 </span><span class="lineNoCov">          0 :   const char *fmt;</span>
+<span class="lineNum">    1023 </span><span class="lineNoCov">          0 :   int i, j;</span>
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span><span class="lineNoCov">          0 :   if (code == SET)</span>
+<span class="lineNum">    1026 </span><span class="lineNoCov">          0 :     mark_referenced_regs (&amp;SET_SRC (*loc), mark, arg);</span>
+<span class="lineNum">    1027 </span><span class="lineNoCov">          0 :   if (code == SET || code == CLOBBER)</span>
+<span class="lineNum">    1028 </span>            :     {
+<span class="lineNum">    1029 </span><span class="lineNoCov">          0 :       loc = &amp;SET_DEST (*loc);</span>
+<span class="lineNum">    1030 </span><span class="lineNoCov">          0 :       code = GET_CODE (*loc);</span>
+<span class="lineNum">    1031 </span><span class="lineNoCov">          0 :       if ((code == REG &amp;&amp; REGNO (*loc) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">    1032 </span><span class="lineNoCov">          0 :           || code == PC || code == CC0</span>
+<span class="lineNum">    1033 </span><span class="lineNoCov">          0 :           || (code == SUBREG &amp;&amp; REG_P (SUBREG_REG (*loc))</span>
+<span class="lineNum">    1034 </span><span class="lineNoCov">          0 :               &amp;&amp; REGNO (SUBREG_REG (*loc)) &lt; FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">    1035 </span>            :               /* If we're setting only part of a multi-word register,
+<span class="lineNum">    1036 </span>            :                  we shall mark it as referenced, because the words
+<span class="lineNum">    1037 </span>            :                  that are not being set should be restored.  */
+<span class="lineNum">    1038 </span><span class="lineNoCov">          0 :               &amp;&amp; !read_modify_subreg_p (*loc)))</span>
+<span class="lineNum">    1039 </span><span class="lineNoCov">          0 :         return;</span>
+<span class="lineNum">    1040 </span>            :     }
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :   if (code == MEM || code == SUBREG)</span>
+<span class="lineNum">    1042 </span>            :     {
+<span class="lineNum">    1043 </span><span class="lineNoCov">          0 :       loc = &amp;XEXP (*loc, 0);</span>
+<span class="lineNum">    1044 </span><span class="lineNoCov">          0 :       code = GET_CODE (*loc);</span>
+<span class="lineNum">    1045 </span>            :     }
+<span class="lineNum">    1046 </span>            : 
+<span class="lineNum">    1047 </span><span class="lineNoCov">          0 :   if (code == REG)</span>
+<span class="lineNum">    1048 </span>            :     {
+<span class="lineNum">    1049 </span><span class="lineNoCov">          0 :       int regno = REGNO (*loc);</span>
+<span class="lineNum">    1050 </span><span class="lineNoCov">          0 :       int hardregno = (regno &lt; FIRST_PSEUDO_REGISTER ? regno</span>
+<span class="lineNum">    1051 </span><span class="lineNoCov">          0 :                        : reg_renumber[regno]);</span>
+<span class="lineNum">    1052 </span>            : 
+<span class="lineNum">    1053 </span><span class="lineNoCov">          0 :       if (hardregno &gt;= 0)</span>
+<span class="lineNum">    1054 </span><span class="lineNoCov">          0 :         mark (loc, GET_MODE (*loc), hardregno, arg);</span>
+<span class="lineNum">    1055 </span><span class="lineNoCov">          0 :       else if (arg)</span>
+<span class="lineNum">    1056 </span>            :         /* ??? Will we ever end up with an equiv expression in a debug
+<span class="lineNum">    1057 </span>            :            insn, that would have required restoring a reg, or will
+<span class="lineNum">    1058 </span>            :            reload take care of it for us?  */
+<span class="lineNum">    1059 </span>            :         return;
+<span class="lineNum">    1060 </span>            :       /* If this is a pseudo that did not get a hard register, scan its
+<span class="lineNum">    1061 </span>            :          memory location, since it might involve the use of another
+<span class="lineNum">    1062 </span>            :          register, which might be saved.  */
+<span class="lineNum">    1063 </span><span class="lineNoCov">          0 :       else if (reg_equiv_mem (regno) != 0)</span>
+<span class="lineNum">    1064 </span><span class="lineNoCov">          0 :         mark_referenced_regs (&amp;XEXP (reg_equiv_mem (regno), 0), mark, arg);</span>
+<span class="lineNum">    1065 </span><span class="lineNoCov">          0 :       else if (reg_equiv_address (regno) != 0)</span>
+<span class="lineNum">    1066 </span><span class="lineNoCov">          0 :         mark_referenced_regs (&amp;reg_equiv_address (regno), mark, arg);</span>
+<span class="lineNum">    1067 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">    1068 </span>            :     }
+<span class="lineNum">    1069 </span>            : 
+<span class="lineNum">    1070 </span><span class="lineNoCov">          0 :   fmt = GET_RTX_FORMAT (code);</span>
+<span class="lineNum">    1071 </span><span class="lineNoCov">          0 :   for (i = GET_RTX_LENGTH (code) - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">    1072 </span>            :     {
+<span class="lineNum">    1073 </span><span class="lineNoCov">          0 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">    1074 </span><span class="lineNoCov">          0 :         mark_referenced_regs (&amp;XEXP (*loc, i), mark, arg);</span>
+<span class="lineNum">    1075 </span><span class="lineNoCov">          0 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">    1076 </span><span class="lineNoCov">          0 :         for (j = XVECLEN (*loc, i) - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">    1077 </span><span class="lineNoCov">          0 :           mark_referenced_regs (&amp;XVECEXP (*loc, i, j), mark, arg);</span>
+<span class="lineNum">    1078 </span>            :     }
+<span class="lineNum">    1079 </span>            : }
+<span class="lineNum">    1080 </span>            : 
+<span class="lineNum">    1081 </span>            : /* Parameter function for mark_referenced_regs() that adds registers
+<span class="lineNum">    1082 </span>            :    present in the insn and in equivalent mems and addresses to
+<span class="lineNum">    1083 </span>            :    referenced_regs.  */
+<a name="1084"><span class="lineNum">    1084 </span>            : </a>
+<span class="lineNum">    1085 </span>            : static void
+<span class="lineNum">    1086 </span><span class="lineNoCov">          0 : mark_reg_as_referenced (rtx *loc ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">    1087 </span>            :                         machine_mode mode,
+<span class="lineNum">    1088 </span>            :                         int hardregno,
+<span class="lineNum">    1089 </span>            :                         void *arg ATTRIBUTE_UNUSED)
+<span class="lineNum">    1090 </span>            : {
+<span class="lineNum">    1091 </span><span class="lineNoCov">          0 :   add_to_hard_reg_set (&amp;referenced_regs, mode, hardregno);</span>
+<span class="lineNum">    1092 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1093 </span>            : 
+<span class="lineNum">    1094 </span>            : /* Parameter function for mark_referenced_regs() that replaces
+<span class="lineNum">    1095 </span>            :    registers referenced in a debug_insn that would have been restored,
+<span class="lineNum">    1096 </span>            :    should it be a non-debug_insn, with their save locations.  */
+<a name="1097"><span class="lineNum">    1097 </span>            : </a>
+<span class="lineNum">    1098 </span>            : static void
+<span class="lineNum">    1099 </span><span class="lineNoCov">          0 : replace_reg_with_saved_mem (rtx *loc,</span>
+<span class="lineNum">    1100 </span>            :                             machine_mode mode,
+<span class="lineNum">    1101 </span>            :                             int regno,
+<span class="lineNum">    1102 </span>            :                             void *arg)
+<span class="lineNum">    1103 </span>            : {
+<span class="lineNum">    1104 </span><span class="lineNoCov">          0 :   unsigned int i, nregs = hard_regno_nregs (regno, mode);</span>
+<span class="lineNum">    1105 </span><span class="lineNoCov">          0 :   rtx mem;</span>
+<span class="lineNum">    1106 </span><span class="lineNoCov">          0 :   machine_mode *save_mode = (machine_mode *)arg;</span>
+<span class="lineNum">    1107 </span>            : 
+<span class="lineNum">    1108 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">    1109 </span><span class="lineNoCov">          0 :     if (TEST_HARD_REG_BIT (hard_regs_saved, regno + i))</span>
+<span class="lineNum">    1110 </span>            :       break;
+<span class="lineNum">    1111 </span>            : 
+<span class="lineNum">    1112 </span>            :   /* If none of the registers in the range would need restoring, we're
+<span class="lineNum">    1113 </span>            :      all set.  */
+<span class="lineNum">    1114 </span><span class="lineNoCov">          0 :   if (i == nregs)</span>
+<span class="lineNum">    1115 </span>            :     return;
+<span class="lineNum">    1116 </span>            : 
+<span class="lineNum">    1117 </span><span class="lineNoCov">          0 :   while (++i &lt; nregs)</span>
+<span class="lineNum">    1118 </span><span class="lineNoCov">          0 :     if (!TEST_HARD_REG_BIT (hard_regs_saved, regno + i))</span>
+<span class="lineNum">    1119 </span>            :       break;
+<span class="lineNum">    1120 </span>            : 
+<span class="lineNum">    1121 </span><span class="lineNoCov">          0 :   if (i == nregs</span>
+<span class="lineNum">    1122 </span><span class="lineNoCov">          0 :       &amp;&amp; regno_save_mem[regno][nregs])</span>
+<span class="lineNum">    1123 </span>            :     {
+<span class="lineNum">    1124 </span><span class="lineNoCov">          0 :       mem = copy_rtx (regno_save_mem[regno][nregs]);</span>
+<span class="lineNum">    1125 </span>            : 
+<span class="lineNum">    1126 </span><span class="lineNoCov">          0 :       if (nregs == hard_regno_nregs (regno, save_mode[regno]))</span>
+<span class="lineNum">    1127 </span><span class="lineNoCov">          0 :         mem = adjust_address_nv (mem, save_mode[regno], 0);</span>
+<span class="lineNum">    1128 </span>            : 
+<span class="lineNum">    1129 </span><span class="lineNoCov">          0 :       if (GET_MODE (mem) != mode)</span>
+<span class="lineNum">    1130 </span>            :         {
+<span class="lineNum">    1131 </span>            :           /* This is gen_lowpart_if_possible(), but without validating
+<span class="lineNum">    1132 </span>            :              the newly-formed address.  */
+<span class="lineNum">    1133 </span><span class="lineNoCov">          0 :           poly_int64 offset = byte_lowpart_offset (mode, GET_MODE (mem));</span>
+<span class="lineNum">    1134 </span><span class="lineNoCov">          0 :           mem = adjust_address_nv (mem, mode, offset);</span>
+<span class="lineNum">    1135 </span>            :         }
+<span class="lineNum">    1136 </span>            :     }
+<span class="lineNum">    1137 </span>            :   else
+<span class="lineNum">    1138 </span>            :     {
+<span class="lineNum">    1139 </span><span class="lineNoCov">          0 :       mem = gen_rtx_CONCATN (mode, rtvec_alloc (nregs));</span>
+<span class="lineNum">    1140 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">    1141 </span><span class="lineNoCov">          0 :         if (TEST_HARD_REG_BIT (hard_regs_saved, regno + i))</span>
+<span class="lineNum">    1142 </span>            :           {
+<span class="lineNum">    1143 </span><span class="lineNoCov">          0 :             gcc_assert (regno_save_mem[regno + i][1]);</span>
+<span class="lineNum">    1144 </span><span class="lineNoCov">          0 :             XVECEXP (mem, 0, i) = copy_rtx (regno_save_mem[regno + i][1]);</span>
+<span class="lineNum">    1145 </span>            :           }
+<span class="lineNum">    1146 </span>            :         else
+<span class="lineNum">    1147 </span>            :           {
+<span class="lineNum">    1148 </span><span class="lineNoCov">          0 :             machine_mode smode = save_mode[regno];</span>
+<span class="lineNum">    1149 </span><span class="lineNoCov">          0 :             gcc_assert (smode != VOIDmode);</span>
+<span class="lineNum">    1150 </span><span class="lineNoCov">          0 :             if (hard_regno_nregs (regno, smode) &gt; 1)</span>
+<span class="lineNum">    1151 </span><span class="lineNoCov">          0 :               smode = mode_for_size (exact_div (GET_MODE_BITSIZE (mode),</span>
+<span class="lineNum">    1152 </span><span class="lineNoCov">          0 :                                                 nregs),</span>
+<span class="lineNum">    1153 </span><span class="lineNoCov">          0 :                                      GET_MODE_CLASS (mode), 0).require ();</span>
+<span class="lineNum">    1154 </span><span class="lineNoCov">          0 :             XVECEXP (mem, 0, i) = gen_rtx_REG (smode, regno + i);</span>
+<span class="lineNum">    1155 </span>            :           }
+<span class="lineNum">    1156 </span>            :     }
+<span class="lineNum">    1157 </span>            : 
+<span class="lineNum">    1158 </span><span class="lineNoCov">          0 :   gcc_assert (GET_MODE (mem) == mode);</span>
+<span class="lineNum">    1159 </span><span class="lineNoCov">          0 :   *loc = mem;</span>
+<span class="lineNum">    1160 </span>            : }
+<span class="lineNum">    1161 </span>            : 
+<span class="lineNum">    1162 </span>            : 
+<span class="lineNum">    1163 </span>            : /* Insert a sequence of insns to restore.  Place these insns in front of
+<span class="lineNum">    1164 </span>            :    CHAIN if BEFORE_P is nonzero, behind the insn otherwise.  MAXRESTORE is
+<span class="lineNum">    1165 </span>            :    the maximum number of registers which should be restored during this call.
+<span class="lineNum">    1166 </span>            :    It should never be less than 1 since we only work with entire registers.
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            :    Note that we have verified in init_caller_save that we can do this
+<span class="lineNum">    1169 </span>            :    with a simple SET, so use it.  Set INSN_CODE to what we save there
+<span class="lineNum">    1170 </span>            :    since the address might not be valid so the insn might not be recognized.
+<span class="lineNum">    1171 </span>            :    These insns will be reloaded and have register elimination done by
+<span class="lineNum">    1172 </span>            :    find_reload, so we need not worry about that here.
+<span class="lineNum">    1173 </span>            : 
+<span class="lineNum">    1174 </span>            :    Return the extra number of registers saved.  */
+<a name="1175"><span class="lineNum">    1175 </span>            : </a>
+<span class="lineNum">    1176 </span>            : static int
+<span class="lineNum">    1177 </span><span class="lineNoCov">          0 : insert_restore (struct insn_chain *chain, int before_p, int regno,</span>
+<span class="lineNum">    1178 </span>            :                 int maxrestore, machine_mode *save_mode)
+<span class="lineNum">    1179 </span>            : {
+<span class="lineNum">    1180 </span><span class="lineNoCov">          0 :   int i, k;</span>
+<span class="lineNum">    1181 </span><span class="lineNoCov">          0 :   rtx pat = NULL_RTX;</span>
+<span class="lineNum">    1182 </span><span class="lineNoCov">          0 :   int code;</span>
+<span class="lineNum">    1183 </span><span class="lineNoCov">          0 :   unsigned int numregs = 0;</span>
+<span class="lineNum">    1184 </span><span class="lineNoCov">          0 :   struct insn_chain *new_chain;</span>
+<span class="lineNum">    1185 </span><span class="lineNoCov">          0 :   rtx mem;</span>
+<span class="lineNum">    1186 </span>            : 
+<span class="lineNum">    1187 </span>            :   /* A common failure mode if register status is not correct in the
+<span class="lineNum">    1188 </span>            :      RTL is for this routine to be called with a REGNO we didn't
+<span class="lineNum">    1189 </span>            :      expect to save.  That will cause us to write an insn with a (nil)
+<span class="lineNum">    1190 </span>            :      SET_DEST or SET_SRC.  Instead of doing so and causing a crash
+<span class="lineNum">    1191 </span>            :      later, check for this common case here instead.  This will remove
+<span class="lineNum">    1192 </span>            :      one step in debugging such problems.  */
+<span class="lineNum">    1193 </span><span class="lineNoCov">          0 :   gcc_assert (regno_save_mem[regno][1]);</span>
+<span class="lineNum">    1194 </span>            : 
+<span class="lineNum">    1195 </span>            :   /* Get the pattern to emit and update our status.
+<span class="lineNum">    1196 </span>            : 
+<span class="lineNum">    1197 </span>            :      See if we can restore `maxrestore' registers at once.  Work
+<span class="lineNum">    1198 </span>            :      backwards to the single register case.  */
+<span class="lineNum">    1199 </span><span class="lineNoCov">          0 :   for (i = maxrestore; i &gt; 0; i--)</span>
+<span class="lineNum">    1200 </span>            :     {
+<span class="lineNum">    1201 </span><span class="lineNoCov">          0 :       int j;</span>
+<span class="lineNum">    1202 </span><span class="lineNoCov">          0 :       int ok = 1;</span>
+<span class="lineNum">    1203 </span>            : 
+<span class="lineNum">    1204 </span><span class="lineNoCov">          0 :       if (regno_save_mem[regno][i] == 0)</span>
+<span class="lineNum">    1205 </span>            :         continue;
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span><span class="lineNoCov">          0 :       for (j = 0; j &lt; i; j++)</span>
+<span class="lineNum">    1208 </span><span class="lineNoCov">          0 :         if (! TEST_HARD_REG_BIT (hard_regs_saved, regno + j))</span>
+<span class="lineNum">    1209 </span>            :           {
+<span class="lineNum">    1210 </span>            :             ok = 0;
+<span class="lineNum">    1211 </span>            :             break;
+<span class="lineNum">    1212 </span>            :           }
+<span class="lineNum">    1213 </span>            :       /* Must do this one restore at a time.  */
+<span class="lineNum">    1214 </span><span class="lineNoCov">          0 :       if (! ok)</span>
+<span class="lineNum">    1215 </span>            :         continue;
+<span class="lineNum">    1216 </span>            : 
+<span class="lineNum">    1217 </span><span class="lineNoCov">          0 :       numregs = i;</span>
+<span class="lineNum">    1218 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1219 </span>            :     }
+<span class="lineNum">    1220 </span>            : 
+<span class="lineNum">    1221 </span><span class="lineNoCov">          0 :   mem = regno_save_mem [regno][numregs];</span>
+<span class="lineNum">    1222 </span><span class="lineNoCov">          0 :   if (save_mode [regno] != VOIDmode</span>
+<span class="lineNum">    1223 </span><span class="lineNoCov">          0 :       &amp;&amp; save_mode [regno] != GET_MODE (mem)</span>
+<span class="lineNum">    1224 </span><span class="lineNoCov">          0 :       &amp;&amp; numregs == hard_regno_nregs (regno, save_mode [regno])</span>
+<span class="lineNum">    1225 </span>            :       /* Check that insn to restore REGNO in save_mode[regno] is
+<span class="lineNum">    1226 </span>            :          correct.  */
+<span class="lineNum">    1227 </span><span class="lineNoCov">          0 :       &amp;&amp; reg_save_code (regno, save_mode[regno]) &gt;= 0)</span>
+<span class="lineNum">    1228 </span><span class="lineNoCov">          0 :     mem = adjust_address_nv (mem, save_mode[regno], 0);</span>
+<span class="lineNum">    1229 </span>            :   else
+<span class="lineNum">    1230 </span><span class="lineNoCov">          0 :     mem = copy_rtx (mem);</span>
+<span class="lineNum">    1231 </span>            : 
+<span class="lineNum">    1232 </span>            :   /* Verify that the alignment of spill space is equal to or greater
+<span class="lineNum">    1233 </span>            :      than required.  */
+<span class="lineNum">    1234 </span><span class="lineNoCov">          0 :   gcc_assert (MIN (MAX_SUPPORTED_STACK_ALIGNMENT,</span>
+<span class="lineNum">    1235 </span>            :                    GET_MODE_ALIGNMENT (GET_MODE (mem))) &lt;= MEM_ALIGN (mem));
+<span class="lineNum">    1236 </span>            : 
+<span class="lineNum">    1237 </span><span class="lineNoCov">          0 :   pat = gen_rtx_SET (gen_rtx_REG (GET_MODE (mem), regno), mem);</span>
+<span class="lineNum">    1238 </span><span class="lineNoCov">          0 :   code = reg_restore_code (regno, GET_MODE (mem));</span>
+<span class="lineNum">    1239 </span><span class="lineNoCov">          0 :   new_chain = insert_one_insn (chain, before_p, code, pat);</span>
+<span class="lineNum">    1240 </span>            : 
+<span class="lineNum">    1241 </span>            :   /* Clear status for all registers we restored.  */
+<span class="lineNum">    1242 </span><span class="lineNoCov">          0 :   for (k = 0; k &lt; i; k++)</span>
+<span class="lineNum">    1243 </span>            :     {
+<span class="lineNum">    1244 </span><span class="lineNoCov">          0 :       CLEAR_HARD_REG_BIT (hard_regs_saved, regno + k);</span>
+<span class="lineNum">    1245 </span><span class="lineNoCov">          0 :       SET_REGNO_REG_SET (&amp;new_chain-&gt;dead_or_set, regno + k);</span>
+<span class="lineNum">    1246 </span><span class="lineNoCov">          0 :       n_regs_saved--;</span>
+<span class="lineNum">    1247 </span>            :     }
+<span class="lineNum">    1248 </span>            : 
+<span class="lineNum">    1249 </span>            :   /* Tell our callers how many extra registers we saved/restored.  */
+<span class="lineNum">    1250 </span><span class="lineNoCov">          0 :   return numregs - 1;</span>
+<span class="lineNum">    1251 </span>            : }
+<span class="lineNum">    1252 </span>            : 
+<span class="lineNum">    1253 </span>            : /* Like insert_restore above, but save registers instead.  */
+<a name="1254"><span class="lineNum">    1254 </span>            : </a>
+<span class="lineNum">    1255 </span>            : static int
+<span class="lineNum">    1256 </span><span class="lineNoCov">          0 : insert_save (struct insn_chain *chain, int regno,</span>
+<span class="lineNum">    1257 </span>            :              HARD_REG_SET *to_save, machine_mode *save_mode)
+<span class="lineNum">    1258 </span>            : {
+<span class="lineNum">    1259 </span><span class="lineNoCov">          0 :   int i;</span>
+<span class="lineNum">    1260 </span><span class="lineNoCov">          0 :   unsigned int k;</span>
+<span class="lineNum">    1261 </span><span class="lineNoCov">          0 :   rtx pat = NULL_RTX;</span>
+<span class="lineNum">    1262 </span><span class="lineNoCov">          0 :   int code;</span>
+<span class="lineNum">    1263 </span><span class="lineNoCov">          0 :   unsigned int numregs = 0;</span>
+<span class="lineNum">    1264 </span><span class="lineNoCov">          0 :   struct insn_chain *new_chain;</span>
+<span class="lineNum">    1265 </span><span class="lineNoCov">          0 :   rtx mem;</span>
+<span class="lineNum">    1266 </span>            : 
+<span class="lineNum">    1267 </span>            :   /* A common failure mode if register status is not correct in the
+<span class="lineNum">    1268 </span>            :      RTL is for this routine to be called with a REGNO we didn't
+<span class="lineNum">    1269 </span>            :      expect to save.  That will cause us to write an insn with a (nil)
+<span class="lineNum">    1270 </span>            :      SET_DEST or SET_SRC.  Instead of doing so and causing a crash
+<span class="lineNum">    1271 </span>            :      later, check for this common case here.  This will remove one
+<span class="lineNum">    1272 </span>            :      step in debugging such problems.  */
+<span class="lineNum">    1273 </span><span class="lineNoCov">          0 :   gcc_assert (regno_save_mem[regno][1]);</span>
+<span class="lineNum">    1274 </span>            : 
+<span class="lineNum">    1275 </span>            :   /* Get the pattern to emit and update our status.
+<span class="lineNum">    1276 </span>            : 
+<span class="lineNum">    1277 </span>            :      See if we can save several registers with a single instruction.
+<span class="lineNum">    1278 </span>            :      Work backwards to the single register case.  */
+<span class="lineNum">    1279 </span><span class="lineNoCov">          0 :   for (i = MOVE_MAX_WORDS; i &gt; 0; i--)</span>
+<span class="lineNum">    1280 </span>            :     {
+<span class="lineNum">    1281 </span><span class="lineNoCov">          0 :       int j;</span>
+<span class="lineNum">    1282 </span><span class="lineNoCov">          0 :       int ok = 1;</span>
+<span class="lineNum">    1283 </span><span class="lineNoCov">          0 :       if (regno_save_mem[regno][i] == 0)</span>
+<span class="lineNum">    1284 </span>            :         continue;
+<span class="lineNum">    1285 </span>            : 
+<span class="lineNum">    1286 </span><span class="lineNoCov">          0 :       for (j = 0; j &lt; i; j++)</span>
+<span class="lineNum">    1287 </span><span class="lineNoCov">          0 :         if (! TEST_HARD_REG_BIT (*to_save, regno + j))</span>
+<span class="lineNum">    1288 </span>            :           {
+<span class="lineNum">    1289 </span>            :             ok = 0;
+<span class="lineNum">    1290 </span>            :             break;
+<span class="lineNum">    1291 </span>            :           }
+<span class="lineNum">    1292 </span>            :       /* Must do this one save at a time.  */
+<span class="lineNum">    1293 </span><span class="lineNoCov">          0 :       if (! ok)</span>
+<span class="lineNum">    1294 </span>            :         continue;
+<span class="lineNum">    1295 </span>            : 
+<span class="lineNum">    1296 </span><span class="lineNoCov">          0 :       numregs = i;</span>
+<span class="lineNum">    1297 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1298 </span>            :     }
+<span class="lineNum">    1299 </span>            : 
+<span class="lineNum">    1300 </span><span class="lineNoCov">          0 :   mem = regno_save_mem [regno][numregs];</span>
+<span class="lineNum">    1301 </span><span class="lineNoCov">          0 :   if (save_mode [regno] != VOIDmode</span>
+<span class="lineNum">    1302 </span><span class="lineNoCov">          0 :       &amp;&amp; save_mode [regno] != GET_MODE (mem)</span>
+<span class="lineNum">    1303 </span><span class="lineNoCov">          0 :       &amp;&amp; numregs == hard_regno_nregs (regno, save_mode [regno])</span>
+<span class="lineNum">    1304 </span>            :       /* Check that insn to save REGNO in save_mode[regno] is
+<span class="lineNum">    1305 </span>            :          correct.  */
+<span class="lineNum">    1306 </span><span class="lineNoCov">          0 :       &amp;&amp; reg_save_code (regno, save_mode[regno]) &gt;= 0)</span>
+<span class="lineNum">    1307 </span><span class="lineNoCov">          0 :     mem = adjust_address_nv (mem, save_mode[regno], 0);</span>
+<span class="lineNum">    1308 </span>            :   else
+<span class="lineNum">    1309 </span><span class="lineNoCov">          0 :     mem = copy_rtx (mem);</span>
+<span class="lineNum">    1310 </span>            : 
+<span class="lineNum">    1311 </span>            :   /* Verify that the alignment of spill space is equal to or greater
+<span class="lineNum">    1312 </span>            :      than required.  */
+<span class="lineNum">    1313 </span><span class="lineNoCov">          0 :   gcc_assert (MIN (MAX_SUPPORTED_STACK_ALIGNMENT,</span>
+<span class="lineNum">    1314 </span>            :                    GET_MODE_ALIGNMENT (GET_MODE (mem))) &lt;= MEM_ALIGN (mem));
+<span class="lineNum">    1315 </span>            : 
+<span class="lineNum">    1316 </span><span class="lineNoCov">          0 :   pat = gen_rtx_SET (mem, gen_rtx_REG (GET_MODE (mem), regno));</span>
+<span class="lineNum">    1317 </span><span class="lineNoCov">          0 :   code = reg_save_code (regno, GET_MODE (mem));</span>
+<span class="lineNum">    1318 </span><span class="lineNoCov">          0 :   new_chain = insert_one_insn (chain, 1, code, pat);</span>
+<span class="lineNum">    1319 </span>            : 
+<span class="lineNum">    1320 </span>            :   /* Set hard_regs_saved and dead_or_set for all the registers we saved.  */
+<span class="lineNum">    1321 </span><span class="lineNoCov">          0 :   for (k = 0; k &lt; numregs; k++)</span>
+<span class="lineNum">    1322 </span>            :     {
+<span class="lineNum">    1323 </span><span class="lineNoCov">          0 :       SET_HARD_REG_BIT (hard_regs_saved, regno + k);</span>
+<span class="lineNum">    1324 </span><span class="lineNoCov">          0 :       SET_REGNO_REG_SET (&amp;new_chain-&gt;dead_or_set, regno + k);</span>
+<span class="lineNum">    1325 </span><span class="lineNoCov">          0 :       n_regs_saved++;</span>
+<span class="lineNum">    1326 </span>            :     }
+<span class="lineNum">    1327 </span>            : 
+<span class="lineNum">    1328 </span>            :   /* Tell our callers how many extra registers we saved/restored.  */
+<span class="lineNum">    1329 </span><span class="lineNoCov">          0 :   return numregs - 1;</span>
+<span class="lineNum">    1330 </span>            : }
+<span class="lineNum">    1331 </span>            : 
+<span class="lineNum">    1332 </span>            : /* A note_uses callback used by insert_one_insn.  Add the hard-register
+<span class="lineNum">    1333 </span>            :    equivalent of each REG to regset DATA.  */
+<a name="1334"><span class="lineNum">    1334 </span>            : </a>
+<span class="lineNum">    1335 </span>            : static void
+<span class="lineNum">    1336 </span><span class="lineNoCov">          0 : add_used_regs (rtx *loc, void *data)</span>
+<span class="lineNum">    1337 </span>            : {
+<span class="lineNum">    1338 </span><span class="lineNoCov">          0 :   subrtx_iterator::array_type array;</span>
+<span class="lineNum">    1339 </span><span class="lineNoCov">          0 :   FOR_EACH_SUBRTX (iter, array, *loc, NONCONST)</span>
+<span class="lineNum">    1340 </span>            :     {
+<span class="lineNum">    1341 </span><span class="lineNoCov">          0 :       const_rtx x = *iter;</span>
+<span class="lineNum">    1342 </span><span class="lineNoCov">          0 :       if (REG_P (x))</span>
+<span class="lineNum">    1343 </span>            :         {
+<span class="lineNum">    1344 </span><span class="lineNoCov">          0 :           unsigned int regno = REGNO (x);</span>
+<span class="lineNum">    1345 </span><span class="lineNoCov">          0 :           if (HARD_REGISTER_NUM_P (regno))</span>
+<span class="lineNum">    1346 </span><span class="lineNoCov">          0 :             bitmap_set_range ((regset) data, regno, REG_NREGS (x));</span>
+<span class="lineNum">    1347 </span>            :           else
+<span class="lineNum">    1348 </span><span class="lineNoCov">          0 :             gcc_checking_assert (reg_renumber[regno] &lt; 0);</span>
+<span class="lineNum">    1349 </span>            :         }
+<span class="lineNum">    1350 </span>            :     }
+<span class="lineNum">    1351 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1352 </span>            : 
+<a name="1353"><span class="lineNum">    1353 </span>            : /* Emit a new caller-save insn and set the code.  */</a>
+<span class="lineNum">    1354 </span>            : static struct insn_chain *
+<span class="lineNum">    1355 </span><span class="lineNoCov">          0 : insert_one_insn (struct insn_chain *chain, int before_p, int code, rtx pat)</span>
+<span class="lineNum">    1356 </span>            : {
+<span class="lineNum">    1357 </span><span class="lineNoCov">          0 :   rtx_insn *insn = chain-&gt;insn;</span>
+<span class="lineNum">    1358 </span><span class="lineNoCov">          0 :   struct insn_chain *new_chain;</span>
+<span class="lineNum">    1359 </span>            : 
+<span class="lineNum">    1360 </span>            :   /* If INSN references CC0, put our insns in front of the insn that sets
+<span class="lineNum">    1361 </span>            :      CC0.  This is always safe, since the only way we could be passed an
+<span class="lineNum">    1362 </span>            :      insn that references CC0 is for a restore, and doing a restore earlier
+<span class="lineNum">    1363 </span>            :      isn't a problem.  We do, however, assume here that CALL_INSNs don't
+<span class="lineNum">    1364 </span>            :      reference CC0.  Guard against non-INSN's like CODE_LABEL.  */
+<span class="lineNum">    1365 </span>            : 
+<span class="lineNum">    1366 </span><span class="lineNoCov">          0 :   if (HAVE_cc0 &amp;&amp; (NONJUMP_INSN_P (insn) || JUMP_P (insn))</span>
+<span class="lineNum">    1367 </span>            :       &amp;&amp; before_p
+<span class="lineNum">    1368 </span>            :       &amp;&amp; reg_referenced_p (cc0_rtx, PATTERN (insn)))
+<span class="lineNum">    1369 </span>            :     chain = chain-&gt;prev, insn = chain-&gt;insn;
+<span class="lineNum">    1370 </span>            : 
+<span class="lineNum">    1371 </span><span class="lineNoCov">          0 :   new_chain = new_insn_chain ();</span>
+<span class="lineNum">    1372 </span><span class="lineNoCov">          0 :   if (before_p)</span>
+<span class="lineNum">    1373 </span>            :     {
+<span class="lineNum">    1374 </span><span class="lineNoCov">          0 :       rtx link;</span>
+<span class="lineNum">    1375 </span>            : 
+<span class="lineNum">    1376 </span><span class="lineNoCov">          0 :       new_chain-&gt;prev = chain-&gt;prev;</span>
+<span class="lineNum">    1377 </span><span class="lineNoCov">          0 :       if (new_chain-&gt;prev != 0)</span>
+<span class="lineNum">    1378 </span><span class="lineNoCov">          0 :         new_chain-&gt;prev-&gt;next = new_chain;</span>
+<span class="lineNum">    1379 </span>            :       else
+<span class="lineNum">    1380 </span><span class="lineNoCov">          0 :         reload_insn_chain = new_chain;</span>
+<span class="lineNum">    1381 </span>            : 
+<span class="lineNum">    1382 </span><span class="lineNoCov">          0 :       chain-&gt;prev = new_chain;</span>
+<span class="lineNum">    1383 </span><span class="lineNoCov">          0 :       new_chain-&gt;next = chain;</span>
+<span class="lineNum">    1384 </span><span class="lineNoCov">          0 :       new_chain-&gt;insn = emit_insn_before (pat, insn);</span>
+<span class="lineNum">    1385 </span>            :       /* ??? It would be nice if we could exclude the already / still saved
+<span class="lineNum">    1386 </span>            :          registers from the live sets.  */
+<span class="lineNum">    1387 </span><span class="lineNoCov">          0 :       COPY_REG_SET (&amp;new_chain-&gt;live_throughout, &amp;chain-&gt;live_throughout);</span>
+<span class="lineNum">    1388 </span><span class="lineNoCov">          0 :       note_uses (&amp;PATTERN (chain-&gt;insn), add_used_regs,</span>
+<span class="lineNum">    1389 </span>            :                  &amp;new_chain-&gt;live_throughout);
+<span class="lineNum">    1390 </span>            :       /* If CHAIN-&gt;INSN is a call, then the registers which contain
+<span class="lineNum">    1391 </span>            :          the arguments to the function are live in the new insn.  */
+<span class="lineNum">    1392 </span><span class="lineNoCov">          0 :       if (CALL_P (chain-&gt;insn))</span>
+<span class="lineNum">    1393 </span><span class="lineNoCov">          0 :         for (link = CALL_INSN_FUNCTION_USAGE (chain-&gt;insn);</span>
+<span class="lineNum">    1394 </span><span class="lineNoCov">          0 :              link != NULL_RTX;</span>
+<span class="lineNum">    1395 </span><span class="lineNoCov">          0 :              link = XEXP (link, 1))</span>
+<span class="lineNum">    1396 </span><span class="lineNoCov">          0 :           note_uses (&amp;XEXP (link, 0), add_used_regs,</span>
+<span class="lineNum">    1397 </span>            :                      &amp;new_chain-&gt;live_throughout);
+<span class="lineNum">    1398 </span>            : 
+<span class="lineNum">    1399 </span><span class="lineNoCov">          0 :       CLEAR_REG_SET (&amp;new_chain-&gt;dead_or_set);</span>
+<span class="lineNum">    1400 </span><span class="lineNoCov">          0 :       if (chain-&gt;insn == BB_HEAD (BASIC_BLOCK_FOR_FN (cfun, chain-&gt;block)))</span>
+<span class="lineNum">    1401 </span><span class="lineNoCov">          0 :         BB_HEAD (BASIC_BLOCK_FOR_FN (cfun, chain-&gt;block)) = new_chain-&gt;insn;</span>
+<span class="lineNum">    1402 </span>            :     }
+<span class="lineNum">    1403 </span>            :   else
+<span class="lineNum">    1404 </span>            :     {
+<span class="lineNum">    1405 </span><span class="lineNoCov">          0 :       new_chain-&gt;next = chain-&gt;next;</span>
+<span class="lineNum">    1406 </span><span class="lineNoCov">          0 :       if (new_chain-&gt;next != 0)</span>
+<span class="lineNum">    1407 </span><span class="lineNoCov">          0 :         new_chain-&gt;next-&gt;prev = new_chain;</span>
+<span class="lineNum">    1408 </span><span class="lineNoCov">          0 :       chain-&gt;next = new_chain;</span>
+<span class="lineNum">    1409 </span><span class="lineNoCov">          0 :       new_chain-&gt;prev = chain;</span>
+<span class="lineNum">    1410 </span><span class="lineNoCov">          0 :       new_chain-&gt;insn = emit_insn_after (pat, insn);</span>
+<span class="lineNum">    1411 </span>            :       /* ??? It would be nice if we could exclude the already / still saved
+<span class="lineNum">    1412 </span>            :          registers from the live sets, and observe REG_UNUSED notes.  */
+<span class="lineNum">    1413 </span><span class="lineNoCov">          0 :       COPY_REG_SET (&amp;new_chain-&gt;live_throughout, &amp;chain-&gt;live_throughout);</span>
+<span class="lineNum">    1414 </span>            :       /* Registers that are set in CHAIN-&gt;INSN live in the new insn.
+<span class="lineNum">    1415 </span>            :          (Unless there is a REG_UNUSED note for them, but we don't
+<span class="lineNum">    1416 </span>            :           look for them here.) */
+<span class="lineNum">    1417 </span><span class="lineNoCov">          0 :       note_stores (PATTERN (chain-&gt;insn), add_stored_regs,</span>
+<span class="lineNum">    1418 </span>            :                    &amp;new_chain-&gt;live_throughout);
+<span class="lineNum">    1419 </span><span class="lineNoCov">          0 :       CLEAR_REG_SET (&amp;new_chain-&gt;dead_or_set);</span>
+<span class="lineNum">    1420 </span><span class="lineNoCov">          0 :       if (chain-&gt;insn == BB_END (BASIC_BLOCK_FOR_FN (cfun, chain-&gt;block)))</span>
+<span class="lineNum">    1421 </span><span class="lineNoCov">          0 :         BB_END (BASIC_BLOCK_FOR_FN (cfun, chain-&gt;block)) = new_chain-&gt;insn;</span>
+<span class="lineNum">    1422 </span>            :     }
+<span class="lineNum">    1423 </span><span class="lineNoCov">          0 :   new_chain-&gt;block = chain-&gt;block;</span>
+<span class="lineNum">    1424 </span><span class="lineNoCov">          0 :   new_chain-&gt;is_caller_save_insn = 1;</span>
+<span class="lineNum">    1425 </span>            : 
+<span class="lineNum">    1426 </span><span class="lineNoCov">          0 :   INSN_CODE (new_chain-&gt;insn) = code;</span>
+<span class="lineNum">    1427 </span><span class="lineNoCov">          0 :   return new_chain;</span>
+<span class="lineNum">    1428 </span>            : }
+<span class="lineNum">    1429 </span>            : #include &quot;gt-caller-save.h&quot;
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

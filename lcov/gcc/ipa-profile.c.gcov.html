@@ -1,0 +1,848 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ipa-profile.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ipa-profile.c<span style="font-size: 80%;"> (source / <a href="ipa-profile.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">319</td>
+            <td class="headerCovTableEntry">350</td>
+            <td class="headerCovTableEntryHi">91.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntryMed">86.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Basic IPA optimizations based on profile.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* ipa-profile pass implements the following analysis propagating profille
+<span class="lineNum">      21 </span>            :    inter-procedurally.
+<span class="lineNum">      22 </span>            : 
+<span class="lineNum">      23 </span>            :    - Count histogram construction.  This is a histogram analyzing how much
+<span class="lineNum">      24 </span>            :      time is spent executing statements with a given execution count read
+<span class="lineNum">      25 </span>            :      from profile feedback. This histogram is complete only with LTO,
+<span class="lineNum">      26 </span>            :      otherwise it contains information only about the current unit.
+<span class="lineNum">      27 </span>            : 
+<span class="lineNum">      28 </span>            :      The information is used to set hot/cold thresholds.
+<span class="lineNum">      29 </span>            :    - Next speculative indirect call resolution is performed:  the local
+<span class="lineNum">      30 </span>            :      profile pass assigns profile-id to each function and provide us with a
+<span class="lineNum">      31 </span>            :      histogram specifying the most common target.  We look up the callgraph
+<span class="lineNum">      32 </span>            :      node corresponding to the target and produce a speculative call.
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            :      This call may or may not survive through IPA optimization based on decision
+<span class="lineNum">      35 </span>            :      of inliner. 
+<span class="lineNum">      36 </span>            :    - Finally we propagate the following flags: unlikely executed, executed
+<span class="lineNum">      37 </span>            :      once, executed at startup and executed at exit.  These flags are used to
+<span class="lineNum">      38 </span>            :      control code size/performance threshold and code placement (by producing
+<span class="lineNum">      39 </span>            :      .text.unlikely/.text.hot/.text.startup/.text.exit subsections).  */
+<span class="lineNum">      40 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;alloc-pool.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      50 </span>            : #include &quot;data-streamer.h&quot;
+<span class="lineNum">      51 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      52 </span>            : #include &quot;ipa-utils.h&quot;
+<span class="lineNum">      53 </span>            : #include &quot;profile.h&quot;
+<span class="lineNum">      54 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      55 </span>            : #include &quot;value-prof.h&quot;
+<span class="lineNum">      56 </span>            : #include &quot;tree-inline.h&quot;
+<span class="lineNum">      57 </span>            : #include &quot;symbol-summary.h&quot;
+<span class="lineNum">      58 </span>            : #include &quot;tree-vrp.h&quot;
+<span class="lineNum">      59 </span>            : #include &quot;ipa-prop.h&quot;
+<span class="lineNum">      60 </span>            : #include &quot;ipa-fnsummary.h&quot;
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            : /* Entry in the histogram.  */
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : struct histogram_entry
+<span class="lineNum">      65 </span>            : {
+<span class="lineNum">      66 </span>            :   gcov_type count;
+<span class="lineNum">      67 </span>            :   int time;
+<span class="lineNum">      68 </span>            :   int size;
+<span class="lineNum">      69 </span>            : };
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            : /* Histogram of profile values.
+<span class="lineNum">      72 </span>            :    The histogram is represented as an ordered vector of entries allocated via
+<span class="lineNum">      73 </span>            :    histogram_pool. During construction a separate hashtable is kept to lookup
+<span class="lineNum">      74 </span>            :    duplicate entries.  */
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            : vec&lt;histogram_entry *&gt; histogram;
+<span class="lineNum">      77 </span>            : static object_allocator&lt;histogram_entry&gt; histogram_pool (&quot;IPA histogram&quot;);
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            : /* Hashtable support for storing SSA names hashed by their SSA_NAME_VAR.  */
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : struct histogram_hash : nofree_ptr_hash &lt;histogram_entry&gt;
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span>            :   static inline hashval_t hash (const histogram_entry *);
+<span class="lineNum">      84 </span>            :   static inline int equal (const histogram_entry *, const histogram_entry *);
+<span class="lineNum">      85 </span>            : };
+<a name="86"><span class="lineNum">      86 </span>            : </a>
+<span class="lineNum">      87 </span>            : inline hashval_t
+<span class="lineNum">      88 </span><span class="lineNoCov">          0 : histogram_hash::hash (const histogram_entry *val)</span>
+<span class="lineNum">      89 </span>            : {
+<span class="lineNum">      90 </span><span class="lineCov">      15484 :   return val-&gt;count;</span>
+<span class="lineNum">      91 </span>            : }
+<a name="92"><span class="lineNum">      92 </span>            : </a>
+<span class="lineNum">      93 </span>            : inline int
+<span class="lineNum">      94 </span><span class="lineNoCov">          0 : histogram_hash::equal (const histogram_entry *val, const histogram_entry *val2)</span>
+<span class="lineNum">      95 </span>            : {
+<span class="lineNum">      96 </span><span class="lineCov">      13999 :   return val-&gt;count == val2-&gt;count;</span>
+<span class="lineNum">      97 </span>            : }
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            : /* Account TIME and SIZE executed COUNT times into HISTOGRAM.
+<span class="lineNum">     100 </span>            :    HASHTABLE is the on-side hash kept to avoid duplicates.  */
+<a name="101"><span class="lineNum">     101 </span>            : </a>
+<span class="lineNum">     102 </span>            : static void
+<span class="lineNum">     103 </span><span class="lineCov">      15384 : account_time_size (hash_table&lt;histogram_hash&gt; *hashtable,</span>
+<span class="lineNum">     104 </span>            :                    vec&lt;histogram_entry *&gt; &amp;histogram,
+<span class="lineNum">     105 </span>            :                    gcov_type count, int time, int size)
+<span class="lineNum">     106 </span>            : {
+<span class="lineNum">     107 </span><span class="lineCov">      15384 :   histogram_entry key = {count, 0, 0};</span>
+<span class="lineNum">     108 </span><span class="lineCov">      15384 :   histogram_entry **val = hashtable-&gt;find_slot (&amp;key, INSERT);</span>
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span><span class="lineCov">      15384 :   if (!*val)</span>
+<span class="lineNum">     111 </span>            :     {
+<span class="lineNum">     112 </span><span class="lineCov">       1539 :       *val = histogram_pool.allocate ();</span>
+<span class="lineNum">     113 </span><span class="lineCov">       1539 :       **val = key;</span>
+<span class="lineNum">     114 </span><span class="lineCov">       1539 :       histogram.safe_push (*val);</span>
+<span class="lineNum">     115 </span>            :     }
+<span class="lineNum">     116 </span><span class="lineCov">      15384 :   (*val)-&gt;time += time;</span>
+<span class="lineNum">     117 </span><span class="lineCov">      15384 :   (*val)-&gt;size += size;</span>
+<span class="lineNum">     118 </span><span class="lineCov">      15384 : }</span>
+<a name="119"><span class="lineNum">     119 </span>            : </a>
+<span class="lineNum">     120 </span>            : int
+<span class="lineNum">     121 </span><span class="lineCov">       4181 : cmp_counts (const void *v1, const void *v2)</span>
+<span class="lineNum">     122 </span>            : {
+<span class="lineNum">     123 </span><span class="lineCov">       4181 :   const histogram_entry *h1 = *(const histogram_entry * const *)v1;</span>
+<span class="lineNum">     124 </span><span class="lineCov">       4181 :   const histogram_entry *h2 = *(const histogram_entry * const *)v2;</span>
+<span class="lineNum">     125 </span><span class="lineCov">       4181 :   if (h1-&gt;count &lt; h2-&gt;count)</span>
+<span class="lineNum">     126 </span>            :     return 1;
+<span class="lineNum">     127 </span><span class="lineCov">       2390 :   if (h1-&gt;count &gt; h2-&gt;count)</span>
+<span class="lineNum">     128 </span><span class="lineCov">       2390 :     return -1;</span>
+<span class="lineNum">     129 </span>            :   return 0;
+<span class="lineNum">     130 </span>            : }
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : /* Dump HISTOGRAM to FILE.  */
+<a name="133"><span class="lineNum">     133 </span>            : </a>
+<span class="lineNum">     134 </span>            : static void
+<span class="lineNum">     135 </span><span class="lineCov">         22 : dump_histogram (FILE *file, vec&lt;histogram_entry *&gt; histogram)</span>
+<span class="lineNum">     136 </span>            : {
+<span class="lineNum">     137 </span><span class="lineCov">         22 :   unsigned int i;</span>
+<span class="lineNum">     138 </span><span class="lineCov">         22 :   gcov_type overall_time = 0, cumulated_time = 0, cumulated_size = 0, overall_size = 0;</span>
+<span class="lineNum">     139 </span>            :   
+<span class="lineNum">     140 </span><span class="lineCov">         22 :   fprintf (dump_file, &quot;Histogram:\n&quot;);</span>
+<span class="lineNum">     141 </span><span class="lineCov">         33 :   for (i = 0; i &lt; histogram.length (); i++)</span>
+<span class="lineNum">     142 </span>            :     {
+<span class="lineNum">     143 </span><span class="lineCov">          5 :       overall_time += histogram[i]-&gt;count * histogram[i]-&gt;time;</span>
+<span class="lineNum">     144 </span><span class="lineCov">         10 :       overall_size += histogram[i]-&gt;size;</span>
+<span class="lineNum">     145 </span>            :     }
+<span class="lineNum">     146 </span><span class="lineCov">         22 :   if (!overall_time)</span>
+<span class="lineNum">     147 </span><span class="lineCov">         21 :     overall_time = 1;</span>
+<span class="lineNum">     148 </span><span class="lineCov">         22 :   if (!overall_size)</span>
+<span class="lineNum">     149 </span><span class="lineCov">         21 :     overall_size = 1;</span>
+<span class="lineNum">     150 </span><span class="lineCov">         33 :   for (i = 0; i &lt; histogram.length (); i++)</span>
+<span class="lineNum">     151 </span>            :     {
+<span class="lineNum">     152 </span><span class="lineCov">          5 :       cumulated_time += histogram[i]-&gt;count * histogram[i]-&gt;time;</span>
+<span class="lineNum">     153 </span><span class="lineCov">          5 :       cumulated_size += histogram[i]-&gt;size;</span>
+<span class="lineNum">     154 </span><span class="lineCov">         20 :       fprintf (file, &quot;  %&quot; PRId64&quot;: time:%i (%2.2f) size:%i (%2.2f)\n&quot;,</span>
+<span class="lineNum">     155 </span><span class="lineCov">          5 :                (int64_t) histogram[i]-&gt;count,</span>
+<span class="lineNum">     156 </span><span class="lineCov">          5 :                histogram[i]-&gt;time,</span>
+<span class="lineNum">     157 </span><span class="lineCov">          5 :                cumulated_time * 100.0 / overall_time,</span>
+<span class="lineNum">     158 </span><span class="lineCov">          5 :                histogram[i]-&gt;size,</span>
+<span class="lineNum">     159 </span><span class="lineCov">          5 :                cumulated_size * 100.0 / overall_size);</span>
+<span class="lineNum">     160 </span>            :    }
+<span class="lineNum">     161 </span><span class="lineCov">         22 : }</span>
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span>            : /* Collect histogram from CFG profiles.  */
+<a name="164"><span class="lineNum">     164 </span>            : </a>
+<span class="lineNum">     165 </span>            : static void
+<span class="lineNum">     166 </span><span class="lineCov">      99011 : ipa_profile_generate_summary (void)</span>
+<span class="lineNum">     167 </span>            : {
+<span class="lineNum">     168 </span><span class="lineCov">      99011 :   struct cgraph_node *node;</span>
+<span class="lineNum">     169 </span><span class="lineCov">      99011 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     170 </span><span class="lineCov">      99011 :   basic_block bb;</span>
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span><span class="lineCov">      99011 :   hash_table&lt;histogram_hash&gt; hashtable (10);</span>
+<span class="lineNum">     173 </span>            :   
+<span class="lineNum">     174 </span><span class="lineCov">    1668026 :   FOR_EACH_FUNCTION_WITH_GIMPLE_BODY (node)</span>
+<span class="lineNum">     175 </span><span class="lineCov">     735002 :     if (ENTRY_BLOCK_PTR_FOR_FN (DECL_STRUCT_FUNCTION (node-&gt;decl))-&gt;count.ipa_p ())</span>
+<span class="lineNum">     176 </span><span class="lineCov">      20752 :       FOR_EACH_BB_FN (bb, DECL_STRUCT_FUNCTION (node-&gt;decl))</span>
+<span class="lineNum">     177 </span>            :         {
+<span class="lineNum">     178 </span><span class="lineCov">      16950 :           int time = 0;</span>
+<span class="lineNum">     179 </span><span class="lineCov">      16950 :           int size = 0;</span>
+<span class="lineNum">     180 </span><span class="lineCov">     108082 :           for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     181 </span>            :             {
+<span class="lineNum">     182 </span><span class="lineCov">      74182 :               gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     183 </span><span class="lineCov">      74182 :               if (gimple_code (stmt) == GIMPLE_CALL</span>
+<span class="lineNum">     184 </span><span class="lineCov">      74182 :                   &amp;&amp; !gimple_call_fndecl (stmt))</span>
+<span class="lineNum">     185 </span>            :                 {
+<span class="lineNum">     186 </span><span class="lineCov">         91 :                   histogram_value h;</span>
+<span class="lineNum">     187 </span><span class="lineCov">         91 :                   h = gimple_histogram_value_of_type</span>
+<span class="lineNum">     188 </span><span class="lineCov">         91 :                         (DECL_STRUCT_FUNCTION (node-&gt;decl),</span>
+<span class="lineNum">     189 </span>            :                          stmt, HIST_TYPE_INDIR_CALL);
+<span class="lineNum">     190 </span>            :                   /* No need to do sanity check: gimple_ic_transform already
+<span class="lineNum">     191 </span>            :                      takes away bad histograms.  */
+<span class="lineNum">     192 </span><span class="lineCov">         91 :                   if (h)</span>
+<span class="lineNum">     193 </span>            :                     {
+<span class="lineNum">     194 </span>            :                       /* counter 0 is target, counter 1 is number of execution we called target,
+<span class="lineNum">     195 </span>            :                          counter 2 is total number of executions.  */
+<span class="lineNum">     196 </span><span class="lineCov">         29 :                       if (h-&gt;hvalue.counters[2])</span>
+<span class="lineNum">     197 </span>            :                         {
+<span class="lineNum">     198 </span><span class="lineCov">         29 :                           struct cgraph_edge * e = node-&gt;get_edge (stmt);</span>
+<span class="lineNum">     199 </span><span class="lineCov">         29 :                           if (e &amp;&amp; !e-&gt;indirect_unknown_callee)</span>
+<span class="lineNum">     200 </span>            :                             continue;
+<span class="lineNum">     201 </span><span class="lineCov">         58 :                           e-&gt;indirect_info-&gt;common_target_id</span>
+<span class="lineNum">     202 </span><span class="lineCov">         58 :                             = h-&gt;hvalue.counters [0];</span>
+<span class="lineNum">     203 </span><span class="lineCov">         29 :                           e-&gt;indirect_info-&gt;common_target_probability</span>
+<span class="lineNum">     204 </span><span class="lineCov">         29 :                             = GCOV_COMPUTE_SCALE (h-&gt;hvalue.counters [1], h-&gt;hvalue.counters [2]);</span>
+<span class="lineNum">     205 </span><span class="lineCov">         29 :                           if (e-&gt;indirect_info-&gt;common_target_probability &gt; REG_BR_PROB_BASE)</span>
+<span class="lineNum">     206 </span>            :                             {
+<span class="lineNum">     207 </span><span class="lineNoCov">          0 :                               if (dump_file)</span>
+<span class="lineNum">     208 </span><span class="lineNoCov">          0 :                                 fprintf (dump_file, &quot;Probability capped to 1\n&quot;);</span>
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :                               e-&gt;indirect_info-&gt;common_target_probability = REG_BR_PROB_BASE;</span>
+<span class="lineNum">     210 </span>            :                             }
+<span class="lineNum">     211 </span>            :                         }
+<span class="lineNum">     212 </span><span class="lineCov">         29 :                       gimple_remove_histogram_value (DECL_STRUCT_FUNCTION (node-&gt;decl),</span>
+<span class="lineNum">     213 </span>            :                                                       stmt, h);
+<span class="lineNum">     214 </span>            :                     }
+<span class="lineNum">     215 </span>            :                 }
+<span class="lineNum">     216 </span><span class="lineCov">      74182 :               time += estimate_num_insns (stmt, &amp;eni_time_weights);</span>
+<span class="lineNum">     217 </span><span class="lineCov">      74182 :               size += estimate_num_insns (stmt, &amp;eni_size_weights);</span>
+<span class="lineNum">     218 </span>            :             }
+<span class="lineNum">     219 </span><span class="lineCov">      47418 :           if (bb-&gt;count.ipa_p () &amp;&amp; bb-&gt;count.initialized_p ())</span>
+<span class="lineNum">     220 </span><span class="lineCov">      15234 :             account_time_size (&amp;hashtable, histogram, bb-&gt;count.ipa ().to_gcov_type (),</span>
+<span class="lineNum">     221 </span>            :                                time, size);
+<span class="lineNum">     222 </span>            :         }
+<span class="lineNum">     223 </span><span class="lineCov">     100053 :   histogram.qsort (cmp_counts);</span>
+<span class="lineNum">     224 </span><span class="lineCov">      99011 : }</span>
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            : /* Serialize the ipa info for lto.  */
+<a name="227"><span class="lineNum">     227 </span>            : </a>
+<span class="lineNum">     228 </span>            : static void
+<span class="lineNum">     229 </span><span class="lineCov">      14173 : ipa_profile_write_summary (void)</span>
+<span class="lineNum">     230 </span>            : {
+<span class="lineNum">     231 </span><span class="lineCov">      14173 :   struct lto_simple_output_block *ob</span>
+<span class="lineNum">     232 </span><span class="lineCov">      14173 :     = lto_create_simple_output_block (LTO_section_ipa_profile);</span>
+<span class="lineNum">     233 </span><span class="lineCov">      14173 :   unsigned int i;</span>
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span><span class="lineCov">      14173 :   streamer_write_uhwi_stream (ob-&gt;main_stream, histogram.length ());</span>
+<span class="lineNum">     236 </span><span class="lineCov">      15032 :   for (i = 0; i &lt; histogram.length (); i++)</span>
+<span class="lineNum">     237 </span>            :     {
+<span class="lineNum">     238 </span><span class="lineCov">        289 :       streamer_write_gcov_count_stream (ob-&gt;main_stream, histogram[i]-&gt;count);</span>
+<span class="lineNum">     239 </span><span class="lineCov">        289 :       streamer_write_uhwi_stream (ob-&gt;main_stream, histogram[i]-&gt;time);</span>
+<span class="lineNum">     240 </span><span class="lineCov">        289 :       streamer_write_uhwi_stream (ob-&gt;main_stream, histogram[i]-&gt;size);</span>
+<span class="lineNum">     241 </span>            :     }
+<span class="lineNum">     242 </span><span class="lineCov">      14173 :   lto_destroy_simple_output_block (ob);</span>
+<span class="lineNum">     243 </span><span class="lineCov">      14173 : }</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            : /* Deserialize the ipa info for lto.  */
+<a name="246"><span class="lineNum">     246 </span>            : </a>
+<span class="lineNum">     247 </span>            : static void
+<span class="lineNum">     248 </span><span class="lineCov">       7895 : ipa_profile_read_summary (void)</span>
+<span class="lineNum">     249 </span>            : {
+<span class="lineNum">     250 </span><span class="lineCov">       7895 :   struct lto_file_decl_data ** file_data_vec</span>
+<span class="lineNum">     251 </span><span class="lineCov">       7895 :     = lto_get_file_decl_data ();</span>
+<span class="lineNum">     252 </span><span class="lineCov">       7895 :   struct lto_file_decl_data * file_data;</span>
+<span class="lineNum">     253 </span><span class="lineCov">       7895 :   int j = 0;</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">       7895 :   hash_table&lt;histogram_hash&gt; hashtable (10);</span>
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineCov">      16640 :   while ((file_data = file_data_vec[j++]))</span>
+<span class="lineNum">     258 </span>            :     {
+<span class="lineNum">     259 </span><span class="lineCov">       8745 :       const char *data;</span>
+<span class="lineNum">     260 </span><span class="lineCov">       8745 :       size_t len;</span>
+<span class="lineNum">     261 </span><span class="lineCov">       8745 :       struct lto_input_block *ib</span>
+<span class="lineNum">     262 </span><span class="lineCov">       8745 :         = lto_create_simple_input_block (file_data,</span>
+<span class="lineNum">     263 </span>            :                                          LTO_section_ipa_profile,
+<span class="lineNum">     264 </span>            :                                          &amp;data, &amp;len);
+<span class="lineNum">     265 </span><span class="lineCov">       8745 :       if (ib)</span>
+<span class="lineNum">     266 </span>            :         {
+<span class="lineNum">     267 </span><span class="lineCov">       7949 :           unsigned int num = streamer_read_uhwi (ib);</span>
+<span class="lineNum">     268 </span><span class="lineCov">       7949 :           unsigned int n;</span>
+<span class="lineNum">     269 </span><span class="lineCov">       8099 :           for (n = 0; n &lt; num; n++)</span>
+<span class="lineNum">     270 </span>            :             {
+<span class="lineNum">     271 </span><span class="lineCov">        150 :               gcov_type count = streamer_read_gcov_count (ib);</span>
+<span class="lineNum">     272 </span><span class="lineCov">        150 :               int time = streamer_read_uhwi (ib);</span>
+<span class="lineNum">     273 </span><span class="lineCov">        150 :               int size = streamer_read_uhwi (ib);</span>
+<span class="lineNum">     274 </span><span class="lineCov">        150 :               account_time_size (&amp;hashtable, histogram,</span>
+<span class="lineNum">     275 </span>            :                                  count, time, size);
+<span class="lineNum">     276 </span>            :             }
+<span class="lineNum">     277 </span><span class="lineCov">       7949 :           lto_destroy_simple_input_block (file_data,</span>
+<span class="lineNum">     278 </span>            :                                           LTO_section_ipa_profile,
+<span class="lineNum">     279 </span>            :                                           ib, data, len);
+<span class="lineNum">     280 </span>            :         }
+<span class="lineNum">     281 </span>            :     }
+<span class="lineNum">     282 </span><span class="lineCov">       8036 :   histogram.qsort (cmp_counts);</span>
+<span class="lineNum">     283 </span><span class="lineCov">       7895 : }</span>
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            : /* Data used by ipa_propagate_frequency.  */
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            : struct ipa_propagate_frequency_data
+<span class="lineNum">     288 </span>            : {
+<span class="lineNum">     289 </span>            :   cgraph_node *function_symbol;
+<span class="lineNum">     290 </span>            :   bool maybe_unlikely_executed;
+<span class="lineNum">     291 </span>            :   bool maybe_executed_once;
+<span class="lineNum">     292 </span>            :   bool only_called_at_startup;
+<span class="lineNum">     293 </span>            :   bool only_called_at_exit;
+<span class="lineNum">     294 </span>            : };
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span>            : /* Worker for ipa_propagate_frequency_1.  */
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span>            : static bool
+<span class="lineNum">     299 </span><span class="lineCov">    2009442 : ipa_propagate_frequency_1 (struct cgraph_node *node, void *data)</span>
+<span class="lineNum">     300 </span>            : {
+<span class="lineNum">     301 </span><span class="lineCov">    2009442 :   struct ipa_propagate_frequency_data *d;</span>
+<span class="lineNum">     302 </span><span class="lineCov">    2009442 :   struct cgraph_edge *edge;</span>
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span><span class="lineCov">    2009442 :   d = (struct ipa_propagate_frequency_data *)data;</span>
+<span class="lineNum">     305 </span><span class="lineCov">    2009442 :   for (edge = node-&gt;callers;</span>
+<span class="lineNum">     306 </span><span class="lineCov">    4073571 :        edge &amp;&amp; (d-&gt;maybe_unlikely_executed || d-&gt;maybe_executed_once</span>
+<span class="lineNum">     307 </span><span class="lineCov">      40017 :                 || d-&gt;only_called_at_startup || d-&gt;only_called_at_exit);</span>
+<span class="lineNum">     308 </span><span class="lineCov">    2064129 :        edge = edge-&gt;next_caller)</span>
+<span class="lineNum">     309 </span>            :     {
+<span class="lineNum">     310 </span><span class="lineCov">    2064129 :       if (edge-&gt;caller != d-&gt;function_symbol)</span>
+<span class="lineNum">     311 </span>            :         {
+<span class="lineNum">     312 </span><span class="lineCov">    2063829 :           d-&gt;only_called_at_startup &amp;= edge-&gt;caller-&gt;only_called_at_startup;</span>
+<span class="lineNum">     313 </span>            :           /* It makes sense to put main() together with the static constructors.
+<span class="lineNum">     314 </span>            :              It will be executed for sure, but rest of functions called from
+<span class="lineNum">     315 </span>            :              main are definitely not at startup only.  */
+<span class="lineNum">     316 </span><span class="lineCov">    2063829 :           if (MAIN_NAME_P (DECL_NAME (edge-&gt;caller-&gt;decl)))</span>
+<span class="lineNum">     317 </span><span class="lineCov">      91943 :             d-&gt;only_called_at_startup = 0;</span>
+<span class="lineNum">     318 </span><span class="lineCov">    2063829 :           d-&gt;only_called_at_exit &amp;= edge-&gt;caller-&gt;only_called_at_exit;</span>
+<span class="lineNum">     319 </span>            :         }
+<span class="lineNum">     320 </span>            : 
+<span class="lineNum">     321 </span>            :       /* When profile feedback is available, do not try to propagate too hard;
+<span class="lineNum">     322 </span>            :          counts are already good guide on function frequencies and roundoff
+<span class="lineNum">     323 </span>            :          errors can make us to push function into unlikely section even when
+<span class="lineNum">     324 </span>            :          it is executed by the train run.  Transfer the function only if all
+<span class="lineNum">     325 </span>            :          callers are unlikely executed.  */
+<span class="lineNum">     326 </span><span class="lineCov">    2064129 :       if (profile_info</span>
+<span class="lineNum">     327 </span><span class="lineCov">    2064534 :           &amp;&amp; !(edge-&gt;callee-&gt;count.ipa () == profile_count::zero ())</span>
+<span class="lineNum">     328 </span><span class="lineCov">    2064533 :           &amp;&amp; (edge-&gt;caller-&gt;frequency != NODE_FREQUENCY_UNLIKELY_EXECUTED</span>
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :               || (edge-&gt;caller-&gt;global.inlined_to</span>
+<span class="lineNum">     330 </span><span class="lineNoCov">          0 :                   &amp;&amp; edge-&gt;caller-&gt;global.inlined_to-&gt;frequency</span>
+<span class="lineNum">     331 </span><span class="lineNoCov">          0 :                      != NODE_FREQUENCY_UNLIKELY_EXECUTED)))</span>
+<span class="lineNum">     332 </span><span class="lineCov">        404 :           d-&gt;maybe_unlikely_executed = false;</span>
+<span class="lineNum">     333 </span><span class="lineCov">    2064129 :       if (edge-&gt;count.ipa ().initialized_p ()</span>
+<span class="lineNum">     334 </span><span class="lineCov">    2064211 :           &amp;&amp; !edge-&gt;count.ipa ().nonzero_p ())</span>
+<span class="lineNum">     335 </span><span class="lineCov">       6431 :         continue;</span>
+<span class="lineNum">     336 </span><span class="lineCov">    2057698 :       switch (edge-&gt;caller-&gt;frequency)</span>
+<span class="lineNum">     337 </span>            :         {
+<span class="lineNum">     338 </span>            :         case NODE_FREQUENCY_UNLIKELY_EXECUTED:
+<span class="lineNum">     339 </span>            :           break;
+<span class="lineNum">     340 </span><span class="lineCov">     170138 :         case NODE_FREQUENCY_EXECUTED_ONCE:</span>
+<span class="lineNum">     341 </span><span class="lineCov">     170138 :           {</span>
+<span class="lineNum">     342 </span><span class="lineCov">     170138 :             if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     343 </span><span class="lineCov">         89 :               fprintf (dump_file, &quot;  Called by %s that is executed once\n&quot;,</span>
+<span class="lineNum">     344 </span>            :                        edge-&gt;caller-&gt;name ());
+<span class="lineNum">     345 </span><span class="lineCov">     170138 :             d-&gt;maybe_unlikely_executed = false;</span>
+<span class="lineNum">     346 </span><span class="lineCov">     170138 :             ipa_call_summary *s = ipa_call_summaries-&gt;get (edge);</span>
+<span class="lineNum">     347 </span><span class="lineCov">     170138 :             if (s != NULL &amp;&amp; s-&gt;loop_depth)</span>
+<span class="lineNum">     348 </span>            :               {
+<span class="lineNum">     349 </span><span class="lineCov">       4499 :                 d-&gt;maybe_executed_once = false;</span>
+<span class="lineNum">     350 </span><span class="lineCov">       4499 :                 if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     351 </span><span class="lineCov">          4 :                   fprintf (dump_file, &quot;  Called in loop\n&quot;);</span>
+<span class="lineNum">     352 </span>            :               }
+<span class="lineNum">     353 </span>            :             break;
+<span class="lineNum">     354 </span>            :           }
+<span class="lineNum">     355 </span><span class="lineCov">    1887520 :         case NODE_FREQUENCY_HOT:</span>
+<span class="lineNum">     356 </span><span class="lineCov">    1887520 :         case NODE_FREQUENCY_NORMAL:</span>
+<span class="lineNum">     357 </span><span class="lineCov">    1887520 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     358 </span><span class="lineCov">        103 :             fprintf (dump_file, &quot;  Called by %s that is normal or hot\n&quot;,</span>
+<span class="lineNum">     359 </span>            :                      edge-&gt;caller-&gt;name ());
+<span class="lineNum">     360 </span><span class="lineCov">    1887520 :           d-&gt;maybe_unlikely_executed = false;</span>
+<span class="lineNum">     361 </span><span class="lineCov">    1887520 :           d-&gt;maybe_executed_once = false;</span>
+<span class="lineNum">     362 </span><span class="lineCov">    1887520 :           break;</span>
+<span class="lineNum">     363 </span>            :         }
+<span class="lineNum">     364 </span>            :     }
+<span class="lineNum">     365 </span><span class="lineCov">    2009442 :   return edge != NULL;</span>
+<span class="lineNum">     366 </span>            : }
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            : /* Return ture if NODE contains hot calls.  */
+<a name="369"><span class="lineNum">     369 </span>            : </a>
+<span class="lineNum">     370 </span>            : bool
+<span class="lineNum">     371 </span><span class="lineCov">       5827 : contains_hot_call_p (struct cgraph_node *node)</span>
+<span class="lineNum">     372 </span>            : {
+<span class="lineNum">     373 </span><span class="lineCov">       5827 :   struct cgraph_edge *e;</span>
+<span class="lineNum">     374 </span><span class="lineCov">      14300 :   for (e = node-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     375 </span><span class="lineCov">       8473 :     if (e-&gt;maybe_hot_p ())</span>
+<span class="lineNum">     376 </span>            :       return true;
+<span class="lineNum">     377 </span><span class="lineCov">       8473 :     else if (!e-&gt;inline_failed</span>
+<span class="lineNum">     378 </span><span class="lineCov">       8473 :              &amp;&amp; contains_hot_call_p (e-&gt;callee))</span>
+<span class="lineNum">     379 </span>            :       return true;
+<span class="lineNum">     380 </span><span class="lineCov">       5885 :   for (e = node-&gt;indirect_calls; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     381 </span><span class="lineCov">         58 :     if (e-&gt;maybe_hot_p ())</span>
+<span class="lineNum">     382 </span>            :       return true;
+<span class="lineNum">     383 </span>            :   return false;
+<span class="lineNum">     384 </span>            : }
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span>            : /* See if the frequency of NODE can be updated based on frequencies of its
+<a name="387"><span class="lineNum">     387 </span>            :    callers.  */</a>
+<span class="lineNum">     388 </span>            : bool
+<span class="lineNum">     389 </span><span class="lineCov">    3054957 : ipa_propagate_frequency (struct cgraph_node *node)</span>
+<span class="lineNum">     390 </span>            : {
+<span class="lineNum">     391 </span><span class="lineCov">    3054957 :   struct ipa_propagate_frequency_data d = {node, true, true, true, true};</span>
+<span class="lineNum">     392 </span><span class="lineCov">    3054957 :   bool changed = false;</span>
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            :   /* We can not propagate anything useful about externally visible functions
+<span class="lineNum">     395 </span>            :      nor about virtuals.  */
+<span class="lineNum">     396 </span><span class="lineCov">    3054957 :   if (!node-&gt;local.local</span>
+<span class="lineNum">     397 </span><span class="lineCov">    2032322 :       || node-&gt;alias</span>
+<span class="lineNum">     398 </span><span class="lineCov">    5082727 :       || (opt_for_fn (node-&gt;decl, flag_devirtualize)</span>
+<span class="lineNum">     399 </span><span class="lineCov">    1994421 :           &amp;&amp; DECL_VIRTUAL_P (node-&gt;decl)))</span>
+<span class="lineNum">     400 </span>            :     return false;
+<span class="lineNum">     401 </span><span class="lineCov">    2005321 :   gcc_assert (node-&gt;analyzed);</span>
+<span class="lineNum">     402 </span><span class="lineCov">    2005321 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     403 </span><span class="lineCov">        192 :     fprintf (dump_file, &quot;Processing frequency %s\n&quot;, node-&gt;name ());</span>
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span><span class="lineCov">    2005321 :   node-&gt;call_for_symbol_and_aliases (ipa_propagate_frequency_1, &amp;d,</span>
+<span class="lineNum">     406 </span>            :                                      true);
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">    2005321 :   if ((d.only_called_at_startup &amp;&amp; !d.only_called_at_exit)</span>
+<span class="lineNum">     409 </span><span class="lineCov">       3177 :       &amp;&amp; !node-&gt;only_called_at_startup)</span>
+<span class="lineNum">     410 </span>            :     {
+<span class="lineNum">     411 </span><span class="lineCov">       1452 :        node-&gt;only_called_at_startup = true;</span>
+<span class="lineNum">     412 </span><span class="lineCov">       1452 :        if (dump_file)</span>
+<span class="lineNum">     413 </span><span class="lineCov">          1 :          fprintf (dump_file, &quot;Node %s promoted to only called at startup.\n&quot;,</span>
+<span class="lineNum">     414 </span>            :                   node-&gt;name ());
+<span class="lineNum">     415 </span>            :        changed = true;
+<span class="lineNum">     416 </span>            :     }
+<span class="lineNum">     417 </span><span class="lineCov">    2005321 :   if ((d.only_called_at_exit &amp;&amp; !d.only_called_at_startup)</span>
+<span class="lineNum">     418 </span><span class="lineCov">         12 :       &amp;&amp; !node-&gt;only_called_at_exit)</span>
+<span class="lineNum">     419 </span>            :     {
+<span class="lineNum">     420 </span><span class="lineCov">          6 :        node-&gt;only_called_at_exit = true;</span>
+<span class="lineNum">     421 </span><span class="lineCov">          6 :        if (dump_file)</span>
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :          fprintf (dump_file, &quot;Node %s promoted to only called at exit.\n&quot;,</span>
+<span class="lineNum">     423 </span>            :                   node-&gt;name ());
+<span class="lineNum">     424 </span>            :        changed = true;
+<span class="lineNum">     425 </span>            :     }
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span>            :   /* With profile we can decide on hot/normal based on count.  */
+<span class="lineNum">     428 </span><span class="lineCov">    2005321 :   if (node-&gt;count. ipa().initialized_p ())</span>
+<span class="lineNum">     429 </span>            :     {
+<span class="lineNum">     430 </span><span class="lineCov">       5570 :       bool hot = false;</span>
+<span class="lineNum">     431 </span><span class="lineCov">      11063 :       if (!(node-&gt;count. ipa() == profile_count::zero ())</span>
+<span class="lineNum">     432 </span><span class="lineCov">         77 :           &amp;&amp; node-&gt;count. ipa() &gt;= get_hot_bb_threshold ())</span>
+<span class="lineNum">     433 </span><span class="lineCov">         77 :         hot = true;</span>
+<span class="lineNum">     434 </span><span class="lineCov">         77 :       if (!hot)</span>
+<span class="lineNum">     435 </span><span class="lineCov">       5493 :         hot |= contains_hot_call_p (node);</span>
+<span class="lineNum">     436 </span><span class="lineCov">       5570 :       if (hot)</span>
+<span class="lineNum">     437 </span>            :         {
+<span class="lineNum">     438 </span><span class="lineCov">         77 :           if (node-&gt;frequency != NODE_FREQUENCY_HOT)</span>
+<span class="lineNum">     439 </span>            :             {
+<span class="lineNum">     440 </span><span class="lineCov">          6 :               if (dump_file)</span>
+<span class="lineNum">     441 </span><span class="lineNoCov">          0 :                 fprintf (dump_file, &quot;Node %s promoted to hot.\n&quot;,</span>
+<span class="lineNum">     442 </span>            :                          node-&gt;name ());
+<span class="lineNum">     443 </span><span class="lineCov">          6 :               node-&gt;frequency = NODE_FREQUENCY_HOT;</span>
+<span class="lineNum">     444 </span><span class="lineCov">          6 :               return true;</span>
+<span class="lineNum">     445 </span>            :             }
+<span class="lineNum">     446 </span>            :           return false;
+<span class="lineNum">     447 </span>            :         }
+<span class="lineNum">     448 </span><span class="lineCov">       5493 :       else if (node-&gt;frequency == NODE_FREQUENCY_HOT)</span>
+<span class="lineNum">     449 </span>            :         {
+<span class="lineNum">     450 </span><span class="lineNoCov">          0 :           if (dump_file)</span>
+<span class="lineNum">     451 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;Node %s reduced to normal.\n&quot;,</span>
+<span class="lineNum">     452 </span>            :                      node-&gt;name ());
+<span class="lineNum">     453 </span><span class="lineNoCov">          0 :           node-&gt;frequency = NODE_FREQUENCY_NORMAL;</span>
+<span class="lineNum">     454 </span><span class="lineNoCov">          0 :           changed = true;</span>
+<span class="lineNum">     455 </span>            :         }
+<span class="lineNum">     456 </span>            :     }
+<span class="lineNum">     457 </span>            :   /* These come either from profile or user hints; never update them.  */
+<span class="lineNum">     458 </span><span class="lineCov">    2005244 :   if (node-&gt;frequency == NODE_FREQUENCY_HOT</span>
+<span class="lineNum">     459 </span><span class="lineCov">    2005240 :       || node-&gt;frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED)</span>
+<span class="lineNum">     460 </span>            :     return changed;
+<span class="lineNum">     461 </span><span class="lineCov">    2000323 :   if (d.maybe_unlikely_executed)</span>
+<span class="lineNum">     462 </span>            :     {
+<span class="lineNum">     463 </span><span class="lineCov">       1233 :       node-&gt;frequency = NODE_FREQUENCY_UNLIKELY_EXECUTED;</span>
+<span class="lineNum">     464 </span><span class="lineCov">       1233 :       if (dump_file)</span>
+<span class="lineNum">     465 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Node %s promoted to unlikely executed.\n&quot;,</span>
+<span class="lineNum">     466 </span>            :                  node-&gt;name ());
+<span class="lineNum">     467 </span>            :       changed = true;
+<span class="lineNum">     468 </span>            :     }
+<span class="lineNum">     469 </span><span class="lineCov">    1999090 :   else if (d.maybe_executed_once &amp;&amp; node-&gt;frequency != NODE_FREQUENCY_EXECUTED_ONCE)</span>
+<span class="lineNum">     470 </span>            :     {
+<span class="lineNum">     471 </span><span class="lineCov">      60299 :       node-&gt;frequency = NODE_FREQUENCY_EXECUTED_ONCE;</span>
+<span class="lineNum">     472 </span><span class="lineCov">      60299 :       if (dump_file)</span>
+<span class="lineNum">     473 </span><span class="lineCov">         19 :         fprintf (dump_file, &quot;Node %s promoted to executed once.\n&quot;,</span>
+<span class="lineNum">     474 </span>            :                  node-&gt;name ());
+<span class="lineNum">     475 </span>            :       changed = true;
+<span class="lineNum">     476 </span>            :     }
+<span class="lineNum">     477 </span>            :   return changed;
+<span class="lineNum">     478 </span>            : }
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            : /* Simple ipa profile pass propagating frequencies across the callgraph.  */
+<a name="481"><span class="lineNum">     481 </span>            : </a>
+<span class="lineNum">     482 </span>            : static unsigned int
+<span class="lineNum">     483 </span><span class="lineCov">     100082 : ipa_profile (void)</span>
+<span class="lineNum">     484 </span>            : {
+<span class="lineNum">     485 </span><span class="lineCov">     100082 :   struct cgraph_node **order;</span>
+<span class="lineNum">     486 </span><span class="lineCov">     100082 :   struct cgraph_edge *e;</span>
+<span class="lineNum">     487 </span><span class="lineCov">     100082 :   int order_pos;</span>
+<span class="lineNum">     488 </span><span class="lineCov">     100082 :   bool something_changed = false;</span>
+<span class="lineNum">     489 </span><span class="lineCov">     100082 :   int i;</span>
+<span class="lineNum">     490 </span><span class="lineCov">     100082 :   gcov_type overall_time = 0, cutoff = 0, cumulated = 0, overall_size = 0;</span>
+<span class="lineNum">     491 </span><span class="lineCov">     100082 :   struct cgraph_node *n,*n2;</span>
+<span class="lineNum">     492 </span><span class="lineCov">     100082 :   int nindirect = 0, ncommon = 0, nunknown = 0, nuseless = 0, nconverted = 0;</span>
+<span class="lineNum">     493 </span><span class="lineCov">     100082 :   int nmismatch = 0, nimpossible = 0;</span>
+<span class="lineNum">     494 </span><span class="lineCov">     100082 :   bool node_map_initialized = false;</span>
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span><span class="lineCov">     100082 :   if (dump_file)</span>
+<span class="lineNum">     497 </span><span class="lineCov">         22 :     dump_histogram (dump_file, histogram);</span>
+<span class="lineNum">     498 </span><span class="lineCov">     103898 :   for (i = 0; i &lt; (int)histogram.length (); i++)</span>
+<span class="lineNum">     499 </span>            :     {
+<span class="lineNum">     500 </span><span class="lineCov">       1388 :       overall_time += histogram[i]-&gt;count * histogram[i]-&gt;time;</span>
+<span class="lineNum">     501 </span><span class="lineCov">       2776 :       overall_size += histogram[i]-&gt;size;</span>
+<span class="lineNum">     502 </span>            :     }
+<span class="lineNum">     503 </span><span class="lineCov">     100082 :   if (overall_time)</span>
+<span class="lineNum">     504 </span>            :     {
+<span class="lineNum">     505 </span><span class="lineCov">         81 :       gcov_type threshold;</span>
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineCov">         81 :       gcc_assert (overall_size);</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">         81 :       cutoff = (overall_time * PARAM_VALUE (HOT_BB_COUNT_WS_PERMILLE) + 500) / 1000;</span>
+<span class="lineNum">     510 </span><span class="lineCov">         81 :       threshold = 0;</span>
+<span class="lineNum">     511 </span><span class="lineCov">        394 :       for (i = 0; cumulated &lt; cutoff; i++)</span>
+<span class="lineNum">     512 </span>            :         {
+<span class="lineNum">     513 </span><span class="lineCov">        313 :           cumulated += histogram[i]-&gt;count * histogram[i]-&gt;time;</span>
+<span class="lineNum">     514 </span><span class="lineCov">        626 :           threshold = histogram[i]-&gt;count;</span>
+<span class="lineNum">     515 </span>            :         }
+<span class="lineNum">     516 </span><span class="lineCov">         81 :       if (!threshold)</span>
+<span class="lineNum">     517 </span><span class="lineNoCov">          0 :         threshold = 1;</span>
+<span class="lineNum">     518 </span><span class="lineCov">         81 :       if (dump_file)</span>
+<span class="lineNum">     519 </span>            :         {
+<span class="lineNum">     520 </span>            :           gcov_type cumulated_time = 0, cumulated_size = 0;
+<span class="lineNum">     521 </span>            : 
+<span class="lineNum">     522 </span><span class="lineCov">          4 :           for (i = 0;</span>
+<span class="lineNum">     523 </span><span class="lineCov">          5 :                i &lt; (int)histogram.length () &amp;&amp; histogram[i]-&gt;count &gt;= threshold;</span>
+<span class="lineNum">     524 </span>            :                i++)
+<span class="lineNum">     525 </span>            :             {
+<span class="lineNum">     526 </span><span class="lineCov">          8 :               cumulated_time += histogram[i]-&gt;count * histogram[i]-&gt;time;</span>
+<span class="lineNum">     527 </span><span class="lineCov">          8 :               cumulated_size += histogram[i]-&gt;size;</span>
+<span class="lineNum">     528 </span>            :             }
+<span class="lineNum">     529 </span><span class="lineCov">          3 :           fprintf (dump_file, &quot;Determined min count: %&quot; PRId64</span>
+<span class="lineNum">     530 </span>            :                    &quot; Time:%3.2f%% Size:%3.2f%%\n&quot;, 
+<span class="lineNum">     531 </span>            :                    (int64_t)threshold,
+<span class="lineNum">     532 </span><span class="lineCov">          1 :                    cumulated_time * 100.0 / overall_time,</span>
+<span class="lineNum">     533 </span><span class="lineCov">          1 :                    cumulated_size * 100.0 / overall_size);</span>
+<span class="lineNum">     534 </span>            :         }
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span><span class="lineCov">         81 :       if (threshold &gt; get_hot_bb_threshold ()</span>
+<span class="lineNum">     537 </span><span class="lineCov">         81 :           || in_lto_p)</span>
+<span class="lineNum">     538 </span>            :         {
+<span class="lineNum">     539 </span><span class="lineCov">         81 :           if (dump_file)</span>
+<span class="lineNum">     540 </span><span class="lineCov">          1 :             fprintf (dump_file, &quot;Threshold updated.\n&quot;);</span>
+<span class="lineNum">     541 </span><span class="lineCov">         81 :           set_hot_bb_threshold (threshold);</span>
+<span class="lineNum">     542 </span>            :         }
+<span class="lineNum">     543 </span>            :     }
+<span class="lineNum">     544 </span><span class="lineCov">     100082 :   histogram.release ();</span>
+<span class="lineNum">     545 </span><span class="lineCov">     100082 :   histogram_pool.release ();</span>
+<span class="lineNum">     546 </span>            : 
+<span class="lineNum">     547 </span>            :   /* Produce speculative calls: we saved common traget from porfiling into
+<span class="lineNum">     548 </span>            :      e-&gt;common_target_id.  Now, at link time, we can look up corresponding
+<span class="lineNum">     549 </span>            :      function node and produce speculative call.  */
+<span class="lineNum">     550 </span>            : 
+<span class="lineNum">     551 </span><span class="lineCov">    1800350 :   FOR_EACH_DEFINED_FUNCTION (n)</span>
+<span class="lineNum">     552 </span>            :     {
+<span class="lineNum">     553 </span><span class="lineCov">     800093 :       bool update = false;</span>
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span><span class="lineCov">     800093 :       if (!opt_for_fn (n-&gt;decl, flag_ipa_profile))</span>
+<span class="lineNum">     556 </span>            :         continue;
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span><span class="lineCov">     906026 :       for (e = n-&gt;indirect_calls; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     559 </span>            :         {
+<span class="lineNum">     560 </span><span class="lineCov">     224984 :           if (n-&gt;count.initialized_p ())</span>
+<span class="lineNum">     561 </span><span class="lineCov">     112488 :             nindirect++;</span>
+<span class="lineNum">     562 </span><span class="lineCov">     112492 :           if (e-&gt;indirect_info-&gt;common_target_id)</span>
+<span class="lineNum">     563 </span>            :             {
+<span class="lineNum">     564 </span><span class="lineCov">         29 :               if (!node_map_initialized)</span>
+<span class="lineNum">     565 </span><span class="lineCov">         14 :                 init_node_map (false);</span>
+<span class="lineNum">     566 </span><span class="lineCov">         29 :               node_map_initialized = true;</span>
+<span class="lineNum">     567 </span><span class="lineCov">         29 :               ncommon++;</span>
+<span class="lineNum">     568 </span><span class="lineCov">         29 :               n2 = find_func_by_profile_id (e-&gt;indirect_info-&gt;common_target_id);</span>
+<span class="lineNum">     569 </span><span class="lineCov">         29 :               if (n2)</span>
+<span class="lineNum">     570 </span>            :                 {
+<span class="lineNum">     571 </span><span class="lineCov">         28 :                   if (dump_file)</span>
+<span class="lineNum">     572 </span>            :                     {
+<span class="lineNum">     573 </span><span class="lineCov">          1 :                       fprintf (dump_file, &quot;Indirect call -&gt; direct call from&quot;</span>
+<span class="lineNum">     574 </span>            :                                &quot; other module %s =&gt; %s, prob %3.2f\n&quot;,
+<span class="lineNum">     575 </span>            :                                n-&gt;dump_name (),
+<span class="lineNum">     576 </span>            :                                n2-&gt;dump_name (),
+<span class="lineNum">     577 </span><span class="lineCov">          1 :                                e-&gt;indirect_info-&gt;common_target_probability</span>
+<span class="lineNum">     578 </span><span class="lineCov">          1 :                                / (float)REG_BR_PROB_BASE);</span>
+<span class="lineNum">     579 </span>            :                     }
+<span class="lineNum">     580 </span><span class="lineCov">         28 :                   if (e-&gt;indirect_info-&gt;common_target_probability</span>
+<span class="lineNum">     581 </span>            :                       &lt; REG_BR_PROB_BASE / 2)
+<span class="lineNum">     582 </span>            :                     {
+<span class="lineNum">     583 </span><span class="lineCov">          1 :                       nuseless++;</span>
+<span class="lineNum">     584 </span><span class="lineCov">          1 :                       if (dump_file)</span>
+<span class="lineNum">     585 </span><span class="lineNoCov">          0 :                         fprintf (dump_file,</span>
+<span class="lineNum">     586 </span>            :                                  &quot;Not speculating: probability is too low.\n&quot;);
+<span class="lineNum">     587 </span>            :                     }
+<span class="lineNum">     588 </span><span class="lineCov">         27 :                   else if (!e-&gt;maybe_hot_p ())</span>
+<span class="lineNum">     589 </span>            :                     {
+<span class="lineNum">     590 </span><span class="lineCov">          6 :                       nuseless++;</span>
+<span class="lineNum">     591 </span><span class="lineCov">          6 :                       if (dump_file)</span>
+<span class="lineNum">     592 </span><span class="lineNoCov">          0 :                         fprintf (dump_file,</span>
+<span class="lineNum">     593 </span>            :                                  &quot;Not speculating: call is cold.\n&quot;);
+<span class="lineNum">     594 </span>            :                     }
+<span class="lineNum">     595 </span><span class="lineCov">         21 :                   else if (n2-&gt;get_availability () &lt;= AVAIL_INTERPOSABLE</span>
+<span class="lineNum">     596 </span><span class="lineCov">         21 :                            &amp;&amp; n2-&gt;can_be_discarded_p ())</span>
+<span class="lineNum">     597 </span>            :                     {
+<span class="lineNum">     598 </span><span class="lineNoCov">          0 :                       nuseless++;</span>
+<span class="lineNum">     599 </span><span class="lineNoCov">          0 :                       if (dump_file)</span>
+<span class="lineNum">     600 </span><span class="lineNoCov">          0 :                         fprintf (dump_file,</span>
+<span class="lineNum">     601 </span>            :                                  &quot;Not speculating: target is overwritable &quot;
+<span class="lineNum">     602 </span>            :                                  &quot;and can be discarded.\n&quot;);
+<span class="lineNum">     603 </span>            :                     }
+<span class="lineNum">     604 </span><span class="lineCov">         21 :                   else if (ipa_node_params_sum &amp;&amp; ipa_edge_args_sum</span>
+<span class="lineNum">     605 </span>            :                            &amp;&amp; (!vec_safe_is_empty
+<span class="lineNum">     606 </span><span class="lineCov">         21 :                                (IPA_NODE_REF (n2)-&gt;descriptors))</span>
+<span class="lineNum">     607 </span><span class="lineCov">         16 :                            &amp;&amp; ipa_get_param_count (IPA_NODE_REF (n2))</span>
+<span class="lineNum">     608 </span><span class="lineCov">          8 :                               != ipa_get_cs_argument_count (IPA_EDGE_REF (e))</span>
+<span class="lineNum">     609 </span><span class="lineCov">         21 :                             &amp;&amp; (ipa_get_param_count (IPA_NODE_REF (n2))</span>
+<span class="lineNum">     610 </span><span class="lineNoCov">          0 :                                 &gt;= ipa_get_cs_argument_count (IPA_EDGE_REF (e))</span>
+<span class="lineNum">     611 </span><span class="lineNoCov">          0 :                                 || !stdarg_p (TREE_TYPE (n2-&gt;decl))))</span>
+<span class="lineNum">     612 </span>            :                     {
+<span class="lineNum">     613 </span><span class="lineNoCov">          0 :                       nmismatch++;</span>
+<span class="lineNum">     614 </span><span class="lineNoCov">          0 :                       if (dump_file)</span>
+<span class="lineNum">     615 </span><span class="lineNoCov">          0 :                         fprintf (dump_file,</span>
+<span class="lineNum">     616 </span>            :                                  &quot;Not speculating: &quot;
+<span class="lineNum">     617 </span>            :                                  &quot;parameter count mistmatch\n&quot;);
+<span class="lineNum">     618 </span>            :                     }
+<span class="lineNum">     619 </span><span class="lineCov">         21 :                   else if (e-&gt;indirect_info-&gt;polymorphic</span>
+<span class="lineNum">     620 </span><span class="lineCov">          6 :                            &amp;&amp; !opt_for_fn (n-&gt;decl, flag_devirtualize)</span>
+<span class="lineNum">     621 </span><span class="lineCov">         24 :                            &amp;&amp; !possible_polymorphic_call_target_p (e, n2))</span>
+<span class="lineNum">     622 </span>            :                     {
+<span class="lineNum">     623 </span><span class="lineNoCov">          0 :                       nimpossible++;</span>
+<span class="lineNum">     624 </span><span class="lineNoCov">          0 :                       if (dump_file)</span>
+<span class="lineNum">     625 </span><span class="lineNoCov">          0 :                         fprintf (dump_file,</span>
+<span class="lineNum">     626 </span>            :                                  &quot;Not speculating: &quot;
+<span class="lineNum">     627 </span>            :                                  &quot;function is not in the polymorphic &quot;
+<span class="lineNum">     628 </span>            :                                  &quot;call target list\n&quot;);
+<span class="lineNum">     629 </span>            :                     }
+<span class="lineNum">     630 </span>            :                   else
+<span class="lineNum">     631 </span>            :                     {
+<span class="lineNum">     632 </span>            :                       /* Target may be overwritable, but profile says that
+<span class="lineNum">     633 </span>            :                          control flow goes to this particular implementation
+<span class="lineNum">     634 </span>            :                          of N2.  Speculate on the local alias to allow inlining.
+<span class="lineNum">     635 </span>            :                        */
+<span class="lineNum">     636 </span><span class="lineCov">         21 :                       if (!n2-&gt;can_be_discarded_p ())</span>
+<span class="lineNum">     637 </span>            :                         {
+<span class="lineNum">     638 </span><span class="lineCov">         18 :                           cgraph_node *alias;</span>
+<span class="lineNum">     639 </span><span class="lineCov">         18 :                           alias = dyn_cast&lt;cgraph_node *&gt; (n2-&gt;noninterposable_alias ());</span>
+<span class="lineNum">     640 </span><span class="lineCov">         18 :                           if (alias)</span>
+<span class="lineNum">     641 </span><span class="lineCov">         18 :                             n2 = alias;</span>
+<span class="lineNum">     642 </span>            :                         }
+<span class="lineNum">     643 </span><span class="lineCov">         21 :                       nconverted++;</span>
+<span class="lineNum">     644 </span><span class="lineCov">         21 :                       e-&gt;make_speculative</span>
+<span class="lineNum">     645 </span><span class="lineCov">         63 :                         (n2,</span>
+<span class="lineNum">     646 </span>            :                          e-&gt;count.apply_probability
+<span class="lineNum">     647 </span><span class="lineCov">         21 :                                      (e-&gt;indirect_info-&gt;common_target_probability));</span>
+<span class="lineNum">     648 </span><span class="lineCov">         21 :                       update = true;</span>
+<span class="lineNum">     649 </span>            :                     }
+<span class="lineNum">     650 </span>            :                 }
+<span class="lineNum">     651 </span>            :               else
+<span class="lineNum">     652 </span>            :                 {
+<span class="lineNum">     653 </span><span class="lineCov">          1 :                   if (dump_file)</span>
+<span class="lineNum">     654 </span><span class="lineNoCov">          0 :                     fprintf (dump_file, &quot;Function with profile-id %i not found.\n&quot;,</span>
+<span class="lineNum">     655 </span><span class="lineNoCov">          0 :                              e-&gt;indirect_info-&gt;common_target_id);</span>
+<span class="lineNum">     656 </span><span class="lineCov">          1 :                   nunknown++;</span>
+<span class="lineNum">     657 </span>            :                 }
+<span class="lineNum">     658 </span>            :             }
+<span class="lineNum">     659 </span>            :          }
+<span class="lineNum">     660 </span><span class="lineCov">     793534 :        if (update)</span>
+<span class="lineNum">     661 </span><span class="lineCov">         20 :          ipa_update_overall_fn_summary (n);</span>
+<span class="lineNum">     662 </span>            :      }
+<span class="lineNum">     663 </span><span class="lineCov">     100082 :   if (node_map_initialized)</span>
+<span class="lineNum">     664 </span><span class="lineCov">         14 :     del_node_map ();</span>
+<span class="lineNum">     665 </span><span class="lineCov">     100082 :   if (dump_file &amp;&amp; nindirect)</span>
+<span class="lineNum">     666 </span><span class="lineCov">        140 :     fprintf (dump_file,</span>
+<span class="lineNum">     667 </span>            :              &quot;%i indirect calls trained.\n&quot;
+<span class="lineNum">     668 </span>            :              &quot;%i (%3.2f%%) have common target.\n&quot;
+<span class="lineNum">     669 </span>            :              &quot;%i (%3.2f%%) targets was not found.\n&quot;
+<span class="lineNum">     670 </span>            :              &quot;%i (%3.2f%%) targets had parameter count mismatch.\n&quot;
+<span class="lineNum">     671 </span>            :              &quot;%i (%3.2f%%) targets was not in polymorphic call target list.\n&quot;
+<span class="lineNum">     672 </span>            :              &quot;%i (%3.2f%%) speculations seems useless.\n&quot;
+<span class="lineNum">     673 </span>            :              &quot;%i (%3.2f%%) speculations produced.\n&quot;,
+<span class="lineNum">     674 </span>            :              nindirect,
+<span class="lineNum">     675 </span><span class="lineCov">         20 :              ncommon, ncommon * 100.0 / nindirect,</span>
+<span class="lineNum">     676 </span><span class="lineCov">         20 :              nunknown, nunknown * 100.0 / nindirect,</span>
+<span class="lineNum">     677 </span><span class="lineCov">         20 :              nmismatch, nmismatch * 100.0 / nindirect,</span>
+<span class="lineNum">     678 </span><span class="lineCov">         20 :              nimpossible, nimpossible * 100.0 / nindirect,</span>
+<span class="lineNum">     679 </span><span class="lineCov">         20 :              nuseless, nuseless * 100.0 / nindirect,</span>
+<span class="lineNum">     680 </span><span class="lineCov">         20 :              nconverted, nconverted * 100.0 / nindirect);</span>
+<span class="lineNum">     681 </span>            : 
+<span class="lineNum">     682 </span><span class="lineCov">     100082 :   order = XCNEWVEC (struct cgraph_node *, symtab-&gt;cgraph_count);</span>
+<span class="lineNum">     683 </span><span class="lineCov">     100082 :   order_pos = ipa_reverse_postorder (order);</span>
+<span class="lineNum">     684 </span><span class="lineCov">    1958600 :   for (i = order_pos - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     685 </span>            :     {
+<span class="lineNum">     686 </span><span class="lineCov">    1858518 :       if (order[i]-&gt;local.local</span>
+<span class="lineNum">     687 </span><span class="lineCov">     120360 :           &amp;&amp; opt_for_fn (order[i]-&gt;decl, flag_ipa_profile)</span>
+<span class="lineNum">     688 </span><span class="lineCov">    1973806 :           &amp;&amp; ipa_propagate_frequency (order[i]))</span>
+<span class="lineNum">     689 </span>            :         {
+<span class="lineNum">     690 </span><span class="lineCov">     401085 :           for (e = order[i]-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     691 </span><span class="lineCov">     374472 :             if (e-&gt;callee-&gt;local.local &amp;&amp; !e-&gt;callee-&gt;aux)</span>
+<span class="lineNum">     692 </span>            :               {
+<span class="lineNum">     693 </span><span class="lineCov">      16866 :                 something_changed = true;</span>
+<span class="lineNum">     694 </span><span class="lineCov">      16866 :                 e-&gt;callee-&gt;aux = (void *)1;</span>
+<span class="lineNum">     695 </span>            :               }
+<span class="lineNum">     696 </span>            :         }
+<span class="lineNum">     697 </span><span class="lineCov">    1858518 :       order[i]-&gt;aux = NULL;</span>
+<span class="lineNum">     698 </span>            :     }
+<span class="lineNum">     699 </span>            : 
+<span class="lineNum">     700 </span><span class="lineCov">     108238 :   while (something_changed)</span>
+<span class="lineNum">     701 </span>            :     {
+<span class="lineNum">     702 </span>            :       something_changed = false;
+<span class="lineNum">     703 </span><span class="lineCov">     129438 :       for (i = order_pos - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     704 </span>            :         {
+<span class="lineNum">     705 </span><span class="lineCov">     121282 :           if (order[i]-&gt;aux</span>
+<span class="lineNum">     706 </span><span class="lineCov">      22125 :               &amp;&amp; opt_for_fn (order[i]-&gt;decl, flag_ipa_profile)</span>
+<span class="lineNum">     707 </span><span class="lineCov">     143407 :               &amp;&amp; ipa_propagate_frequency (order[i]))</span>
+<span class="lineNum">     708 </span>            :             {
+<span class="lineNum">     709 </span><span class="lineCov">      85995 :               for (e = order[i]-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     710 </span><span class="lineCov">      65249 :                 if (e-&gt;callee-&gt;local.local &amp;&amp; !e-&gt;callee-&gt;aux)</span>
+<span class="lineNum">     711 </span>            :                   {
+<span class="lineNum">     712 </span><span class="lineCov">       5259 :                     something_changed = true;</span>
+<span class="lineNum">     713 </span><span class="lineCov">       5259 :                     e-&gt;callee-&gt;aux = (void *)1;</span>
+<span class="lineNum">     714 </span>            :                   }
+<span class="lineNum">     715 </span>            :             }
+<span class="lineNum">     716 </span><span class="lineCov">     121282 :           order[i]-&gt;aux = NULL;</span>
+<span class="lineNum">     717 </span>            :         }
+<span class="lineNum">     718 </span>            :     }
+<span class="lineNum">     719 </span><span class="lineCov">     100082 :   free (order);</span>
+<span class="lineNum">     720 </span><span class="lineCov">     100082 :   return 0;</span>
+<span class="lineNum">     721 </span>            : }
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span>            : namespace {
+<span class="lineNum">     724 </span>            : 
+<span class="lineNum">     725 </span>            : const pass_data pass_data_ipa_profile =
+<span class="lineNum">     726 </span>            : {
+<span class="lineNum">     727 </span>            :   IPA_PASS, /* type */
+<span class="lineNum">     728 </span>            :   &quot;profile_estimate&quot;, /* name */
+<span class="lineNum">     729 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     730 </span>            :   TV_IPA_PROFILE, /* tv_id */
+<span class="lineNum">     731 </span>            :   0, /* properties_required */
+<span class="lineNum">     732 </span>            :   0, /* properties_provided */
+<span class="lineNum">     733 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     734 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     735 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     736 </span>            : };
+<span class="lineNum">     737 </span>            : 
+<span class="lineNum">     738 </span>            : class pass_ipa_profile : public ipa_opt_pass_d
+<span class="lineNum">     739 </span>            : {
+<span class="lineNum">     740 </span>            : public:
+<span class="lineNum">     741 </span>            :   pass_ipa_profile (gcc::context *ctxt)
+<span class="lineNum">     742 </span>            :     : ipa_opt_pass_d (pass_data_ipa_profile, ctxt,
+<span class="lineNum">     743 </span>            :                       ipa_profile_generate_summary, /* generate_summary */
+<span class="lineNum">     744 </span>            :                       ipa_profile_write_summary, /* write_summary */
+<span class="lineNum">     745 </span>            :                       ipa_profile_read_summary, /* read_summary */
+<span class="lineNum">     746 </span>            :                       NULL, /* write_optimization_summary */
+<span class="lineNum">     747 </span>            :                       NULL, /* read_optimization_summary */
+<span class="lineNum">     748 </span>            :                       NULL, /* stmt_fixup */
+<span class="lineNum">     749 </span>            :                       0, /* function_transform_todo_flags_start */
+<span class="lineNum">     750 </span>            :                       NULL, /* function_transform */
+<span class="lineNum">     751 </span><span class="lineCov">     340624 :                       NULL) /* variable_transform */</span>
+<span class="lineNum">     752 </span>            :   {}
+<a name="753"><span class="lineNum">     753 </span>            : </a>
+<a name="754"><span class="lineNum">     754 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     755 </span><span class="lineCov">     376785 :   virtual bool gate (function *) { return flag_ipa_profile || in_lto_p; }</span>
+<span class="lineNum">     756 </span><span class="lineCov">     100082 :   virtual unsigned int execute (function *) { return ipa_profile (); }</span>
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : }; // class pass_ipa_profile
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span>            : } // anon namespace
+<a name="761"><span class="lineNum">     761 </span>            : </a>
+<span class="lineNum">     762 </span>            : ipa_opt_pass_d *
+<span class="lineNum">     763 </span><span class="lineCov">     170312 : make_pass_ipa_profile (gcc::context *ctxt)</span>
+<span class="lineNum">     764 </span>            : {
+<span class="lineNum">     765 </span><span class="lineCov">     170312 :   return new pass_ipa_profile (ctxt);</span>
+<span class="lineNum">     766 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,777 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ipa-inline-transform.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ipa-inline-transform.c<span style="font-size: 80%;"> (source / <a href="ipa-inline-transform.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">267</td>
+            <td class="headerCovTableEntry">318</td>
+            <td class="headerCovTableEntryMed">84.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntryHi">90.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Callgraph transformations to handle inlining</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Jan Hubicka
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : /* The inline decisions are stored in callgraph in &quot;inline plan&quot; and
+<span class="lineNum">      22 </span>            :    applied later.
+<span class="lineNum">      23 </span>            : 
+<span class="lineNum">      24 </span>            :    To mark given call inline, use inline_call function.
+<span class="lineNum">      25 </span>            :    The function marks the edge inlinable and, if necessary, produces
+<span class="lineNum">      26 </span>            :    virtual clone in the callgraph representing the new copy of callee's
+<span class="lineNum">      27 </span>            :    function body.
+<span class="lineNum">      28 </span>            : 
+<span class="lineNum">      29 </span>            :    The inline plan is applied on given function body by inline_transform.  */
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;function.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;alloc-pool.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;symbol-summary.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;tree-vrp.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;ipa-prop.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;ipa-fnsummary.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;ipa-inline.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;tree-inline.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;function.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;cfg.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;basic-block.h&quot;
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : int ncalls_inlined;
+<span class="lineNum">      52 </span>            : int nfunctions_inlined;
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            : /* Scale counts of NODE edges by NUM/DEN.  */
+<a name="55"><span class="lineNum">      55 </span>            : </a>
+<span class="lineNum">      56 </span>            : static void
+<span class="lineNum">      57 </span><span class="lineCov">     830447 : update_noncloned_counts (struct cgraph_node *node, </span>
+<span class="lineNum">      58 </span>            :                          profile_count num, profile_count den)
+<span class="lineNum">      59 </span>            : {
+<span class="lineNum">      60 </span><span class="lineCov">     830447 :   struct cgraph_edge *e;</span>
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span><span class="lineCov">     830447 :   profile_count::adjust_for_ipa_scaling (&amp;num, &amp;den);</span>
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span><span class="lineCov">    1505360 :   for (e = node-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">      65 </span>            :     {
+<span class="lineNum">      66 </span><span class="lineCov">     674913 :       if (!e-&gt;inline_failed)</span>
+<span class="lineNum">      67 </span><span class="lineCov">      31258 :         update_noncloned_counts (e-&gt;callee, num, den);</span>
+<span class="lineNum">      68 </span><span class="lineCov">     674913 :       e-&gt;count = e-&gt;count.apply_scale (num, den);</span>
+<span class="lineNum">      69 </span>            :     }
+<span class="lineNum">      70 </span><span class="lineCov">     852433 :   for (e = node-&gt;indirect_calls; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">      71 </span><span class="lineCov">      21986 :     e-&gt;count = e-&gt;count.apply_scale (num, den);</span>
+<span class="lineNum">      72 </span><span class="lineCov">     830447 :   node-&gt;count = node-&gt;count.apply_scale (num, den);</span>
+<span class="lineNum">      73 </span><span class="lineCov">     830447 : }</span>
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : /* We removed or are going to remove the last call to NODE.
+<span class="lineNum">      76 </span>            :    Return true if we can and want proactively remove the NODE now.
+<span class="lineNum">      77 </span>            :    This is important to do, since we want inliner to know when offline
+<span class="lineNum">      78 </span>            :    copy of function was removed.  */
+<a name="79"><span class="lineNum">      79 </span>            : </a>
+<span class="lineNum">      80 </span>            : static bool
+<span class="lineNum">      81 </span><span class="lineCov">    1428314 : can_remove_node_now_p_1 (struct cgraph_node *node, struct cgraph_edge *e)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineCov">    1428314 :   ipa_ref *ref;</span>
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span><span class="lineCov">    2204074 :   FOR_EACH_ALIAS (node, ref)</span>
+<span class="lineNum">      86 </span>            :     {
+<span class="lineNum">      87 </span><span class="lineCov">     366453 :       cgraph_node *alias = dyn_cast &lt;cgraph_node *&gt; (ref-&gt;referring);</span>
+<span class="lineNum">      88 </span><span class="lineCov">     203917 :       if ((alias-&gt;callers &amp;&amp; alias-&gt;callers != e)</span>
+<span class="lineNum">      89 </span><span class="lineCov">     366453 :           || !can_remove_node_now_p_1 (alias, e))</span>
+<span class="lineNum">      90 </span><span class="lineCov">     213910 :         return false;</span>
+<span class="lineNum">      91 </span>            :     }
+<span class="lineNum">      92 </span>            :   /* FIXME: When address is taken of DECL_EXTERNAL function we still
+<span class="lineNum">      93 </span>            :      can remove its offline copy, but we would need to keep unanalyzed node in
+<span class="lineNum">      94 </span>            :      the callgraph so references can point to it.
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            :      Also for comdat group we can ignore references inside a group as we
+<span class="lineNum">      97 </span>            :      want to prove the group as a whole to be dead.  */
+<span class="lineNum">      98 </span><span class="lineCov">    1214404 :   return (!node-&gt;address_taken</span>
+<span class="lineNum">      99 </span><span class="lineCov">    1187835 :           &amp;&amp; node-&gt;can_remove_if_no_direct_calls_and_refs_p ()</span>
+<span class="lineNum">     100 </span>            :           /* Inlining might enable more devirtualizing, so we want to remove
+<span class="lineNum">     101 </span>            :              those only after all devirtualizable virtual calls are processed.
+<span class="lineNum">     102 </span>            :              Lacking may edges in callgraph we just preserve them post
+<span class="lineNum">     103 </span>            :              inlining.  */
+<span class="lineNum">     104 </span><span class="lineCov">    1149855 :           &amp;&amp; (!DECL_VIRTUAL_P (node-&gt;decl)</span>
+<span class="lineNum">     105 </span><span class="lineCov">       2264 :               || !opt_for_fn (node-&gt;decl, flag_devirtualize))</span>
+<span class="lineNum">     106 </span>            :           /* During early inlining some unanalyzed cgraph nodes might be in the
+<span class="lineNum">     107 </span>            :              callgraph and they might reffer the function in question.  */
+<span class="lineNum">     108 </span><span class="lineCov">    2362037 :           &amp;&amp; !cgraph_new_nodes.exists ());</span>
+<span class="lineNum">     109 </span>            : }
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* We are going to eliminate last direct call to NODE (or alias of it) via edge E.
+<span class="lineNum">     112 </span>            :    Verify that the NODE can be removed from unit and if it is contained in comdat
+<span class="lineNum">     113 </span>            :    group that the whole comdat group is removable.  */
+<a name="114"><span class="lineNum">     114 </span>            : </a>
+<span class="lineNum">     115 </span>            : static bool
+<span class="lineNum">     116 </span><span class="lineCov">    1171838 : can_remove_node_now_p (struct cgraph_node *node, struct cgraph_edge *e)</span>
+<span class="lineNum">     117 </span>            : {
+<span class="lineNum">     118 </span><span class="lineCov">    1171838 :   struct cgraph_node *next;</span>
+<span class="lineNum">     119 </span><span class="lineCov">    1171838 :   if (!can_remove_node_now_p_1 (node, e))</span>
+<span class="lineNum">     120 </span>            :     return false;
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            :   /* When we see same comdat group, we need to be sure that all
+<span class="lineNum">     123 </span>            :      items can be removed.  */
+<span class="lineNum">     124 </span><span class="lineCov">     901294 :   if (!node-&gt;same_comdat_group || !node-&gt;externally_visible)</span>
+<span class="lineNum">     125 </span>            :     return true;
+<span class="lineNum">     126 </span><span class="lineCov">     154012 :   for (next = dyn_cast&lt;cgraph_node *&gt; (node-&gt;same_comdat_group);</span>
+<span class="lineNum">     127 </span><span class="lineCov">     459592 :        next != node; next = dyn_cast&lt;cgraph_node *&gt; (next-&gt;same_comdat_group))</span>
+<span class="lineNum">     128 </span>            :     {
+<span class="lineNum">     129 </span><span class="lineCov">     154360 :       if (next-&gt;alias)</span>
+<span class="lineNum">     130 </span>            :         continue;
+<span class="lineNum">     131 </span><span class="lineCov">      94981 :       if ((next-&gt;callers &amp;&amp; next-&gt;callers != e)</span>
+<span class="lineNum">     132 </span><span class="lineCov">     188921 :           || !can_remove_node_now_p_1 (next, e))</span>
+<span class="lineNum">     133 </span>            :         return false;
+<span class="lineNum">     134 </span>            :     }
+<span class="lineNum">     135 </span>            :   return true;
+<span class="lineNum">     136 </span>            : }
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span>            : /* Return true if NODE is a master clone with non-inline clones.  */
+<a name="139"><span class="lineNum">     139 </span>            : </a>
+<span class="lineNum">     140 </span>            : static bool
+<span class="lineNum">     141 </span><span class="lineNoCov">          0 : master_clone_with_noninline_clones_p (struct cgraph_node *node)</span>
+<span class="lineNum">     142 </span>            : {
+<span class="lineNum">     143 </span><span class="lineNoCov">          0 :   if (node-&gt;clone_of)</span>
+<span class="lineNum">     144 </span>            :     return false;
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span><span class="lineCov">    1030084 :   for (struct cgraph_node *n = node-&gt;clones; n; n = n-&gt;next_sibling_clone)</span>
+<span class="lineNum">     147 </span><span class="lineCov">     237725 :     if (n-&gt;decl != node-&gt;decl)</span>
+<span class="lineNum">     148 </span>            :       return true;
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            :   return false;
+<span class="lineNum">     151 </span>            : }
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            : /* E is expected to be an edge being inlined.  Clone destination node of
+<span class="lineNum">     154 </span>            :    the edge and redirect it to the new clone.
+<span class="lineNum">     155 </span>            :    DUPLICATE is used for bookkeeping on whether we are actually creating new
+<span class="lineNum">     156 </span>            :    clones or re-using node originally representing out-of-line function call.
+<span class="lineNum">     157 </span>            :    By default the offline copy is removed, when it appears dead after inlining.
+<span class="lineNum">     158 </span>            :    UPDATE_ORIGINAL prevents this transformation.
+<span class="lineNum">     159 </span>            :    If OVERALL_SIZE is non-NULL, the size is updated to reflect the
+<span class="lineNum">     160 </span>            :    transformation.  */
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span>            : void
+<span class="lineNum">     163 </span><span class="lineCov">    2099902 : clone_inlined_nodes (struct cgraph_edge *e, bool duplicate,</span>
+<span class="lineNum">     164 </span>            :                      bool update_original, int *overall_size)
+<span class="lineNum">     165 </span>            : {
+<span class="lineNum">     166 </span><span class="lineCov">    2099902 :   struct cgraph_node *inlining_into;</span>
+<span class="lineNum">     167 </span><span class="lineCov">    2099902 :   struct cgraph_edge *next;</span>
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineCov">    2099902 :   if (e-&gt;caller-&gt;global.inlined_to)</span>
+<span class="lineNum">     170 </span>            :     inlining_into = e-&gt;caller-&gt;global.inlined_to;
+<span class="lineNum">     171 </span>            :   else
+<span class="lineNum">     172 </span><span class="lineCov">    1926613 :     inlining_into = e-&gt;caller;</span>
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span><span class="lineCov">    2099902 :   if (duplicate)</span>
+<span class="lineNum">     175 </span>            :     {
+<span class="lineNum">     176 </span>            :       /* We may eliminate the need for out-of-line copy to be output.
+<span class="lineNum">     177 </span>            :          In that case just go ahead and re-use it.  This is not just an
+<span class="lineNum">     178 </span>            :          memory optimization.  Making offline copy of fuction disappear
+<span class="lineNum">     179 </span>            :          from the program will improve future decisions on inlining.  */
+<span class="lineNum">     180 </span><span class="lineCov">    2068644 :       if (!e-&gt;callee-&gt;callers-&gt;next_caller</span>
+<span class="lineNum">     181 </span>            :           /* Recursive inlining never wants the master clone to
+<span class="lineNum">     182 </span>            :              be overwritten.  */
+<span class="lineNum">     183 </span><span class="lineCov">    1059958 :           &amp;&amp; update_original</span>
+<span class="lineNum">     184 </span><span class="lineCov">    1059958 :           &amp;&amp; can_remove_node_now_p (e-&gt;callee, e)</span>
+<span class="lineNum">     185 </span>            :           /* We cannot overwrite a master clone with non-inline clones
+<span class="lineNum">     186 </span>            :              until after these clones are materialized.  */
+<span class="lineNum">     187 </span><span class="lineCov">    3660242 :           &amp;&amp; !master_clone_with_noninline_clones_p (e-&gt;callee))</span>
+<span class="lineNum">     188 </span>            :         {
+<span class="lineNum">     189 </span>            :           /* TODO: When callee is in a comdat group, we could remove all of it,
+<span class="lineNum">     190 </span>            :              including all inline clones inlined into it.  That would however
+<span class="lineNum">     191 </span>            :              need small function inlining to register edge removal hook to
+<span class="lineNum">     192 </span>            :              maintain the priority queue.
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span>            :              For now we keep the ohter functions in the group in program until
+<span class="lineNum">     195 </span>            :              cgraph_remove_unreachable_functions gets rid of them.  */
+<span class="lineNum">     196 </span><span class="lineCov">     799189 :           gcc_assert (!e-&gt;callee-&gt;global.inlined_to);</span>
+<span class="lineNum">     197 </span><span class="lineCov">     799189 :           e-&gt;callee-&gt;remove_from_same_comdat_group ();</span>
+<span class="lineNum">     198 </span><span class="lineCov">     799189 :           if (e-&gt;callee-&gt;definition</span>
+<span class="lineNum">     199 </span><span class="lineCov">     799189 :               &amp;&amp; inline_account_function_p (e-&gt;callee))</span>
+<span class="lineNum">     200 </span>            :             {
+<span class="lineNum">     201 </span><span class="lineCov">     729510 :               gcc_assert (!e-&gt;callee-&gt;alias);</span>
+<span class="lineNum">     202 </span><span class="lineCov">     729510 :               if (overall_size)</span>
+<span class="lineNum">     203 </span><span class="lineCov">     188604 :                 *overall_size -= ipa_fn_summaries-&gt;get (e-&gt;callee)-&gt;size;</span>
+<span class="lineNum">     204 </span><span class="lineCov">     729510 :               nfunctions_inlined++;</span>
+<span class="lineNum">     205 </span>            :             }
+<span class="lineNum">     206 </span><span class="lineCov">     799189 :           duplicate = false;</span>
+<span class="lineNum">     207 </span><span class="lineCov">     799189 :           e-&gt;callee-&gt;externally_visible = false;</span>
+<span class="lineNum">     208 </span><span class="lineCov">     799189 :           update_noncloned_counts (e-&gt;callee, e-&gt;count, e-&gt;callee-&gt;count);</span>
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span><span class="lineCov">     799189 :           dump_callgraph_transformation (e-&gt;callee, inlining_into,</span>
+<span class="lineNum">     211 </span>            :                                          &quot;inlining to&quot;);
+<span class="lineNum">     212 </span>            :         }
+<span class="lineNum">     213 </span>            :       else
+<span class="lineNum">     214 </span>            :         {
+<span class="lineNum">     215 </span><span class="lineCov">    1269455 :           struct cgraph_node *n;</span>
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span><span class="lineCov">    1269455 :           n = e-&gt;callee-&gt;create_clone (e-&gt;callee-&gt;decl,</span>
+<span class="lineNum">     218 </span>            :                                        e-&gt;count,
+<span class="lineNum">     219 </span>            :                                        update_original, vNULL, true,
+<span class="lineNum">     220 </span>            :                                        inlining_into,
+<span class="lineNum">     221 </span>            :                                        NULL);
+<span class="lineNum">     222 </span><span class="lineCov">    1269455 :           n-&gt;used_as_abstract_origin = e-&gt;callee-&gt;used_as_abstract_origin;</span>
+<span class="lineNum">     223 </span><span class="lineCov">    1269455 :           e-&gt;redirect_callee (n);</span>
+<span class="lineNum">     224 </span>            :         }
+<span class="lineNum">     225 </span>            :     }
+<span class="lineNum">     226 </span>            :   else
+<span class="lineNum">     227 </span><span class="lineCov">      31258 :     e-&gt;callee-&gt;remove_from_same_comdat_group ();</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">    2099902 :   e-&gt;callee-&gt;global.inlined_to = inlining_into;</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            :   /* Recursively clone all bodies.  */
+<span class="lineNum">     232 </span><span class="lineCov">    3584513 :   for (e = e-&gt;callee-&gt;callees; e; e = next)</span>
+<span class="lineNum">     233 </span>            :     {
+<span class="lineNum">     234 </span><span class="lineCov">    1484611 :       next = e-&gt;next_callee;</span>
+<span class="lineNum">     235 </span><span class="lineCov">    1484611 :       if (!e-&gt;inline_failed)</span>
+<span class="lineNum">     236 </span><span class="lineCov">     122000 :         clone_inlined_nodes (e, duplicate, update_original, overall_size);</span>
+<span class="lineNum">     237 </span>            :     }
+<span class="lineNum">     238 </span><span class="lineCov">    2099902 : }</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span>            : /* Check all speculations in N and resolve them if they seems useless. */
+<a name="241"><span class="lineNum">     241 </span>            : </a>
+<span class="lineNum">     242 </span>            : static bool
+<span class="lineNum">     243 </span><span class="lineCov">    2099882 : check_speculations (cgraph_node *n)</span>
+<span class="lineNum">     244 </span>            : {
+<span class="lineNum">     245 </span><span class="lineCov">    2099882 :   bool speculation_removed = false;</span>
+<span class="lineNum">     246 </span><span class="lineCov">    2099882 :   cgraph_edge *next;</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">    3585779 :   for (cgraph_edge *e = n-&gt;callees; e; e = next)</span>
+<span class="lineNum">     249 </span>            :     {
+<span class="lineNum">     250 </span><span class="lineCov">    1485897 :       next = e-&gt;next_callee;</span>
+<span class="lineNum">     251 </span><span class="lineCov">    1485897 :       if (e-&gt;speculative &amp;&amp; !speculation_useful_p (e, true))</span>
+<span class="lineNum">     252 </span>            :         {
+<span class="lineNum">     253 </span><span class="lineCov">         25 :           e-&gt;resolve_speculation (NULL);</span>
+<span class="lineNum">     254 </span><span class="lineCov">         25 :           speculation_removed = true;</span>
+<span class="lineNum">     255 </span>            :         }
+<span class="lineNum">     256 </span><span class="lineCov">    1485872 :       else if (!e-&gt;inline_failed)</span>
+<span class="lineNum">     257 </span><span class="lineCov">     121980 :         speculation_removed |= check_speculations (e-&gt;callee);</span>
+<span class="lineNum">     258 </span>            :     }
+<span class="lineNum">     259 </span><span class="lineCov">    2099882 :   return speculation_removed;</span>
+<span class="lineNum">     260 </span>            : }
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span>            : /* Mark all call graph edges coming out of NODE and all nodes that have been
+<span class="lineNum">     263 </span>            :    inlined to it as in_polymorphic_cdtor.  */
+<a name="264"><span class="lineNum">     264 </span>            : </a>
+<span class="lineNum">     265 </span>            : static void
+<span class="lineNum">     266 </span><span class="lineCov">      77505 : mark_all_inlined_calls_cdtor (cgraph_node *node)</span>
+<span class="lineNum">     267 </span>            : {
+<span class="lineNum">     268 </span><span class="lineCov">     158542 :   for (cgraph_edge *cs = node-&gt;callees; cs; cs = cs-&gt;next_callee)</span>
+<span class="lineNum">     269 </span>            :     {
+<span class="lineNum">     270 </span><span class="lineCov">      81037 :       cs-&gt;in_polymorphic_cdtor = true;</span>
+<span class="lineNum">     271 </span><span class="lineCov">      81037 :       if (!cs-&gt;inline_failed)</span>
+<span class="lineNum">     272 </span><span class="lineCov">       6864 :         mark_all_inlined_calls_cdtor (cs-&gt;callee);</span>
+<span class="lineNum">     273 </span>            :     }
+<span class="lineNum">     274 </span><span class="lineCov">      80271 :   for (cgraph_edge *cs = node-&gt;indirect_calls; cs; cs = cs-&gt;next_callee)</span>
+<span class="lineNum">     275 </span><span class="lineCov">       2766 :     cs-&gt;in_polymorphic_cdtor = true;</span>
+<span class="lineNum">     276 </span><span class="lineCov">      77505 : }</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : /* Mark edge E as inlined and update callgraph accordingly.  UPDATE_ORIGINAL
+<span class="lineNum">     280 </span>            :    specify whether profile of original function should be updated.  If any new
+<span class="lineNum">     281 </span>            :    indirect edges are discovered in the process, add them to NEW_EDGES, unless
+<span class="lineNum">     282 </span>            :    it is NULL. If UPDATE_OVERALL_SUMMARY is false, do not bother to recompute overall
+<span class="lineNum">     283 </span>            :    size of caller after inlining. Caller is required to eventually do it via
+<span class="lineNum">     284 </span>            :    ipa_update_overall_fn_summary.
+<span class="lineNum">     285 </span>            :    If callee_removed is non-NULL, set it to true if we removed callee node.
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            :    Return true iff any new callgraph edges were discovered as a
+<span class="lineNum">     288 </span>            :    result of inlining.  */
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span>            : bool
+<span class="lineNum">     291 </span><span class="lineCov">    1977902 : inline_call (struct cgraph_edge *e, bool update_original,</span>
+<span class="lineNum">     292 </span>            :              vec&lt;cgraph_edge *&gt; *new_edges,
+<span class="lineNum">     293 </span>            :              int *overall_size, bool update_overall_summary,
+<span class="lineNum">     294 </span>            :              bool *callee_removed)
+<span class="lineNum">     295 </span>            : {
+<span class="lineNum">     296 </span><span class="lineCov">    1977902 :   int old_size = 0, new_size = 0;</span>
+<span class="lineNum">     297 </span><span class="lineCov">    1977902 :   struct cgraph_node *to = NULL;</span>
+<span class="lineNum">     298 </span><span class="lineCov">    1977902 :   struct cgraph_edge *curr = e;</span>
+<span class="lineNum">     299 </span><span class="lineCov">    1977902 :   struct cgraph_node *callee = e-&gt;callee-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     300 </span><span class="lineCov">    1977902 :   bool new_edges_found = false;</span>
+<span class="lineNum">     301 </span>            : 
+<span class="lineNum">     302 </span><span class="lineCov">    1977902 :   int estimated_growth = 0;</span>
+<span class="lineNum">     303 </span><span class="lineCov">    1977902 :   if (! update_overall_summary)</span>
+<span class="lineNum">     304 </span><span class="lineCov">    1747739 :     estimated_growth = estimate_edge_growth (e);</span>
+<span class="lineNum">     305 </span>            :   /* This is used only for assert bellow.  */
+<span class="lineNum">     306 </span>            : #if 0
+<span class="lineNum">     307 </span>            :   bool predicated = inline_edge_summary (e)-&gt;predicate != NULL;
+<span class="lineNum">     308 </span>            : #endif
+<span class="lineNum">     309 </span>            : 
+<span class="lineNum">     310 </span>            :   /* Don't inline inlined edges.  */
+<span class="lineNum">     311 </span><span class="lineCov">    1977902 :   gcc_assert (e-&gt;inline_failed);</span>
+<span class="lineNum">     312 </span>            :   /* Don't even think of inlining inline clone.  */
+<span class="lineNum">     313 </span><span class="lineCov">    1977902 :   gcc_assert (!callee-&gt;global.inlined_to);</span>
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span><span class="lineCov">    1977902 :   to = e-&gt;caller;</span>
+<span class="lineNum">     316 </span><span class="lineCov">    1977902 :   if (to-&gt;global.inlined_to)</span>
+<span class="lineNum">     317 </span><span class="lineCov">      51289 :     to = to-&gt;global.inlined_to;</span>
+<span class="lineNum">     318 </span><span class="lineCov">    1977902 :   if (to-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     319 </span>            :     {
+<span class="lineNum">     320 </span><span class="lineCov">        755 :       struct cgraph_node *target = to-&gt;callees-&gt;callee;</span>
+<span class="lineNum">     321 </span><span class="lineCov">        755 :       if (in_lto_p)</span>
+<span class="lineNum">     322 </span><span class="lineCov">         32 :         to-&gt;get_untransformed_body ();</span>
+<span class="lineNum">     323 </span><span class="lineCov">        755 :       to-&gt;expand_thunk (false, true);</span>
+<span class="lineNum">     324 </span>            :       /* When thunk is instrumented we may have multiple callees.  */
+<span class="lineNum">     325 </span><span class="lineCov">        755 :       for (e = to-&gt;callees; e &amp;&amp; e-&gt;callee != target; e = e-&gt;next_callee)</span>
+<span class="lineNum">     326 </span>            :         ;
+<span class="lineNum">     327 </span><span class="lineCov">        755 :       gcc_assert (e);</span>
+<span class="lineNum">     328 </span>            :     }
+<span class="lineNum">     329 </span>            : 
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineCov">    1977902 :   e-&gt;inline_failed = CIF_OK;</span>
+<span class="lineNum">     332 </span><span class="lineCov">    1977902 :   DECL_POSSIBLY_INLINED (callee-&gt;decl) = true;</span>
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span><span class="lineCov">    1977902 :   if (DECL_FUNCTION_PERSONALITY (callee-&gt;decl))</span>
+<span class="lineNum">     335 </span><span class="lineCov">      85200 :     DECL_FUNCTION_PERSONALITY (to-&gt;decl)</span>
+<span class="lineNum">     336 </span><span class="lineCov">      56800 :       = DECL_FUNCTION_PERSONALITY (callee-&gt;decl);</span>
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span><span class="lineCov">    1977902 :   bool reload_optimization_node = false;</span>
+<span class="lineNum">     339 </span><span class="lineCov">    1977902 :   if (!opt_for_fn (callee-&gt;decl, flag_strict_aliasing)</span>
+<span class="lineNum">     340 </span><span class="lineCov">    1977902 :       &amp;&amp; opt_for_fn (to-&gt;decl, flag_strict_aliasing))</span>
+<span class="lineNum">     341 </span>            :     {
+<span class="lineNum">     342 </span><span class="lineCov">         11 :       struct gcc_options opts = global_options;</span>
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span><span class="lineCov">         11 :       cl_optimization_restore (&amp;opts, opts_for_fn (to-&gt;decl));</span>
+<span class="lineNum">     345 </span><span class="lineCov">         11 :       opts.x_flag_strict_aliasing = false;</span>
+<span class="lineNum">     346 </span><span class="lineCov">         11 :       if (dump_file)</span>
+<span class="lineNum">     347 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Dropping flag_strict_aliasing on %s\n&quot;,</span>
+<span class="lineNum">     348 </span>            :                  to-&gt;dump_name ());
+<span class="lineNum">     349 </span><span class="lineCov">         11 :       DECL_FUNCTION_SPECIFIC_OPTIMIZATION (to-&gt;decl)</span>
+<span class="lineNum">     350 </span><span class="lineCov">         11 :          = build_optimization_node (&amp;opts);</span>
+<span class="lineNum">     351 </span><span class="lineCov">         11 :       reload_optimization_node = true;</span>
+<span class="lineNum">     352 </span>            :     }
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span><span class="lineCov">    1977902 :   ipa_fn_summary *caller_info = ipa_fn_summaries-&gt;get (to);</span>
+<span class="lineNum">     355 </span><span class="lineCov">    1977902 :   ipa_fn_summary *callee_info = ipa_fn_summaries-&gt;get (callee);</span>
+<span class="lineNum">     356 </span><span class="lineCov">    1977902 :   if (!caller_info-&gt;fp_expressions &amp;&amp; callee_info-&gt;fp_expressions)</span>
+<span class="lineNum">     357 </span>            :     {
+<span class="lineNum">     358 </span><span class="lineCov">       8290 :       caller_info-&gt;fp_expressions = true;</span>
+<span class="lineNum">     359 </span><span class="lineCov">       8290 :       if (opt_for_fn (callee-&gt;decl, flag_rounding_math)</span>
+<span class="lineNum">     360 </span><span class="lineCov">       8290 :           != opt_for_fn (to-&gt;decl, flag_rounding_math)</span>
+<span class="lineNum">     361 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_trapping_math)</span>
+<span class="lineNum">     362 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_trapping_math)</span>
+<span class="lineNum">     363 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_unsafe_math_optimizations)</span>
+<span class="lineNum">     364 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_unsafe_math_optimizations)</span>
+<span class="lineNum">     365 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_finite_math_only)</span>
+<span class="lineNum">     366 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_finite_math_only)</span>
+<span class="lineNum">     367 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_signaling_nans)</span>
+<span class="lineNum">     368 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_signaling_nans)</span>
+<span class="lineNum">     369 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_cx_limited_range)</span>
+<span class="lineNum">     370 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_cx_limited_range)</span>
+<span class="lineNum">     371 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_signed_zeros)</span>
+<span class="lineNum">     372 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_signed_zeros)</span>
+<span class="lineNum">     373 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_associative_math)</span>
+<span class="lineNum">     374 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_associative_math)</span>
+<span class="lineNum">     375 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_reciprocal_math)</span>
+<span class="lineNum">     376 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_reciprocal_math)</span>
+<span class="lineNum">     377 </span><span class="lineCov">      16580 :           || opt_for_fn (callee-&gt;decl, flag_fp_int_builtin_inexact)</span>
+<span class="lineNum">     378 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_fp_int_builtin_inexact)</span>
+<span class="lineNum">     379 </span><span class="lineCov">       8290 :           || opt_for_fn (callee-&gt;decl, flag_errno_math)</span>
+<span class="lineNum">     380 </span><span class="lineCov">       8290 :              != opt_for_fn (to-&gt;decl, flag_errno_math))</span>
+<span class="lineNum">     381 </span>            :         {
+<span class="lineNum">     382 </span><span class="lineNoCov">          0 :           struct gcc_options opts = global_options;</span>
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span><span class="lineNoCov">          0 :           cl_optimization_restore (&amp;opts, opts_for_fn (to-&gt;decl));</span>
+<span class="lineNum">     385 </span><span class="lineNoCov">          0 :           opts.x_flag_rounding_math</span>
+<span class="lineNum">     386 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_rounding_math);</span>
+<span class="lineNum">     387 </span><span class="lineNoCov">          0 :           opts.x_flag_trapping_math</span>
+<span class="lineNum">     388 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_trapping_math);</span>
+<span class="lineNum">     389 </span><span class="lineNoCov">          0 :           opts.x_flag_unsafe_math_optimizations</span>
+<span class="lineNum">     390 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_unsafe_math_optimizations);</span>
+<span class="lineNum">     391 </span><span class="lineNoCov">          0 :           opts.x_flag_finite_math_only</span>
+<span class="lineNum">     392 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_finite_math_only);</span>
+<span class="lineNum">     393 </span><span class="lineNoCov">          0 :           opts.x_flag_signaling_nans</span>
+<span class="lineNum">     394 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_signaling_nans);</span>
+<span class="lineNum">     395 </span><span class="lineNoCov">          0 :           opts.x_flag_cx_limited_range</span>
+<span class="lineNum">     396 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_cx_limited_range);</span>
+<span class="lineNum">     397 </span><span class="lineNoCov">          0 :           opts.x_flag_signed_zeros</span>
+<span class="lineNum">     398 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_signed_zeros);</span>
+<span class="lineNum">     399 </span><span class="lineNoCov">          0 :           opts.x_flag_associative_math</span>
+<span class="lineNum">     400 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_associative_math);</span>
+<span class="lineNum">     401 </span><span class="lineNoCov">          0 :           opts.x_flag_reciprocal_math</span>
+<span class="lineNum">     402 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_reciprocal_math);</span>
+<span class="lineNum">     403 </span><span class="lineNoCov">          0 :           opts.x_flag_fp_int_builtin_inexact</span>
+<span class="lineNum">     404 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_fp_int_builtin_inexact);</span>
+<span class="lineNum">     405 </span><span class="lineNoCov">          0 :           opts.x_flag_errno_math</span>
+<span class="lineNum">     406 </span><span class="lineNoCov">          0 :             = opt_for_fn (callee-&gt;decl, flag_errno_math);</span>
+<span class="lineNum">     407 </span><span class="lineNoCov">          0 :           if (dump_file)</span>
+<span class="lineNum">     408 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;Copying FP flags from %s to %s\n&quot;,</span>
+<span class="lineNum">     409 </span>            :                      callee-&gt;dump_name (), to-&gt;dump_name ());
+<span class="lineNum">     410 </span><span class="lineNoCov">          0 :           DECL_FUNCTION_SPECIFIC_OPTIMIZATION (to-&gt;decl)</span>
+<span class="lineNum">     411 </span><span class="lineNoCov">          0 :              = build_optimization_node (&amp;opts);</span>
+<span class="lineNum">     412 </span><span class="lineNoCov">          0 :           reload_optimization_node = true;</span>
+<span class="lineNum">     413 </span>            :         }
+<span class="lineNum">     414 </span>            :     }
+<span class="lineNum">     415 </span>            : 
+<span class="lineNum">     416 </span>            :   /* Reload global optimization flags.  */
+<span class="lineNum">     417 </span><span class="lineCov">    1977902 :   if (reload_optimization_node &amp;&amp; DECL_STRUCT_FUNCTION (to-&gt;decl) == cfun)</span>
+<span class="lineNum">     418 </span><span class="lineCov">         11 :     set_cfun (cfun, true);</span>
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span>            :   /* If aliases are involved, redirect edge to the actual destination and
+<span class="lineNum">     421 </span>            :      possibly remove the aliases.  */
+<span class="lineNum">     422 </span><span class="lineCov">    1977902 :   if (e-&gt;callee != callee)</span>
+<span class="lineNum">     423 </span>            :     {
+<span class="lineNum">     424 </span><span class="lineCov">     314775 :       struct cgraph_node *alias = e-&gt;callee, *next_alias;</span>
+<span class="lineNum">     425 </span><span class="lineCov">     314775 :       e-&gt;redirect_callee (callee);</span>
+<span class="lineNum">     426 </span><span class="lineCov">     415285 :       while (alias &amp;&amp; alias != callee)</span>
+<span class="lineNum">     427 </span>            :         {
+<span class="lineNum">     428 </span><span class="lineCov">     314800 :           if (!alias-&gt;callers</span>
+<span class="lineNum">     429 </span><span class="lineCov">     426680 :               &amp;&amp; can_remove_node_now_p (alias,</span>
+<span class="lineNum">     430 </span><span class="lineCov">     111880 :                                         !e-&gt;next_caller &amp;&amp; !e-&gt;prev_caller ? e : NULL))</span>
+<span class="lineNum">     431 </span>            :             {
+<span class="lineNum">     432 </span><span class="lineCov">     100510 :               next_alias = alias-&gt;get_alias_target ();</span>
+<span class="lineNum">     433 </span><span class="lineCov">     100510 :               alias-&gt;remove ();</span>
+<span class="lineNum">     434 </span><span class="lineCov">     100510 :               if (callee_removed)</span>
+<span class="lineNum">     435 </span><span class="lineCov">         53 :                 *callee_removed = true;</span>
+<span class="lineNum">     436 </span>            :               alias = next_alias;
+<span class="lineNum">     437 </span>            :             }
+<span class="lineNum">     438 </span>            :           else
+<span class="lineNum">     439 </span>            :             break;
+<span class="lineNum">     440 </span>            :         }
+<span class="lineNum">     441 </span>            :     }
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">    1977902 :   clone_inlined_nodes (e, true, update_original, overall_size);</span>
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span><span class="lineCov">    1977902 :   gcc_assert (curr-&gt;callee-&gt;global.inlined_to == to);</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span><span class="lineCov">    1977902 :   old_size = ipa_fn_summaries-&gt;get (to)-&gt;size;</span>
+<span class="lineNum">     448 </span><span class="lineCov">    1977902 :   ipa_merge_fn_summary_after_inlining (e);</span>
+<span class="lineNum">     449 </span><span class="lineCov">    1977902 :   if (e-&gt;in_polymorphic_cdtor)</span>
+<span class="lineNum">     450 </span><span class="lineCov">      70641 :     mark_all_inlined_calls_cdtor (e-&gt;callee);</span>
+<span class="lineNum">     451 </span><span class="lineCov">    1977902 :   if (opt_for_fn (e-&gt;caller-&gt;decl, optimize))</span>
+<span class="lineNum">     452 </span><span class="lineCov">    1970463 :     new_edges_found = ipa_propagate_indirect_call_infos (curr, new_edges);</span>
+<span class="lineNum">     453 </span><span class="lineCov">    1977902 :   check_speculations (e-&gt;callee);</span>
+<span class="lineNum">     454 </span><span class="lineCov">    1977902 :   if (update_overall_summary)</span>
+<span class="lineNum">     455 </span><span class="lineCov">     230163 :     ipa_update_overall_fn_summary (to);</span>
+<span class="lineNum">     456 </span>            :   else
+<span class="lineNum">     457 </span>            :     /* Update self size by the estimate so overall function growth limits
+<span class="lineNum">     458 </span>            :        work for further inlining into this function.  Before inlining
+<span class="lineNum">     459 </span>            :        the function we inlined to again we expect the caller to update
+<span class="lineNum">     460 </span>            :        the overall summary.  */
+<span class="lineNum">     461 </span><span class="lineCov">    5243217 :     ipa_fn_summaries-&gt;get (to)-&gt;size += estimated_growth;</span>
+<span class="lineNum">     462 </span><span class="lineCov">    1977902 :   new_size = ipa_fn_summaries-&gt;get (to)-&gt;size;</span>
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span><span class="lineCov">    1977902 :   if (callee-&gt;calls_comdat_local)</span>
+<span class="lineNum">     465 </span><span class="lineNoCov">          0 :     to-&gt;calls_comdat_local = true;</span>
+<span class="lineNum">     466 </span><span class="lineCov">    1977902 :   else if (to-&gt;calls_comdat_local &amp;&amp; callee-&gt;comdat_local_p ())</span>
+<span class="lineNum">     467 </span>            :     {
+<span class="lineNum">     468 </span><span class="lineCov">        166 :       struct cgraph_edge *se = to-&gt;callees;</span>
+<span class="lineNum">     469 </span><span class="lineCov">        332 :       for (; se; se = se-&gt;next_callee)</span>
+<span class="lineNum">     470 </span><span class="lineCov">        166 :         if (se-&gt;inline_failed &amp;&amp; se-&gt;callee-&gt;comdat_local_p ())</span>
+<span class="lineNum">     471 </span>            :           break;
+<span class="lineNum">     472 </span><span class="lineCov">        166 :       if (se == NULL)</span>
+<span class="lineNum">     473 </span><span class="lineCov">        166 :         to-&gt;calls_comdat_local = false;</span>
+<span class="lineNum">     474 </span>            :     }
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span>            :   /* FIXME: This assert suffers from roundoff errors, disable it for GCC 5
+<span class="lineNum">     477 </span>            :      and revisit it after conversion to sreals in GCC 6.
+<span class="lineNum">     478 </span>            :      See PR 65654.  */
+<span class="lineNum">     479 </span>            : #if 0
+<span class="lineNum">     480 </span>            :   /* Verify that estimated growth match real growth.  Allow off-by-one
+<span class="lineNum">     481 </span>            :      error due to ipa_fn_summary::size_scale roudoff errors.  */
+<span class="lineNum">     482 </span>            :   gcc_assert (!update_overall_summary || !overall_size || new_edges_found
+<span class="lineNum">     483 </span>            :               || abs (estimated_growth - (new_size - old_size)) &lt;= 1
+<span class="lineNum">     484 </span>            :               || speculation_removed
+<span class="lineNum">     485 </span>            :               /* FIXME: a hack.  Edges with false predicate are accounted
+<span class="lineNum">     486 </span>            :                  wrong, we should remove them from callgraph.  */
+<span class="lineNum">     487 </span>            :               || predicated);
+<span class="lineNum">     488 </span>            : #endif
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            :   /* Account the change of overall unit size; external functions will be
+<span class="lineNum">     491 </span>            :      removed and are thus not accounted.  */
+<span class="lineNum">     492 </span><span class="lineCov">    1977902 :   if (overall_size &amp;&amp; inline_account_function_p (to))</span>
+<span class="lineNum">     493 </span><span class="lineCov">     221643 :     *overall_size += new_size - old_size;</span>
+<span class="lineNum">     494 </span><span class="lineCov">    1977902 :   ncalls_inlined++;</span>
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span>            :   /* This must happen after ipa_merge_fn_summary_after_inlining that rely on jump
+<span class="lineNum">     497 </span>            :      functions of callee to not be updated.  */
+<span class="lineNum">     498 </span><span class="lineCov">    1977902 :   return new_edges_found;</span>
+<span class="lineNum">     499 </span>            : }
+<span class="lineNum">     500 </span>            : 
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span>            : /* Copy function body of NODE and redirect all inline clones to it.
+<span class="lineNum">     503 </span>            :    This is done before inline plan is applied to NODE when there are
+<span class="lineNum">     504 </span>            :    still some inline clones if it.
+<span class="lineNum">     505 </span>            : 
+<span class="lineNum">     506 </span>            :    This is necessary because inline decisions are not really transitive
+<span class="lineNum">     507 </span>            :    and the other inline clones may have different bodies.  */
+<a name="508"><span class="lineNum">     508 </span>            : </a>
+<span class="lineNum">     509 </span>            : static struct cgraph_node *
+<span class="lineNum">     510 </span><span class="lineCov">      15888 : save_inline_function_body (struct cgraph_node *node)</span>
+<span class="lineNum">     511 </span>            : {
+<span class="lineNum">     512 </span><span class="lineCov">      15888 :   struct cgraph_node *first_clone, *n;</span>
+<span class="lineNum">     513 </span>            : 
+<span class="lineNum">     514 </span><span class="lineCov">      15888 :   if (dump_file)</span>
+<span class="lineNum">     515 </span><span class="lineCov">        111 :     fprintf (dump_file, &quot;\nSaving body of %s for later reuse\n&quot;,</span>
+<span class="lineNum">     516 </span>            :              node-&gt;name ());
+<span class="lineNum">     517 </span>            :  
+<span class="lineNum">     518 </span><span class="lineCov">      15888 :   gcc_assert (node == cgraph_node::get (node-&gt;decl));</span>
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span>            :   /* first_clone will be turned into real function.  */
+<span class="lineNum">     521 </span><span class="lineCov">      15888 :   first_clone = node-&gt;clones;</span>
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span>            :   /* Arrange first clone to not be thunk as those do not have bodies.  */
+<span class="lineNum">     524 </span><span class="lineCov">      15888 :   if (first_clone-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     525 </span>            :     {
+<span class="lineNum">     526 </span><span class="lineNoCov">          0 :       while (first_clone-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     527 </span><span class="lineNoCov">          0 :         first_clone = first_clone-&gt;next_sibling_clone;</span>
+<span class="lineNum">     528 </span><span class="lineNoCov">          0 :       first_clone-&gt;prev_sibling_clone-&gt;next_sibling_clone</span>
+<span class="lineNum">     529 </span><span class="lineNoCov">          0 :         = first_clone-&gt;next_sibling_clone;</span>
+<span class="lineNum">     530 </span><span class="lineNoCov">          0 :       if (first_clone-&gt;next_sibling_clone)</span>
+<span class="lineNum">     531 </span><span class="lineNoCov">          0 :         first_clone-&gt;next_sibling_clone-&gt;prev_sibling_clone</span>
+<span class="lineNum">     532 </span><span class="lineNoCov">          0 :            = first_clone-&gt;prev_sibling_clone;</span>
+<span class="lineNum">     533 </span><span class="lineNoCov">          0 :       first_clone-&gt;next_sibling_clone = node-&gt;clones;</span>
+<span class="lineNum">     534 </span><span class="lineNoCov">          0 :       first_clone-&gt;prev_sibling_clone = NULL;</span>
+<span class="lineNum">     535 </span><span class="lineNoCov">          0 :       node-&gt;clones-&gt;prev_sibling_clone = first_clone;</span>
+<span class="lineNum">     536 </span><span class="lineNoCov">          0 :       node-&gt;clones = first_clone;</span>
+<span class="lineNum">     537 </span>            :     }
+<span class="lineNum">     538 </span><span class="lineCov">      15888 :   first_clone-&gt;decl = copy_node (node-&gt;decl);</span>
+<span class="lineNum">     539 </span><span class="lineCov">      15888 :   first_clone-&gt;decl-&gt;decl_with_vis.symtab_node = first_clone;</span>
+<span class="lineNum">     540 </span><span class="lineCov">      15888 :   gcc_assert (first_clone == cgraph_node::get (first_clone-&gt;decl));</span>
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span>            :   /* Now reshape the clone tree, so all other clones descends from
+<span class="lineNum">     543 </span>            :      first_clone.  */
+<span class="lineNum">     544 </span><span class="lineCov">      15888 :   if (first_clone-&gt;next_sibling_clone)</span>
+<span class="lineNum">     545 </span>            :     {
+<span class="lineNum">     546 </span><span class="lineCov">      33359 :       for (n = first_clone-&gt;next_sibling_clone; n-&gt;next_sibling_clone;</span>
+<span class="lineNum">     547 </span><span class="lineCov">      26996 :            n = n-&gt;next_sibling_clone)</span>
+<span class="lineNum">     548 </span><span class="lineCov">      26996 :         n-&gt;clone_of = first_clone;</span>
+<span class="lineNum">     549 </span><span class="lineCov">       6363 :       n-&gt;clone_of = first_clone;</span>
+<span class="lineNum">     550 </span><span class="lineCov">       6363 :       n-&gt;next_sibling_clone = first_clone-&gt;clones;</span>
+<span class="lineNum">     551 </span><span class="lineCov">       6363 :       if (first_clone-&gt;clones)</span>
+<span class="lineNum">     552 </span><span class="lineCov">        125 :         first_clone-&gt;clones-&gt;prev_sibling_clone = n;</span>
+<span class="lineNum">     553 </span><span class="lineCov">       6363 :       first_clone-&gt;clones = first_clone-&gt;next_sibling_clone;</span>
+<span class="lineNum">     554 </span><span class="lineCov">       6363 :       first_clone-&gt;next_sibling_clone-&gt;prev_sibling_clone = NULL;</span>
+<span class="lineNum">     555 </span><span class="lineCov">       6363 :       first_clone-&gt;next_sibling_clone = NULL;</span>
+<span class="lineNum">     556 </span><span class="lineCov">       6363 :       gcc_assert (!first_clone-&gt;prev_sibling_clone);</span>
+<span class="lineNum">     557 </span>            :     }
+<span class="lineNum">     558 </span><span class="lineCov">      15888 :   first_clone-&gt;clone_of = NULL;</span>
+<span class="lineNum">     559 </span>            : 
+<span class="lineNum">     560 </span>            :   /* Now node in question has no clones.  */
+<span class="lineNum">     561 </span><span class="lineCov">      15888 :   node-&gt;clones = NULL;</span>
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span>            :   /* Inline clones share decl with the function they are cloned
+<span class="lineNum">     564 </span>            :      from.  Walk the whole clone tree and redirect them all to the
+<span class="lineNum">     565 </span>            :      new decl.  */
+<span class="lineNum">     566 </span><span class="lineCov">      15888 :   if (first_clone-&gt;clones)</span>
+<span class="lineNum">     567 </span><span class="lineCov">      47543 :     for (n = first_clone-&gt;clones; n != first_clone;)</span>
+<span class="lineNum">     568 </span>            :       {
+<span class="lineNum">     569 </span><span class="lineCov">      40541 :         gcc_assert (n-&gt;decl == node-&gt;decl);</span>
+<span class="lineNum">     570 </span><span class="lineCov">      40541 :         n-&gt;decl = first_clone-&gt;decl;</span>
+<span class="lineNum">     571 </span><span class="lineCov">      40541 :         if (n-&gt;clones)</span>
+<span class="lineNum">     572 </span>            :           n = n-&gt;clones;
+<span class="lineNum">     573 </span><span class="lineCov">      39538 :         else if (n-&gt;next_sibling_clone)</span>
+<span class="lineNum">     574 </span>            :           n = n-&gt;next_sibling_clone;
+<span class="lineNum">     575 </span>            :         else
+<span class="lineNum">     576 </span>            :           {
+<span class="lineNum">     577 </span><span class="lineCov">      15689 :             while (n != first_clone &amp;&amp; !n-&gt;next_sibling_clone)</span>
+<span class="lineNum">     578 </span><span class="lineCov">       8005 :               n = n-&gt;clone_of;</span>
+<span class="lineNum">     579 </span><span class="lineCov">       7684 :             if (n != first_clone)</span>
+<span class="lineNum">     580 </span><span class="lineCov">        682 :               n = n-&gt;next_sibling_clone;</span>
+<span class="lineNum">     581 </span>            :           }
+<span class="lineNum">     582 </span>            :       }
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span>            :   /* Copy the OLD_VERSION_NODE function tree to the new version.  */
+<span class="lineNum">     585 </span><span class="lineCov">      15888 :   tree_function_versioning (node-&gt;decl, first_clone-&gt;decl,</span>
+<span class="lineNum">     586 </span>            :                             NULL, true, NULL, false,
+<span class="lineNum">     587 </span>            :                             NULL, NULL);
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span>            :   /* The function will be short lived and removed after we inline all the clones,
+<span class="lineNum">     590 </span>            :      but make it internal so we won't confuse ourself.  */
+<span class="lineNum">     591 </span><span class="lineCov">      15888 :   DECL_EXTERNAL (first_clone-&gt;decl) = 0;</span>
+<span class="lineNum">     592 </span><span class="lineCov">      15888 :   TREE_PUBLIC (first_clone-&gt;decl) = 0;</span>
+<span class="lineNum">     593 </span><span class="lineCov">      15888 :   DECL_COMDAT (first_clone-&gt;decl) = 0;</span>
+<span class="lineNum">     594 </span><span class="lineCov">      15888 :   first_clone-&gt;ipa_transforms_to_apply.release ();</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span>            :   /* When doing recursive inlining, the clone may become unnecessary.
+<span class="lineNum">     597 </span>            :      This is possible i.e. in the case when the recursive function is proved to be
+<span class="lineNum">     598 </span>            :      non-throwing and the recursion happens only in the EH landing pad.
+<span class="lineNum">     599 </span>            :      We can not remove the clone until we are done with saving the body.
+<span class="lineNum">     600 </span>            :      Remove it now.  */
+<span class="lineNum">     601 </span><span class="lineCov">      15888 :   if (!first_clone-&gt;callers)</span>
+<span class="lineNum">     602 </span>            :     {
+<span class="lineNum">     603 </span><span class="lineNoCov">          0 :       first_clone-&gt;remove_symbol_and_inline_clones ();</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :       first_clone = NULL;</span>
+<span class="lineNum">     605 </span>            :     }
+<span class="lineNum">     606 </span><span class="lineCov">      15888 :   else if (flag_checking)</span>
+<span class="lineNum">     607 </span><span class="lineCov">      15888 :     first_clone-&gt;verify ();</span>
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span><span class="lineCov">      15888 :   return first_clone;</span>
+<span class="lineNum">     610 </span>            : }
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span>            : /* Return true when function body of DECL still needs to be kept around
+<a name="613"><span class="lineNum">     613 </span>            :    for later re-use.  */</a>
+<span class="lineNum">     614 </span>            : static bool
+<span class="lineNum">     615 </span><span class="lineCov">     827719 : preserve_function_body_p (struct cgraph_node *node)</span>
+<span class="lineNum">     616 </span>            : {
+<span class="lineNum">     617 </span><span class="lineCov">     827719 :   gcc_assert (symtab-&gt;global_info_ready);</span>
+<span class="lineNum">     618 </span><span class="lineCov">     827719 :   gcc_assert (!node-&gt;alias &amp;&amp; !node-&gt;thunk.thunk_p);</span>
+<span class="lineNum">     619 </span>            : 
+<span class="lineNum">     620 </span>            :   /* Look if there is any non-thunk clone around.  */
+<span class="lineNum">     621 </span><span class="lineCov">     827747 :   for (node = node-&gt;clones; node; node = node-&gt;next_sibling_clone)</span>
+<span class="lineNum">     622 </span><span class="lineCov">      15916 :     if (!node-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     623 </span>            :       return true;
+<span class="lineNum">     624 </span>            :   return false;
+<span class="lineNum">     625 </span>            : }
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            : /* Apply inline plan to function.  */
+<a name="628"><span class="lineNum">     628 </span>            : </a>
+<span class="lineNum">     629 </span>            : unsigned int
+<span class="lineNum">     630 </span><span class="lineCov">     827719 : inline_transform (struct cgraph_node *node)</span>
+<span class="lineNum">     631 </span>            : {
+<span class="lineNum">     632 </span><span class="lineCov">     827719 :   unsigned int todo = 0;</span>
+<span class="lineNum">     633 </span><span class="lineCov">     827719 :   struct cgraph_edge *e, *next;</span>
+<span class="lineNum">     634 </span><span class="lineCov">     827719 :   bool has_inline = false;</span>
+<span class="lineNum">     635 </span>            :  
+<span class="lineNum">     636 </span>            :   /* FIXME: Currently the pass manager is adding inline transform more than
+<span class="lineNum">     637 </span>            :      once to some clones.  This needs revisiting after WPA cleanups.  */
+<span class="lineNum">     638 </span><span class="lineCov">     827719 :   if (cfun-&gt;after_inlining)</span>
+<span class="lineNum">     639 </span>            :     return 0;
+<span class="lineNum">     640 </span>            : 
+<span class="lineNum">     641 </span>            :   /* We might need the body of this function so that we can expand
+<span class="lineNum">     642 </span>            :      it inline somewhere else.  */
+<span class="lineNum">     643 </span><span class="lineCov">     827719 :   if (preserve_function_body_p (node))</span>
+<span class="lineNum">     644 </span><span class="lineCov">      15888 :     save_inline_function_body (node);</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span><span class="lineCov">    4380734 :   for (e = node-&gt;callees; e; e = next)</span>
+<span class="lineNum">     647 </span>            :     {
+<span class="lineNum">     648 </span><span class="lineCov">    3553015 :       if (!e-&gt;inline_failed)</span>
+<span class="lineNum">     649 </span><span class="lineCov">     162409 :         has_inline = true;</span>
+<span class="lineNum">     650 </span><span class="lineCov">    3553015 :       next = e-&gt;next_callee;</span>
+<span class="lineNum">     651 </span><span class="lineCov">    3553015 :       e-&gt;redirect_call_stmt_to_callee ();</span>
+<span class="lineNum">     652 </span>            :     }
+<span class="lineNum">     653 </span><span class="lineCov">     827719 :   node-&gt;remove_all_references ();</span>
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span><span class="lineCov">     827719 :   timevar_push (TV_INTEGRATION);</span>
+<span class="lineNum">     656 </span><span class="lineCov">     827719 :   if (node-&gt;callees &amp;&amp; (opt_for_fn (node-&gt;decl, optimize) || has_inline))</span>
+<span class="lineNum">     657 </span>            :     {
+<span class="lineNum">     658 </span><span class="lineCov">     485855 :       profile_count num = node-&gt;count;</span>
+<span class="lineNum">     659 </span><span class="lineCov">     485855 :       profile_count den = ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;count;</span>
+<span class="lineNum">     660 </span><span class="lineCov">    1456737 :       bool scale = num.initialized_p () &amp;&amp; !(num == den);</span>
+<span class="lineNum">     661 </span><span class="lineCov">         12 :       if (scale)</span>
+<span class="lineNum">     662 </span>            :         {
+<span class="lineNum">     663 </span><span class="lineCov">         12 :           profile_count::adjust_for_ipa_scaling (&amp;num, &amp;den);</span>
+<span class="lineNum">     664 </span><span class="lineCov">         12 :           if (dump_file)</span>
+<span class="lineNum">     665 </span>            :             {
+<span class="lineNum">     666 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;Applying count scale &quot;);</span>
+<span class="lineNum">     667 </span><span class="lineNoCov">          0 :               num.dump (dump_file);</span>
+<span class="lineNum">     668 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;/&quot;);</span>
+<span class="lineNum">     669 </span><span class="lineNoCov">          0 :               den.dump (dump_file);</span>
+<span class="lineNum">     670 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     671 </span>            :             }
+<span class="lineNum">     672 </span>            : 
+<span class="lineNum">     673 </span><span class="lineCov">         12 :           basic_block bb;</span>
+<span class="lineNum">     674 </span><span class="lineCov">         12 :           cfun-&gt;cfg-&gt;count_max = profile_count::uninitialized ();</span>
+<span class="lineNum">     675 </span><span class="lineCov">        131 :           FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     676 </span>            :             {
+<span class="lineNum">     677 </span><span class="lineCov">        119 :               bb-&gt;count = bb-&gt;count.apply_scale (num, den);</span>
+<span class="lineNum">     678 </span><span class="lineCov">        119 :               cfun-&gt;cfg-&gt;count_max = cfun-&gt;cfg-&gt;count_max.max (bb-&gt;count);</span>
+<span class="lineNum">     679 </span>            :             }
+<span class="lineNum">     680 </span><span class="lineCov">         12 :           ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;count = node-&gt;count;</span>
+<span class="lineNum">     681 </span>            :         }
+<span class="lineNum">     682 </span><span class="lineCov">     485855 :       todo = optimize_inline_calls (current_function_decl);</span>
+<span class="lineNum">     683 </span>            :    }
+<span class="lineNum">     684 </span><span class="lineCov">     827719 :   timevar_pop (TV_INTEGRATION);</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span><span class="lineCov">     827719 :   cfun-&gt;always_inline_functions_inlined = true;</span>
+<span class="lineNum">     687 </span><span class="lineCov">     827719 :   cfun-&gt;after_inlining = true;</span>
+<span class="lineNum">     688 </span><span class="lineCov">     827719 :   todo |= execute_fixup_cfg ();</span>
+<span class="lineNum">     689 </span>            : 
+<span class="lineNum">     690 </span><span class="lineCov">     827719 :   if (!(todo &amp; TODO_update_ssa_any))</span>
+<span class="lineNum">     691 </span>            :     /* Redirecting edges might lead to a need for vops to be recomputed.  */
+<span class="lineNum">     692 </span><span class="lineCov">     641094 :     todo |= TODO_update_ssa_only_virtuals;</span>
+<span class="lineNum">     693 </span>            : 
+<span class="lineNum">     694 </span>            :   return todo;
+<span class="lineNum">     695 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

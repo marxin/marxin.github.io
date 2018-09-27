@@ -1,0 +1,1113 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-dfa.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-dfa.c<span style="font-size: 80%;"> (source / <a href="tree-dfa.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">481</td>
+            <td class="headerCovTableEntry">507</td>
+            <td class="headerCovTableEntryHi">94.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntryMed">89.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Data flow functions for trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2001-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Diego Novillo &lt;dnovillo@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;langhooks.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;gimple-walk.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : /* Build and maintain data flow information for trees.  */
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : /* Counters used to display DFA and SSA statistics.  */
+<span class="lineNum">      41 </span>            : struct dfa_stats_d
+<span class="lineNum">      42 </span>            : {
+<span class="lineNum">      43 </span>            :   long num_defs;
+<span class="lineNum">      44 </span>            :   long num_uses;
+<span class="lineNum">      45 </span>            :   long num_phis;
+<span class="lineNum">      46 </span>            :   long num_phi_args;
+<span class="lineNum">      47 </span>            :   size_t max_num_phi_args;
+<span class="lineNum">      48 </span>            :   long num_vdefs;
+<span class="lineNum">      49 </span>            :   long num_vuses;
+<span class="lineNum">      50 </span>            : };
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            : /* Local functions.  */
+<span class="lineNum">      54 </span>            : static void collect_dfa_stats (struct dfa_stats_d *);
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            : /*---------------------------------------------------------------------------
+<span class="lineNum">      58 </span>            :                         Dataflow analysis (DFA) routines
+<span class="lineNum">      59 </span>            : ---------------------------------------------------------------------------*/
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : /* Renumber all of the gimple stmt uids.  */
+<a name="62"><span class="lineNum">      62 </span>            : </a>
+<span class="lineNum">      63 </span>            : void
+<span class="lineNum">      64 </span><span class="lineCov">    3320530 : renumber_gimple_stmt_uids (void)</span>
+<span class="lineNum">      65 </span>            : {
+<span class="lineNum">      66 </span><span class="lineCov">    3320530 :   basic_block bb;</span>
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span><span class="lineCov">    3320530 :   set_gimple_stmt_max_uid (cfun, 0);</span>
+<span class="lineNum">      69 </span><span class="lineCov">   34801900 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">      70 </span>            :     {
+<span class="lineNum">      71 </span><span class="lineCov">   31481370 :       gimple_stmt_iterator bsi;</span>
+<span class="lineNum">      72 </span><span class="lineCov">   49308368 :       for (bsi = gsi_start_phis (bb); !gsi_end_p (bsi); gsi_next (&amp;bsi))</span>
+<span class="lineNum">      73 </span>            :         {
+<span class="lineNum">      74 </span><span class="lineCov">    8913499 :           gimple *stmt = gsi_stmt (bsi);</span>
+<span class="lineNum">      75 </span><span class="lineCov">   26740497 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">      76 </span>            :         }
+<span class="lineNum">      77 </span><span class="lineCov">  473457082 :       for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&amp;bsi))</span>
+<span class="lineNum">      78 </span>            :         {
+<span class="lineNum">      79 </span><span class="lineCov">  205247171 :           gimple *stmt = gsi_stmt (bsi);</span>
+<span class="lineNum">      80 </span><span class="lineCov">  615741513 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">      81 </span>            :         }
+<span class="lineNum">      82 </span>            :     }
+<span class="lineNum">      83 </span><span class="lineCov">    3320530 : }</span>
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            : /* Like renumber_gimple_stmt_uids, but only do work on the basic blocks
+<span class="lineNum">      86 </span>            :    in BLOCKS, of which there are N_BLOCKS.  Also renumbers PHIs.  */
+<a name="87"><span class="lineNum">      87 </span>            : </a>
+<span class="lineNum">      88 </span>            : void
+<span class="lineNum">      89 </span><span class="lineCov">     310872 : renumber_gimple_stmt_uids_in_blocks (basic_block *blocks, int n_blocks)</span>
+<span class="lineNum">      90 </span>            : {
+<span class="lineNum">      91 </span><span class="lineCov">     310872 :   int i;</span>
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span><span class="lineCov">     310872 :   set_gimple_stmt_max_uid (cfun, 0);</span>
+<span class="lineNum">      94 </span><span class="lineCov">    2339829 :   for (i = 0; i &lt; n_blocks; i++)</span>
+<span class="lineNum">      95 </span>            :     {
+<span class="lineNum">      96 </span><span class="lineCov">    2028957 :       basic_block bb = blocks[i];</span>
+<span class="lineNum">      97 </span><span class="lineCov">    2028957 :       gimple_stmt_iterator bsi;</span>
+<span class="lineNum">      98 </span><span class="lineCov">    5904327 :       for (bsi = gsi_start_phis (bb); !gsi_end_p (bsi); gsi_next (&amp;bsi))</span>
+<span class="lineNum">      99 </span>            :         {
+<span class="lineNum">     100 </span><span class="lineCov">    1937685 :           gimple *stmt = gsi_stmt (bsi);</span>
+<span class="lineNum">     101 </span><span class="lineCov">    5813055 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">     102 </span>            :         }
+<span class="lineNum">     103 </span><span class="lineCov">   36798846 :       for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&amp;bsi))</span>
+<span class="lineNum">     104 </span>            :         {
+<span class="lineNum">     105 </span><span class="lineCov">   16370466 :           gimple *stmt = gsi_stmt (bsi);</span>
+<span class="lineNum">     106 </span><span class="lineCov">   49111398 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">     107 </span>            :         }
+<span class="lineNum">     108 </span>            :     }
+<span class="lineNum">     109 </span><span class="lineCov">     310872 : }</span>
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : 
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span>            : /*---------------------------------------------------------------------------
+<span class="lineNum">     114 </span>            :                               Debugging functions
+<span class="lineNum">     115 </span>            : ---------------------------------------------------------------------------*/
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : /* Dump variable VAR and its may-aliases to FILE.  */
+<a name="118"><span class="lineNum">     118 </span>            : </a>
+<span class="lineNum">     119 </span>            : void
+<span class="lineNum">     120 </span><span class="lineCov">        353 : dump_variable (FILE *file, tree var)</span>
+<span class="lineNum">     121 </span>            : {
+<span class="lineNum">     122 </span><span class="lineCov">        353 :   if (TREE_CODE (var) == SSA_NAME)</span>
+<span class="lineNum">     123 </span>            :     {
+<span class="lineNum">     124 </span><span class="lineNoCov">          0 :       if (POINTER_TYPE_P (TREE_TYPE (var)))</span>
+<span class="lineNum">     125 </span><span class="lineNoCov">          0 :         dump_points_to_info_for (file, var);</span>
+<span class="lineNum">     126 </span><span class="lineNoCov">          0 :       var = SSA_NAME_VAR (var);</span>
+<span class="lineNum">     127 </span>            :     }
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span><span class="lineCov">        353 :   if (var == NULL_TREE)</span>
+<span class="lineNum">     130 </span>            :     {
+<span class="lineNum">     131 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;&lt;nil&gt;&quot;);</span>
+<span class="lineNum">     132 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">     133 </span>            :     }
+<span class="lineNum">     134 </span>            : 
+<span class="lineNum">     135 </span><span class="lineCov">        353 :   print_generic_expr (file, var, dump_flags);</span>
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span><span class="lineCov">        353 :   fprintf (file, &quot;, UID D.%u&quot;, (unsigned) DECL_UID (var));</span>
+<span class="lineNum">     138 </span><span class="lineCov">        353 :   if (DECL_PT_UID (var) != DECL_UID (var))</span>
+<span class="lineNum">     139 </span><span class="lineNoCov">          0 :     fprintf (file, &quot;, PT-UID D.%u&quot;, (unsigned) DECL_PT_UID (var));</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineCov">        353 :   fprintf (file, &quot;, &quot;);</span>
+<span class="lineNum">     142 </span><span class="lineCov">        353 :   print_generic_expr (file, TREE_TYPE (var), dump_flags);</span>
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span><span class="lineCov">        353 :   if (TREE_ADDRESSABLE (var))</span>
+<span class="lineNum">     145 </span><span class="lineCov">        353 :     fprintf (file, &quot;, is addressable&quot;);</span>
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span><span class="lineCov">        353 :   if (is_global_var (var))</span>
+<span class="lineNum">     148 </span><span class="lineCov">         63 :     fprintf (file, &quot;, is global&quot;);</span>
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">        353 :   if (TREE_THIS_VOLATILE (var))</span>
+<span class="lineNum">     151 </span><span class="lineNoCov">          0 :     fprintf (file, &quot;, is volatile&quot;);</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">        353 :   if (cfun &amp;&amp; ssa_default_def (cfun, var))</span>
+<span class="lineNum">     154 </span>            :     {
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;, default def: &quot;);</span>
+<span class="lineNum">     156 </span><span class="lineNoCov">          0 :       print_generic_expr (file, ssa_default_def (cfun, var), dump_flags);</span>
+<span class="lineNum">     157 </span>            :     }
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineCov">        353 :   if (DECL_INITIAL (var))</span>
+<span class="lineNum">     160 </span>            :     {
+<span class="lineNum">     161 </span><span class="lineCov">         63 :       fprintf (file, &quot;, initial: &quot;);</span>
+<span class="lineNum">     162 </span><span class="lineCov">         63 :       print_generic_expr (file, DECL_INITIAL (var), dump_flags);</span>
+<span class="lineNum">     163 </span>            :     }
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineCov">        353 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     166 </span>            : }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span>            : /* Dump variable VAR and its may-aliases to stderr.  */
+<a name="170"><span class="lineNum">     170 </span>            : </a>
+<span class="lineNum">     171 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 : debug_variable (tree var)</span>
+<span class="lineNum">     173 </span>            : {
+<span class="lineNum">     174 </span><span class="lineNoCov">          0 :   dump_variable (stderr, var);</span>
+<span class="lineNum">     175 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            : 
+<span class="lineNum">     178 </span>            : /* Dump various DFA statistics to FILE.  */
+<a name="179"><span class="lineNum">     179 </span>            : </a>
+<span class="lineNum">     180 </span>            : void
+<span class="lineNum">     181 </span><span class="lineCov">        281 : dump_dfa_stats (FILE *file)</span>
+<span class="lineNum">     182 </span>            : {
+<span class="lineNum">     183 </span><span class="lineCov">        281 :   struct dfa_stats_d dfa_stats;</span>
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span><span class="lineCov">        281 :   unsigned long size, total = 0;</span>
+<span class="lineNum">     186 </span><span class="lineCov">        281 :   const char * const fmt_str   = &quot;%-30s%-13s%12s\n&quot;;</span>
+<span class="lineNum">     187 </span><span class="lineCov">        281 :   const char * const fmt_str_1 = &quot;%-30s%13lu%11lu%c\n&quot;;</span>
+<span class="lineNum">     188 </span><span class="lineCov">        281 :   const char * const fmt_str_3 = &quot;%-43s%11lu%c\n&quot;;</span>
+<span class="lineNum">     189 </span><span class="lineCov">        281 :   const char *funcname</span>
+<span class="lineNum">     190 </span><span class="lineCov">        281 :     = lang_hooks.decl_printable_name (current_function_decl, 2);</span>
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span><span class="lineCov">        281 :   collect_dfa_stats (&amp;dfa_stats);</span>
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span><span class="lineCov">        281 :   fprintf (file, &quot;\nDFA Statistics for %s\n\n&quot;, funcname);</span>
+<span class="lineNum">     195 </span>            : 
+<span class="lineNum">     196 </span><span class="lineCov">        281 :   fprintf (file, &quot;---------------------------------------------------------\n&quot;);</span>
+<span class="lineNum">     197 </span><span class="lineCov">        281 :   fprintf (file, fmt_str, &quot;&quot;, &quot;  Number of  &quot;, &quot;Memory&quot;);</span>
+<span class="lineNum">     198 </span><span class="lineCov">        281 :   fprintf (file, fmt_str, &quot;&quot;, &quot;  instances  &quot;, &quot;used &quot;);</span>
+<span class="lineNum">     199 </span><span class="lineCov">        281 :   fprintf (file, &quot;---------------------------------------------------------\n&quot;);</span>
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span><span class="lineCov">        281 :   size = dfa_stats.num_uses * sizeof (tree *);</span>
+<span class="lineNum">     202 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     203 </span><span class="lineCov">        281 :   fprintf (file, fmt_str_1, &quot;USE operands&quot;, dfa_stats.num_uses,</span>
+<span class="lineNum">     204 </span><span class="lineNoCov">          0 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     205 </span>            : 
+<span class="lineNum">     206 </span><span class="lineCov">        281 :   size = dfa_stats.num_defs * sizeof (tree *);</span>
+<span class="lineNum">     207 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     208 </span><span class="lineCov">        281 :   fprintf (file, fmt_str_1, &quot;DEF operands&quot;, dfa_stats.num_defs,</span>
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span><span class="lineCov">        281 :   size = dfa_stats.num_vuses * sizeof (tree *);</span>
+<span class="lineNum">     212 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     213 </span><span class="lineCov">        281 :   fprintf (file, fmt_str_1, &quot;VUSE operands&quot;, dfa_stats.num_vuses,</span>
+<span class="lineNum">     214 </span><span class="lineNoCov">          0 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span><span class="lineCov">        281 :   size = dfa_stats.num_vdefs * sizeof (tree *);</span>
+<span class="lineNum">     217 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     218 </span><span class="lineCov">        281 :   fprintf (file, fmt_str_1, &quot;VDEF operands&quot;, dfa_stats.num_vdefs,</span>
+<span class="lineNum">     219 </span><span class="lineNoCov">          0 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span><span class="lineCov">        281 :   size = dfa_stats.num_phis * sizeof (struct gphi);</span>
+<span class="lineNum">     222 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     223 </span><span class="lineCov">        293 :   fprintf (file, fmt_str_1, &quot;PHI nodes&quot;, dfa_stats.num_phis,</span>
+<span class="lineNum">     224 </span><span class="lineCov">         12 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span><span class="lineCov">        281 :   size = dfa_stats.num_phi_args * sizeof (struct phi_arg_d);</span>
+<span class="lineNum">     227 </span><span class="lineCov">        281 :   total += size;</span>
+<span class="lineNum">     228 </span><span class="lineCov">        301 :   fprintf (file, fmt_str_1, &quot;PHI arguments&quot;, dfa_stats.num_phi_args,</span>
+<span class="lineNum">     229 </span><span class="lineCov">         20 :            SCALE (size), LABEL (size));</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">        281 :   fprintf (file, &quot;---------------------------------------------------------\n&quot;);</span>
+<span class="lineNum">     232 </span><span class="lineCov">        300 :   fprintf (file, fmt_str_3, &quot;Total memory used by DFA/SSA data&quot;, SCALE (total),</span>
+<span class="lineNum">     233 </span><span class="lineCov">         19 :            LABEL (total));</span>
+<span class="lineNum">     234 </span><span class="lineCov">        281 :   fprintf (file, &quot;---------------------------------------------------------\n&quot;);</span>
+<span class="lineNum">     235 </span><span class="lineCov">        281 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span><span class="lineCov">        281 :   if (dfa_stats.num_phis)</span>
+<span class="lineNum">     238 </span><span class="lineCov">        837 :     fprintf (file, &quot;Average number of arguments per PHI node: %.1f (max: %ld)\n&quot;,</span>
+<span class="lineNum">     239 </span><span class="lineCov">        279 :              (float) dfa_stats.num_phi_args / (float) dfa_stats.num_phis,</span>
+<span class="lineNum">     240 </span><span class="lineCov">        279 :              (long) dfa_stats.max_num_phi_args);</span>
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span><span class="lineCov">        281 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     243 </span><span class="lineCov">        281 : }</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span>            : /* Dump DFA statistics on stderr.  */
+<a name="247"><span class="lineNum">     247 </span>            : </a>
+<span class="lineNum">     248 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     249 </span><span class="lineNoCov">          0 : debug_dfa_stats (void)</span>
+<span class="lineNum">     250 </span>            : {
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 :   dump_dfa_stats (stderr);</span>
+<span class="lineNum">     252 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span>            : /* Collect DFA statistics and store them in the structure pointed to by
+<span class="lineNum">     256 </span>            :    DFA_STATS_P.  */
+<a name="257"><span class="lineNum">     257 </span>            : </a>
+<span class="lineNum">     258 </span>            : static void
+<span class="lineNum">     259 </span><span class="lineCov">        281 : collect_dfa_stats (struct dfa_stats_d *dfa_stats_p ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     260 </span>            : {
+<span class="lineNum">     261 </span><span class="lineCov">        281 :   basic_block bb;</span>
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span><span class="lineCov">        281 :   gcc_assert (dfa_stats_p);</span>
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span><span class="lineCov">        281 :   memset ((void *)dfa_stats_p, 0, sizeof (struct dfa_stats_d));</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            :   /* Walk all the statements in the function counting references.  */
+<span class="lineNum">     268 </span><span class="lineCov">       5219 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     269 </span>            :     {
+<span class="lineNum">     270 </span><span class="lineCov">      12168 :       for (gphi_iterator si = gsi_start_phis (bb); !gsi_end_p (si);</span>
+<span class="lineNum">     271 </span><span class="lineCov">       3615 :            gsi_next (&amp;si))</span>
+<span class="lineNum">     272 </span>            :         {
+<span class="lineNum">     273 </span><span class="lineCov">       3615 :           gphi *phi = si.phi ();</span>
+<span class="lineNum">     274 </span><span class="lineCov">       3615 :           dfa_stats_p-&gt;num_phis++;</span>
+<span class="lineNum">     275 </span><span class="lineCov">       3615 :           dfa_stats_p-&gt;num_phi_args += gimple_phi_num_args (phi);</span>
+<span class="lineNum">     276 </span><span class="lineCov">       7230 :           if (gimple_phi_num_args (phi) &gt; dfa_stats_p-&gt;max_num_phi_args)</span>
+<span class="lineNum">     277 </span><span class="lineCov">        866 :             dfa_stats_p-&gt;max_num_phi_args = gimple_phi_num_args (phi);</span>
+<span class="lineNum">     278 </span>            :         }
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span><span class="lineCov">      35574 :       for (gimple_stmt_iterator si = gsi_start_bb (bb); !gsi_end_p (si);</span>
+<span class="lineNum">     281 </span><span class="lineCov">      10380 :            gsi_next (&amp;si))</span>
+<span class="lineNum">     282 </span>            :         {
+<span class="lineNum">     283 </span><span class="lineCov">      10380 :           gimple *stmt = gsi_stmt (si);</span>
+<span class="lineNum">     284 </span><span class="lineCov">      10380 :           dfa_stats_p-&gt;num_defs += NUM_SSA_OPERANDS (stmt, SSA_OP_DEF);</span>
+<span class="lineNum">     285 </span><span class="lineCov">      10380 :           dfa_stats_p-&gt;num_uses += NUM_SSA_OPERANDS (stmt, SSA_OP_USE);</span>
+<span class="lineNum">     286 </span><span class="lineCov">      18899 :           dfa_stats_p-&gt;num_vdefs += gimple_vdef (stmt) ? 1 : 0;</span>
+<span class="lineNum">     287 </span><span class="lineCov">      26073 :           dfa_stats_p-&gt;num_vuses += gimple_vuse (stmt) ? 1 : 0;</span>
+<span class="lineNum">     288 </span>            :         }
+<span class="lineNum">     289 </span>            :     }
+<span class="lineNum">     290 </span><span class="lineCov">        281 : }</span>
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span>            : /*---------------------------------------------------------------------------
+<span class="lineNum">     294 </span>            :                              Miscellaneous helpers
+<span class="lineNum">     295 </span>            : ---------------------------------------------------------------------------*/
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            : /* Lookup VAR UID in the default_defs hashtable and return the associated
+<span class="lineNum">     298 </span>            :    variable.  */
+<a name="299"><span class="lineNum">     299 </span>            : </a>
+<span class="lineNum">     300 </span>            : tree
+<span class="lineNum">     301 </span><span class="lineCov">  266147531 : ssa_default_def (struct function *fn, tree var)</span>
+<span class="lineNum">     302 </span>            : {
+<span class="lineNum">     303 </span><span class="lineCov">  266147531 :   struct tree_decl_minimal ind;</span>
+<span class="lineNum">     304 </span><span class="lineCov">  266147531 :   struct tree_ssa_name in;</span>
+<span class="lineNum">     305 </span><span class="lineCov">  266147531 :   gcc_assert (VAR_P (var)</span>
+<span class="lineNum">     306 </span>            :               || TREE_CODE (var) == PARM_DECL
+<span class="lineNum">     307 </span>            :               || TREE_CODE (var) == RESULT_DECL);
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span>            :   /* Always NULL_TREE for rtl function dumps.  */
+<span class="lineNum">     310 </span><span class="lineCov">  266147531 :   if (!fn-&gt;gimple_df)</span>
+<span class="lineNum">     311 </span>            :     return NULL_TREE;
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span><span class="lineCov">  266147531 :   in.var = (tree)&amp;ind;</span>
+<span class="lineNum">     314 </span><span class="lineCov">  266147531 :   ind.uid = DECL_UID (var);</span>
+<span class="lineNum">     315 </span><span class="lineCov">  532295062 :   return DEFAULT_DEFS (fn)-&gt;find_with_hash ((tree)&amp;in, DECL_UID (var));</span>
+<span class="lineNum">     316 </span>            : }
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span>            : /* Insert the pair VAR's UID, DEF into the default_defs hashtable
+<span class="lineNum">     319 </span>            :    of function FN.  */
+<a name="320"><span class="lineNum">     320 </span>            : </a>
+<span class="lineNum">     321 </span>            : void
+<span class="lineNum">     322 </span><span class="lineCov">    7173589 : set_ssa_default_def (struct function *fn, tree var, tree def)</span>
+<span class="lineNum">     323 </span>            : {
+<span class="lineNum">     324 </span><span class="lineCov">    7173589 :   struct tree_decl_minimal ind;</span>
+<span class="lineNum">     325 </span><span class="lineCov">    7173589 :   struct tree_ssa_name in;</span>
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span><span class="lineCov">    7173589 :   gcc_assert (VAR_P (var)</span>
+<span class="lineNum">     328 </span>            :               || TREE_CODE (var) == PARM_DECL
+<span class="lineNum">     329 </span>            :               || TREE_CODE (var) == RESULT_DECL);
+<span class="lineNum">     330 </span><span class="lineCov">    7173589 :   in.var = (tree)&amp;ind;</span>
+<span class="lineNum">     331 </span><span class="lineCov">    7173589 :   ind.uid = DECL_UID (var);</span>
+<span class="lineNum">     332 </span><span class="lineCov">    7173589 :   if (!def)</span>
+<span class="lineNum">     333 </span>            :     {
+<span class="lineNum">     334 </span><span class="lineCov">    1642815 :       tree *loc = DEFAULT_DEFS (fn)-&gt;find_slot_with_hash ((tree)&amp;in,</span>
+<span class="lineNum">     335 </span><span class="lineCov">    1095210 :                                                           DECL_UID (var),</span>
+<span class="lineNum">     336 </span>            :                                                           NO_INSERT);
+<span class="lineNum">     337 </span><span class="lineCov">     547605 :       if (loc)</span>
+<span class="lineNum">     338 </span>            :         {
+<span class="lineNum">     339 </span><span class="lineCov">     547605 :           SSA_NAME_IS_DEFAULT_DEF (*(tree *)loc) = false;</span>
+<span class="lineNum">     340 </span><span class="lineCov">     547605 :           DEFAULT_DEFS (fn)-&gt;clear_slot (loc);</span>
+<span class="lineNum">     341 </span>            :         }
+<span class="lineNum">     342 </span><span class="lineCov">     547605 :       return;</span>
+<span class="lineNum">     343 </span>            :     }
+<span class="lineNum">     344 </span><span class="lineCov">    6625984 :   gcc_assert (TREE_CODE (def) == SSA_NAME &amp;&amp; SSA_NAME_VAR (def) == var);</span>
+<span class="lineNum">     345 </span><span class="lineCov">   19877952 :   tree *loc = DEFAULT_DEFS (fn)-&gt;find_slot_with_hash ((tree)&amp;in,</span>
+<span class="lineNum">     346 </span><span class="lineCov">   13251968 :                                                       DECL_UID (var), INSERT);</span>
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span>            :   /* Default definition might be changed by tail call optimization.  */
+<span class="lineNum">     349 </span><span class="lineCov">    6625984 :   if (*loc)</span>
+<span class="lineNum">     350 </span><span class="lineCov">        850 :     SSA_NAME_IS_DEFAULT_DEF (*loc) = false;</span>
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            :    /* Mark DEF as the default definition for VAR.  */
+<span class="lineNum">     353 </span><span class="lineCov">    6625984 :   *loc = def;</span>
+<span class="lineNum">     354 </span><span class="lineCov">    6625984 :   SSA_NAME_IS_DEFAULT_DEF (def) = true;</span>
+<span class="lineNum">     355 </span>            : }
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            : /* Retrieve or create a default definition for VAR.  */
+<a name="358"><span class="lineNum">     358 </span>            : </a>
+<span class="lineNum">     359 </span>            : tree
+<span class="lineNum">     360 </span><span class="lineCov">   15695961 : get_or_create_ssa_default_def (struct function *fn, tree var)</span>
+<span class="lineNum">     361 </span>            : {
+<span class="lineNum">     362 </span><span class="lineCov">   15695961 :   tree ddef = ssa_default_def (fn, var);</span>
+<span class="lineNum">     363 </span><span class="lineCov">   15695961 :   if (ddef == NULL_TREE)</span>
+<span class="lineNum">     364 </span>            :     {
+<span class="lineNum">     365 </span><span class="lineCov">    6159079 :       ddef = make_ssa_name_fn (fn, var, gimple_build_nop ());</span>
+<span class="lineNum">     366 </span><span class="lineCov">    6159079 :       set_ssa_default_def (fn, var, ddef);</span>
+<span class="lineNum">     367 </span>            :     }
+<span class="lineNum">     368 </span><span class="lineCov">   15695961 :   return ddef;</span>
+<span class="lineNum">     369 </span>            : }
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            : /* If EXP is a handled component reference for a structure, return the
+<span class="lineNum">     373 </span>            :    base variable.  The access range is delimited by bit positions *POFFSET and
+<span class="lineNum">     374 </span>            :    *POFFSET + *PMAX_SIZE.  The access size is *PSIZE bits.  If either
+<span class="lineNum">     375 </span>            :    *PSIZE or *PMAX_SIZE is -1, they could not be determined.  If *PSIZE
+<span class="lineNum">     376 </span>            :    and *PMAX_SIZE are equal, the access is non-variable.  If *PREVERSE is
+<span class="lineNum">     377 </span>            :    true, the storage order of the reference is reversed.  */
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            : tree
+<span class="lineNum">     380 </span><span class="lineCov"> 1501204660 : get_ref_base_and_extent (tree exp, poly_int64_pod *poffset,</span>
+<span class="lineNum">     381 </span>            :                          poly_int64_pod *psize,
+<span class="lineNum">     382 </span>            :                          poly_int64_pod *pmax_size,
+<span class="lineNum">     383 </span>            :                          bool *preverse)
+<span class="lineNum">     384 </span>            : {
+<span class="lineNum">     385 </span><span class="lineCov"> 1501204660 :   poly_offset_int bitsize = -1;</span>
+<span class="lineNum">     386 </span><span class="lineCov"> 1501204660 :   poly_offset_int maxsize;</span>
+<span class="lineNum">     387 </span><span class="lineCov"> 1501204660 :   tree size_tree = NULL_TREE;</span>
+<span class="lineNum">     388 </span><span class="lineCov"> 1501204660 :   poly_offset_int bit_offset = 0;</span>
+<span class="lineNum">     389 </span><span class="lineCov"> 1501204660 :   bool seen_variable_array_ref = false;</span>
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span>            :   /* First get the final access size and the storage order from just the
+<span class="lineNum">     392 </span>            :      outermost expression.  */
+<span class="lineNum">     393 </span><span class="lineCov"> 1501204660 :   if (TREE_CODE (exp) == COMPONENT_REF)</span>
+<span class="lineNum">     394 </span><span class="lineCov">  581540247 :     size_tree = DECL_SIZE (TREE_OPERAND (exp, 1));</span>
+<span class="lineNum">     395 </span><span class="lineCov">  919664413 :   else if (TREE_CODE (exp) == BIT_FIELD_REF)</span>
+<span class="lineNum">     396 </span><span class="lineCov">     676921 :     size_tree = TREE_OPERAND (exp, 1);</span>
+<span class="lineNum">     397 </span><span class="lineCov">  918987492 :   else if (!VOID_TYPE_P (TREE_TYPE (exp)))</span>
+<span class="lineNum">     398 </span>            :     {
+<span class="lineNum">     399 </span><span class="lineCov"> 1806717146 :       machine_mode mode = TYPE_MODE (TREE_TYPE (exp));</span>
+<span class="lineNum">     400 </span><span class="lineCov">  903358573 :       if (mode == BLKmode)</span>
+<span class="lineNum">     401 </span><span class="lineCov">  130684505 :         size_tree = TYPE_SIZE (TREE_TYPE (exp));</span>
+<span class="lineNum">     402 </span>            :       else
+<span class="lineNum">     403 </span><span class="lineCov"> 1545348136 :         bitsize = GET_MODE_BITSIZE (mode);</span>
+<span class="lineNum">     404 </span>            :     }
+<span class="lineNum">     405 </span><span class="lineCov">  772674068 :   if (size_tree != NULL_TREE</span>
+<span class="lineNum">     406 </span><span class="lineCov">  712901673 :       &amp;&amp; poly_int_tree_p (size_tree))</span>
+<span class="lineNum">     407 </span><span class="lineCov">  710389732 :     bitsize = wi::to_poly_offset (size_tree);</span>
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span><span class="lineCov"> 1501204660 :   *preverse = reverse_storage_order_for_component_p (exp);</span>
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            :   /* Initially, maxsize is the same as the accessed element size.
+<span class="lineNum">     412 </span>            :      In the following it will only grow (or become -1).  */
+<span class="lineNum">     413 </span><span class="lineCov"> 1501204660 :   maxsize = bitsize;</span>
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span>            :   /* Compute cumulative bit-offset for nested component-refs and array-refs,
+<span class="lineNum">     416 </span>            :      and find the ultimate containing object.  */
+<span class="lineNum">     417 </span><span class="lineCov"> 2595331775 :   while (1)</span>
+<span class="lineNum">     418 </span>            :     {
+<span class="lineNum">     419 </span><span class="lineCov"> 2595331775 :       switch (TREE_CODE (exp))</span>
+<span class="lineNum">     420 </span>            :         {
+<span class="lineNum">     421 </span><span class="lineCov">     676921 :         case BIT_FIELD_REF:</span>
+<span class="lineNum">     422 </span><span class="lineCov">     676921 :           bit_offset += wi::to_poly_offset (TREE_OPERAND (exp, 2));</span>
+<span class="lineNum">     423 </span><span class="lineCov">     676921 :           break;</span>
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">  825338460 :         case COMPONENT_REF:</span>
+<span class="lineNum">     426 </span><span class="lineCov">  825338460 :           {</span>
+<span class="lineNum">     427 </span><span class="lineCov">  825338460 :             tree field = TREE_OPERAND (exp, 1);</span>
+<span class="lineNum">     428 </span><span class="lineCov">  825338460 :             tree this_offset = component_ref_field_offset (exp);</span>
+<span class="lineNum">     429 </span>            : 
+<span class="lineNum">     430 </span><span class="lineCov">  825338460 :             if (this_offset &amp;&amp; poly_int_tree_p (this_offset))</span>
+<span class="lineNum">     431 </span>            :               {
+<span class="lineNum">     432 </span><span class="lineCov">  825337403 :                 poly_offset_int woffset = (wi::to_poly_offset (this_offset)</span>
+<span class="lineNum">     433 </span><span class="lineCov">  825337403 :                                            &lt;&lt; LOG2_BITS_PER_UNIT);</span>
+<span class="lineNum">     434 </span><span class="lineCov">  825337403 :                 woffset += wi::to_offset (DECL_FIELD_BIT_OFFSET (field));</span>
+<span class="lineNum">     435 </span><span class="lineCov">  825337403 :                 bit_offset += woffset;</span>
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            :                 /* If we had seen a variable array ref already and we just
+<span class="lineNum">     438 </span>            :                    referenced the last field of a struct or a union member
+<span class="lineNum">     439 </span>            :                    then we have to adjust maxsize by the padding at the end
+<span class="lineNum">     440 </span>            :                    of our field.  */
+<span class="lineNum">     441 </span><span class="lineCov">  825337403 :                 if (seen_variable_array_ref)</span>
+<span class="lineNum">     442 </span>            :                   {
+<span class="lineNum">     443 </span><span class="lineCov">    4429056 :                     tree stype = TREE_TYPE (TREE_OPERAND (exp, 0));</span>
+<span class="lineNum">     444 </span><span class="lineCov">    4429056 :                     tree next = DECL_CHAIN (field);</span>
+<span class="lineNum">     445 </span><span class="lineCov">    6958759 :                     while (next &amp;&amp; TREE_CODE (next) != FIELD_DECL)</span>
+<span class="lineNum">     446 </span><span class="lineCov">    2529703 :                       next = DECL_CHAIN (next);</span>
+<span class="lineNum">     447 </span><span class="lineCov">    4429056 :                     if (!next</span>
+<span class="lineNum">     448 </span><span class="lineCov">    1256111 :                         || TREE_CODE (stype) != RECORD_TYPE)</span>
+<span class="lineNum">     449 </span>            :                       {
+<span class="lineNum">     450 </span><span class="lineCov">    3305860 :                         tree fsize = DECL_SIZE_UNIT (field);</span>
+<span class="lineNum">     451 </span><span class="lineCov">    3305860 :                         tree ssize = TYPE_SIZE_UNIT (stype);</span>
+<span class="lineNum">     452 </span><span class="lineCov">    3305860 :                         if (fsize == NULL</span>
+<span class="lineNum">     453 </span><span class="lineCov">    2615874 :                             || !poly_int_tree_p (fsize)</span>
+<span class="lineNum">     454 </span><span class="lineCov">    1307465 :                             || ssize == NULL</span>
+<span class="lineNum">     455 </span><span class="lineCov">    5920790 :                             || !poly_int_tree_p (ssize))</span>
+<span class="lineNum">     456 </span><span class="lineCov">    3996790 :                           maxsize = -1;</span>
+<span class="lineNum">     457 </span><span class="lineCov">    1307465 :                         else if (known_size_p (maxsize))</span>
+<span class="lineNum">     458 </span>            :                           {
+<span class="lineNum">     459 </span><span class="lineCov">    1307465 :                             poly_offset_int tem</span>
+<span class="lineNum">     460 </span><span class="lineCov">    3922395 :                               = (wi::to_poly_offset (ssize)</span>
+<span class="lineNum">     461 </span><span class="lineCov">    1307465 :                                  - wi::to_poly_offset (fsize));</span>
+<span class="lineNum">     462 </span><span class="lineCov">    1307465 :                             tem &lt;&lt;= LOG2_BITS_PER_UNIT;</span>
+<span class="lineNum">     463 </span><span class="lineCov">    1307465 :                             tem -= woffset;</span>
+<span class="lineNum">     464 </span><span class="lineCov">    1307465 :                             maxsize += tem;</span>
+<span class="lineNum">     465 </span>            :                           }
+<span class="lineNum">     466 </span>            :                       }
+<span class="lineNum">     467 </span>            :                     /* An component ref with an adjacent field up in the
+<span class="lineNum">     468 </span>            :                        structure hierarchy constrains the size of any variable
+<span class="lineNum">     469 </span>            :                        array ref lower in the access hierarchy.  */
+<span class="lineNum">     470 </span>            :                     else
+<span class="lineNum">     471 </span>            :                       seen_variable_array_ref = false;
+<span class="lineNum">     472 </span>            :                   }
+<span class="lineNum">     473 </span>            :               }
+<span class="lineNum">     474 </span>            :             else
+<span class="lineNum">     475 </span>            :               {
+<span class="lineNum">     476 </span><span class="lineCov">       1057 :                 tree csize = TYPE_SIZE (TREE_TYPE (TREE_OPERAND (exp, 0)));</span>
+<span class="lineNum">     477 </span>            :                 /* We need to adjust maxsize to the whole structure bitsize.
+<span class="lineNum">     478 </span>            :                    But we can subtract any constant offset seen so far,
+<span class="lineNum">     479 </span>            :                    because that would get us out of the structure otherwise.  */
+<span class="lineNum">     480 </span><span class="lineCov">       1057 :                 if (known_size_p (maxsize)</span>
+<span class="lineNum">     481 </span><span class="lineCov">        714 :                     &amp;&amp; csize</span>
+<span class="lineNum">     482 </span><span class="lineCov">       1428 :                     &amp;&amp; poly_int_tree_p (csize))</span>
+<span class="lineNum">     483 </span><span class="lineNoCov">          0 :                   maxsize = wi::to_poly_offset (csize) - bit_offset;</span>
+<span class="lineNum">     484 </span>            :                 else
+<span class="lineNum">     485 </span><span class="lineCov">       2114 :                   maxsize = -1;</span>
+<span class="lineNum">     486 </span>            :               }
+<span class="lineNum">     487 </span>            :           }
+<span class="lineNum">     488 </span>            :           break;
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span><span class="lineCov">  263080208 :         case ARRAY_REF:</span>
+<span class="lineNum">     491 </span><span class="lineCov">  263080208 :         case ARRAY_RANGE_REF:</span>
+<span class="lineNum">     492 </span><span class="lineCov">  263080208 :           {</span>
+<span class="lineNum">     493 </span><span class="lineCov">  263080208 :             tree index = TREE_OPERAND (exp, 1);</span>
+<span class="lineNum">     494 </span><span class="lineCov">  263080208 :             tree low_bound, unit_size;</span>
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span>            :             /* If the resulting bit-offset is constant, track it.  */
+<span class="lineNum">     497 </span><span class="lineCov">  483105172 :             if (poly_int_tree_p (index)</span>
+<span class="lineNum">     498 </span><span class="lineCov">  220024964 :                 &amp;&amp; (low_bound = array_ref_low_bound (exp),</span>
+<span class="lineNum">     499 </span><span class="lineCov">  440049928 :                     poly_int_tree_p (low_bound))</span>
+<span class="lineNum">     500 </span><span class="lineCov">  483105172 :                 &amp;&amp; (unit_size = array_ref_element_size (exp),</span>
+<span class="lineNum">     501 </span><span class="lineCov">  220024964 :                     TREE_CODE (unit_size) == INTEGER_CST))</span>
+<span class="lineNum">     502 </span>            :               {
+<span class="lineNum">     503 </span><span class="lineCov">  219995842 :                 poly_offset_int woffset</span>
+<span class="lineNum">     504 </span><span class="lineCov">  659987526 :                   = wi::sext (wi::to_poly_offset (index)</span>
+<span class="lineNum">     505 </span><span class="lineCov">  219995842 :                               - wi::to_poly_offset (low_bound),</span>
+<span class="lineNum">     506 </span><span class="lineCov">  439991684 :                               TYPE_PRECISION (TREE_TYPE (index)));</span>
+<span class="lineNum">     507 </span><span class="lineCov">  219995842 :                 woffset *= wi::to_offset (unit_size);</span>
+<span class="lineNum">     508 </span><span class="lineCov">  219995842 :                 woffset &lt;&lt;= LOG2_BITS_PER_UNIT;</span>
+<span class="lineNum">     509 </span><span class="lineCov">  219995842 :                 bit_offset += woffset;</span>
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span>            :                 /* An array ref with a constant index up in the structure
+<span class="lineNum">     512 </span>            :                    hierarchy will constrain the size of any variable array ref
+<span class="lineNum">     513 </span>            :                    lower in the access hierarchy.  */
+<span class="lineNum">     514 </span><span class="lineCov">  219995842 :                 seen_variable_array_ref = false;</span>
+<span class="lineNum">     515 </span>            :               }
+<span class="lineNum">     516 </span>            :             else
+<span class="lineNum">     517 </span>            :               {
+<span class="lineNum">     518 </span><span class="lineCov">   43084366 :                 tree asize = TYPE_SIZE (TREE_TYPE (TREE_OPERAND (exp, 0)));</span>
+<span class="lineNum">     519 </span>            :                 /* We need to adjust maxsize to the whole array bitsize.
+<span class="lineNum">     520 </span>            :                    But we can subtract any constant offset seen so far,
+<span class="lineNum">     521 </span>            :                    because that would get us outside of the array otherwise.  */
+<span class="lineNum">     522 </span><span class="lineCov">   43084366 :                 if (known_size_p (maxsize)</span>
+<span class="lineNum">     523 </span><span class="lineCov">   43006635 :                     &amp;&amp; asize</span>
+<span class="lineNum">     524 </span><span class="lineCov">   74351534 :                     &amp;&amp; poly_int_tree_p (asize))</span>
+<span class="lineNum">     525 </span><span class="lineCov">   35200421 :                   maxsize = wi::to_poly_offset (asize) - bit_offset;</span>
+<span class="lineNum">     526 </span>            :                 else
+<span class="lineNum">     527 </span><span class="lineCov">   15767890 :                   maxsize = -1;</span>
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span>            :                 /* Remember that we have seen an array ref with a variable
+<span class="lineNum">     530 </span>            :                    index.  */
+<span class="lineNum">     531 </span><span class="lineCov">   43084366 :                 seen_variable_array_ref = true;</span>
+<span class="lineNum">     532 </span>            : 
+<span class="lineNum">     533 </span><span class="lineCov">   86168732 :                 wide_int min, max;</span>
+<span class="lineNum">     534 </span><span class="lineCov">   43084366 :                 if (TREE_CODE (index) == SSA_NAME</span>
+<span class="lineNum">     535 </span><span class="lineCov">   42779587 :                     &amp;&amp; (low_bound = array_ref_low_bound (exp),</span>
+<span class="lineNum">     536 </span><span class="lineCov">   85559174 :                         poly_int_tree_p (low_bound))</span>
+<span class="lineNum">     537 </span><span class="lineCov">   42779587 :                     &amp;&amp; (unit_size = array_ref_element_size (exp),</span>
+<span class="lineNum">     538 </span><span class="lineCov">   42779587 :                         TREE_CODE (unit_size) == INTEGER_CST)</span>
+<span class="lineNum">     539 </span><span class="lineCov">   85809564 :                     &amp;&amp; get_range_info (index, &amp;min, &amp;max) == VR_RANGE)</span>
+<span class="lineNum">     540 </span>            :                   {
+<span class="lineNum">     541 </span><span class="lineCov">   19518781 :                     poly_offset_int lbound = wi::to_poly_offset (low_bound);</span>
+<span class="lineNum">     542 </span>            :                     /* Try to constrain maxsize with range information.  */
+<span class="lineNum">     543 </span><span class="lineCov">   19518781 :                     offset_int omax</span>
+<span class="lineNum">     544 </span><span class="lineCov">   19518781 :                       = offset_int::from (max, TYPE_SIGN (TREE_TYPE (index)));</span>
+<span class="lineNum">     545 </span><span class="lineCov">   19518781 :                     if (known_lt (lbound, omax))</span>
+<span class="lineNum">     546 </span>            :                       {
+<span class="lineNum">     547 </span><span class="lineCov">   19515418 :                         poly_offset_int rmaxsize;</span>
+<span class="lineNum">     548 </span><span class="lineCov">   19515418 :                         rmaxsize = (omax - lbound + 1)</span>
+<span class="lineNum">     549 </span><span class="lineCov">   39030836 :                             * wi::to_offset (unit_size) &lt;&lt; LOG2_BITS_PER_UNIT;</span>
+<span class="lineNum">     550 </span><span class="lineCov">   19515418 :                         if (!known_size_p (maxsize)</span>
+<span class="lineNum">     551 </span><span class="lineCov">   14994899 :                             || known_lt (rmaxsize, maxsize))</span>
+<span class="lineNum">     552 </span>            :                           {
+<span class="lineNum">     553 </span>            :                             /* If we know an upper bound below the declared
+<span class="lineNum">     554 </span>            :                                one this is no longer variable.  */
+<span class="lineNum">     555 </span><span class="lineCov">   10176619 :                             if (known_size_p (maxsize))</span>
+<span class="lineNum">     556 </span>            :                               seen_variable_array_ref = false;
+<span class="lineNum">     557 </span><span class="lineCov">    7348569 :                             maxsize = rmaxsize;</span>
+<span class="lineNum">     558 </span>            :                           }
+<span class="lineNum">     559 </span>            :                       }
+<span class="lineNum">     560 </span>            :                     /* Try to adjust bit_offset with range information.  */
+<span class="lineNum">     561 </span><span class="lineCov">   19518781 :                     offset_int omin</span>
+<span class="lineNum">     562 </span><span class="lineCov">   19518781 :                       = offset_int::from (min, TYPE_SIGN (TREE_TYPE (index)));</span>
+<span class="lineNum">     563 </span><span class="lineCov">   19518781 :                     if (known_le (lbound, omin))</span>
+<span class="lineNum">     564 </span>            :                       {
+<span class="lineNum">     565 </span><span class="lineCov">   17186058 :                         poly_offset_int woffset</span>
+<span class="lineNum">     566 </span><span class="lineCov">   51558174 :                           = wi::sext (omin - lbound,</span>
+<span class="lineNum">     567 </span><span class="lineCov">   17186058 :                                       TYPE_PRECISION (TREE_TYPE (index)));</span>
+<span class="lineNum">     568 </span><span class="lineCov">   17186058 :                         woffset *= wi::to_offset (unit_size);</span>
+<span class="lineNum">     569 </span><span class="lineCov">   17186058 :                         woffset &lt;&lt;= LOG2_BITS_PER_UNIT;</span>
+<span class="lineNum">     570 </span><span class="lineCov">   17186058 :                         bit_offset += woffset;</span>
+<span class="lineNum">     571 </span><span class="lineCov">   17186058 :                         if (known_size_p (maxsize))</span>
+<span class="lineNum">     572 </span><span class="lineCov">   17186008 :                           maxsize -= woffset;</span>
+<span class="lineNum">     573 </span>            :                       }
+<span class="lineNum">     574 </span>            :                   }
+<span class="lineNum">     575 </span>            :               }
+<span class="lineNum">     576 </span>            :           }
+<span class="lineNum">     577 </span>            :           break;
+<span class="lineNum">     578 </span>            : 
+<span class="lineNum">     579 </span>            :         case REALPART_EXPR:
+<span class="lineNum">     580 </span>            :           break;
+<span class="lineNum">     581 </span>            : 
+<span class="lineNum">     582 </span><span class="lineCov">    1702200 :         case IMAGPART_EXPR:</span>
+<span class="lineNum">     583 </span><span class="lineCov">    1702200 :           bit_offset += bitsize;</span>
+<span class="lineNum">     584 </span><span class="lineCov">    1702200 :           break;</span>
+<span class="lineNum">     585 </span>            : 
+<span class="lineNum">     586 </span>            :         case VIEW_CONVERT_EXPR:
+<span class="lineNum">     587 </span>            :           break;
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span><span class="lineCov">   23773959 :         case TARGET_MEM_REF:</span>
+<span class="lineNum">     590 </span>            :           /* Via the variable index or index2 we can reach the
+<span class="lineNum">     591 </span>            :              whole object.  Still hand back the decl here.  */
+<span class="lineNum">     592 </span><span class="lineCov">   23773959 :           if (TREE_CODE (TMR_BASE (exp)) == ADDR_EXPR</span>
+<span class="lineNum">     593 </span><span class="lineCov">   23773959 :               &amp;&amp; (TMR_INDEX (exp) || TMR_INDEX2 (exp)))</span>
+<span class="lineNum">     594 </span>            :             {
+<span class="lineNum">     595 </span><span class="lineCov">    6935460 :               exp = TREE_OPERAND (TMR_BASE (exp), 0);</span>
+<span class="lineNum">     596 </span><span class="lineCov">    3467730 :               bit_offset = 0;</span>
+<span class="lineNum">     597 </span><span class="lineCov">    3467730 :               maxsize = -1;</span>
+<span class="lineNum">     598 </span><span class="lineCov">    3467730 :               goto done;</span>
+<span class="lineNum">     599 </span>            :             }
+<span class="lineNum">     600 </span>            :           /* Fallthru.  */
+<span class="lineNum">     601 </span><span class="lineCov">  724583488 :         case MEM_REF:</span>
+<span class="lineNum">     602 </span>            :           /* We need to deal with variable arrays ending structures such as
+<span class="lineNum">     603 </span>            :              struct { int length; int a[1]; } x;           x.a[d]
+<span class="lineNum">     604 </span>            :              struct { struct { int a; int b; } a[1]; } x;  x.a[d].a
+<span class="lineNum">     605 </span>            :              struct { struct { int a[1]; } a[1]; } x;      x.a[0][d], x.a[d][0]
+<span class="lineNum">     606 </span>            :              struct { int len; union { int a[1]; struct X x; } u; } x; x.u.a[d]
+<span class="lineNum">     607 </span>            :              where we do not know maxsize for variable index accesses to
+<span class="lineNum">     608 </span>            :              the array.  The simplest way to conservatively deal with this
+<span class="lineNum">     609 </span>            :              is to punt in the case that offset + maxsize reaches the
+<span class="lineNum">     610 </span>            :              base type boundary.  This needs to include possible trailing
+<span class="lineNum">     611 </span>            :              padding that is there for alignment purposes.  */
+<span class="lineNum">     612 </span><span class="lineCov">  724583488 :           if (seen_variable_array_ref</span>
+<span class="lineNum">     613 </span><span class="lineCov">   10111521 :               &amp;&amp; known_size_p (maxsize)</span>
+<span class="lineNum">     614 </span><span class="lineCov">  729958996 :               &amp;&amp; (TYPE_SIZE (TREE_TYPE (exp)) == NULL_TREE</span>
+<span class="lineNum">     615 </span><span class="lineCov">   14267056 :                   || !poly_int_tree_p (TYPE_SIZE (TREE_TYPE (exp)))</span>
+<span class="lineNum">     616 </span><span class="lineCov">    2540280 :                   || (maybe_eq</span>
+<span class="lineNum">     617 </span><span class="lineCov">    2540280 :                       (bit_offset + maxsize,</span>
+<span class="lineNum">     618 </span><span class="lineCov">  726828820 :                        wi::to_poly_offset (TYPE_SIZE (TREE_TYPE (exp)))))))</span>
+<span class="lineNum">     619 </span><span class="lineCov">   10751016 :             maxsize = -1;</span>
+<span class="lineNum">     620 </span>            : 
+<span class="lineNum">     621 </span>            :           /* Hand back the decl for MEM[&amp;decl, off].  */
+<span class="lineNum">     622 </span><span class="lineCov">  724583488 :           if (TREE_CODE (TREE_OPERAND (exp, 0)) == ADDR_EXPR)</span>
+<span class="lineNum">     623 </span>            :             {
+<span class="lineNum">     624 </span><span class="lineCov">  453911851 :               if (integer_zerop (TREE_OPERAND (exp, 1)))</span>
+<span class="lineNum">     625 </span><span class="lineCov">   85291626 :                 exp = TREE_OPERAND (TREE_OPERAND (exp, 0), 0);</span>
+<span class="lineNum">     626 </span>            :               else
+<span class="lineNum">     627 </span>            :                 {
+<span class="lineNum">     628 </span><span class="lineCov">  368620225 :                   poly_offset_int off = mem_ref_offset (exp);</span>
+<span class="lineNum">     629 </span><span class="lineCov">  368620225 :                   off &lt;&lt;= LOG2_BITS_PER_UNIT;</span>
+<span class="lineNum">     630 </span><span class="lineCov">  368620225 :                   off += bit_offset;</span>
+<span class="lineNum">     631 </span><span class="lineCov">  368620225 :                   poly_int64 off_hwi;</span>
+<span class="lineNum">     632 </span><span class="lineCov">  368620225 :                   if (off.to_shwi (&amp;off_hwi))</span>
+<span class="lineNum">     633 </span>            :                     {
+<span class="lineNum">     634 </span><span class="lineCov">  368619053 :                       bit_offset = off_hwi;</span>
+<span class="lineNum">     635 </span><span class="lineCov">  368619053 :                       exp = TREE_OPERAND (TREE_OPERAND (exp, 0), 0);</span>
+<span class="lineNum">     636 </span>            :                     }
+<span class="lineNum">     637 </span>            :                 }
+<span class="lineNum">     638 </span>            :             }
+<span class="lineNum">     639 </span><span class="lineCov">  724583488 :           goto done;</span>
+<span class="lineNum">     640 </span>            : 
+<span class="lineNum">     641 </span><span class="lineCov">  773153442 :         default:</span>
+<span class="lineNum">     642 </span><span class="lineCov">  773153442 :           goto done;</span>
+<span class="lineNum">     643 </span>            :         }
+<span class="lineNum">     644 </span>            : 
+<span class="lineNum">     645 </span><span class="lineCov"> 1094127115 :       exp = TREE_OPERAND (exp, 0);</span>
+<span class="lineNum">     646 </span><span class="lineCov"> 1094127115 :     }</span>
+<span class="lineNum">     647 </span>            : 
+<span class="lineNum">     648 </span><span class="lineCov"> 1501204660 :  done:</span>
+<span class="lineNum">     649 </span><span class="lineCov"> 3002409320 :   if (!bitsize.to_shwi (psize) || maybe_lt (*psize, 0))</span>
+<span class="lineNum">     650 </span>            :     {
+<span class="lineNum">     651 </span><span class="lineCov">   18140860 :       *poffset = 0;</span>
+<span class="lineNum">     652 </span><span class="lineCov">   18140860 :       *psize = -1;</span>
+<span class="lineNum">     653 </span><span class="lineCov">   18140860 :       *pmax_size = -1;</span>
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span><span class="lineCov">   18140860 :       return exp;</span>
+<span class="lineNum">     656 </span>            :     }
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span>            :   /* ???  Due to negative offsets in ARRAY_REF we can end up with
+<span class="lineNum">     659 </span>            :      negative bit_offset here.  We might want to store a zero offset
+<span class="lineNum">     660 </span>            :      in this case.  */
+<span class="lineNum">     661 </span><span class="lineCov"> 1483063800 :   if (!bit_offset.to_shwi (poffset))</span>
+<span class="lineNum">     662 </span>            :     {
+<span class="lineNum">     663 </span><span class="lineCov">       4988 :       *poffset = 0;</span>
+<span class="lineNum">     664 </span><span class="lineCov">       4988 :       *pmax_size = -1;</span>
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span><span class="lineCov">       4988 :       return exp;</span>
+<span class="lineNum">     667 </span>            :     }
+<span class="lineNum">     668 </span>            : 
+<span class="lineNum">     669 </span>            :   /* In case of a decl or constant base object we can do better.  */
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span><span class="lineCov"> 1483058812 :   if (DECL_P (exp))</span>
+<span class="lineNum">     672 </span>            :     {
+<span class="lineNum">     673 </span><span class="lineCov"> 1196256587 :       if (VAR_P (exp)</span>
+<span class="lineNum">     674 </span><span class="lineCov"> 1196256587 :           &amp;&amp; ((flag_unconstrained_commons &amp;&amp; DECL_COMMON (exp))</span>
+<span class="lineNum">     675 </span><span class="lineCov"> 1159141734 :               || (DECL_EXTERNAL (exp) &amp;&amp; seen_variable_array_ref)))</span>
+<span class="lineNum">     676 </span>            :         {
+<span class="lineNum">     677 </span><span class="lineCov">     268824 :           tree sz_tree = TYPE_SIZE (TREE_TYPE (exp));</span>
+<span class="lineNum">     678 </span>            :           /* If size is unknown, or we have read to the end, assume there
+<span class="lineNum">     679 </span>            :              may be more to the structure than we are told.  */
+<span class="lineNum">     680 </span><span class="lineCov">     268824 :           if (TREE_CODE (TREE_TYPE (exp)) == ARRAY_TYPE</span>
+<span class="lineNum">     681 </span><span class="lineCov">     268824 :               || (seen_variable_array_ref</span>
+<span class="lineNum">     682 </span><span class="lineCov">      21545 :                   &amp;&amp; (sz_tree == NULL_TREE</span>
+<span class="lineNum">     683 </span><span class="lineCov">      43090 :                       || !poly_int_tree_p (sz_tree)</span>
+<span class="lineNum">     684 </span><span class="lineCov">      21545 :                       || maybe_eq (bit_offset + maxsize,</span>
+<span class="lineNum">     685 </span><span class="lineCov">      21682 :                                    wi::to_poly_offset (sz_tree)))))</span>
+<span class="lineNum">     686 </span><span class="lineCov">     537374 :             maxsize = -1;</span>
+<span class="lineNum">     687 </span>            :         }
+<span class="lineNum">     688 </span>            :       /* If maxsize is unknown adjust it according to the size of the
+<span class="lineNum">     689 </span>            :          base decl.  */
+<span class="lineNum">     690 </span><span class="lineCov"> 1195987763 :       else if (!known_size_p (maxsize)</span>
+<span class="lineNum">     691 </span><span class="lineCov">    4957349 :                &amp;&amp; DECL_SIZE (exp)</span>
+<span class="lineNum">     692 </span><span class="lineCov">   14868231 :                &amp;&amp; poly_int_tree_p (DECL_SIZE (exp)))</span>
+<span class="lineNum">     693 </span><span class="lineCov">    9912154 :         maxsize = wi::to_poly_offset (DECL_SIZE (exp)) - bit_offset;</span>
+<span class="lineNum">     694 </span>            :     }
+<span class="lineNum">     695 </span><span class="lineCov">  286802225 :   else if (CONSTANT_CLASS_P (exp))</span>
+<span class="lineNum">     696 </span>            :     {
+<span class="lineNum">     697 </span>            :       /* If maxsize is unknown adjust it according to the size of the
+<span class="lineNum">     698 </span>            :          base type constant.  */
+<span class="lineNum">     699 </span><span class="lineCov">    3642176 :       if (!known_size_p (maxsize)</span>
+<span class="lineNum">     700 </span><span class="lineCov">       2539 :           &amp;&amp; TYPE_SIZE (TREE_TYPE (exp))</span>
+<span class="lineNum">     701 </span><span class="lineCov">      10156 :           &amp;&amp; poly_int_tree_p (TYPE_SIZE (TREE_TYPE (exp))))</span>
+<span class="lineNum">     702 </span><span class="lineCov">       7617 :         maxsize = (wi::to_poly_offset (TYPE_SIZE (TREE_TYPE (exp)))</span>
+<span class="lineNum">     703 </span><span class="lineCov">       2539 :                    - bit_offset);</span>
+<span class="lineNum">     704 </span>            :     }
+<span class="lineNum">     705 </span>            : 
+<span class="lineNum">     706 </span><span class="lineCov"> 1483058812 :   if (!maxsize.to_shwi (pmax_size)</span>
+<span class="lineNum">     707 </span><span class="lineCov"> 1483058812 :       || maybe_lt (*pmax_size, 0)</span>
+<span class="lineNum">     708 </span><span class="lineCov"> 4431401013 :       || !endpoint_representable_p (*poffset, *pmax_size))</span>
+<span class="lineNum">     709 </span><span class="lineCov">   17775468 :     *pmax_size = -1;</span>
+<span class="lineNum">     710 </span>            : 
+<span class="lineNum">     711 </span>            :   /* Punt if *POFFSET + *PSIZE overflows in HOST_WIDE_INT, the callers don't
+<span class="lineNum">     712 </span>            :      check for such overflows individually and assume it works.  */
+<span class="lineNum">     713 </span><span class="lineCov"> 2966117624 :   if (!endpoint_representable_p (*poffset, *psize))</span>
+<span class="lineNum">     714 </span>            :     {
+<span class="lineNum">     715 </span><span class="lineCov">         45 :       *poffset = 0;</span>
+<span class="lineNum">     716 </span><span class="lineCov">         45 :       *psize = -1;</span>
+<span class="lineNum">     717 </span><span class="lineCov">         45 :       *pmax_size = -1;</span>
+<span class="lineNum">     718 </span>            : 
+<span class="lineNum">     719 </span><span class="lineCov">         45 :       return exp;</span>
+<span class="lineNum">     720 </span>            :     }
+<span class="lineNum">     721 </span>            : 
+<span class="lineNum">     722 </span>            :   return exp;
+<span class="lineNum">     723 </span>            : }
+<span class="lineNum">     724 </span>            : 
+<span class="lineNum">     725 </span>            : /* Like get_ref_base_and_extent, but for cases in which we only care
+<span class="lineNum">     726 </span>            :    about constant-width accesses at constant offsets.  Return null
+<span class="lineNum">     727 </span>            :    if the access is anything else.  */
+<a name="728"><span class="lineNum">     728 </span>            : </a>
+<span class="lineNum">     729 </span>            : tree
+<span class="lineNum">     730 </span><span class="lineCov">   23692375 : get_ref_base_and_extent_hwi (tree exp, HOST_WIDE_INT *poffset,</span>
+<span class="lineNum">     731 </span>            :                              HOST_WIDE_INT *psize, bool *preverse)
+<span class="lineNum">     732 </span>            : {
+<span class="lineNum">     733 </span><span class="lineCov">   71077125 :   poly_int64 offset, size, max_size;</span>
+<span class="lineNum">     734 </span><span class="lineCov">   23692375 :   HOST_WIDE_INT const_offset, const_size;</span>
+<span class="lineNum">     735 </span><span class="lineCov">   23692375 :   bool reverse;</span>
+<span class="lineNum">     736 </span><span class="lineCov">   23692375 :   tree decl = get_ref_base_and_extent (exp, &amp;offset, &amp;size, &amp;max_size,</span>
+<span class="lineNum">     737 </span>            :                                        &amp;reverse);
+<span class="lineNum">     738 </span><span class="lineCov">   23692375 :   if (!offset.is_constant (&amp;const_offset)</span>
+<span class="lineNum">     739 </span><span class="lineCov">   23692375 :       || !size.is_constant (&amp;const_size)</span>
+<span class="lineNum">     740 </span><span class="lineCov">   23692375 :       || const_offset &lt; 0</span>
+<span class="lineNum">     741 </span><span class="lineCov">   47383594 :       || !known_size_p (max_size)</span>
+<span class="lineNum">     742 </span><span class="lineCov">   23404279 :       || maybe_ne (max_size, const_size))</span>
+<span class="lineNum">     743 </span>            :     return NULL_TREE;
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineCov">   22891047 :   *poffset = const_offset;</span>
+<span class="lineNum">     746 </span><span class="lineCov">   22891047 :   *psize = const_size;</span>
+<span class="lineNum">     747 </span><span class="lineCov">   22891047 :   *preverse = reverse;</span>
+<span class="lineNum">     748 </span><span class="lineCov">   22891047 :   return decl;</span>
+<span class="lineNum">     749 </span>            : }
+<span class="lineNum">     750 </span>            : 
+<span class="lineNum">     751 </span>            : /* Returns the base object and a constant BITS_PER_UNIT offset in *POFFSET that
+<span class="lineNum">     752 </span>            :    denotes the starting address of the memory access EXP.
+<span class="lineNum">     753 </span>            :    Returns NULL_TREE if the offset is not constant or any component
+<span class="lineNum">     754 </span>            :    is not BITS_PER_UNIT-aligned.
+<span class="lineNum">     755 </span>            :    VALUEIZE if non-NULL is used to valueize SSA names.  It should return
+<span class="lineNum">     756 </span>            :    its argument or a constant if the argument is known to be constant.  */
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : tree
+<span class="lineNum">     759 </span><span class="lineCov">   88141741 : get_addr_base_and_unit_offset_1 (tree exp, poly_int64_pod *poffset,</span>
+<span class="lineNum">     760 </span>            :                                  tree (*valueize) (tree))
+<span class="lineNum">     761 </span>            : {
+<span class="lineNum">     762 </span><span class="lineCov">  176283482 :   poly_int64 byte_offset = 0;</span>
+<span class="lineNum">     763 </span>            : 
+<span class="lineNum">     764 </span>            :   /* Compute cumulative byte-offset for nested component-refs and array-refs,
+<span class="lineNum">     765 </span>            :      and find the ultimate containing object.  */
+<span class="lineNum">     766 </span><span class="lineCov">  103257494 :   while (1)</span>
+<span class="lineNum">     767 </span>            :     {
+<span class="lineNum">     768 </span><span class="lineCov">  103257494 :       switch (TREE_CODE (exp))</span>
+<span class="lineNum">     769 </span>            :         {
+<span class="lineNum">     770 </span><span class="lineCov">        344 :         case BIT_FIELD_REF:</span>
+<span class="lineNum">     771 </span><span class="lineCov">        344 :           {</span>
+<span class="lineNum">     772 </span><span class="lineCov">        344 :             poly_int64 this_byte_offset;</span>
+<span class="lineNum">     773 </span><span class="lineCov">        344 :             poly_uint64 this_bit_offset;</span>
+<span class="lineNum">     774 </span><span class="lineCov">        344 :             if (!poly_int_tree_p (TREE_OPERAND (exp, 2), &amp;this_bit_offset)</span>
+<span class="lineNum">     775 </span><span class="lineCov">        688 :                 || !multiple_p (this_bit_offset, BITS_PER_UNIT,</span>
+<span class="lineNum">     776 </span>            :                                 &amp;this_byte_offset))
+<span class="lineNum">     777 </span><span class="lineNoCov">          0 :               return NULL_TREE;</span>
+<span class="lineNum">     778 </span><span class="lineNoCov">          0 :             byte_offset += this_byte_offset;</span>
+<span class="lineNum">     779 </span>            :           }
+<span class="lineNum">     780 </span><span class="lineCov">        344 :           break;</span>
+<span class="lineNum">     781 </span>            : 
+<span class="lineNum">     782 </span><span class="lineCov">   13765671 :         case COMPONENT_REF:</span>
+<span class="lineNum">     783 </span><span class="lineCov">   13765671 :           {</span>
+<span class="lineNum">     784 </span><span class="lineCov">   13765671 :             tree field = TREE_OPERAND (exp, 1);</span>
+<span class="lineNum">     785 </span><span class="lineCov">   13765671 :             tree this_offset = component_ref_field_offset (exp);</span>
+<span class="lineNum">     786 </span><span class="lineCov">   13765671 :             poly_int64 hthis_offset;</span>
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span><span class="lineCov">   13765671 :             if (!this_offset</span>
+<span class="lineNum">     789 </span><span class="lineCov">   13765671 :                 || !poly_int_tree_p (this_offset, &amp;hthis_offset)</span>
+<span class="lineNum">     790 </span><span class="lineCov">   27530725 :                 || (TREE_INT_CST_LOW (DECL_FIELD_BIT_OFFSET (field))</span>
+<span class="lineNum">     791 </span><span class="lineCov">   13765054 :                     % BITS_PER_UNIT))</span>
+<span class="lineNum">     792 </span><span class="lineCov">        683 :               return NULL_TREE;</span>
+<span class="lineNum">     793 </span>            : 
+<span class="lineNum">     794 </span><span class="lineCov">   27529976 :             hthis_offset += (TREE_INT_CST_LOW (DECL_FIELD_BIT_OFFSET (field))</span>
+<span class="lineNum">     795 </span><span class="lineCov">   13764988 :                              / BITS_PER_UNIT);</span>
+<span class="lineNum">     796 </span><span class="lineCov">   13765671 :             byte_offset += hthis_offset;</span>
+<span class="lineNum">     797 </span>            :           }
+<span class="lineNum">     798 </span><span class="lineCov">   13764988 :           break;</span>
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span><span class="lineCov">    2110238 :         case ARRAY_REF:</span>
+<span class="lineNum">     801 </span><span class="lineCov">    2110238 :         case ARRAY_RANGE_REF:</span>
+<span class="lineNum">     802 </span><span class="lineCov">    2110238 :           {</span>
+<span class="lineNum">     803 </span><span class="lineCov">    2110238 :             tree index = TREE_OPERAND (exp, 1);</span>
+<span class="lineNum">     804 </span><span class="lineCov">    2110238 :             tree low_bound, unit_size;</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span><span class="lineCov">    2110238 :             if (valueize</span>
+<span class="lineNum">     807 </span><span class="lineCov">     729795 :                 &amp;&amp; TREE_CODE (index) == SSA_NAME)</span>
+<span class="lineNum">     808 </span><span class="lineCov">     514803 :               index = (*valueize) (index);</span>
+<span class="lineNum">     809 </span>            : 
+<span class="lineNum">     810 </span>            :             /* If the resulting bit-offset is constant, track it.  */
+<span class="lineNum">     811 </span><span class="lineCov">    3406367 :             if (poly_int_tree_p (index)</span>
+<span class="lineNum">     812 </span><span class="lineCov">    1296129 :                 &amp;&amp; (low_bound = array_ref_low_bound (exp),</span>
+<span class="lineNum">     813 </span><span class="lineCov">    2592258 :                     poly_int_tree_p (low_bound))</span>
+<span class="lineNum">     814 </span><span class="lineCov">    3406367 :                 &amp;&amp; (unit_size = array_ref_element_size (exp),</span>
+<span class="lineNum">     815 </span><span class="lineCov">    1296129 :                     TREE_CODE (unit_size) == INTEGER_CST))</span>
+<span class="lineNum">     816 </span>            :               {
+<span class="lineNum">     817 </span><span class="lineCov">    1276125 :                 poly_offset_int woffset</span>
+<span class="lineNum">     818 </span><span class="lineCov">    3828375 :                   = wi::sext (wi::to_poly_offset (index)</span>
+<span class="lineNum">     819 </span><span class="lineCov">    1276125 :                               - wi::to_poly_offset (low_bound),</span>
+<span class="lineNum">     820 </span><span class="lineCov">    2552250 :                               TYPE_PRECISION (TREE_TYPE (index)));</span>
+<span class="lineNum">     821 </span><span class="lineCov">    1276125 :                 woffset *= wi::to_offset (unit_size);</span>
+<span class="lineNum">     822 </span><span class="lineCov">    2552250 :                 byte_offset += woffset.force_shwi ();</span>
+<span class="lineNum">     823 </span>            :               }
+<span class="lineNum">     824 </span>            :             else
+<span class="lineNum">     825 </span><span class="lineCov">    1276125 :               return NULL_TREE;</span>
+<span class="lineNum">     826 </span>            :           }
+<span class="lineNum">     827 </span>            :           break;
+<span class="lineNum">     828 </span>            : 
+<span class="lineNum">     829 </span>            :         case REALPART_EXPR:
+<span class="lineNum">     830 </span>            :           break;
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span><span class="lineCov">        200 :         case IMAGPART_EXPR:</span>
+<span class="lineNum">     833 </span><span class="lineCov">        200 :           byte_offset += TREE_INT_CST_LOW (TYPE_SIZE_UNIT (TREE_TYPE (exp)));</span>
+<span class="lineNum">     834 </span><span class="lineCov">        200 :           break;</span>
+<span class="lineNum">     835 </span>            : 
+<span class="lineNum">     836 </span>            :         case VIEW_CONVERT_EXPR:
+<span class="lineNum">     837 </span>            :           break;
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span><span class="lineCov">    8798770 :         case MEM_REF:</span>
+<span class="lineNum">     840 </span><span class="lineCov">    8798770 :           {</span>
+<span class="lineNum">     841 </span><span class="lineCov">    8798770 :             tree base = TREE_OPERAND (exp, 0);</span>
+<span class="lineNum">     842 </span><span class="lineCov">    8798770 :             if (valueize</span>
+<span class="lineNum">     843 </span><span class="lineCov">    4653414 :                 &amp;&amp; TREE_CODE (base) == SSA_NAME)</span>
+<span class="lineNum">     844 </span><span class="lineCov">    4642401 :               base = (*valueize) (base);</span>
+<span class="lineNum">     845 </span>            : 
+<span class="lineNum">     846 </span>            :             /* Hand back the decl for MEM[&amp;decl, off].  */
+<span class="lineNum">     847 </span><span class="lineCov">    8798770 :             if (TREE_CODE (base) == ADDR_EXPR)</span>
+<span class="lineNum">     848 </span>            :               {
+<span class="lineNum">     849 </span><span class="lineCov">    2010921 :                 if (!integer_zerop (TREE_OPERAND (exp, 1)))</span>
+<span class="lineNum">     850 </span>            :                   {
+<span class="lineNum">     851 </span><span class="lineCov">    1456982 :                     poly_offset_int off = mem_ref_offset (exp);</span>
+<span class="lineNum">     852 </span><span class="lineCov">    4370946 :                     byte_offset += off.force_shwi ();</span>
+<span class="lineNum">     853 </span>            :                   }
+<span class="lineNum">     854 </span><span class="lineCov">    2010921 :                 exp = TREE_OPERAND (base, 0);</span>
+<span class="lineNum">     855 </span>            :               }
+<span class="lineNum">     856 </span><span class="lineCov">    8798770 :             goto done;</span>
+<span class="lineNum">     857 </span>            :           }
+<span class="lineNum">     858 </span>            : 
+<span class="lineNum">     859 </span><span class="lineCov">      13106 :         case TARGET_MEM_REF:</span>
+<span class="lineNum">     860 </span><span class="lineCov">      13106 :           {</span>
+<span class="lineNum">     861 </span><span class="lineCov">      13106 :             tree base = TREE_OPERAND (exp, 0);</span>
+<span class="lineNum">     862 </span><span class="lineCov">      13106 :             if (valueize</span>
+<span class="lineNum">     863 </span><span class="lineCov">        728 :                 &amp;&amp; TREE_CODE (base) == SSA_NAME)</span>
+<span class="lineNum">     864 </span><span class="lineCov">        381 :               base = (*valueize) (base);</span>
+<span class="lineNum">     865 </span>            : 
+<span class="lineNum">     866 </span>            :             /* Hand back the decl for MEM[&amp;decl, off].  */
+<span class="lineNum">     867 </span><span class="lineCov">      13106 :             if (TREE_CODE (base) == ADDR_EXPR)</span>
+<span class="lineNum">     868 </span>            :               {
+<span class="lineNum">     869 </span><span class="lineCov">       2492 :                 if (TMR_INDEX (exp) || TMR_INDEX2 (exp))</span>
+<span class="lineNum">     870 </span>            :                   return NULL_TREE;
+<span class="lineNum">     871 </span><span class="lineNoCov">          0 :                 if (!integer_zerop (TMR_OFFSET (exp)))</span>
+<span class="lineNum">     872 </span>            :                   {
+<span class="lineNum">     873 </span><span class="lineNoCov">          0 :                     poly_offset_int off = mem_ref_offset (exp);</span>
+<span class="lineNum">     874 </span><span class="lineNoCov">          0 :                     byte_offset += off.force_shwi ();</span>
+<span class="lineNum">     875 </span>            :                   }
+<span class="lineNum">     876 </span><span class="lineNoCov">          0 :                 exp = TREE_OPERAND (base, 0);</span>
+<span class="lineNum">     877 </span>            :               }
+<span class="lineNum">     878 </span><span class="lineCov">      10614 :             goto done;</span>
+<span class="lineNum">     879 </span>            :           }
+<span class="lineNum">     880 </span>            : 
+<span class="lineNum">     881 </span><span class="lineCov">   78495069 :         default:</span>
+<span class="lineNum">     882 </span><span class="lineCov">   78495069 :           goto done;</span>
+<span class="lineNum">     883 </span>            :         }
+<span class="lineNum">     884 </span>            : 
+<span class="lineNum">     885 </span><span class="lineCov">   15115753 :       exp = TREE_OPERAND (exp, 0);</span>
+<span class="lineNum">     886 </span><span class="lineCov">   15115753 :     }</span>
+<span class="lineNum">     887 </span><span class="lineCov">   87304453 : done:</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span><span class="lineCov">   87304453 :   *poffset = byte_offset;</span>
+<span class="lineNum">     890 </span><span class="lineCov">   87304453 :   return exp;</span>
+<span class="lineNum">     891 </span>            : }
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span>            : /* Returns the base object and a constant BITS_PER_UNIT offset in *POFFSET that
+<span class="lineNum">     894 </span>            :    denotes the starting address of the memory access EXP.
+<span class="lineNum">     895 </span>            :    Returns NULL_TREE if the offset is not constant or any component
+<span class="lineNum">     896 </span>            :    is not BITS_PER_UNIT-aligned.  */
+<a name="897"><span class="lineNum">     897 </span>            : </a>
+<span class="lineNum">     898 </span>            : tree
+<span class="lineNum">     899 </span><span class="lineCov">   83015338 : get_addr_base_and_unit_offset (tree exp, poly_int64_pod *poffset)</span>
+<span class="lineNum">     900 </span>            : {
+<span class="lineNum">     901 </span><span class="lineCov">   83015338 :   return get_addr_base_and_unit_offset_1 (exp, poffset, NULL);</span>
+<span class="lineNum">     902 </span>            : }
+<span class="lineNum">     903 </span>            : 
+<span class="lineNum">     904 </span>            : /* Returns true if STMT references an SSA_NAME that has
+<span class="lineNum">     905 </span>            :    SSA_NAME_OCCURS_IN_ABNORMAL_PHI set, otherwise false.  */
+<a name="906"><span class="lineNum">     906 </span>            : </a>
+<span class="lineNum">     907 </span>            : bool
+<span class="lineNum">     908 </span><span class="lineCov">    9006513 : stmt_references_abnormal_ssa_name (gimple *stmt)</span>
+<span class="lineNum">     909 </span>            : {
+<span class="lineNum">     910 </span><span class="lineCov">    9006513 :   ssa_op_iter oi;</span>
+<span class="lineNum">     911 </span><span class="lineCov">    9006513 :   use_operand_p use_p;</span>
+<span class="lineNum">     912 </span>            : 
+<span class="lineNum">     913 </span><span class="lineCov">   20115731 :   FOR_EACH_SSA_USE_OPERAND (use_p, stmt, oi, SSA_OP_USE)</span>
+<span class="lineNum">     914 </span>            :     {
+<span class="lineNum">     915 </span><span class="lineCov">   22219446 :       if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (USE_FROM_PTR (use_p)))</span>
+<span class="lineNum">     916 </span>            :         return true;
+<span class="lineNum">     917 </span>            :     }
+<span class="lineNum">     918 </span>            : 
+<span class="lineNum">     919 </span>            :   return false;
+<span class="lineNum">     920 </span>            : }
+<span class="lineNum">     921 </span>            : 
+<span class="lineNum">     922 </span>            : /* If STMT takes any abnormal PHI values as input, replace them with
+<span class="lineNum">     923 </span>            :    local copies.  */
+<a name="924"><span class="lineNum">     924 </span>            : </a>
+<span class="lineNum">     925 </span>            : void
+<span class="lineNum">     926 </span><span class="lineCov">       1538 : replace_abnormal_ssa_names (gimple *stmt)</span>
+<span class="lineNum">     927 </span>            : {
+<span class="lineNum">     928 </span><span class="lineCov">       1538 :   ssa_op_iter oi;</span>
+<span class="lineNum">     929 </span><span class="lineCov">       1538 :   use_operand_p use_p;</span>
+<span class="lineNum">     930 </span>            : 
+<span class="lineNum">     931 </span><span class="lineCov">       3061 :   FOR_EACH_SSA_USE_OPERAND (use_p, stmt, oi, SSA_OP_USE)</span>
+<span class="lineNum">     932 </span>            :     {
+<span class="lineNum">     933 </span><span class="lineCov">       1523 :       tree op = USE_FROM_PTR (use_p);</span>
+<span class="lineNum">     934 </span><span class="lineCov">       1523 :       if (TREE_CODE (op) == SSA_NAME &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (op))</span>
+<span class="lineNum">     935 </span>            :         {
+<span class="lineNum">     936 </span><span class="lineCov">          4 :           gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     937 </span><span class="lineCov">          4 :           tree new_name = make_ssa_name (TREE_TYPE (op));</span>
+<span class="lineNum">     938 </span><span class="lineCov">          4 :           gassign *assign = gimple_build_assign (new_name, op);</span>
+<span class="lineNum">     939 </span><span class="lineCov">          4 :           gsi_insert_before (&amp;gsi, assign, GSI_SAME_STMT);</span>
+<span class="lineNum">     940 </span><span class="lineCov">          4 :           SET_USE (use_p, new_name);</span>
+<span class="lineNum">     941 </span>            :         }
+<span class="lineNum">     942 </span>            :     }
+<span class="lineNum">     943 </span><span class="lineCov">       1538 : }</span>
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span>            : /* Pair of tree and a sorting index, for dump_enumerated_decls.  */
+<span class="lineNum">     946 </span>            : struct GTY(()) numbered_tree
+<span class="lineNum">     947 </span>            : {
+<span class="lineNum">     948 </span>            :   tree t;
+<span class="lineNum">     949 </span>            :   int num;
+<span class="lineNum">     950 </span>            : };
+<span class="lineNum">     951 </span>            : 
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span>            : /* Compare two declarations references by their DECL_UID / sequence number.
+<span class="lineNum">     954 </span>            :    Called via qsort.  */
+<a name="955"><span class="lineNum">     955 </span>            : </a>
+<span class="lineNum">     956 </span>            : static int
+<span class="lineNum">     957 </span><span class="lineCov">     310934 : compare_decls_by_uid (const void *pa, const void *pb)</span>
+<span class="lineNum">     958 </span>            : {
+<span class="lineNum">     959 </span><span class="lineCov">     310934 :   const numbered_tree *nt_a = ((const numbered_tree *)pa);</span>
+<span class="lineNum">     960 </span><span class="lineCov">     310934 :   const numbered_tree *nt_b = ((const numbered_tree *)pb);</span>
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span><span class="lineCov">     310934 :   if (DECL_UID (nt_a-&gt;t) != DECL_UID (nt_b-&gt;t))</span>
+<span class="lineNum">     963 </span><span class="lineCov">     769020 :     return  DECL_UID (nt_a-&gt;t) - DECL_UID (nt_b-&gt;t);</span>
+<span class="lineNum">     964 </span><span class="lineCov">      54594 :   return nt_a-&gt;num - nt_b-&gt;num;</span>
+<span class="lineNum">     965 </span>            : }
+<span class="lineNum">     966 </span>            : 
+<a name="967"><span class="lineNum">     967 </span>            : /* Called via walk_gimple_stmt / walk_gimple_op by dump_enumerated_decls.  */</a>
+<span class="lineNum">     968 </span>            : static tree
+<span class="lineNum">     969 </span><span class="lineCov">      87624 : dump_enumerated_decls_push (tree *tp, int *walk_subtrees, void *data)</span>
+<span class="lineNum">     970 </span>            : {
+<span class="lineNum">     971 </span><span class="lineCov">      87624 :   struct walk_stmt_info *wi = (struct walk_stmt_info *) data;</span>
+<span class="lineNum">     972 </span><span class="lineCov">      87624 :   vec&lt;numbered_tree&gt; *list = (vec&lt;numbered_tree&gt; *) wi-&gt;info;</span>
+<span class="lineNum">     973 </span><span class="lineCov">      87624 :   numbered_tree nt;</span>
+<span class="lineNum">     974 </span>            : 
+<span class="lineNum">     975 </span><span class="lineCov">      87624 :   if (!DECL_P (*tp))</span>
+<span class="lineNum">     976 </span>            :     return NULL_TREE;
+<span class="lineNum">     977 </span><span class="lineCov">      15856 :   nt.t = *tp;</span>
+<span class="lineNum">     978 </span><span class="lineCov">      15856 :   nt.num = list-&gt;length ();</span>
+<span class="lineNum">     979 </span><span class="lineCov">      15856 :   list-&gt;safe_push (nt);</span>
+<span class="lineNum">     980 </span><span class="lineCov">      15856 :   *walk_subtrees = 0;</span>
+<span class="lineNum">     981 </span><span class="lineCov">      15856 :   return NULL_TREE;</span>
+<span class="lineNum">     982 </span>            : }
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span>            : /* Find all the declarations used by the current function, sort them by uid,
+<span class="lineNum">     985 </span>            :    and emit the sorted list.  Each declaration is tagged with a sequence
+<span class="lineNum">     986 </span>            :    number indicating when it was found during statement / tree walking,
+<span class="lineNum">     987 </span>            :    so that TDF_NOUID comparisons of anonymous declarations are still
+<span class="lineNum">     988 </span>            :    meaningful.  Where a declaration was encountered more than once, we
+<span class="lineNum">     989 </span>            :    emit only the sequence number of the first encounter.
+<span class="lineNum">     990 </span>            :    FILE is the dump file where to output the list and FLAGS is as in
+<a name="991"><span class="lineNum">     991 </span>            :    print_generic_expr.  */</a>
+<span class="lineNum">     992 </span>            : void
+<span class="lineNum">     993 </span><span class="lineCov">       2350 : dump_enumerated_decls (FILE *file, dump_flags_t flags)</span>
+<span class="lineNum">     994 </span>            : {
+<span class="lineNum">     995 </span><span class="lineCov">       2350 :   if (!cfun-&gt;cfg)</span>
+<span class="lineNum">     996 </span><span class="lineCov">          4 :     return;</span>
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span><span class="lineCov">       2346 :   basic_block bb;</span>
+<span class="lineNum">     999 </span><span class="lineCov">       2346 :   struct walk_stmt_info wi;</span>
+<span class="lineNum">    1000 </span><span class="lineCov">       7038 :   auto_vec&lt;numbered_tree, 40&gt; decl_list;</span>
+<span class="lineNum">    1001 </span>            : 
+<span class="lineNum">    1002 </span><span class="lineCov">       2346 :   memset (&amp;wi, '\0', sizeof (wi));</span>
+<span class="lineNum">    1003 </span><span class="lineCov">       2346 :   wi.info = (void *) &amp;decl_list;</span>
+<span class="lineNum">    1004 </span><span class="lineCov">      12096 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1005 </span>            :     {
+<span class="lineNum">    1006 </span><span class="lineCov">       9750 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1007 </span>            : 
+<span class="lineNum">    1008 </span><span class="lineCov">      55710 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1009 </span><span class="lineCov">     108630 :         if (!is_gimple_debug (gsi_stmt (gsi)))</span>
+<span class="lineNum">    1010 </span><span class="lineCov">      27888 :           walk_gimple_stmt (&amp;gsi, NULL, dump_enumerated_decls_push, &amp;wi);</span>
+<span class="lineNum">    1011 </span>            :     }
+<span class="lineNum">    1012 </span><span class="lineCov">       2346 :   decl_list.qsort (compare_decls_by_uid);</span>
+<span class="lineNum">    1013 </span><span class="lineCov">       2346 :   if (decl_list.length ())</span>
+<span class="lineNum">    1014 </span>            :     {
+<span class="lineNum">    1015 </span><span class="lineCov">       1940 :       unsigned ix;</span>
+<span class="lineNum">    1016 </span><span class="lineCov">       1940 :       numbered_tree *ntp;</span>
+<span class="lineNum">    1017 </span><span class="lineCov">       1940 :       tree last = NULL_TREE;</span>
+<span class="lineNum">    1018 </span>            : 
+<span class="lineNum">    1019 </span><span class="lineCov">       1940 :       fprintf (file, &quot;Declarations used by %s, sorted by DECL_UID:\n&quot;,</span>
+<span class="lineNum">    1020 </span>            :                current_function_name ());
+<span class="lineNum">    1021 </span><span class="lineCov">      17796 :       FOR_EACH_VEC_ELT (decl_list, ix, ntp)</span>
+<span class="lineNum">    1022 </span>            :         {
+<span class="lineNum">    1023 </span><span class="lineCov">      15856 :           if (ntp-&gt;t == last)</span>
+<span class="lineNum">    1024 </span>            :             continue;
+<span class="lineNum">    1025 </span><span class="lineCov">       8980 :           fprintf (file, &quot;%d: &quot;, ntp-&gt;num);</span>
+<span class="lineNum">    1026 </span><span class="lineCov">       8980 :           print_generic_decl (file, ntp-&gt;t, flags);</span>
+<span class="lineNum">    1027 </span><span class="lineCov">       8980 :           fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1028 </span><span class="lineCov">       8980 :           last = ntp-&gt;t;</span>
+<span class="lineNum">    1029 </span>            :         }
+<span class="lineNum">    1030 </span>            :     }
+<span class="lineNum">    1031 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

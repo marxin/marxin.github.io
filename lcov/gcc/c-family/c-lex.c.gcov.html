@@ -1,0 +1,1446 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/c-family/c-lex.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/c-family</a> - c-lex.c<span style="font-size: 80%;"> (source / <a href="c-lex.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">557</td>
+            <td class="headerCovTableEntry">681</td>
+            <td class="headerCovTableEntryMed">81.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntryHi">90.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Mainly the interface between cpplib and the C front ends.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1987-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;c-common.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;c-pragma.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;debug.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;file-prefix-map.h&quot; /* remap_macro_filename()  */
+<span class="lineNum">      31 </span>            : 
+<span class="lineNum">      32 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            : /* We may keep statistics about how long which files took to compile.  */
+<span class="lineNum">      35 </span>            : static int header_time, body_time;
+<span class="lineNum">      36 </span>            : static splay_tree file_info_tree;
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : int pending_lang_change; /* If we need to switch languages - C++ only */
+<span class="lineNum">      39 </span>            : int c_header_level;      /* depth in C headers - C++ only */
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : static tree interpret_integer (const cpp_token *, unsigned int,
+<span class="lineNum">      42 </span>            :                                enum overflow_type *);
+<span class="lineNum">      43 </span>            : static tree interpret_float (const cpp_token *, unsigned int, const char *,
+<span class="lineNum">      44 </span>            :                              enum overflow_type *);
+<span class="lineNum">      45 </span>            : static tree interpret_fixed (const cpp_token *, unsigned int);
+<span class="lineNum">      46 </span>            : static enum integer_type_kind narrowest_unsigned_type
+<span class="lineNum">      47 </span>            :         (const widest_int &amp;, unsigned int);
+<span class="lineNum">      48 </span>            : static enum integer_type_kind narrowest_signed_type
+<span class="lineNum">      49 </span>            :         (const widest_int &amp;, unsigned int);
+<span class="lineNum">      50 </span>            : static enum cpp_ttype lex_string (const cpp_token *, tree *, bool, bool);
+<span class="lineNum">      51 </span>            : static tree lex_charconst (const cpp_token *);
+<span class="lineNum">      52 </span>            : static void update_header_times (const char *);
+<span class="lineNum">      53 </span>            : static int dump_one_header (splay_tree_node, void *);
+<span class="lineNum">      54 </span>            : static void cb_line_change (cpp_reader *, const cpp_token *, int);
+<span class="lineNum">      55 </span>            : static void cb_ident (cpp_reader *, unsigned int, const cpp_string *);
+<span class="lineNum">      56 </span>            : static void cb_def_pragma (cpp_reader *, unsigned int);
+<span class="lineNum">      57 </span>            : static void cb_define (cpp_reader *, unsigned int, cpp_hashnode *);
+<span class="lineNum">      58 </span>            : static void cb_undef (cpp_reader *, unsigned int, cpp_hashnode *);
+<a name="59"><span class="lineNum">      59 </span>            : </a>
+<span class="lineNum">      60 </span>            : void
+<span class="lineNum">      61 </span><span class="lineCov">     127793 : init_c_lex (void)</span>
+<span class="lineNum">      62 </span>            : {
+<span class="lineNum">      63 </span><span class="lineCov">     127793 :   struct cpp_callbacks *cb;</span>
+<span class="lineNum">      64 </span><span class="lineCov">     127793 :   struct c_fileinfo *toplevel;</span>
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :   /* The get_fileinfo data structure must be initialized before
+<span class="lineNum">      67 </span>            :      cpp_read_main_file is called.  */
+<span class="lineNum">      68 </span><span class="lineCov">     127793 :   toplevel = get_fileinfo (&quot;&lt;top level&gt;&quot;);</span>
+<span class="lineNum">      69 </span><span class="lineCov">     127793 :   if (flag_detailed_statistics)</span>
+<span class="lineNum">      70 </span>            :     {
+<span class="lineNum">      71 </span><span class="lineNoCov">          0 :       header_time = 0;</span>
+<span class="lineNum">      72 </span><span class="lineNoCov">          0 :       body_time = get_run_time ();</span>
+<span class="lineNum">      73 </span><span class="lineNoCov">          0 :       toplevel-&gt;time = body_time;</span>
+<span class="lineNum">      74 </span>            :     }
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span><span class="lineCov">     127793 :   cb = cpp_get_callbacks (parse_in);</span>
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span><span class="lineCov">     127793 :   cb-&gt;line_change = cb_line_change;</span>
+<span class="lineNum">      79 </span><span class="lineCov">     127793 :   cb-&gt;ident = cb_ident;</span>
+<span class="lineNum">      80 </span><span class="lineCov">     127793 :   cb-&gt;def_pragma = cb_def_pragma;</span>
+<span class="lineNum">      81 </span><span class="lineCov">     127793 :   cb-&gt;valid_pch = c_common_valid_pch;</span>
+<span class="lineNum">      82 </span><span class="lineCov">     127793 :   cb-&gt;read_pch = c_common_read_pch;</span>
+<span class="lineNum">      83 </span><span class="lineCov">     127793 :   cb-&gt;has_attribute = c_common_has_attribute;</span>
+<span class="lineNum">      84 </span><span class="lineCov">     127793 :   cb-&gt;get_source_date_epoch = cb_get_source_date_epoch;</span>
+<span class="lineNum">      85 </span><span class="lineCov">     127793 :   cb-&gt;get_suggestion = cb_get_suggestion;</span>
+<span class="lineNum">      86 </span><span class="lineCov">     127793 :   cb-&gt;remap_filename = remap_macro_filename;</span>
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span>            :   /* Set the debug callbacks if we can use them.  */
+<span class="lineNum">      89 </span><span class="lineCov">     127793 :   if ((debug_info_level == DINFO_LEVEL_VERBOSE</span>
+<span class="lineNum">      90 </span><span class="lineCov">       2854 :        &amp;&amp; (write_symbols == DWARF2_DEBUG</span>
+<span class="lineNum">      91 </span><span class="lineCov">       1427 :            || write_symbols == VMS_AND_DWARF2_DEBUG))</span>
+<span class="lineNum">      92 </span><span class="lineCov">     127306 :       || flag_dump_go_spec != NULL)</span>
+<span class="lineNum">      93 </span>            :     {
+<span class="lineNum">      94 </span><span class="lineCov">        490 :       cb-&gt;define = cb_define;</span>
+<span class="lineNum">      95 </span><span class="lineCov">        490 :       cb-&gt;undef = cb_undef;</span>
+<span class="lineNum">      96 </span>            :     }
+<span class="lineNum">      97 </span><span class="lineCov">     127793 : }</span>
+<a name="98"><span class="lineNum">      98 </span>            : </a>
+<span class="lineNum">      99 </span>            : struct c_fileinfo *
+<span class="lineNum">     100 </span><span class="lineCov">   32332557 : get_fileinfo (const char *name)</span>
+<span class="lineNum">     101 </span>            : {
+<span class="lineNum">     102 </span><span class="lineCov">   32332557 :   splay_tree_node n;</span>
+<span class="lineNum">     103 </span><span class="lineCov">   32332557 :   struct c_fileinfo *fi;</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span><span class="lineCov">   32332557 :   if (!file_info_tree)</span>
+<span class="lineNum">     106 </span><span class="lineCov">     129290 :     file_info_tree = splay_tree_new (splay_tree_compare_strings,</span>
+<span class="lineNum">     107 </span>            :                                      0,
+<span class="lineNum">     108 </span>            :                                      splay_tree_delete_pointers);
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span><span class="lineCov">   32332557 :   n = splay_tree_lookup (file_info_tree, (splay_tree_key) name);</span>
+<span class="lineNum">     111 </span><span class="lineCov">   32332557 :   if (n)</span>
+<span class="lineNum">     112 </span><span class="lineCov">   31558216 :     return (struct c_fileinfo *) n-&gt;value;</span>
+<span class="lineNum">     113 </span>            : 
+<span class="lineNum">     114 </span><span class="lineCov">     774341 :   fi = XNEW (struct c_fileinfo);</span>
+<span class="lineNum">     115 </span><span class="lineCov">     774341 :   fi-&gt;time = 0;</span>
+<span class="lineNum">     116 </span><span class="lineCov">     774341 :   fi-&gt;interface_only = 0;</span>
+<span class="lineNum">     117 </span><span class="lineCov">     774341 :   fi-&gt;interface_unknown = 1;</span>
+<span class="lineNum">     118 </span><span class="lineCov">     774341 :   splay_tree_insert (file_info_tree, (splay_tree_key) name,</span>
+<span class="lineNum">     119 </span>            :                      (splay_tree_value) fi);
+<span class="lineNum">     120 </span><span class="lineCov">     774341 :   return fi;</span>
+<span class="lineNum">     121 </span>            : }
+<a name="122"><span class="lineNum">     122 </span>            : </a>
+<span class="lineNum">     123 </span>            : static void
+<span class="lineNum">     124 </span><span class="lineCov">    4737045 : update_header_times (const char *name)</span>
+<span class="lineNum">     125 </span>            : {
+<span class="lineNum">     126 </span>            :   /* Changing files again.  This means currently collected time
+<span class="lineNum">     127 </span>            :      is charged against header time, and body time starts back at 0.  */
+<span class="lineNum">     128 </span><span class="lineCov">    4737045 :   if (flag_detailed_statistics)</span>
+<span class="lineNum">     129 </span>            :     {
+<span class="lineNum">     130 </span><span class="lineNoCov">          0 :       int this_time = get_run_time ();</span>
+<span class="lineNum">     131 </span><span class="lineNoCov">          0 :       struct c_fileinfo *file = get_fileinfo (name);</span>
+<span class="lineNum">     132 </span><span class="lineNoCov">          0 :       header_time += this_time - body_time;</span>
+<span class="lineNum">     133 </span><span class="lineNoCov">          0 :       file-&gt;time += this_time - body_time;</span>
+<span class="lineNum">     134 </span><span class="lineNoCov">          0 :       body_time = this_time;</span>
+<span class="lineNum">     135 </span>            :     }
+<span class="lineNum">     136 </span><span class="lineCov">    4737045 : }</span>
+<a name="137"><span class="lineNum">     137 </span>            : </a>
+<span class="lineNum">     138 </span>            : static int
+<span class="lineNum">     139 </span><span class="lineNoCov">          0 : dump_one_header (splay_tree_node n, void * ARG_UNUSED (dummy))</span>
+<span class="lineNum">     140 </span>            : {
+<span class="lineNum">     141 </span><span class="lineNoCov">          0 :   print_time ((const char *) n-&gt;key,</span>
+<span class="lineNum">     142 </span><span class="lineNoCov">          0 :               ((struct c_fileinfo *) n-&gt;value)-&gt;time);</span>
+<span class="lineNum">     143 </span><span class="lineNoCov">          0 :   return 0;</span>
+<span class="lineNum">     144 </span>            : }
+<a name="145"><span class="lineNum">     145 </span>            : </a>
+<span class="lineNum">     146 </span>            : void
+<span class="lineNum">     147 </span><span class="lineNoCov">          0 : dump_time_statistics (void)</span>
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span><span class="lineNoCov">          0 :   struct c_fileinfo *file = get_fileinfo (LOCATION_FILE (input_location));</span>
+<span class="lineNum">     150 </span><span class="lineNoCov">          0 :   int this_time = get_run_time ();</span>
+<span class="lineNum">     151 </span><span class="lineNoCov">          0 :   file-&gt;time += this_time - body_time;</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;\n******\n&quot;);</span>
+<span class="lineNum">     154 </span><span class="lineNoCov">          0 :   print_time (&quot;header files (total)&quot;, header_time);</span>
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 :   print_time (&quot;main file (total)&quot;, this_time - body_time);</span>
+<span class="lineNum">     156 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;ratio = %g : 1\n&quot;,</span>
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :            (double) header_time / (double) (this_time - body_time));</span>
+<span class="lineNum">     158 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;\n******\n&quot;);</span>
+<span class="lineNum">     159 </span>            : 
+<span class="lineNum">     160 </span><span class="lineNoCov">          0 :   splay_tree_foreach (file_info_tree, dump_one_header, 0);</span>
+<span class="lineNum">     161 </span><span class="lineNoCov">          0 : }</span>
+<a name="162"><span class="lineNum">     162 </span>            : </a>
+<span class="lineNum">     163 </span>            : static void
+<span class="lineNum">     164 </span><span class="lineCov">         20 : cb_ident (cpp_reader * ARG_UNUSED (pfile),</span>
+<span class="lineNum">     165 </span>            :           unsigned int ARG_UNUSED (line),
+<span class="lineNum">     166 </span>            :           const cpp_string * ARG_UNUSED (str))
+<span class="lineNum">     167 </span>            : {
+<span class="lineNum">     168 </span><span class="lineCov">         20 :   if (!flag_no_ident)</span>
+<span class="lineNum">     169 </span>            :     {
+<span class="lineNum">     170 </span>            :       /* Convert escapes in the string.  */
+<span class="lineNum">     171 </span><span class="lineCov">         20 :       cpp_string cstr = { 0, 0 };</span>
+<span class="lineNum">     172 </span><span class="lineCov">         20 :       if (cpp_interpret_string (pfile, str, 1, &amp;cstr, CPP_STRING))</span>
+<span class="lineNum">     173 </span>            :         {
+<span class="lineNum">     174 </span><span class="lineCov">         20 :           targetm.asm_out.output_ident ((const char *) cstr.text);</span>
+<span class="lineNum">     175 </span><span class="lineCov">         20 :           free (CONST_CAST (unsigned char *, cstr.text));</span>
+<span class="lineNum">     176 </span>            :         }
+<span class="lineNum">     177 </span>            :     }
+<span class="lineNum">     178 </span><span class="lineCov">         20 : }</span>
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            : /* Called at the start of every non-empty line.  TOKEN is the first
+<a name="181"><span class="lineNum">     181 </span>            :    lexed token on the line.  Used for diagnostic line numbers.  */</a>
+<span class="lineNum">     182 </span>            : static void
+<span class="lineNum">     183 </span><span class="lineCov">  231870839 : cb_line_change (cpp_reader * ARG_UNUSED (pfile), const cpp_token *token,</span>
+<span class="lineNum">     184 </span>            :                 int parsing_args)
+<span class="lineNum">     185 </span>            : {
+<span class="lineNum">     186 </span><span class="lineCov">  231870839 :   if (token-&gt;type != CPP_EOF &amp;&amp; !parsing_args)</span>
+<span class="lineNum">     187 </span><span class="lineCov">  231157800 :     input_location = token-&gt;src_loc;</span>
+<span class="lineNum">     188 </span><span class="lineCov">  231870839 : }</span>
+<a name="189"><span class="lineNum">     189 </span>            : </a>
+<span class="lineNum">     190 </span>            : void
+<span class="lineNum">     191 </span><span class="lineCov">    4864593 : fe_file_change (const line_map_ordinary *new_map)</span>
+<span class="lineNum">     192 </span>            : {
+<span class="lineNum">     193 </span><span class="lineCov">    4864593 :   if (new_map == NULL)</span>
+<span class="lineNum">     194 </span>            :     return;
+<span class="lineNum">     195 </span>            : 
+<span class="lineNum">     196 </span><span class="lineCov">    4737045 :   if (new_map-&gt;reason == LC_ENTER)</span>
+<span class="lineNum">     197 </span>            :     {
+<span class="lineNum">     198 </span>            :       /* Don't stack the main buffer on the input stack;
+<span class="lineNum">     199 </span>            :          we already did in compile_file.  */
+<span class="lineNum">     200 </span><span class="lineCov">    4334004 :       if (!MAIN_FILE_P (new_map))</span>
+<span class="lineNum">     201 </span>            :         {
+<span class="lineNum">     202 </span><span class="lineCov">    2039209 :           location_t included_at = linemap_included_from (new_map);</span>
+<span class="lineNum">     203 </span><span class="lineCov">    2039209 :           int line = 0;</span>
+<span class="lineNum">     204 </span><span class="lineCov">    2039209 :           if (included_at &gt; BUILTINS_LOCATION)</span>
+<span class="lineNum">     205 </span><span class="lineCov">    4078418 :             line = SOURCE_LINE (new_map - 1, included_at);</span>
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span><span class="lineCov">    2039209 :           input_location = new_map-&gt;start_location;</span>
+<span class="lineNum">     208 </span><span class="lineCov">    4078418 :           (*debug_hooks-&gt;start_source_file) (line, LINEMAP_FILE (new_map));</span>
+<span class="lineNum">     209 </span>            : #ifdef SYSTEM_IMPLICIT_EXTERN_C
+<span class="lineNum">     210 </span>            :           if (c_header_level)
+<span class="lineNum">     211 </span>            :             ++c_header_level;
+<span class="lineNum">     212 </span>            :           else if (LINEMAP_SYSP (new_map) == 2)
+<span class="lineNum">     213 </span>            :             {
+<span class="lineNum">     214 </span>            :               c_header_level = 1;
+<span class="lineNum">     215 </span>            :               ++pending_lang_change;
+<span class="lineNum">     216 </span>            :             }
+<span class="lineNum">     217 </span>            : #endif
+<span class="lineNum">     218 </span>            :         }
+<span class="lineNum">     219 </span>            :     }
+<span class="lineNum">     220 </span><span class="lineCov">    2570043 :   else if (new_map-&gt;reason == LC_LEAVE)</span>
+<span class="lineNum">     221 </span>            :     {
+<span class="lineNum">     222 </span>            : #ifdef SYSTEM_IMPLICIT_EXTERN_C
+<span class="lineNum">     223 </span>            :       if (c_header_level &amp;&amp; --c_header_level == 0)
+<span class="lineNum">     224 </span>            :         {
+<span class="lineNum">     225 </span>            :           if (LINEMAP_SYSP (new_map) == 2)
+<span class="lineNum">     226 </span>            :             warning (0, &quot;badly nested C headers from preprocessor&quot;);
+<span class="lineNum">     227 </span>            :           --pending_lang_change;
+<span class="lineNum">     228 </span>            :         }
+<span class="lineNum">     229 </span>            : #endif
+<span class="lineNum">     230 </span><span class="lineCov">    2039206 :       input_location = new_map-&gt;start_location;</span>
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span><span class="lineCov">    4078412 :       (*debug_hooks-&gt;end_source_file) (LINEMAP_LINE (new_map));</span>
+<span class="lineNum">     233 </span>            :     }
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span><span class="lineCov">    9474090 :   update_header_times (LINEMAP_FILE (new_map));</span>
+<span class="lineNum">     236 </span><span class="lineCov">    4737045 :   input_location = new_map-&gt;start_location;</span>
+<span class="lineNum">     237 </span>            : }
+<a name="238"><span class="lineNum">     238 </span>            : </a>
+<span class="lineNum">     239 </span>            : static void
+<span class="lineNum">     240 </span><span class="lineCov">        522 : cb_def_pragma (cpp_reader *pfile, source_location loc)</span>
+<span class="lineNum">     241 </span>            : {
+<span class="lineNum">     242 </span>            :   /* Issue a warning message if we have been asked to do so.  Ignore
+<span class="lineNum">     243 </span>            :      unknown pragmas in system headers unless an explicit
+<span class="lineNum">     244 </span>            :      -Wunknown-pragmas has been given.  */
+<span class="lineNum">     245 </span><span class="lineCov">        522 :   if (warn_unknown_pragmas &gt; in_system_header_at (input_location))</span>
+<span class="lineNum">     246 </span>            :     {
+<span class="lineNum">     247 </span><span class="lineCov">         29 :       const unsigned char *space, *name;</span>
+<span class="lineNum">     248 </span><span class="lineCov">         29 :       const cpp_token *s;</span>
+<span class="lineNum">     249 </span><span class="lineCov">         29 :       location_t fe_loc = loc;</span>
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span><span class="lineCov">         29 :       space = name = (const unsigned char *) &quot;&quot;;</span>
+<span class="lineNum">     252 </span><span class="lineCov">         29 :       s = cpp_get_token (pfile);</span>
+<span class="lineNum">     253 </span><span class="lineCov">         29 :       if (s-&gt;type != CPP_EOF)</span>
+<span class="lineNum">     254 </span>            :         {
+<span class="lineNum">     255 </span><span class="lineCov">         28 :           space = cpp_token_as_text (pfile, s);</span>
+<span class="lineNum">     256 </span><span class="lineCov">         28 :           s = cpp_get_token (pfile);</span>
+<span class="lineNum">     257 </span><span class="lineCov">         28 :           if (s-&gt;type == CPP_NAME)</span>
+<span class="lineNum">     258 </span><span class="lineCov">         17 :             name = cpp_token_as_text (pfile, s);</span>
+<span class="lineNum">     259 </span>            :         }
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span><span class="lineCov">         29 :       warning_at (fe_loc, OPT_Wunknown_pragmas, &quot;ignoring #pragma %s %s&quot;,</span>
+<span class="lineNum">     262 </span>            :                   space, name);
+<span class="lineNum">     263 </span>            :     }
+<span class="lineNum">     264 </span><span class="lineCov">        522 : }</span>
+<span class="lineNum">     265 </span>            : 
+<a name="266"><span class="lineNum">     266 </span>            : /* #define callback for DWARF and DWARF2 debug info.  */</a>
+<span class="lineNum">     267 </span>            : static void
+<span class="lineNum">     268 </span><span class="lineCov">     198766 : cb_define (cpp_reader *pfile, source_location loc, cpp_hashnode *node)</span>
+<span class="lineNum">     269 </span>            : {
+<span class="lineNum">     270 </span><span class="lineCov">     198766 :   const struct line_map *map = linemap_lookup (line_table, loc);</span>
+<span class="lineNum">     271 </span><span class="lineCov">     397532 :   (*debug_hooks-&gt;define) (SOURCE_LINE (linemap_check_ordinary (map), loc),</span>
+<span class="lineNum">     272 </span><span class="lineCov">     198766 :                           (const char *) cpp_macro_definition (pfile, node));</span>
+<span class="lineNum">     273 </span><span class="lineCov">     198766 : }</span>
+<span class="lineNum">     274 </span>            : 
+<a name="275"><span class="lineNum">     275 </span>            : /* #undef callback for DWARF and DWARF2 debug info.  */</a>
+<span class="lineNum">     276 </span>            : static void
+<span class="lineNum">     277 </span><span class="lineCov">       1174 : cb_undef (cpp_reader * ARG_UNUSED (pfile), source_location loc,</span>
+<span class="lineNum">     278 </span>            :           cpp_hashnode *node)
+<span class="lineNum">     279 </span>            : {
+<span class="lineNum">     280 </span><span class="lineCov">       1174 :   const struct line_map *map = linemap_lookup (line_table, loc);</span>
+<span class="lineNum">     281 </span><span class="lineCov">       2348 :   (*debug_hooks-&gt;undef) (SOURCE_LINE (linemap_check_ordinary (map), loc),</span>
+<span class="lineNum">     282 </span><span class="lineCov">       1174 :                          (const char *) NODE_NAME (node));</span>
+<span class="lineNum">     283 </span><span class="lineCov">       1174 : }</span>
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            : /* Wrapper around cpp_get_token to skip CPP_PADDING tokens
+<a name="286"><span class="lineNum">     286 </span>            :    and not consume CPP_EOF.  */</a>
+<span class="lineNum">     287 </span>            : static const cpp_token *
+<span class="lineNum">     288 </span><span class="lineCov">        987 : get_token_no_padding (cpp_reader *pfile)</span>
+<span class="lineNum">     289 </span>            : {
+<span class="lineNum">     290 </span><span class="lineCov">       1283 :   for (;;)</span>
+<span class="lineNum">     291 </span>            :     {
+<span class="lineNum">     292 </span><span class="lineCov">       1283 :       const cpp_token *ret = cpp_peek_token (pfile, 0);</span>
+<span class="lineNum">     293 </span><span class="lineCov">       1283 :       if (ret-&gt;type == CPP_EOF)</span>
+<span class="lineNum">     294 </span><span class="lineCov">          2 :         return ret;</span>
+<span class="lineNum">     295 </span><span class="lineCov">       1281 :       ret = cpp_get_token (pfile);</span>
+<span class="lineNum">     296 </span><span class="lineCov">       1281 :       if (ret-&gt;type != CPP_PADDING)</span>
+<span class="lineNum">     297 </span><span class="lineCov">        985 :         return ret;</span>
+<span class="lineNum">     298 </span>            :     }
+<span class="lineNum">     299 </span>            : }
+<span class="lineNum">     300 </span>            : 
+<a name="301"><span class="lineNum">     301 </span>            : /* Callback for has_attribute.  */</a>
+<span class="lineNum">     302 </span>            : int
+<span class="lineNum">     303 </span><span class="lineCov">        298 : c_common_has_attribute (cpp_reader *pfile)</span>
+<span class="lineNum">     304 </span>            : {
+<span class="lineNum">     305 </span><span class="lineCov">        298 :   int result = 0;</span>
+<span class="lineNum">     306 </span><span class="lineCov">        298 :   tree attr_name = NULL_TREE;</span>
+<span class="lineNum">     307 </span><span class="lineCov">        298 :   const cpp_token *token;</span>
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span><span class="lineCov">        298 :   token = get_token_no_padding (pfile);</span>
+<span class="lineNum">     310 </span><span class="lineCov">        298 :   if (token-&gt;type != CPP_OPEN_PAREN)</span>
+<span class="lineNum">     311 </span>            :     {
+<span class="lineNum">     312 </span><span class="lineNoCov">          0 :       cpp_error (pfile, CPP_DL_ERROR,</span>
+<span class="lineNum">     313 </span>            :                  &quot;missing '(' after \&quot;__has_attribute\&quot;&quot;);
+<span class="lineNum">     314 </span><span class="lineNoCov">          0 :       return 0;</span>
+<span class="lineNum">     315 </span>            :     }
+<span class="lineNum">     316 </span><span class="lineCov">        298 :   token = get_token_no_padding (pfile);</span>
+<span class="lineNum">     317 </span><span class="lineCov">        298 :   if (token-&gt;type == CPP_NAME)</span>
+<span class="lineNum">     318 </span>            :     {
+<span class="lineNum">     319 </span><span class="lineCov">        295 :       attr_name = get_identifier ((const char *)</span>
+<span class="lineNum">     320 </span>            :                                   cpp_token_as_text (pfile, token));
+<span class="lineNum">     321 </span><span class="lineCov">        295 :       attr_name = canonicalize_attr_name (attr_name);</span>
+<span class="lineNum">     322 </span><span class="lineCov">        295 :       if (c_dialect_cxx ())</span>
+<span class="lineNum">     323 </span>            :         {
+<span class="lineNum">     324 </span>            :           int idx = 0;
+<span class="lineNum">     325 </span><span class="lineCov">        266 :           const cpp_token *nxt_token;</span>
+<span class="lineNum">     326 </span><span class="lineCov">        266 :           do</span>
+<span class="lineNum">     327 </span><span class="lineCov">        266 :             nxt_token = cpp_peek_token (pfile, idx++);</span>
+<span class="lineNum">     328 </span><span class="lineCov">        266 :           while (nxt_token-&gt;type == CPP_PADDING);</span>
+<span class="lineNum">     329 </span><span class="lineCov">        221 :           if (nxt_token-&gt;type == CPP_SCOPE)</span>
+<span class="lineNum">     330 </span>            :             {
+<span class="lineNum">     331 </span><span class="lineCov">         48 :               get_token_no_padding (pfile); // Eat scope.</span>
+<span class="lineNum">     332 </span><span class="lineCov">         48 :               nxt_token = get_token_no_padding (pfile);</span>
+<span class="lineNum">     333 </span><span class="lineCov">         48 :               if (nxt_token-&gt;type == CPP_NAME)</span>
+<span class="lineNum">     334 </span>            :                 {
+<span class="lineNum">     335 </span><span class="lineCov">         48 :                   tree attr_ns = attr_name;</span>
+<span class="lineNum">     336 </span><span class="lineCov">         48 :                   tree attr_id</span>
+<span class="lineNum">     337 </span><span class="lineCov">         48 :                     = get_identifier ((const char *)</span>
+<span class="lineNum">     338 </span>            :                                       cpp_token_as_text (pfile, nxt_token));
+<span class="lineNum">     339 </span><span class="lineCov">         48 :                   attr_name = build_tree_list (attr_ns, attr_id);</span>
+<span class="lineNum">     340 </span>            :                 }
+<span class="lineNum">     341 </span>            :               else
+<span class="lineNum">     342 </span>            :                 {
+<span class="lineNum">     343 </span><span class="lineNoCov">          0 :                   cpp_error (pfile, CPP_DL_ERROR,</span>
+<span class="lineNum">     344 </span>            :                              &quot;attribute identifier required after scope&quot;);
+<span class="lineNum">     345 </span><span class="lineNoCov">          0 :                   attr_name = NULL_TREE;</span>
+<span class="lineNum">     346 </span>            :                 }
+<span class="lineNum">     347 </span>            :             }
+<span class="lineNum">     348 </span>            :           else
+<span class="lineNum">     349 </span>            :             {
+<span class="lineNum">     350 </span>            :               /* Some standard attributes need special handling.  */
+<span class="lineNum">     351 </span><span class="lineCov">        173 :               if (is_attribute_p (&quot;noreturn&quot;, attr_name))</span>
+<span class="lineNum">     352 </span>            :                 result = 200809;
+<span class="lineNum">     353 </span><span class="lineCov">        136 :               else if (is_attribute_p (&quot;deprecated&quot;, attr_name))</span>
+<span class="lineNum">     354 </span>            :                 result = 201309;
+<span class="lineNum">     355 </span><span class="lineCov">        106 :               else if (is_attribute_p (&quot;maybe_unused&quot;, attr_name)</span>
+<span class="lineNum">     356 </span><span class="lineCov">        104 :                        || is_attribute_p (&quot;nodiscard&quot;, attr_name)</span>
+<span class="lineNum">     357 </span><span class="lineCov">        208 :                        || is_attribute_p (&quot;fallthrough&quot;, attr_name))</span>
+<span class="lineNum">     358 </span>            :                 result = 201603;
+<span class="lineNum">     359 </span>            :               if (result)
+<span class="lineNum">     360 </span>            :                 attr_name = NULL_TREE;
+<span class="lineNum">     361 </span>            :             }
+<span class="lineNum">     362 </span>            :         }
+<span class="lineNum">     363 </span><span class="lineCov">        222 :       if (attr_name)</span>
+<span class="lineNum">     364 </span>            :         {
+<span class="lineNum">     365 </span><span class="lineCov">        222 :           init_attributes ();</span>
+<span class="lineNum">     366 </span><span class="lineCov">        222 :           const struct attribute_spec *attr = lookup_attribute_spec (attr_name);</span>
+<span class="lineNum">     367 </span><span class="lineCov">        222 :           if (attr)</span>
+<span class="lineNum">     368 </span><span class="lineCov">        194 :             result = 1;</span>
+<span class="lineNum">     369 </span>            :         }
+<span class="lineNum">     370 </span>            :     }
+<span class="lineNum">     371 </span>            :   else
+<span class="lineNum">     372 </span>            :     {
+<span class="lineNum">     373 </span><span class="lineCov">          3 :       cpp_error (pfile, CPP_DL_ERROR,</span>
+<span class="lineNum">     374 </span>            :                  &quot;macro \&quot;__has_attribute\&quot; requires an identifier&quot;);
+<span class="lineNum">     375 </span><span class="lineCov">          3 :       return 0;</span>
+<span class="lineNum">     376 </span>            :     }
+<span class="lineNum">     377 </span>            : 
+<span class="lineNum">     378 </span><span class="lineCov">        295 :   if (get_token_no_padding (pfile)-&gt;type != CPP_CLOSE_PAREN)</span>
+<span class="lineNum">     379 </span><span class="lineCov">          2 :     cpp_error (pfile, CPP_DL_ERROR,</span>
+<span class="lineNum">     380 </span>            :                &quot;missing ')' after \&quot;__has_attribute\&quot;&quot;);
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            :   return result;
+<span class="lineNum">     383 </span>            : }
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span>            : /* Read a token and return its type.  Fill *VALUE with its value, if
+<span class="lineNum">     386 </span>            :    applicable.  Fill *CPP_FLAGS with the token's flags, if it is
+<span class="lineNum">     387 </span>            :    non-NULL.  */
+<a name="388"><span class="lineNum">     388 </span>            : </a>
+<span class="lineNum">     389 </span>            : enum cpp_ttype
+<span class="lineNum">     390 </span><span class="lineCov"> 1635903295 : c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,</span>
+<span class="lineNum">     391 </span>            :                   int lex_flags)
+<span class="lineNum">     392 </span>            : {
+<span class="lineNum">     393 </span><span class="lineCov"> 1635903295 :   static bool no_more_pch;</span>
+<span class="lineNum">     394 </span><span class="lineCov"> 1635903295 :   const cpp_token *tok;</span>
+<span class="lineNum">     395 </span><span class="lineCov"> 1635903295 :   enum cpp_ttype type;</span>
+<span class="lineNum">     396 </span><span class="lineCov"> 1635903295 :   unsigned char add_flags = 0;</span>
+<span class="lineNum">     397 </span><span class="lineCov"> 1635903295 :   enum overflow_type overflow = OT_NONE;</span>
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span><span class="lineCov"> 1635903295 :   timevar_push (TV_CPP);</span>
+<span class="lineNum">     400 </span><span class="lineCov"> 1858882187 :  retry:</span>
+<span class="lineNum">     401 </span><span class="lineCov"> 1858882187 :   tok = cpp_get_token_with_location (parse_in, loc);</span>
+<span class="lineNum">     402 </span><span class="lineCov"> 1858882077 :   type = tok-&gt;type;</span>
+<span class="lineNum">     403 </span>            : 
+<span class="lineNum">     404 </span><span class="lineCov"> 1858882221 :  retry_after_at:</span>
+<span class="lineNum">     405 </span><span class="lineCov"> 1858882221 :   switch (type)</span>
+<span class="lineNum">     406 </span>            :     {
+<span class="lineNum">     407 </span><span class="lineCov">  222978616 :     case CPP_PADDING:</span>
+<span class="lineNum">     408 </span><span class="lineCov">  222978616 :       goto retry;</span>
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span><span class="lineCov">  754670108 :     case CPP_NAME:</span>
+<span class="lineNum">     411 </span><span class="lineCov">  754670108 :       *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok-&gt;val.node.node));</span>
+<span class="lineNum">     412 </span><span class="lineCov">  754670108 :       break;</span>
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span><span class="lineCov">   27201702 :     case CPP_NUMBER:</span>
+<span class="lineNum">     415 </span><span class="lineCov">   27201702 :       {</span>
+<span class="lineNum">     416 </span><span class="lineCov">   27201702 :         const char *suffix = NULL;</span>
+<span class="lineNum">     417 </span><span class="lineCov">   27201702 :         unsigned int flags = cpp_classify_number (parse_in, tok, &amp;suffix, *loc);</span>
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span><span class="lineCov">   27201702 :         switch (flags &amp; CPP_N_CATEGORY)</span>
+<span class="lineNum">     420 </span>            :           {
+<span class="lineNum">     421 </span><span class="lineCov">        135 :           case CPP_N_INVALID:</span>
+<span class="lineNum">     422 </span>            :             /* cpplib has issued an error.  */
+<span class="lineNum">     423 </span><span class="lineCov">        135 :             *value = error_mark_node;</span>
+<span class="lineNum">     424 </span><span class="lineCov">        135 :             break;</span>
+<span class="lineNum">     425 </span>            : 
+<span class="lineNum">     426 </span><span class="lineCov">   26185363 :           case CPP_N_INTEGER:</span>
+<span class="lineNum">     427 </span>            :             /* C++ uses '0' to mark virtual functions as pure.
+<span class="lineNum">     428 </span>            :                Set PURE_ZERO to pass this information to the C++ parser.  */
+<span class="lineNum">     429 </span><span class="lineCov">   26185363 :             if (tok-&gt;val.str.len == 1 &amp;&amp; *tok-&gt;val.str.text == '0')</span>
+<span class="lineNum">     430 </span><span class="lineCov">    5250930 :               add_flags = PURE_ZERO;</span>
+<span class="lineNum">     431 </span><span class="lineCov">   26185363 :             *value = interpret_integer (tok, flags, &amp;overflow);</span>
+<span class="lineNum">     432 </span><span class="lineCov">   26185363 :             break;</span>
+<span class="lineNum">     433 </span>            : 
+<span class="lineNum">     434 </span><span class="lineCov">    1016204 :           case CPP_N_FLOATING:</span>
+<span class="lineNum">     435 </span><span class="lineCov">    1016204 :             *value = interpret_float (tok, flags, suffix, &amp;overflow);</span>
+<span class="lineNum">     436 </span><span class="lineCov">    1016204 :             break;</span>
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span><span class="lineNoCov">          0 :           default:</span>
+<span class="lineNum">     439 </span><span class="lineNoCov">          0 :             gcc_unreachable ();</span>
+<span class="lineNum">     440 </span>            :           }
+<span class="lineNum">     441 </span>            : 
+<span class="lineNum">     442 </span><span class="lineCov">   27201702 :         if (flags &amp; CPP_N_USERDEF)</span>
+<span class="lineNum">     443 </span>            :           {
+<span class="lineNum">     444 </span><span class="lineCov">      31878 :             char *str;</span>
+<span class="lineNum">     445 </span><span class="lineCov">      31878 :             tree literal;</span>
+<span class="lineNum">     446 </span><span class="lineCov">      31878 :             tree suffix_id = get_identifier (suffix);</span>
+<span class="lineNum">     447 </span><span class="lineCov">      31878 :             int len = tok-&gt;val.str.len - strlen (suffix);</span>
+<span class="lineNum">     448 </span>            :             /* If this is going to be used as a C string to pass to a
+<span class="lineNum">     449 </span>            :                raw literal operator, we need to add a trailing NUL.  */
+<span class="lineNum">     450 </span><span class="lineCov">      63756 :             tree num_string = build_string (len + 1,</span>
+<span class="lineNum">     451 </span><span class="lineCov">      31878 :                                             (const char *) tok-&gt;val.str.text);</span>
+<span class="lineNum">     452 </span><span class="lineCov">      31878 :             TREE_TYPE (num_string) = char_array_type_node;</span>
+<span class="lineNum">     453 </span><span class="lineCov">      31878 :             num_string = fix_string_type (num_string);</span>
+<span class="lineNum">     454 </span><span class="lineCov">      31878 :             str = CONST_CAST (char *, TREE_STRING_POINTER (num_string));</span>
+<span class="lineNum">     455 </span><span class="lineCov">      31878 :             str[len] = '\0';</span>
+<span class="lineNum">     456 </span><span class="lineCov">      31878 :             literal = build_userdef_literal (suffix_id, *value, overflow,</span>
+<span class="lineNum">     457 </span>            :                                              num_string);
+<span class="lineNum">     458 </span><span class="lineCov">      31878 :             *value = literal;</span>
+<span class="lineNum">     459 </span><span class="lineCov">   27201702 :           }</span>
+<span class="lineNum">     460 </span>            :       }
+<span class="lineNum">     461 </span><span class="lineCov">   27201702 :       break;</span>
+<span class="lineNum">     462 </span>            : 
+<span class="lineNum">     463 </span><span class="lineCov">          3 :     case CPP_ATSIGN:</span>
+<span class="lineNum">     464 </span>            :       /* An @ may give the next token special significance in Objective-C.  */
+<span class="lineNum">     465 </span><span class="lineCov">          3 :       if (c_dialect_objc ())</span>
+<span class="lineNum">     466 </span>            :         {
+<span class="lineNum">     467 </span><span class="lineNoCov">          0 :           location_t atloc = *loc;</span>
+<span class="lineNum">     468 </span><span class="lineNoCov">          0 :           location_t newloc;</span>
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :         retry_at:</span>
+<span class="lineNum">     471 </span><span class="lineNoCov">          0 :           tok = cpp_get_token_with_location (parse_in, &amp;newloc);</span>
+<span class="lineNum">     472 </span><span class="lineNoCov">          0 :           type = tok-&gt;type;</span>
+<span class="lineNum">     473 </span><span class="lineNoCov">          0 :           switch (type)</span>
+<span class="lineNum">     474 </span>            :             {
+<span class="lineNum">     475 </span>            :             case CPP_PADDING:
+<span class="lineNum">     476 </span>            :               goto retry_at;
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span><span class="lineNoCov">          0 :             case CPP_STRING:</span>
+<span class="lineNum">     479 </span><span class="lineNoCov">          0 :             case CPP_WSTRING:</span>
+<span class="lineNum">     480 </span><span class="lineNoCov">          0 :             case CPP_STRING16:</span>
+<span class="lineNum">     481 </span><span class="lineNoCov">          0 :             case CPP_STRING32:</span>
+<span class="lineNum">     482 </span><span class="lineNoCov">          0 :             case CPP_UTF8STRING:</span>
+<span class="lineNum">     483 </span><span class="lineNoCov">          0 :               type = lex_string (tok, value, true, true);</span>
+<span class="lineNum">     484 </span><span class="lineNoCov">          0 :               break;</span>
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineNoCov">          0 :             case CPP_NAME:</span>
+<span class="lineNum">     487 </span><span class="lineNoCov">          0 :               *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok-&gt;val.node.node));</span>
+<span class="lineNum">     488 </span><span class="lineNoCov">          0 :               if (OBJC_IS_AT_KEYWORD (C_RID_CODE (*value))</span>
+<span class="lineNum">     489 </span><span class="lineNoCov">          0 :                   || OBJC_IS_CXX_KEYWORD (C_RID_CODE (*value)))</span>
+<span class="lineNum">     490 </span>            :                 {
+<span class="lineNum">     491 </span>            :                   type = CPP_AT_NAME;
+<span class="lineNum">     492 </span>            :                   /* Note the complication: if we found an OBJC_CXX
+<span class="lineNum">     493 </span>            :                      keyword, for example, 'class', we will be
+<span class="lineNum">     494 </span>            :                      returning a token of type CPP_AT_NAME and rid
+<span class="lineNum">     495 </span>            :                      code RID_CLASS (not RID_AT_CLASS).  The language
+<span class="lineNum">     496 </span>            :                      parser needs to convert that to RID_AT_CLASS.
+<span class="lineNum">     497 </span>            :                   */
+<span class="lineNum">     498 </span>            :                   break;
+<span class="lineNum">     499 </span>            :                 }
+<span class="lineNum">     500 </span>            :               /* FALLTHROUGH */
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineNoCov">          0 :             default:</span>
+<span class="lineNum">     503 </span>            :               /* ... or not.  */
+<span class="lineNum">     504 </span><span class="lineNoCov">          0 :               error_at (atloc, &quot;stray %&lt;@%&gt; in program&quot;);</span>
+<span class="lineNum">     505 </span><span class="lineNoCov">          0 :               *loc = newloc;</span>
+<span class="lineNum">     506 </span><span class="lineNoCov">          0 :               goto retry_after_at;</span>
+<span class="lineNum">     507 </span>            :             }
+<span class="lineNum">     508 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">     509 </span><span class="lineCov">          3 :         }</span>
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span>            :       /* FALLTHROUGH */
+<span class="lineNum">     512 </span><span class="lineCov">         23 :     case CPP_HASH:</span>
+<span class="lineNum">     513 </span><span class="lineCov">         23 :     case CPP_PASTE:</span>
+<span class="lineNum">     514 </span><span class="lineCov">         23 :       {</span>
+<span class="lineNum">     515 </span><span class="lineCov">         23 :         unsigned char name[8];</span>
+<span class="lineNum">     516 </span>            : 
+<span class="lineNum">     517 </span><span class="lineCov">         23 :         *cpp_spell_token (parse_in, tok, name, true) = 0;</span>
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span><span class="lineCov">         23 :         error_at (*loc, &quot;stray %qs in program&quot;, name);</span>
+<span class="lineNum">     520 </span>            :       }
+<span class="lineNum">     521 </span>            : 
+<span class="lineNum">     522 </span><span class="lineCov">         23 :       goto retry;</span>
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span><span class="lineCov">         65 :     case CPP_OTHER:</span>
+<span class="lineNum">     525 </span><span class="lineCov">         65 :       {</span>
+<span class="lineNum">     526 </span><span class="lineCov">         65 :         cppchar_t c = tok-&gt;val.str.text[0];</span>
+<span class="lineNum">     527 </span>            : 
+<span class="lineNum">     528 </span><span class="lineCov">         65 :         if (c == '&quot;' || c == '\'')</span>
+<span class="lineNum">     529 </span><span class="lineCov">         11 :           error_at (*loc, &quot;missing terminating %c character&quot;, (int) c);</span>
+<span class="lineNum">     530 </span><span class="lineCov">         54 :         else if (ISGRAPH (c))</span>
+<span class="lineNum">     531 </span><span class="lineCov">         48 :           error_at (*loc, &quot;stray %qc in program&quot;, (int) c);</span>
+<span class="lineNum">     532 </span>            :         else
+<span class="lineNum">     533 </span><span class="lineCov">          6 :           error_at (*loc, &quot;stray %&lt;\\%o%&gt; in program&quot;, (int) c);</span>
+<span class="lineNum">     534 </span>            :       }
+<span class="lineNum">     535 </span><span class="lineCov">         65 :       goto retry;</span>
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span><span class="lineCov">         53 :     case CPP_CHAR_USERDEF:</span>
+<span class="lineNum">     538 </span><span class="lineCov">         53 :     case CPP_WCHAR_USERDEF:</span>
+<span class="lineNum">     539 </span><span class="lineCov">         53 :     case CPP_CHAR16_USERDEF:</span>
+<span class="lineNum">     540 </span><span class="lineCov">         53 :     case CPP_CHAR32_USERDEF:</span>
+<span class="lineNum">     541 </span><span class="lineCov">         53 :     case CPP_UTF8CHAR_USERDEF:</span>
+<span class="lineNum">     542 </span><span class="lineCov">         53 :       {</span>
+<span class="lineNum">     543 </span><span class="lineCov">         53 :         tree literal;</span>
+<span class="lineNum">     544 </span><span class="lineCov">         53 :         cpp_token temp_tok = *tok;</span>
+<span class="lineNum">     545 </span><span class="lineCov">         53 :         const char *suffix = cpp_get_userdef_suffix (tok);</span>
+<span class="lineNum">     546 </span><span class="lineCov">         53 :         temp_tok.val.str.len -= strlen (suffix);</span>
+<span class="lineNum">     547 </span><span class="lineCov">         53 :         temp_tok.type = cpp_userdef_char_remove_type (type);</span>
+<span class="lineNum">     548 </span><span class="lineCov">         53 :         literal = build_userdef_literal (get_identifier (suffix),</span>
+<span class="lineNum">     549 </span>            :                                          lex_charconst (&amp;temp_tok),
+<span class="lineNum">     550 </span>            :                                          OT_NONE, NULL_TREE);
+<span class="lineNum">     551 </span><span class="lineCov">         53 :         *value = literal;</span>
+<span class="lineNum">     552 </span>            :       }
+<span class="lineNum">     553 </span><span class="lineCov">         53 :       break;</span>
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span><span class="lineCov">     173104 :     case CPP_CHAR:</span>
+<span class="lineNum">     556 </span><span class="lineCov">     173104 :     case CPP_WCHAR:</span>
+<span class="lineNum">     557 </span><span class="lineCov">     173104 :     case CPP_CHAR16:</span>
+<span class="lineNum">     558 </span><span class="lineCov">     173104 :     case CPP_CHAR32:</span>
+<span class="lineNum">     559 </span><span class="lineCov">     173104 :     case CPP_UTF8CHAR:</span>
+<span class="lineNum">     560 </span><span class="lineCov">     173104 :       *value = lex_charconst (tok);</span>
+<span class="lineNum">     561 </span><span class="lineCov">     173104 :       break;</span>
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span><span class="lineCov">      12792 :     case CPP_STRING_USERDEF:</span>
+<span class="lineNum">     564 </span><span class="lineCov">      12792 :     case CPP_WSTRING_USERDEF:</span>
+<span class="lineNum">     565 </span><span class="lineCov">      12792 :     case CPP_STRING16_USERDEF:</span>
+<span class="lineNum">     566 </span><span class="lineCov">      12792 :     case CPP_STRING32_USERDEF:</span>
+<span class="lineNum">     567 </span><span class="lineCov">      12792 :     case CPP_UTF8STRING_USERDEF:</span>
+<span class="lineNum">     568 </span><span class="lineCov">      12792 :       {</span>
+<span class="lineNum">     569 </span><span class="lineCov">      12792 :         tree literal, string;</span>
+<span class="lineNum">     570 </span><span class="lineCov">      12792 :         const char *suffix = cpp_get_userdef_suffix (tok);</span>
+<span class="lineNum">     571 </span><span class="lineCov">      38376 :         string = build_string (tok-&gt;val.str.len - strlen (suffix),</span>
+<span class="lineNum">     572 </span><span class="lineCov">      12792 :                                (const char *) tok-&gt;val.str.text);</span>
+<span class="lineNum">     573 </span><span class="lineCov">      12792 :         literal = build_userdef_literal (get_identifier (suffix),</span>
+<span class="lineNum">     574 </span>            :                                          string, OT_NONE, NULL_TREE);
+<span class="lineNum">     575 </span><span class="lineCov">      12792 :         *value = literal;</span>
+<span class="lineNum">     576 </span>            :       }
+<span class="lineNum">     577 </span><span class="lineCov">      12792 :       break;</span>
+<span class="lineNum">     578 </span>            : 
+<span class="lineNum">     579 </span><span class="lineCov">    4113442 :     case CPP_STRING:</span>
+<span class="lineNum">     580 </span><span class="lineCov">    4113442 :     case CPP_WSTRING:</span>
+<span class="lineNum">     581 </span><span class="lineCov">    4113442 :     case CPP_STRING16:</span>
+<span class="lineNum">     582 </span><span class="lineCov">    4113442 :     case CPP_STRING32:</span>
+<span class="lineNum">     583 </span><span class="lineCov">    4113442 :     case CPP_UTF8STRING:</span>
+<span class="lineNum">     584 </span><span class="lineCov">    4113442 :       if ((lex_flags &amp; C_LEX_STRING_NO_JOIN) == 0)</span>
+<span class="lineNum">     585 </span>            :         {
+<span class="lineNum">     586 </span><span class="lineCov">    4832766 :           type = lex_string (tok, value, false,</span>
+<span class="lineNum">     587 </span><span class="lineCov">    2416383 :                              (lex_flags &amp; C_LEX_STRING_NO_TRANSLATE) == 0);</span>
+<span class="lineNum">     588 </span><span class="lineCov">    2416383 :           break;</span>
+<span class="lineNum">     589 </span>            :         }
+<span class="lineNum">     590 </span><span class="lineCov">    1697059 :       *value = build_string (tok-&gt;val.str.len, (const char *) tok-&gt;val.str.text);</span>
+<span class="lineNum">     591 </span><span class="lineCov">    1697059 :       break;</span>
+<span class="lineNum">     592 </span>            : 
+<span class="lineNum">     593 </span><span class="lineCov">     717540 :     case CPP_PRAGMA:</span>
+<span class="lineNum">     594 </span><span class="lineCov">    1435080 :       *value = build_int_cst (integer_type_node, tok-&gt;val.pragma);</span>
+<span class="lineNum">     595 </span><span class="lineCov">     717540 :       break;</span>
+<span class="lineNum">     596 </span>            : 
+<span class="lineNum">     597 </span>            :       /* These tokens should not be visible outside cpplib.  */
+<span class="lineNum">     598 </span><span class="lineNoCov">          0 :     case CPP_HEADER_NAME:</span>
+<span class="lineNum">     599 </span><span class="lineNoCov">          0 :     case CPP_MACRO_ARG:</span>
+<span class="lineNum">     600 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     601 </span>            : 
+<span class="lineNum">     602 </span>            :     /* CPP_COMMENT will appear when compiling with -C.  Ignore, except
+<span class="lineNum">     603 </span>            :        when it is a FALLTHROUGH comment, in that case set
+<span class="lineNum">     604 </span>            :        PREV_FALLTHROUGH flag on the next non-comment token.  */
+<span class="lineNum">     605 </span><span class="lineCov">        332 :     case CPP_COMMENT:</span>
+<span class="lineNum">     606 </span><span class="lineCov">        332 :       if (tok-&gt;flags &amp; PREV_FALLTHROUGH)</span>
+<span class="lineNum">     607 </span>            :         {
+<span class="lineNum">     608 </span><span class="lineCov">        168 :           do</span>
+<span class="lineNum">     609 </span>            :             {
+<span class="lineNum">     610 </span><span class="lineCov">        168 :               tok = cpp_get_token_with_location (parse_in, loc);</span>
+<span class="lineNum">     611 </span><span class="lineCov">        168 :               type = tok-&gt;type;</span>
+<span class="lineNum">     612 </span>            :             }
+<span class="lineNum">     613 </span><span class="lineCov">        168 :           while (type == CPP_PADDING || type == CPP_COMMENT);</span>
+<span class="lineNum">     614 </span><span class="lineCov">        144 :           add_flags |= PREV_FALLTHROUGH;</span>
+<span class="lineNum">     615 </span><span class="lineCov">        144 :           goto retry_after_at;</span>
+<span class="lineNum">     616 </span>            :         }
+<span class="lineNum">     617 </span><span class="lineCov">        188 :        goto retry;</span>
+<span class="lineNum">     618 </span>            : 
+<span class="lineNum">     619 </span><span class="lineCov">  849014444 :     default:</span>
+<span class="lineNum">     620 </span><span class="lineCov">  849014444 :       *value = NULL_TREE;</span>
+<span class="lineNum">     621 </span><span class="lineCov">  849014444 :       break;</span>
+<span class="lineNum">     622 </span>            :     }
+<span class="lineNum">     623 </span>            : 
+<span class="lineNum">     624 </span><span class="lineCov"> 1635903185 :   if (cpp_flags)</span>
+<span class="lineNum">     625 </span><span class="lineCov"> 1635903185 :     *cpp_flags = tok-&gt;flags | add_flags;</span>
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span><span class="lineCov"> 1635903185 :   if (!no_more_pch)</span>
+<span class="lineNum">     628 </span>            :     {
+<span class="lineNum">     629 </span><span class="lineCov">     127614 :       no_more_pch = true;</span>
+<span class="lineNum">     630 </span><span class="lineCov">     127614 :       c_common_no_more_pch ();</span>
+<span class="lineNum">     631 </span>            :     }
+<span class="lineNum">     632 </span>            : 
+<span class="lineNum">     633 </span><span class="lineCov"> 1635903185 :   timevar_pop (TV_CPP);</span>
+<span class="lineNum">     634 </span>            : 
+<span class="lineNum">     635 </span><span class="lineCov"> 1635903185 :   return type;</span>
+<span class="lineNum">     636 </span>            : }
+<span class="lineNum">     637 </span>            : 
+<span class="lineNum">     638 </span>            : /* Returns the narrowest C-visible unsigned type, starting with the
+<span class="lineNum">     639 </span>            :    minimum specified by FLAGS, that can fit HIGH:LOW, or itk_none if
+<span class="lineNum">     640 </span>            :    there isn't one.  */
+<a name="641"><span class="lineNum">     641 </span>            : </a>
+<span class="lineNum">     642 </span>            : static enum integer_type_kind
+<span class="lineNum">     643 </span><span class="lineCov">   26185363 : narrowest_unsigned_type (const widest_int &amp;val, unsigned int flags)</span>
+<span class="lineNum">     644 </span>            : {
+<span class="lineNum">     645 </span><span class="lineCov">   26185363 :   int itk;</span>
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span><span class="lineCov">   26185363 :   if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">     648 </span>            :     itk = itk_unsigned_int;
+<span class="lineNum">     649 </span><span class="lineCov">    1008944 :   else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">     650 </span>            :     itk = itk_unsigned_long;
+<span class="lineNum">     651 </span>            :   else
+<span class="lineNum">     652 </span><span class="lineCov">     724846 :     itk = itk_unsigned_long_long;</span>
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span><span class="lineCov">   26238544 :   for (; itk &lt; itk_none; itk += 2 /* skip unsigned types */)</span>
+<span class="lineNum">     655 </span>            :     {
+<span class="lineNum">     656 </span><span class="lineCov">   26238544 :       tree upper;</span>
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span><span class="lineCov">   26238544 :       if (integer_types[itk] == NULL_TREE)</span>
+<span class="lineNum">     659 </span>            :         continue;
+<span class="lineNum">     660 </span><span class="lineCov">   26238544 :       upper = TYPE_MAX_VALUE (integer_types[itk]);</span>
+<span class="lineNum">     661 </span>            : 
+<span class="lineNum">     662 </span><span class="lineCov">   26238544 :       if (wi::geu_p (wi::to_widest (upper), val))</span>
+<span class="lineNum">     663 </span><span class="lineCov">   26185363 :         return (enum integer_type_kind) itk;</span>
+<span class="lineNum">     664 </span>            :     }
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span>            :   return itk_none;
+<span class="lineNum">     667 </span>            : }
+<span class="lineNum">     668 </span>            : 
+<a name="669"><span class="lineNum">     669 </span>            : /* Ditto, but narrowest signed type.  */</a>
+<span class="lineNum">     670 </span>            : static enum integer_type_kind
+<span class="lineNum">     671 </span><span class="lineCov">   25247510 : narrowest_signed_type (const widest_int &amp;val, unsigned int flags)</span>
+<span class="lineNum">     672 </span>            : {
+<span class="lineNum">     673 </span><span class="lineCov">   25247510 :   int itk;</span>
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span><span class="lineCov">   25247510 :   if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">     676 </span>            :     itk = itk_int;
+<span class="lineNum">     677 </span><span class="lineCov">     285789 :   else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">     678 </span>            :     itk = itk_long;
+<span class="lineNum">     679 </span>            :   else
+<span class="lineNum">     680 </span><span class="lineCov">     157432 :     itk = itk_long_long;</span>
+<span class="lineNum">     681 </span>            : 
+<span class="lineNum">     682 </span><span class="lineCov">   25306919 :   for (; itk &lt; itk_none; itk += 2 /* skip signed types */)</span>
+<span class="lineNum">     683 </span>            :     {
+<span class="lineNum">     684 </span><span class="lineCov">   25306859 :       tree upper;</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span><span class="lineCov">   25306859 :       if (integer_types[itk] == NULL_TREE)</span>
+<span class="lineNum">     687 </span>            :         continue;
+<span class="lineNum">     688 </span><span class="lineCov">   25306619 :       upper = TYPE_MAX_VALUE (integer_types[itk]);</span>
+<span class="lineNum">     689 </span>            : 
+<span class="lineNum">     690 </span><span class="lineCov">   25306619 :       if (wi::geu_p (wi::to_widest (upper), val))</span>
+<span class="lineNum">     691 </span><span class="lineCov">   25247450 :         return (enum integer_type_kind) itk;</span>
+<span class="lineNum">     692 </span>            :     }
+<span class="lineNum">     693 </span>            : 
+<span class="lineNum">     694 </span>            :   return itk_none;
+<span class="lineNum">     695 </span>            : }
+<span class="lineNum">     696 </span>            : 
+<a name="697"><span class="lineNum">     697 </span>            : /* Interpret TOKEN, an integer with FLAGS as classified by cpplib.  */</a>
+<span class="lineNum">     698 </span>            : static tree
+<span class="lineNum">     699 </span><span class="lineCov">   26185363 : interpret_integer (const cpp_token *token, unsigned int flags,</span>
+<span class="lineNum">     700 </span>            :                    enum overflow_type *overflow)
+<span class="lineNum">     701 </span>            : {
+<span class="lineNum">     702 </span><span class="lineCov">   26185363 :   tree value, type;</span>
+<span class="lineNum">     703 </span><span class="lineCov">   26185363 :   enum integer_type_kind itk;</span>
+<span class="lineNum">     704 </span><span class="lineCov">   26185363 :   cpp_num integer;</span>
+<span class="lineNum">     705 </span><span class="lineCov">   26185363 :   HOST_WIDE_INT ival[3];</span>
+<span class="lineNum">     706 </span>            : 
+<span class="lineNum">     707 </span><span class="lineCov">   26185363 :   *overflow = OT_NONE;</span>
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span><span class="lineCov">   26185363 :   integer = cpp_interpret_integer (parse_in, token, flags);</span>
+<span class="lineNum">     710 </span><span class="lineCov">   26185363 :   if (integer.overflow)</span>
+<span class="lineNum">     711 </span><span class="lineCov">         15 :     *overflow = OT_OVERFLOW;</span>
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span><span class="lineCov">   26185363 :   ival[0] = integer.low;</span>
+<span class="lineNum">     714 </span><span class="lineCov">   26185363 :   ival[1] = integer.high;</span>
+<span class="lineNum">     715 </span><span class="lineCov">   26185363 :   ival[2] = 0;</span>
+<span class="lineNum">     716 </span><span class="lineCov">   26185363 :   widest_int wval = widest_int::from_array (ival, 3);</span>
+<span class="lineNum">     717 </span>            : 
+<span class="lineNum">     718 </span>            :   /* The type of a constant with a U suffix is straightforward.  */
+<span class="lineNum">     719 </span><span class="lineCov">   26185363 :   if (flags &amp; CPP_N_UNSIGNED)</span>
+<span class="lineNum">     720 </span><span class="lineCov">     937853 :     itk = narrowest_unsigned_type (wval, flags);</span>
+<span class="lineNum">     721 </span>            :   else
+<span class="lineNum">     722 </span>            :     {
+<span class="lineNum">     723 </span>            :       /* The type of a potentially-signed integer constant varies
+<span class="lineNum">     724 </span>            :          depending on the base it's in, the standard in use, and the
+<span class="lineNum">     725 </span>            :          length suffixes.  */
+<span class="lineNum">     726 </span><span class="lineCov">   25247510 :       enum integer_type_kind itk_u</span>
+<span class="lineNum">     727 </span><span class="lineCov">   25247510 :         = narrowest_unsigned_type (wval, flags);</span>
+<span class="lineNum">     728 </span><span class="lineCov">   25247510 :       enum integer_type_kind itk_s</span>
+<span class="lineNum">     729 </span><span class="lineCov">   25247510 :         = narrowest_signed_type (wval, flags);</span>
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            :       /* In both C89 and C99, octal and hex constants may be signed or
+<span class="lineNum">     732 </span>            :          unsigned, whichever fits tighter.  We do not warn about this
+<span class="lineNum">     733 </span>            :          choice differing from the traditional choice, as the constant
+<span class="lineNum">     734 </span>            :          is probably a bit pattern and either way will work.  */
+<span class="lineNum">     735 </span><span class="lineCov">   25247510 :       if ((flags &amp; CPP_N_RADIX) != CPP_N_DECIMAL)</span>
+<span class="lineNum">     736 </span><span class="lineCov">    3000531 :         itk = MIN (itk_u, itk_s);</span>
+<span class="lineNum">     737 </span>            :       else
+<span class="lineNum">     738 </span>            :         {
+<span class="lineNum">     739 </span>            :           /* In C99, decimal constants are always signed.
+<span class="lineNum">     740 </span>            :              In C89, decimal constants that don't fit in long have
+<span class="lineNum">     741 </span>            :              undefined behavior; we try to make them unsigned long.
+<span class="lineNum">     742 </span>            :              In GCC's extended C89, that last is true of decimal
+<span class="lineNum">     743 </span>            :              constants that don't fit in long long, too.  */
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineCov">   22246979 :           itk = itk_s;</span>
+<span class="lineNum">     746 </span><span class="lineCov">   22246979 :           if (itk_s &gt; itk_u &amp;&amp; itk_s &gt; itk_long)</span>
+<span class="lineNum">     747 </span>            :             {
+<span class="lineNum">     748 </span><span class="lineCov">         25 :               if (!flag_isoc99)</span>
+<span class="lineNum">     749 </span>            :                 {
+<span class="lineNum">     750 </span><span class="lineCov">         16 :                   if (itk_u &lt; itk_unsigned_long)</span>
+<span class="lineNum">     751 </span><span class="lineNoCov">          0 :                     itk_u = itk_unsigned_long;</span>
+<span class="lineNum">     752 </span><span class="lineCov">         16 :                   itk = itk_u;</span>
+<span class="lineNum">     753 </span><span class="lineCov">         16 :                   warning (0, &quot;this decimal constant is unsigned only in ISO C90&quot;);</span>
+<span class="lineNum">     754 </span>            :                 }
+<span class="lineNum">     755 </span>            :               else
+<span class="lineNum">     756 </span><span class="lineCov">          9 :                 warning (OPT_Wtraditional,</span>
+<span class="lineNum">     757 </span>            :                          &quot;this decimal constant would be unsigned in ISO C90&quot;);
+<span class="lineNum">     758 </span>            :             }
+<span class="lineNum">     759 </span>            :         }
+<span class="lineNum">     760 </span>            :     }
+<span class="lineNum">     761 </span>            : 
+<span class="lineNum">     762 </span><span class="lineCov">   26185363 :   if (itk == itk_none)</span>
+<span class="lineNum">     763 </span>            :     /* cpplib has already issued a warning for overflow.  */
+<span class="lineNum">     764 </span><span class="lineNoCov">          0 :     type = ((flags &amp; CPP_N_UNSIGNED)</span>
+<span class="lineNum">     765 </span><span class="lineNoCov">          0 :             ? widest_unsigned_literal_type_node</span>
+<span class="lineNum">     766 </span>            :             : widest_integer_literal_type_node);
+<span class="lineNum">     767 </span>            :   else
+<span class="lineNum">     768 </span>            :     {
+<span class="lineNum">     769 </span><span class="lineCov">   26185363 :       type = integer_types[itk];</span>
+<span class="lineNum">     770 </span><span class="lineCov">   26185363 :       if (itk &gt; itk_unsigned_long</span>
+<span class="lineNum">     771 </span><span class="lineCov">     729753 :           &amp;&amp; (flags &amp; CPP_N_WIDTH) != CPP_N_LARGE)</span>
+<span class="lineNum">     772 </span><span class="lineCov">       4907 :         emit_diagnostic</span>
+<span class="lineNum">     773 </span><span class="lineCov">      10079 :           ((c_dialect_cxx () ? cxx_dialect == cxx98 : !flag_isoc99)</span>
+<span class="lineNum">     774 </span>            :            ? DK_PEDWARN : DK_WARNING,
+<span class="lineNum">     775 </span>            :            input_location, OPT_Wlong_long,
+<span class="lineNum">     776 </span>            :            (flags &amp; CPP_N_UNSIGNED)
+<span class="lineNum">     777 </span>            :            ? &quot;integer constant is too large for %&lt;unsigned long%&gt; type&quot;
+<span class="lineNum">     778 </span>            :            : &quot;integer constant is too large for %&lt;long%&gt; type&quot;);
+<span class="lineNum">     779 </span>            :     }
+<span class="lineNum">     780 </span>            : 
+<span class="lineNum">     781 </span><span class="lineCov">   52370726 :   value = wide_int_to_tree (type, wval);</span>
+<span class="lineNum">     782 </span>            : 
+<span class="lineNum">     783 </span>            :   /* Convert imaginary to a complex type.  */
+<span class="lineNum">     784 </span><span class="lineCov">   26185363 :   if (flags &amp; CPP_N_IMAGINARY)</span>
+<span class="lineNum">     785 </span><span class="lineCov">       5710 :     value = build_complex (NULL_TREE, build_int_cst (type, 0), value);</span>
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span><span class="lineCov">   26185363 :   return value;</span>
+<span class="lineNum">     788 </span>            : }
+<span class="lineNum">     789 </span>            : 
+<span class="lineNum">     790 </span>            : /* Interpret TOKEN, a floating point number with FLAGS as classified
+<a name="791"><span class="lineNum">     791 </span>            :    by cpplib.  For C++11 SUFFIX may contain a user-defined literal suffix.  */</a>
+<span class="lineNum">     792 </span>            : static tree
+<span class="lineNum">     793 </span><span class="lineCov">    1016204 : interpret_float (const cpp_token *token, unsigned int flags,</span>
+<span class="lineNum">     794 </span>            :                  const char *suffix, enum overflow_type *overflow)
+<span class="lineNum">     795 </span>            : {
+<span class="lineNum">     796 </span><span class="lineCov">    1016204 :   tree type;</span>
+<span class="lineNum">     797 </span><span class="lineCov">    1016204 :   tree const_type;</span>
+<span class="lineNum">     798 </span><span class="lineCov">    1016204 :   tree value;</span>
+<span class="lineNum">     799 </span><span class="lineCov">    1016204 :   REAL_VALUE_TYPE real;</span>
+<span class="lineNum">     800 </span><span class="lineCov">    1016204 :   REAL_VALUE_TYPE real_trunc;</span>
+<span class="lineNum">     801 </span><span class="lineCov">    1016204 :   char *copy;</span>
+<span class="lineNum">     802 </span><span class="lineCov">    1016204 :   size_t copylen;</span>
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span><span class="lineCov">    1016204 :   *overflow = OT_NONE;</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span>            :   /* Default (no suffix) depends on whether the FLOAT_CONST_DECIMAL64
+<span class="lineNum">     807 </span>            :      pragma has been used and is either double or _Decimal64.  Types
+<span class="lineNum">     808 </span>            :      that are not allowed with decimal float default to double.  */
+<span class="lineNum">     809 </span><span class="lineCov">    1016204 :   if (flags &amp; CPP_N_DEFAULT)</span>
+<span class="lineNum">     810 </span>            :     {
+<span class="lineNum">     811 </span><span class="lineCov">     663188 :       flags ^= CPP_N_DEFAULT;</span>
+<span class="lineNum">     812 </span><span class="lineCov">     663188 :       flags |= CPP_N_MEDIUM;</span>
+<span class="lineNum">     813 </span>            : 
+<span class="lineNum">     814 </span><span class="lineCov">     663188 :       if (((flags &amp; CPP_N_HEX) == 0) &amp;&amp; ((flags &amp; CPP_N_IMAGINARY) == 0))</span>
+<span class="lineNum">     815 </span>            :         {
+<span class="lineNum">     816 </span><span class="lineCov">     650527 :           warning (OPT_Wunsuffixed_float_constants,</span>
+<span class="lineNum">     817 </span>            :                    &quot;unsuffixed float constant&quot;);
+<span class="lineNum">     818 </span><span class="lineCov">     650527 :           if (float_const_decimal64_p ())</span>
+<span class="lineNum">     819 </span><span class="lineCov">         23 :             flags |= CPP_N_DFLOAT;</span>
+<span class="lineNum">     820 </span>            :         }
+<span class="lineNum">     821 </span>            :     }
+<span class="lineNum">     822 </span>            : 
+<span class="lineNum">     823 </span>            :   /* Decode _Fract and _Accum.  */
+<span class="lineNum">     824 </span><span class="lineCov">    1016204 :   if (flags &amp; CPP_N_FRACT || flags &amp; CPP_N_ACCUM)</span>
+<span class="lineNum">     825 </span><span class="lineCov">         42 :     return interpret_fixed (token, flags);</span>
+<span class="lineNum">     826 </span>            : 
+<span class="lineNum">     827 </span>            :   /* Decode type based on width and properties. */
+<span class="lineNum">     828 </span><span class="lineCov">    1016162 :   if (flags &amp; CPP_N_DFLOAT)</span>
+<span class="lineNum">     829 </span><span class="lineCov">      14076 :     if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">     830 </span><span class="lineCov">       4493 :       type = dfloat128_type_node;</span>
+<span class="lineNum">     831 </span><span class="lineCov">       9583 :     else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">     832 </span><span class="lineCov">       4851 :       type = dfloat32_type_node;</span>
+<span class="lineNum">     833 </span>            :     else
+<span class="lineNum">     834 </span><span class="lineCov">       4732 :       type = dfloat64_type_node;</span>
+<span class="lineNum">     835 </span>            :   else
+<span class="lineNum">     836 </span><span class="lineCov">    1002086 :     if (flags &amp; CPP_N_WIDTH_MD)</span>
+<span class="lineNum">     837 </span>            :       {
+<span class="lineNum">     838 </span><span class="lineCov">      15395 :         char suffix;</span>
+<span class="lineNum">     839 </span><span class="lineCov">      15395 :         machine_mode mode;</span>
+<span class="lineNum">     840 </span>            : 
+<span class="lineNum">     841 </span><span class="lineCov">      15395 :         if ((flags &amp; CPP_N_WIDTH_MD) == CPP_N_MD_W)</span>
+<span class="lineNum">     842 </span>            :           suffix = 'w';
+<span class="lineNum">     843 </span>            :         else
+<span class="lineNum">     844 </span><span class="lineCov">      15354 :           suffix = 'q';</span>
+<span class="lineNum">     845 </span>            : 
+<span class="lineNum">     846 </span><span class="lineCov">      15395 :         mode = targetm.c.mode_for_suffix (suffix);</span>
+<span class="lineNum">     847 </span><span class="lineCov">      15395 :         if (mode == VOIDmode)</span>
+<span class="lineNum">     848 </span>            :           {
+<span class="lineNum">     849 </span><span class="lineNoCov">          0 :             error (&quot;unsupported non-standard suffix on floating constant&quot;);</span>
+<span class="lineNum">     850 </span>            : 
+<span class="lineNum">     851 </span><span class="lineNoCov">          0 :             return error_mark_node;</span>
+<span class="lineNum">     852 </span>            :           }
+<span class="lineNum">     853 </span>            :         else
+<span class="lineNum">     854 </span><span class="lineCov">      15395 :           pedwarn (input_location, OPT_Wpedantic, &quot;non-standard suffix on floating constant&quot;);</span>
+<span class="lineNum">     855 </span>            : 
+<span class="lineNum">     856 </span><span class="lineCov">      15395 :         type = c_common_type_for_mode (mode, 0);</span>
+<span class="lineNum">     857 </span><span class="lineCov">      15395 :         gcc_assert (type);</span>
+<span class="lineNum">     858 </span>            :       }
+<span class="lineNum">     859 </span><span class="lineCov">     986691 :     else if ((flags &amp; (CPP_N_FLOATN | CPP_N_FLOATNX)) != 0)</span>
+<span class="lineNum">     860 </span>            :       {
+<span class="lineNum">     861 </span><span class="lineCov">       3524 :         unsigned int n = (flags &amp; CPP_N_WIDTH_FLOATN_NX) &gt;&gt; CPP_FLOATN_SHIFT;</span>
+<span class="lineNum">     862 </span><span class="lineCov">       3524 :         bool extended = (flags &amp; CPP_N_FLOATNX) != 0;</span>
+<span class="lineNum">     863 </span><span class="lineCov">       3524 :         type = NULL_TREE;</span>
+<span class="lineNum">     864 </span><span class="lineCov">      13648 :         for (int i = 0; i &lt; NUM_FLOATN_NX_TYPES; i++)</span>
+<span class="lineNum">     865 </span><span class="lineCov">      13648 :           if (floatn_nx_types[i].n == (int) n</span>
+<span class="lineNum">     866 </span><span class="lineCov">       4844 :               &amp;&amp; floatn_nx_types[i].extended == extended)</span>
+<span class="lineNum">     867 </span>            :             {
+<span class="lineNum">     868 </span><span class="lineCov">       3524 :               type = FLOATN_NX_TYPE_NODE (i);</span>
+<span class="lineNum">     869 </span><span class="lineCov">       3524 :               break;</span>
+<span class="lineNum">     870 </span>            :             }
+<span class="lineNum">     871 </span><span class="lineCov">       3524 :         if (type == NULL_TREE)</span>
+<span class="lineNum">     872 </span>            :           {
+<span class="lineNum">     873 </span><span class="lineNoCov">          0 :             error (&quot;unsupported non-standard suffix on floating constant&quot;);</span>
+<span class="lineNum">     874 </span><span class="lineNoCov">          0 :             return error_mark_node;</span>
+<span class="lineNum">     875 </span>            :           }
+<span class="lineNum">     876 </span>            :         else
+<span class="lineNum">     877 </span><span class="lineCov">       3524 :           pedwarn (input_location, OPT_Wpedantic, &quot;non-standard suffix on floating constant&quot;);</span>
+<span class="lineNum">     878 </span>            :       }
+<span class="lineNum">     879 </span><span class="lineCov">     983167 :     else if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">     880 </span><span class="lineCov">     154011 :       type = long_double_type_node;</span>
+<span class="lineNum">     881 </span><span class="lineCov">     829156 :     else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL</span>
+<span class="lineNum">     882 </span><span class="lineCov">     663228 :              || flag_single_precision_constant)</span>
+<span class="lineNum">     883 </span><span class="lineCov">     166109 :       type = float_type_node;</span>
+<span class="lineNum">     884 </span>            :     else
+<span class="lineNum">     885 </span><span class="lineCov">     663047 :       type = double_type_node;</span>
+<span class="lineNum">     886 </span>            : 
+<span class="lineNum">     887 </span><span class="lineCov">    1016162 :   const_type = excess_precision_type (type);</span>
+<span class="lineNum">     888 </span><span class="lineCov">    1016162 :   if (!const_type)</span>
+<span class="lineNum">     889 </span><span class="lineCov">    1016074 :     const_type = type;</span>
+<span class="lineNum">     890 </span>            : 
+<span class="lineNum">     891 </span>            :   /* Copy the constant to a nul-terminated buffer.  If the constant
+<span class="lineNum">     892 </span>            :      has any suffixes, cut them off; REAL_VALUE_ATOF/ REAL_VALUE_HTOF
+<span class="lineNum">     893 </span>            :      can't handle them.  */
+<span class="lineNum">     894 </span><span class="lineCov">    1016162 :   copylen = token-&gt;val.str.len;</span>
+<span class="lineNum">     895 </span><span class="lineCov">    1016162 :   if (flags &amp; CPP_N_USERDEF)</span>
+<span class="lineNum">     896 </span><span class="lineCov">      31623 :     copylen -= strlen (suffix);</span>
+<span class="lineNum">     897 </span><span class="lineCov">     984539 :   else if (flags &amp; CPP_N_DFLOAT)</span>
+<span class="lineNum">     898 </span><span class="lineCov">      14076 :     copylen -= 2;</span>
+<span class="lineNum">     899 </span>            :   else
+<span class="lineNum">     900 </span>            :     {
+<span class="lineNum">     901 </span><span class="lineCov">     970463 :       if ((flags &amp; CPP_N_WIDTH) != CPP_N_MEDIUM)</span>
+<span class="lineNum">     902 </span>            :         /* Must be an F or L or machine defined suffix.  */
+<span class="lineNum">     903 </span><span class="lineCov">     307235 :         copylen--;</span>
+<span class="lineNum">     904 </span><span class="lineCov">     970463 :       if (flags &amp; CPP_N_IMAGINARY)</span>
+<span class="lineNum">     905 </span>            :         /* I or J suffix.  */
+<span class="lineNum">     906 </span><span class="lineCov">      50825 :         copylen--;</span>
+<span class="lineNum">     907 </span><span class="lineCov">     970463 :       if (flags &amp; CPP_N_FLOATNX)</span>
+<span class="lineNum">     908 </span><span class="lineCov">       1320 :         copylen--;</span>
+<span class="lineNum">     909 </span><span class="lineCov">     970463 :       if (flags &amp; (CPP_N_FLOATN | CPP_N_FLOATNX))</span>
+<span class="lineNum">     910 </span>            :         {
+<span class="lineNum">     911 </span><span class="lineCov">       3524 :           unsigned int n = (flags &amp; CPP_N_WIDTH_FLOATN_NX) &gt;&gt; CPP_FLOATN_SHIFT;</span>
+<span class="lineNum">     912 </span><span class="lineCov">      11232 :           while (n &gt; 0)</span>
+<span class="lineNum">     913 </span>            :             {
+<span class="lineNum">     914 </span><span class="lineCov">       7708 :               copylen--;</span>
+<span class="lineNum">     915 </span><span class="lineCov">       7708 :               n /= 10;</span>
+<span class="lineNum">     916 </span>            :             }
+<span class="lineNum">     917 </span>            :         }
+<span class="lineNum">     918 </span>            :     }
+<span class="lineNum">     919 </span>            : 
+<span class="lineNum">     920 </span><span class="lineCov">    1016162 :   copy = (char *) alloca (copylen + 1);</span>
+<span class="lineNum">     921 </span><span class="lineCov">    1016162 :   if (cxx_dialect &gt; cxx11)</span>
+<span class="lineNum">     922 </span>            :     {
+<span class="lineNum">     923 </span>            :       size_t maxlen = 0;
+<span class="lineNum">     924 </span><span class="lineCov">    4335568 :       for (size_t i = 0; i &lt; copylen; ++i)</span>
+<span class="lineNum">     925 </span><span class="lineCov">    3963022 :         if (token-&gt;val.str.text[i] != '\'')</span>
+<span class="lineNum">     926 </span><span class="lineCov">    3963012 :           copy[maxlen++] = token-&gt;val.str.text[i];</span>
+<span class="lineNum">     927 </span><span class="lineCov">     372546 :       copy[maxlen] = '\0';</span>
+<span class="lineNum">     928 </span>            :     }
+<span class="lineNum">     929 </span>            :   else
+<span class="lineNum">     930 </span>            :     {
+<span class="lineNum">     931 </span><span class="lineCov">     643616 :       memcpy (copy, token-&gt;val.str.text, copylen);</span>
+<span class="lineNum">     932 </span><span class="lineCov">     643616 :       copy[copylen] = '\0';</span>
+<span class="lineNum">     933 </span>            :     }
+<span class="lineNum">     934 </span>            : 
+<span class="lineNum">     935 </span><span class="lineCov">    1016162 :   real_from_string3 (&amp;real, copy, TYPE_MODE (const_type));</span>
+<span class="lineNum">     936 </span><span class="lineCov">    1016162 :   if (const_type != type)</span>
+<span class="lineNum">     937 </span>            :     /* Diagnosing if the result of converting the value with excess
+<span class="lineNum">     938 </span>            :        precision to the semantic type would overflow (with associated
+<span class="lineNum">     939 </span>            :        double rounding) is more appropriate than diagnosing if the
+<span class="lineNum">     940 </span>            :        result of converting the string directly to the semantic type
+<span class="lineNum">     941 </span>            :        would overflow.  */
+<span class="lineNum">     942 </span><span class="lineCov">         88 :     real_convert (&amp;real_trunc, TYPE_MODE (type), &amp;real);</span>
+<span class="lineNum">     943 </span>            : 
+<span class="lineNum">     944 </span>            :   /* Both C and C++ require a diagnostic for a floating constant
+<span class="lineNum">     945 </span>            :      outside the range of representable values of its type.  Since we
+<span class="lineNum">     946 </span>            :      have __builtin_inf* to produce an infinity, this is now a
+<span class="lineNum">     947 </span>            :      mandatory pedwarn if the target does not support infinities.  */
+<span class="lineNum">     948 </span><span class="lineCov">    1016162 :   if (REAL_VALUE_ISINF (real)</span>
+<span class="lineNum">     949 </span><span class="lineCov">    1016162 :       || (const_type != type &amp;&amp; REAL_VALUE_ISINF (real_trunc)))</span>
+<span class="lineNum">     950 </span>            :     {
+<span class="lineNum">     951 </span><span class="lineCov">         47 :       *overflow = OT_OVERFLOW;</span>
+<span class="lineNum">     952 </span><span class="lineCov">         47 :       if (!(flags &amp; CPP_N_USERDEF))</span>
+<span class="lineNum">     953 </span>            :         {
+<span class="lineNum">     954 </span><span class="lineCov">        271 :           if (!MODE_HAS_INFINITIES (TYPE_MODE (type)))</span>
+<span class="lineNum">     955 </span><span class="lineNoCov">          0 :             pedwarn (input_location, 0,</span>
+<span class="lineNum">     956 </span>            :                      &quot;floating constant exceeds range of %qT&quot;, type);
+<span class="lineNum">     957 </span>            :           else
+<span class="lineNum">     958 </span><span class="lineCov">         41 :             warning (OPT_Woverflow,</span>
+<span class="lineNum">     959 </span>            :                      &quot;floating constant exceeds range of %qT&quot;, type);
+<span class="lineNum">     960 </span>            :         }
+<span class="lineNum">     961 </span>            :     }
+<span class="lineNum">     962 </span>            :   /* We also give a warning if the value underflows.  */
+<span class="lineNum">     963 </span><span class="lineCov">    1016115 :   else if (real_equal (&amp;real, &amp;dconst0)</span>
+<span class="lineNum">     964 </span><span class="lineCov">    1016115 :            || (const_type != type</span>
+<span class="lineNum">     965 </span><span class="lineCov">         70 :                &amp;&amp; real_equal (&amp;real_trunc, &amp;dconst0)))</span>
+<span class="lineNum">     966 </span>            :     {
+<span class="lineNum">     967 </span><span class="lineCov">     400526 :       REAL_VALUE_TYPE realvoidmode;</span>
+<span class="lineNum">     968 </span><span class="lineCov">     400526 :       int oflow = real_from_string (&amp;realvoidmode, copy);</span>
+<span class="lineNum">     969 </span><span class="lineCov">     400526 :       *overflow = (oflow == 0 ? OT_NONE</span>
+<span class="lineNum">     970 </span><span class="lineCov">         18 :                               : (oflow &lt; 0 ? OT_UNDERFLOW : OT_OVERFLOW));</span>
+<span class="lineNum">     971 </span><span class="lineCov">     400526 :       if (!(flags &amp; CPP_N_USERDEF))</span>
+<span class="lineNum">     972 </span>            :         {
+<span class="lineNum">     973 </span><span class="lineCov">     369024 :           if (oflow &lt; 0 || !real_equal (&amp;realvoidmode, &amp;dconst0))</span>
+<span class="lineNum">     974 </span><span class="lineCov">         30 :             warning (OPT_Woverflow, &quot;floating constant truncated to zero&quot;);</span>
+<span class="lineNum">     975 </span>            :         }
+<span class="lineNum">     976 </span>            :     }
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span>            :   /* Create a node with determined type and value.  */
+<span class="lineNum">     979 </span><span class="lineCov">    1016162 :   value = build_real (const_type, real);</span>
+<span class="lineNum">     980 </span><span class="lineCov">    1016162 :   if (flags &amp; CPP_N_IMAGINARY)</span>
+<span class="lineNum">     981 </span>            :     {
+<span class="lineNum">     982 </span><span class="lineCov">      50825 :       value = build_complex (NULL_TREE,</span>
+<span class="lineNum">     983 </span>            :                              fold_convert (const_type,
+<span class="lineNum">     984 </span>            :                                            integer_zero_node), value);
+<span class="lineNum">     985 </span><span class="lineCov">      50825 :       if (type != const_type)</span>
+<span class="lineNum">     986 </span>            :         {
+<span class="lineNum">     987 </span><span class="lineCov">          6 :           const_type = TREE_TYPE (value);</span>
+<span class="lineNum">     988 </span><span class="lineCov">          6 :           type = build_complex_type (type);</span>
+<span class="lineNum">     989 </span>            :         }
+<span class="lineNum">     990 </span>            :     }
+<span class="lineNum">     991 </span>            : 
+<span class="lineNum">     992 </span><span class="lineCov">    1016162 :   if (type != const_type)</span>
+<span class="lineNum">     993 </span><span class="lineCov">         88 :     value = build1_loc (token-&gt;src_loc, EXCESS_PRECISION_EXPR, type, value);</span>
+<span class="lineNum">     994 </span>            : 
+<span class="lineNum">     995 </span>            :   return value;
+<span class="lineNum">     996 </span>            : }
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span>            : /* Interpret TOKEN, a fixed-point number with FLAGS as classified
+<span class="lineNum">     999 </span>            :    by cpplib.  */
+<a name="1000"><span class="lineNum">    1000 </span>            : </a>
+<span class="lineNum">    1001 </span>            : static tree
+<span class="lineNum">    1002 </span><span class="lineCov">         42 : interpret_fixed (const cpp_token *token, unsigned int flags)</span>
+<span class="lineNum">    1003 </span>            : {
+<span class="lineNum">    1004 </span><span class="lineCov">         42 :   tree type;</span>
+<span class="lineNum">    1005 </span><span class="lineCov">         42 :   tree value;</span>
+<span class="lineNum">    1006 </span><span class="lineCov">         42 :   FIXED_VALUE_TYPE fixed;</span>
+<span class="lineNum">    1007 </span><span class="lineCov">         42 :   char *copy;</span>
+<span class="lineNum">    1008 </span><span class="lineCov">         42 :   size_t copylen;</span>
+<span class="lineNum">    1009 </span>            : 
+<span class="lineNum">    1010 </span><span class="lineCov">         42 :   copylen = token-&gt;val.str.len;</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span><span class="lineCov">         42 :   if (flags &amp; CPP_N_FRACT) /* _Fract.  */</span>
+<span class="lineNum">    1013 </span>            :     {
+<span class="lineNum">    1014 </span><span class="lineCov">         32 :       if (flags &amp; CPP_N_UNSIGNED) /* Unsigned _Fract.  */</span>
+<span class="lineNum">    1015 </span>            :         {
+<span class="lineNum">    1016 </span><span class="lineNoCov">          0 :           if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">    1017 </span>            :             {
+<span class="lineNum">    1018 </span><span class="lineNoCov">          0 :               type = unsigned_long_long_fract_type_node;</span>
+<span class="lineNum">    1019 </span><span class="lineNoCov">          0 :               copylen -= 4;</span>
+<span class="lineNum">    1020 </span>            :             }
+<span class="lineNum">    1021 </span><span class="lineNoCov">          0 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">    1022 </span>            :             {
+<span class="lineNum">    1023 </span><span class="lineNoCov">          0 :               type = unsigned_long_fract_type_node;</span>
+<span class="lineNum">    1024 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1025 </span>            :             }
+<span class="lineNum">    1026 </span><span class="lineNoCov">          0 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">    1027 </span>            :             {
+<span class="lineNum">    1028 </span><span class="lineNoCov">          0 :               type = unsigned_short_fract_type_node;</span>
+<span class="lineNum">    1029 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1030 </span>            :             }
+<span class="lineNum">    1031 </span>            :           else
+<span class="lineNum">    1032 </span>            :             {
+<span class="lineNum">    1033 </span><span class="lineNoCov">          0 :               type = unsigned_fract_type_node;</span>
+<span class="lineNum">    1034 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1035 </span>            :             }
+<span class="lineNum">    1036 </span>            :         }
+<span class="lineNum">    1037 </span>            :       else /* Signed _Fract.  */
+<span class="lineNum">    1038 </span>            :         {
+<span class="lineNum">    1039 </span><span class="lineCov">         32 :           if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">    1040 </span>            :             {
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :               type = long_long_fract_type_node;</span>
+<span class="lineNum">    1042 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1043 </span>            :             }
+<span class="lineNum">    1044 </span><span class="lineCov">         32 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">    1045 </span>            :             {
+<span class="lineNum">    1046 </span><span class="lineNoCov">          0 :               type = long_fract_type_node;</span>
+<span class="lineNum">    1047 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1048 </span>            :             }
+<span class="lineNum">    1049 </span><span class="lineCov">         32 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">    1050 </span>            :             {
+<span class="lineNum">    1051 </span><span class="lineNoCov">          0 :               type = short_fract_type_node;</span>
+<span class="lineNum">    1052 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1053 </span>            :             }
+<span class="lineNum">    1054 </span>            :           else
+<span class="lineNum">    1055 </span>            :             {
+<span class="lineNum">    1056 </span><span class="lineCov">         32 :               type = fract_type_node;</span>
+<span class="lineNum">    1057 </span><span class="lineCov">         32 :               copylen --;</span>
+<span class="lineNum">    1058 </span>            :             }
+<span class="lineNum">    1059 </span>            :           }
+<span class="lineNum">    1060 </span>            :     }
+<span class="lineNum">    1061 </span>            :   else /* _Accum.  */
+<span class="lineNum">    1062 </span>            :     {
+<span class="lineNum">    1063 </span><span class="lineCov">         10 :       if (flags &amp; CPP_N_UNSIGNED) /* Unsigned _Accum.  */</span>
+<span class="lineNum">    1064 </span>            :         {
+<span class="lineNum">    1065 </span><span class="lineNoCov">          0 :           if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">    1066 </span>            :             {
+<span class="lineNum">    1067 </span><span class="lineNoCov">          0 :               type = unsigned_long_long_accum_type_node;</span>
+<span class="lineNum">    1068 </span><span class="lineNoCov">          0 :               copylen -= 4;</span>
+<span class="lineNum">    1069 </span>            :             }
+<span class="lineNum">    1070 </span><span class="lineNoCov">          0 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">    1071 </span>            :             {
+<span class="lineNum">    1072 </span><span class="lineNoCov">          0 :               type = unsigned_long_accum_type_node;</span>
+<span class="lineNum">    1073 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1074 </span>            :             }
+<span class="lineNum">    1075 </span><span class="lineNoCov">          0 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">    1076 </span>            :             {
+<span class="lineNum">    1077 </span><span class="lineNoCov">          0 :               type = unsigned_short_accum_type_node;</span>
+<span class="lineNum">    1078 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1079 </span>            :              }
+<span class="lineNum">    1080 </span>            :           else
+<span class="lineNum">    1081 </span>            :             {
+<span class="lineNum">    1082 </span><span class="lineNoCov">          0 :               type = unsigned_accum_type_node;</span>
+<span class="lineNum">    1083 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1084 </span>            :             }
+<span class="lineNum">    1085 </span>            :         }
+<span class="lineNum">    1086 </span>            :       else /* Signed _Accum.  */
+<span class="lineNum">    1087 </span>            :         {
+<span class="lineNum">    1088 </span><span class="lineCov">         10 :           if ((flags &amp; CPP_N_WIDTH) == CPP_N_LARGE)</span>
+<span class="lineNum">    1089 </span>            :             {
+<span class="lineNum">    1090 </span><span class="lineNoCov">          0 :               type = long_long_accum_type_node;</span>
+<span class="lineNum">    1091 </span><span class="lineNoCov">          0 :               copylen -= 3;</span>
+<span class="lineNum">    1092 </span>            :             }
+<span class="lineNum">    1093 </span><span class="lineCov">         10 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_MEDIUM)</span>
+<span class="lineNum">    1094 </span>            :             {
+<span class="lineNum">    1095 </span><span class="lineNoCov">          0 :               type = long_accum_type_node;</span>
+<span class="lineNum">    1096 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1097 </span>            :             }
+<span class="lineNum">    1098 </span><span class="lineCov">         10 :           else if ((flags &amp; CPP_N_WIDTH) == CPP_N_SMALL)</span>
+<span class="lineNum">    1099 </span>            :             {
+<span class="lineNum">    1100 </span><span class="lineNoCov">          0 :               type = short_accum_type_node;</span>
+<span class="lineNum">    1101 </span><span class="lineNoCov">          0 :               copylen -= 2;</span>
+<span class="lineNum">    1102 </span>            :             }
+<span class="lineNum">    1103 </span>            :           else
+<span class="lineNum">    1104 </span>            :             {
+<span class="lineNum">    1105 </span><span class="lineCov">         10 :               type = accum_type_node;</span>
+<span class="lineNum">    1106 </span><span class="lineCov">         10 :               copylen --;</span>
+<span class="lineNum">    1107 </span>            :             }
+<span class="lineNum">    1108 </span>            :         }
+<span class="lineNum">    1109 </span>            :     }
+<span class="lineNum">    1110 </span>            : 
+<span class="lineNum">    1111 </span><span class="lineCov">         42 :   copy = (char *) alloca (copylen + 1);</span>
+<span class="lineNum">    1112 </span><span class="lineCov">         42 :   memcpy (copy, token-&gt;val.str.text, copylen);</span>
+<span class="lineNum">    1113 </span><span class="lineCov">         42 :   copy[copylen] = '\0';</span>
+<span class="lineNum">    1114 </span>            : 
+<span class="lineNum">    1115 </span><span class="lineCov">         42 :   fixed_from_string (&amp;fixed, copy, SCALAR_TYPE_MODE (type));</span>
+<span class="lineNum">    1116 </span>            : 
+<span class="lineNum">    1117 </span>            :   /* Create a node with determined type and value.  */
+<span class="lineNum">    1118 </span><span class="lineCov">         42 :   value = build_fixed (type, fixed);</span>
+<span class="lineNum">    1119 </span>            : 
+<span class="lineNum">    1120 </span><span class="lineCov">         42 :   return value;</span>
+<span class="lineNum">    1121 </span>            : }
+<span class="lineNum">    1122 </span>            : 
+<span class="lineNum">    1123 </span>            : /* Convert a series of STRING, WSTRING, STRING16, STRING32 and/or
+<span class="lineNum">    1124 </span>            :    UTF8STRING tokens into a tree, performing string constant
+<span class="lineNum">    1125 </span>            :    concatenation.  TOK is the first of these.  VALP is the location to
+<span class="lineNum">    1126 </span>            :    write the string into.  OBJC_STRING indicates whether an '@' token
+<span class="lineNum">    1127 </span>            :    preceded the incoming token (in that case, the strings can either
+<span class="lineNum">    1128 </span>            :    be ObjC strings, preceded by a single '@', or normal strings, not
+<span class="lineNum">    1129 </span>            :    preceded by '@'.  The result will be a CPP_OBJC_STRING).  Returns
+<span class="lineNum">    1130 </span>            :    the CPP token type of the result (CPP_STRING, CPP_WSTRING,
+<span class="lineNum">    1131 </span>            :    CPP_STRING32, CPP_STRING16, CPP_UTF8STRING, or CPP_OBJC_STRING).
+<span class="lineNum">    1132 </span>            : 
+<span class="lineNum">    1133 </span>            :    This is unfortunately more work than it should be.  If any of the
+<span class="lineNum">    1134 </span>            :    strings in the series has an L prefix, the result is a wide string
+<span class="lineNum">    1135 </span>            :    (6.4.5p4).  Whether or not the result is a wide string affects the
+<span class="lineNum">    1136 </span>            :    meaning of octal and hexadecimal escapes (6.4.4.4p6,9).  But escape
+<span class="lineNum">    1137 </span>            :    sequences do not continue across the boundary between two strings in
+<span class="lineNum">    1138 </span>            :    a series (6.4.5p7), so we must not lose the boundaries.  Therefore
+<span class="lineNum">    1139 </span>            :    cpp_interpret_string takes a vector of cpp_string structures, which
+<span class="lineNum">    1140 </span>            :    we must arrange to provide.  */
+<a name="1141"><span class="lineNum">    1141 </span>            : </a>
+<span class="lineNum">    1142 </span>            : static enum cpp_ttype
+<span class="lineNum">    1143 </span><span class="lineCov">    2416383 : lex_string (const cpp_token *tok, tree *valp, bool objc_string, bool translate)</span>
+<span class="lineNum">    1144 </span>            : {
+<span class="lineNum">    1145 </span><span class="lineCov">    2416383 :   tree value;</span>
+<span class="lineNum">    1146 </span><span class="lineCov">    2416383 :   size_t concats = 0;</span>
+<span class="lineNum">    1147 </span><span class="lineCov">    2416383 :   struct obstack str_ob;</span>
+<span class="lineNum">    1148 </span><span class="lineCov">    2416383 :   struct obstack loc_ob;</span>
+<span class="lineNum">    1149 </span><span class="lineCov">    2416383 :   cpp_string istr;</span>
+<span class="lineNum">    1150 </span><span class="lineCov">    2416383 :   enum cpp_ttype type = tok-&gt;type;</span>
+<span class="lineNum">    1151 </span>            : 
+<span class="lineNum">    1152 </span>            :   /* Try to avoid the overhead of creating and destroying an obstack
+<span class="lineNum">    1153 </span>            :      for the common case of just one string.  */
+<span class="lineNum">    1154 </span><span class="lineCov">    2416383 :   cpp_string str = tok-&gt;val.str;</span>
+<span class="lineNum">    1155 </span><span class="lineCov">    2416383 :   location_t init_loc = tok-&gt;src_loc;</span>
+<span class="lineNum">    1156 </span><span class="lineCov">    2416383 :   cpp_string *strs = &amp;str;</span>
+<span class="lineNum">    1157 </span><span class="lineCov">    2416383 :   location_t *locs = NULL;</span>
+<span class="lineNum">    1158 </span>            : 
+<span class="lineNum">    1159 </span>            :   /* objc_at_sign_was_seen is only used when doing Objective-C string
+<span class="lineNum">    1160 </span>            :      concatenation.  It is 'true' if we have seen an '@' before the
+<span class="lineNum">    1161 </span>            :      current string, and 'false' if not.  We must see exactly one or
+<span class="lineNum">    1162 </span>            :      zero '@' before each string.  */
+<span class="lineNum">    1163 </span><span class="lineCov">    2416383 :   bool objc_at_sign_was_seen = false;</span>
+<span class="lineNum">    1164 </span>            : 
+<span class="lineNum">    1165 </span><span class="lineCov">   88911494 :  retry:</span>
+<span class="lineNum">    1166 </span><span class="lineCov">   88911494 :   tok = cpp_get_token (parse_in);</span>
+<span class="lineNum">    1167 </span><span class="lineCov">   88911494 :   switch (tok-&gt;type)</span>
+<span class="lineNum">    1168 </span>            :     {
+<span class="lineNum">    1169 </span>            :     case CPP_PADDING:
+<span class="lineNum">    1170 </span>            :       goto retry;
+<span class="lineNum">    1171 </span><span class="lineNoCov">          0 :     case CPP_ATSIGN:</span>
+<span class="lineNum">    1172 </span><span class="lineNoCov">          0 :       if (objc_string)</span>
+<span class="lineNum">    1173 </span>            :         {
+<span class="lineNum">    1174 </span><span class="lineNoCov">          0 :           if (objc_at_sign_was_seen)</span>
+<span class="lineNum">    1175 </span><span class="lineNoCov">          0 :             error (&quot;repeated %&lt;@%&gt; before Objective-C string&quot;);</span>
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span><span class="lineNoCov">          0 :           objc_at_sign_was_seen = true;</span>
+<span class="lineNum">    1178 </span><span class="lineNoCov">          0 :           goto retry;</span>
+<span class="lineNum">    1179 </span>            :         }
+<span class="lineNum">    1180 </span>            :       /* FALLTHROUGH */
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span><span class="lineCov">    2416383 :     default:</span>
+<span class="lineNum">    1183 </span><span class="lineCov">    2416383 :       break;</span>
+<span class="lineNum">    1184 </span>            : 
+<span class="lineNum">    1185 </span><span class="lineCov">         67 :     case CPP_WSTRING:</span>
+<span class="lineNum">    1186 </span><span class="lineCov">         67 :     case CPP_STRING16:</span>
+<span class="lineNum">    1187 </span><span class="lineCov">         67 :     case CPP_STRING32:</span>
+<span class="lineNum">    1188 </span><span class="lineCov">         67 :     case CPP_UTF8STRING:</span>
+<span class="lineNum">    1189 </span><span class="lineCov">         67 :       if (type != tok-&gt;type)</span>
+<span class="lineNum">    1190 </span>            :         {
+<span class="lineNum">    1191 </span><span class="lineCov">         45 :           if (type == CPP_STRING)</span>
+<span class="lineNum">    1192 </span><span class="lineCov">         29 :             type = tok-&gt;type;</span>
+<span class="lineNum">    1193 </span>            :           else
+<span class="lineNum">    1194 </span><span class="lineCov">         16 :             error (&quot;unsupported non-standard concatenation of string literals&quot;);</span>
+<span class="lineNum">    1195 </span>            :         }
+<span class="lineNum">    1196 </span>            :       /* FALLTHROUGH */
+<span class="lineNum">    1197 </span>            : 
+<span class="lineNum">    1198 </span><span class="lineCov">   26722709 :     case CPP_STRING:</span>
+<span class="lineNum">    1199 </span><span class="lineCov">   26722709 :       if (!concats)</span>
+<span class="lineNum">    1200 </span>            :         {
+<span class="lineNum">    1201 </span><span class="lineCov">     572087 :           gcc_obstack_init (&amp;str_ob);</span>
+<span class="lineNum">    1202 </span><span class="lineCov">     572087 :           gcc_obstack_init (&amp;loc_ob);</span>
+<span class="lineNum">    1203 </span><span class="lineCov">     572087 :           obstack_grow (&amp;str_ob, &amp;str, sizeof (cpp_string));</span>
+<span class="lineNum">    1204 </span><span class="lineCov">     572087 :           obstack_grow (&amp;loc_ob, &amp;init_loc, sizeof (location_t));</span>
+<span class="lineNum">    1205 </span>            :         }
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span><span class="lineCov">   26722709 :       concats++;</span>
+<span class="lineNum">    1208 </span><span class="lineCov">   26722709 :       obstack_grow (&amp;str_ob, &amp;tok-&gt;val.str, sizeof (cpp_string));</span>
+<span class="lineNum">    1209 </span><span class="lineCov">   26722709 :       obstack_grow (&amp;loc_ob, &amp;tok-&gt;src_loc, sizeof (location_t));</span>
+<span class="lineNum">    1210 </span>            : 
+<span class="lineNum">    1211 </span><span class="lineCov">   26722709 :       if (objc_string)</span>
+<span class="lineNum">    1212 </span><span class="lineNoCov">          0 :         objc_at_sign_was_seen = false;</span>
+<span class="lineNum">    1213 </span><span class="lineCov">   26722709 :       goto retry;</span>
+<span class="lineNum">    1214 </span>            :     }
+<span class="lineNum">    1215 </span>            : 
+<span class="lineNum">    1216 </span>            :   /* It is an error if we saw a '@' with no following string.  */
+<span class="lineNum">    1217 </span><span class="lineCov">    2416383 :   if (objc_at_sign_was_seen)</span>
+<span class="lineNum">    1218 </span><span class="lineNoCov">          0 :     error (&quot;stray %&lt;@%&gt; in program&quot;);</span>
+<span class="lineNum">    1219 </span>            : 
+<span class="lineNum">    1220 </span>            :   /* We have read one more token than we want.  */
+<span class="lineNum">    1221 </span><span class="lineCov">    2416383 :   _cpp_backup_tokens (parse_in, 1);</span>
+<span class="lineNum">    1222 </span><span class="lineCov">    2416383 :   if (concats)</span>
+<span class="lineNum">    1223 </span>            :     {
+<span class="lineNum">    1224 </span><span class="lineCov">     572087 :       strs = XOBFINISH (&amp;str_ob, cpp_string *);</span>
+<span class="lineNum">    1225 </span><span class="lineCov">     572087 :       locs = XOBFINISH (&amp;loc_ob, location_t *);</span>
+<span class="lineNum">    1226 </span>            :     }
+<span class="lineNum">    1227 </span>            : 
+<span class="lineNum">    1228 </span><span class="lineCov">    2416383 :   if (concats &amp;&amp; !objc_string &amp;&amp; !in_system_header_at (input_location))</span>
+<span class="lineNum">    1229 </span><span class="lineCov">     476898 :     warning (OPT_Wtraditional,</span>
+<span class="lineNum">    1230 </span>            :              &quot;traditional C rejects string constant concatenation&quot;);
+<span class="lineNum">    1231 </span>            : 
+<span class="lineNum">    1232 </span><span class="lineCov">    2416383 :   if ((translate</span>
+<span class="lineNum">    1233 </span><span class="lineCov">    2416383 :        ? cpp_interpret_string : cpp_interpret_string_notranslate)</span>
+<span class="lineNum">    1234 </span><span class="lineCov">    2416383 :       (parse_in, strs, concats + 1, &amp;istr, type))</span>
+<span class="lineNum">    1235 </span>            :     {
+<span class="lineNum">    1236 </span><span class="lineCov">    2416383 :       value = build_string (istr.len, (const char *) istr.text);</span>
+<span class="lineNum">    1237 </span><span class="lineCov">    2416383 :       free (CONST_CAST (unsigned char *, istr.text));</span>
+<span class="lineNum">    1238 </span><span class="lineCov">    2416383 :       if (concats)</span>
+<span class="lineNum">    1239 </span>            :         {
+<span class="lineNum">    1240 </span><span class="lineCov">     572087 :           gcc_assert (locs);</span>
+<span class="lineNum">    1241 </span><span class="lineCov">     572087 :           gcc_assert (g_string_concat_db);</span>
+<span class="lineNum">    1242 </span><span class="lineCov">     572087 :           g_string_concat_db-&gt;record_string_concatenation (concats + 1, locs);</span>
+<span class="lineNum">    1243 </span>            :         }
+<span class="lineNum">    1244 </span>            :     }
+<span class="lineNum">    1245 </span>            :   else
+<span class="lineNum">    1246 </span>            :     {
+<span class="lineNum">    1247 </span>            :       /* Callers cannot generally handle error_mark_node in this context,
+<span class="lineNum">    1248 </span>            :          so return the empty string instead.  cpp_interpret_string has
+<span class="lineNum">    1249 </span>            :          issued an error.  */
+<span class="lineNum">    1250 </span><span class="lineNoCov">          0 :       switch (type)</span>
+<span class="lineNum">    1251 </span>            :         {
+<span class="lineNum">    1252 </span><span class="lineNoCov">          0 :         default:</span>
+<span class="lineNum">    1253 </span><span class="lineNoCov">          0 :         case CPP_STRING:</span>
+<span class="lineNum">    1254 </span><span class="lineNoCov">          0 :         case CPP_UTF8STRING:</span>
+<span class="lineNum">    1255 </span><span class="lineNoCov">          0 :           value = build_string (1, &quot;&quot;);</span>
+<span class="lineNum">    1256 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">    1257 </span><span class="lineNoCov">          0 :         case CPP_STRING16:</span>
+<span class="lineNum">    1258 </span><span class="lineNoCov">          0 :           value = build_string (TYPE_PRECISION (char16_type_node)</span>
+<span class="lineNum">    1259 </span><span class="lineNoCov">          0 :                                 / TYPE_PRECISION (char_type_node),</span>
+<span class="lineNum">    1260 </span>            :                                 &quot;\0&quot;);  /* char16_t is 16 bits */
+<span class="lineNum">    1261 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">    1262 </span><span class="lineNoCov">          0 :         case CPP_STRING32:</span>
+<span class="lineNum">    1263 </span><span class="lineNoCov">          0 :           value = build_string (TYPE_PRECISION (char32_type_node)</span>
+<span class="lineNum">    1264 </span><span class="lineNoCov">          0 :                                 / TYPE_PRECISION (char_type_node),</span>
+<span class="lineNum">    1265 </span>            :                                 &quot;\0\0\0&quot;);  /* char32_t is 32 bits */
+<span class="lineNum">    1266 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">    1267 </span><span class="lineNoCov">          0 :         case CPP_WSTRING:</span>
+<span class="lineNum">    1268 </span><span class="lineNoCov">          0 :           value = build_string (TYPE_PRECISION (wchar_type_node)</span>
+<span class="lineNum">    1269 </span><span class="lineNoCov">          0 :                                 / TYPE_PRECISION (char_type_node),</span>
+<span class="lineNum">    1270 </span>            :                                 &quot;\0\0\0&quot;);  /* widest supported wchar_t
+<span class="lineNum">    1271 </span>            :                                                is 32 bits */
+<span class="lineNum">    1272 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">    1273 </span>            :         }
+<span class="lineNum">    1274 </span>            :     }
+<span class="lineNum">    1275 </span>            : 
+<span class="lineNum">    1276 </span><span class="lineCov">    2416383 :   switch (type)</span>
+<span class="lineNum">    1277 </span>            :     {
+<span class="lineNum">    1278 </span><span class="lineCov">    2415505 :     default:</span>
+<span class="lineNum">    1279 </span><span class="lineCov">    2415505 :     case CPP_STRING:</span>
+<span class="lineNum">    1280 </span><span class="lineCov">    2415505 :     case CPP_UTF8STRING:</span>
+<span class="lineNum">    1281 </span><span class="lineCov">    2415505 :       TREE_TYPE (value) = char_array_type_node;</span>
+<span class="lineNum">    1282 </span><span class="lineCov">    2415505 :       break;</span>
+<span class="lineNum">    1283 </span><span class="lineCov">        197 :     case CPP_STRING16:</span>
+<span class="lineNum">    1284 </span><span class="lineCov">        197 :       TREE_TYPE (value) = char16_array_type_node;</span>
+<span class="lineNum">    1285 </span><span class="lineCov">        197 :       break;</span>
+<span class="lineNum">    1286 </span><span class="lineCov">        196 :     case CPP_STRING32:</span>
+<span class="lineNum">    1287 </span><span class="lineCov">        196 :       TREE_TYPE (value) = char32_array_type_node;</span>
+<span class="lineNum">    1288 </span><span class="lineCov">        196 :       break;</span>
+<span class="lineNum">    1289 </span><span class="lineCov">        485 :     case CPP_WSTRING:</span>
+<span class="lineNum">    1290 </span><span class="lineCov">        485 :       TREE_TYPE (value) = wchar_array_type_node;</span>
+<span class="lineNum">    1291 </span>            :     }
+<span class="lineNum">    1292 </span><span class="lineCov">    2416383 :   *valp = fix_string_type (value);</span>
+<span class="lineNum">    1293 </span>            : 
+<span class="lineNum">    1294 </span><span class="lineCov">    2416383 :   if (concats)</span>
+<span class="lineNum">    1295 </span>            :     {
+<span class="lineNum">    1296 </span><span class="lineCov">     572087 :       obstack_free (&amp;str_ob, 0);</span>
+<span class="lineNum">    1297 </span><span class="lineCov">     572087 :       obstack_free (&amp;loc_ob, 0);</span>
+<span class="lineNum">    1298 </span>            :     }
+<span class="lineNum">    1299 </span>            : 
+<span class="lineNum">    1300 </span><span class="lineCov">    2416383 :   return objc_string ? CPP_OBJC_STRING : type;</span>
+<span class="lineNum">    1301 </span>            : }
+<span class="lineNum">    1302 </span>            : 
+<a name="1303"><span class="lineNum">    1303 </span>            : /* Converts a (possibly wide) character constant token into a tree.  */</a>
+<span class="lineNum">    1304 </span>            : static tree
+<span class="lineNum">    1305 </span><span class="lineCov">     173157 : lex_charconst (const cpp_token *token)</span>
+<span class="lineNum">    1306 </span>            : {
+<span class="lineNum">    1307 </span><span class="lineCov">     173157 :   cppchar_t result;</span>
+<span class="lineNum">    1308 </span><span class="lineCov">     173157 :   tree type, value;</span>
+<span class="lineNum">    1309 </span><span class="lineCov">     173157 :   unsigned int chars_seen;</span>
+<span class="lineNum">    1310 </span><span class="lineCov">     173157 :   int unsignedp = 0;</span>
+<span class="lineNum">    1311 </span>            : 
+<span class="lineNum">    1312 </span><span class="lineCov">     173157 :   result = cpp_interpret_charconst (parse_in, token,</span>
+<span class="lineNum">    1313 </span>            :                                     &amp;chars_seen, &amp;unsignedp);
+<span class="lineNum">    1314 </span>            : 
+<span class="lineNum">    1315 </span><span class="lineCov">     173157 :   if (token-&gt;type == CPP_WCHAR)</span>
+<span class="lineNum">    1316 </span><span class="lineCov">       5441 :     type = wchar_type_node;</span>
+<span class="lineNum">    1317 </span><span class="lineCov">     167716 :   else if (token-&gt;type == CPP_CHAR32)</span>
+<span class="lineNum">    1318 </span><span class="lineCov">        126 :     type = char32_type_node;</span>
+<span class="lineNum">    1319 </span><span class="lineCov">     167590 :   else if (token-&gt;type == CPP_CHAR16)</span>
+<span class="lineNum">    1320 </span><span class="lineCov">        215 :     type = char16_type_node;</span>
+<span class="lineNum">    1321 </span><span class="lineCov">     167375 :   else if (token-&gt;type == CPP_UTF8CHAR)</span>
+<span class="lineNum">    1322 </span><span class="lineCov">          6 :     type = char_type_node;</span>
+<span class="lineNum">    1323 </span>            :   /* In C, a character constant has type 'int'.
+<span class="lineNum">    1324 </span>            :      In C++ 'char', but multi-char charconsts have type 'int'.  */
+<span class="lineNum">    1325 </span><span class="lineCov">     167369 :   else if (!c_dialect_cxx () || chars_seen &gt; 1)</span>
+<span class="lineNum">    1326 </span><span class="lineCov">      44900 :     type = integer_type_node;</span>
+<span class="lineNum">    1327 </span>            :   else
+<span class="lineNum">    1328 </span><span class="lineCov">     122469 :     type = char_type_node;</span>
+<span class="lineNum">    1329 </span>            : 
+<span class="lineNum">    1330 </span>            :   /* Cast to cppchar_signed_t to get correct sign-extension of RESULT
+<span class="lineNum">    1331 </span>            :      before possibly widening to HOST_WIDE_INT for build_int_cst.  */
+<span class="lineNum">    1332 </span><span class="lineCov">     173157 :   if (unsignedp || (cppchar_signed_t) result &gt;= 0)</span>
+<span class="lineNum">    1333 </span><span class="lineCov">     345936 :     value = build_int_cst (type, result);</span>
+<span class="lineNum">    1334 </span>            :   else
+<span class="lineNum">    1335 </span><span class="lineCov">        378 :     value = build_int_cst (type, (cppchar_signed_t) result);</span>
+<span class="lineNum">    1336 </span>            : 
+<span class="lineNum">    1337 </span><span class="lineCov">     173157 :   return value;</span>
+<span class="lineNum">    1338 </span>            : }
+<span class="lineNum">    1339 </span>            : 
+<span class="lineNum">    1340 </span>            : /* Helper function for c_parser_peek_conflict_marker
+<span class="lineNum">    1341 </span>            :    and cp_lexer_peek_conflict_marker.
+<span class="lineNum">    1342 </span>            :    Given a possible conflict marker token of kind TOK1_KIND
+<span class="lineNum">    1343 </span>            :    consisting of a pair of characters, get the token kind for the
+<span class="lineNum">    1344 </span>            :    standalone final character.  */
+<a name="1345"><span class="lineNum">    1345 </span>            : </a>
+<span class="lineNum">    1346 </span>            : enum cpp_ttype
+<span class="lineNum">    1347 </span><span class="lineCov">         78 : conflict_marker_get_final_tok_kind (enum cpp_ttype tok1_kind)</span>
+<span class="lineNum">    1348 </span>            : {
+<span class="lineNum">    1349 </span><span class="lineCov">         78 :   switch (tok1_kind)</span>
+<span class="lineNum">    1350 </span>            :     {
+<span class="lineNum">    1351 </span><span class="lineNoCov">          0 :     default: gcc_unreachable ();</span>
+<span class="lineNum">    1352 </span>            :     case CPP_LSHIFT:
+<span class="lineNum">    1353 </span>            :       /* &quot;&lt;&lt;&quot; and '&lt;' */
+<span class="lineNum">    1354 </span>            :       return CPP_LESS;
+<span class="lineNum">    1355 </span>            : 
+<span class="lineNum">    1356 </span><span class="lineCov">         26 :     case CPP_EQ_EQ:</span>
+<span class="lineNum">    1357 </span>            :       /* &quot;==&quot; and '=' */
+<span class="lineNum">    1358 </span><span class="lineCov">         26 :       return CPP_EQ;</span>
+<span class="lineNum">    1359 </span>            : 
+<span class="lineNum">    1360 </span><span class="lineCov">         26 :     case CPP_RSHIFT:</span>
+<span class="lineNum">    1361 </span>            :       /* &quot;&gt;&gt;&quot; and '&gt;' */
+<span class="lineNum">    1362 </span><span class="lineCov">         26 :       return CPP_GREATER;</span>
+<span class="lineNum">    1363 </span>            :     }
+<span class="lineNum">    1364 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

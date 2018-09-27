@@ -1,0 +1,905 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/varpool.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - varpool.c<span style="font-size: 80%;"> (source / <a href="varpool.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">311</td>
+            <td class="headerCovTableEntry">366</td>
+            <td class="headerCovTableEntryMed">85.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntry">30</td>
+            <td class="headerCovTableEntryMed">76.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Callgraph handling code.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Jan Hubicka
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;lto-streamer.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;varasm.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;debug.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;output.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;omp-offload.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;context.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      38 </span>            : 
+<span class="lineNum">      39 </span>            : const char * const tls_model_names[]={&quot;none&quot;, &quot;emulated&quot;,
+<span class="lineNum">      40 </span>            :                                       &quot;global-dynamic&quot;, &quot;local-dynamic&quot;,
+<span class="lineNum">      41 </span>            :                                       &quot;initial-exec&quot;, &quot;local-exec&quot;};
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            : /* List of hooks triggered on varpool_node events.  */
+<span class="lineNum">      44 </span>            : struct varpool_node_hook_list {
+<span class="lineNum">      45 </span>            :   varpool_node_hook hook;
+<span class="lineNum">      46 </span>            :   void *data;
+<span class="lineNum">      47 </span>            :   struct varpool_node_hook_list *next;
+<span class="lineNum">      48 </span>            : };
+<span class="lineNum">      49 </span>            : 
+<a name="50"><span class="lineNum">      50 </span>            : /* Register HOOK to be called with DATA on each removed node.  */</a>
+<span class="lineNum">      51 </span>            : varpool_node_hook_list *
+<span class="lineNum">      52 </span><span class="lineCov">      94564 : symbol_table::add_varpool_removal_hook (varpool_node_hook hook, void *data)</span>
+<span class="lineNum">      53 </span>            : {
+<span class="lineNum">      54 </span><span class="lineCov">      94564 :   varpool_node_hook_list *entry;</span>
+<span class="lineNum">      55 </span><span class="lineCov">      94564 :   varpool_node_hook_list **ptr = &amp;m_first_varpool_removal_hook;</span>
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span><span class="lineCov">      94564 :   entry = (varpool_node_hook_list *) xmalloc (sizeof (*entry));</span>
+<span class="lineNum">      58 </span><span class="lineCov">      94564 :   entry-&gt;hook = hook;</span>
+<span class="lineNum">      59 </span><span class="lineCov">      94564 :   entry-&gt;data = data;</span>
+<span class="lineNum">      60 </span><span class="lineCov">      94564 :   entry-&gt;next = NULL;</span>
+<span class="lineNum">      61 </span><span class="lineCov">      97589 :   while (*ptr)</span>
+<span class="lineNum">      62 </span><span class="lineCov">       3025 :     ptr = &amp;(*ptr)-&gt;next;</span>
+<span class="lineNum">      63 </span><span class="lineCov">      94564 :   *ptr = entry;</span>
+<span class="lineNum">      64 </span><span class="lineCov">      94564 :   return entry;</span>
+<span class="lineNum">      65 </span>            : }
+<span class="lineNum">      66 </span>            : 
+<a name="67"><span class="lineNum">      67 </span>            : /* Remove ENTRY from the list of hooks called on removing nodes.  */</a>
+<span class="lineNum">      68 </span>            : void
+<span class="lineNum">      69 </span><span class="lineCov">      84850 : symbol_table::remove_varpool_removal_hook (varpool_node_hook_list *entry)</span>
+<span class="lineNum">      70 </span>            : {
+<span class="lineNum">      71 </span><span class="lineCov">      84850 :   varpool_node_hook_list **ptr = &amp;m_first_varpool_removal_hook;</span>
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span><span class="lineCov">      87737 :   while (*ptr != entry)</span>
+<span class="lineNum">      74 </span><span class="lineCov">       2887 :     ptr = &amp;(*ptr)-&gt;next;</span>
+<span class="lineNum">      75 </span><span class="lineCov">      84850 :   *ptr = entry-&gt;next;</span>
+<span class="lineNum">      76 </span><span class="lineCov">      84850 :   free (entry);</span>
+<span class="lineNum">      77 </span><span class="lineCov">      84850 : }</span>
+<span class="lineNum">      78 </span>            : 
+<a name="79"><span class="lineNum">      79 </span>            : /* Call all node removal hooks.  */</a>
+<span class="lineNum">      80 </span>            : void
+<span class="lineNum">      81 </span><span class="lineCov">    6827738 : symbol_table::call_varpool_removal_hooks (varpool_node *node)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineCov">    6827738 :   varpool_node_hook_list *entry = m_first_varpool_removal_hook;</span>
+<span class="lineNum">      84 </span><span class="lineCov">    8596014 :   while (entry)</span>
+<span class="lineNum">      85 </span>            :   {
+<span class="lineNum">      86 </span><span class="lineCov">    1768276 :     entry-&gt;hook (node, entry-&gt;data);</span>
+<span class="lineNum">      87 </span><span class="lineCov">    1768276 :     entry = entry-&gt;next;</span>
+<span class="lineNum">      88 </span>            :   }
+<span class="lineNum">      89 </span><span class="lineCov">    6827738 : }</span>
+<span class="lineNum">      90 </span>            : 
+<a name="91"><span class="lineNum">      91 </span>            : /* Register HOOK to be called with DATA on each inserted node.  */</a>
+<span class="lineNum">      92 </span>            : varpool_node_hook_list *
+<span class="lineNum">      93 </span><span class="lineNoCov">          0 : symbol_table::add_varpool_insertion_hook (varpool_node_hook hook, void *data)</span>
+<span class="lineNum">      94 </span>            : {
+<span class="lineNum">      95 </span><span class="lineNoCov">          0 :   varpool_node_hook_list *entry;</span>
+<span class="lineNum">      96 </span><span class="lineNoCov">          0 :   varpool_node_hook_list **ptr = &amp;m_first_varpool_insertion_hook;</span>
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span><span class="lineNoCov">          0 :   entry = (varpool_node_hook_list *) xmalloc (sizeof (*entry));</span>
+<span class="lineNum">      99 </span><span class="lineNoCov">          0 :   entry-&gt;hook = hook;</span>
+<span class="lineNum">     100 </span><span class="lineNoCov">          0 :   entry-&gt;data = data;</span>
+<span class="lineNum">     101 </span><span class="lineNoCov">          0 :   entry-&gt;next = NULL;</span>
+<span class="lineNum">     102 </span><span class="lineNoCov">          0 :   while (*ptr)</span>
+<span class="lineNum">     103 </span><span class="lineNoCov">          0 :     ptr = &amp;(*ptr)-&gt;next;</span>
+<span class="lineNum">     104 </span><span class="lineNoCov">          0 :   *ptr = entry;</span>
+<span class="lineNum">     105 </span><span class="lineNoCov">          0 :   return entry;</span>
+<span class="lineNum">     106 </span>            : }
+<span class="lineNum">     107 </span>            : 
+<a name="108"><span class="lineNum">     108 </span>            : /* Remove ENTRY from the list of hooks called on inserted nodes.  */</a>
+<span class="lineNum">     109 </span>            : void
+<span class="lineNum">     110 </span><span class="lineNoCov">          0 : symbol_table::remove_varpool_insertion_hook (varpool_node_hook_list *entry)</span>
+<span class="lineNum">     111 </span>            : {
+<span class="lineNum">     112 </span><span class="lineNoCov">          0 :   varpool_node_hook_list **ptr = &amp;m_first_varpool_insertion_hook;</span>
+<span class="lineNum">     113 </span>            : 
+<span class="lineNum">     114 </span><span class="lineNoCov">          0 :   while (*ptr != entry)</span>
+<span class="lineNum">     115 </span><span class="lineNoCov">          0 :     ptr = &amp;(*ptr)-&gt;next;</span>
+<span class="lineNum">     116 </span><span class="lineNoCov">          0 :   *ptr = entry-&gt;next;</span>
+<span class="lineNum">     117 </span><span class="lineNoCov">          0 :   free (entry);</span>
+<span class="lineNum">     118 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     119 </span>            : 
+<a name="120"><span class="lineNum">     120 </span>            : /* Call all node insertion hooks.  */</a>
+<span class="lineNum">     121 </span>            : void
+<span class="lineNum">     122 </span><span class="lineCov">       3791 : symbol_table::call_varpool_insertion_hooks (varpool_node *node)</span>
+<span class="lineNum">     123 </span>            : {
+<span class="lineNum">     124 </span><span class="lineCov">       3791 :   varpool_node_hook_list *entry = m_first_varpool_insertion_hook;</span>
+<span class="lineNum">     125 </span><span class="lineCov">       3791 :   while (entry)</span>
+<span class="lineNum">     126 </span>            :   {
+<span class="lineNum">     127 </span><span class="lineNoCov">          0 :     entry-&gt;hook (node, entry-&gt;data);</span>
+<span class="lineNum">     128 </span><span class="lineNoCov">          0 :     entry = entry-&gt;next;</span>
+<span class="lineNum">     129 </span>            :   }
+<span class="lineNum">     130 </span><span class="lineCov">       3791 : }</span>
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : /* Allocate new callgraph node and insert it into basic data structures.  */
+<a name="133"><span class="lineNum">     133 </span>            : </a>
+<span class="lineNum">     134 </span>            : varpool_node *
+<span class="lineNum">     135 </span><span class="lineCov">    9002650 : varpool_node::create_empty (void)</span>
+<span class="lineNum">     136 </span>            : {   
+<span class="lineNum">     137 </span><span class="lineCov">    9002650 :   varpool_node *node = ggc_cleared_alloc&lt;varpool_node&gt; ();</span>
+<span class="lineNum">     138 </span><span class="lineCov">    9002650 :   node-&gt;type = SYMTAB_VARIABLE;</span>
+<span class="lineNum">     139 </span><span class="lineCov">    9002650 :   return node;</span>
+<span class="lineNum">     140 </span>            : }   
+<span class="lineNum">     141 </span>            : 
+<a name="142"><span class="lineNum">     142 </span>            : /* Return varpool node assigned to DECL.  Create new one when needed.  */</a>
+<span class="lineNum">     143 </span>            : varpool_node *
+<span class="lineNum">     144 </span><span class="lineCov">   51080161 : varpool_node::get_create (tree decl)</span>
+<span class="lineNum">     145 </span>            : {
+<span class="lineNum">     146 </span><span class="lineCov">   51080161 :   varpool_node *node = varpool_node::get (decl);</span>
+<span class="lineNum">     147 </span><span class="lineCov">   51080161 :   gcc_checking_assert (VAR_P (decl));</span>
+<span class="lineNum">     148 </span><span class="lineCov">   51080161 :   if (node)</span>
+<span class="lineNum">     149 </span>            :     return node;
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span><span class="lineCov">    8946231 :   node = varpool_node::create_empty ();</span>
+<span class="lineNum">     152 </span><span class="lineCov">    8946231 :   node-&gt;decl = decl;</span>
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span><span class="lineCov">    8932696 :   if ((flag_openacc || flag_openmp)</span>
+<span class="lineNum">     155 </span><span class="lineCov">    8960633 :       &amp;&amp; lookup_attribute (&quot;omp declare target&quot;, DECL_ATTRIBUTES (decl)))</span>
+<span class="lineNum">     156 </span>            :     {
+<span class="lineNum">     157 </span><span class="lineCov">        224 :       node-&gt;offloadable = 1;</span>
+<span class="lineNum">     158 </span><span class="lineCov">        224 :       if (ENABLE_OFFLOADING &amp;&amp; !DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     159 </span>            :         {
+<span class="lineNum">     160 </span>            :           g-&gt;have_offload = true;
+<span class="lineNum">     161 </span>            :           if (!in_lto_p)
+<span class="lineNum">     162 </span>            :             vec_safe_push (offload_vars, decl);
+<span class="lineNum">     163 </span>            :         }
+<span class="lineNum">     164 </span>            :     }
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span><span class="lineCov">    8946231 :   node-&gt;register_symbol ();</span>
+<span class="lineNum">     167 </span><span class="lineCov">    8946231 :   return node;</span>
+<span class="lineNum">     168 </span>            : }
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span>            : /* Remove variable from symbol table.  */
+<a name="171"><span class="lineNum">     171 </span>            : </a>
+<span class="lineNum">     172 </span>            : void
+<span class="lineNum">     173 </span><span class="lineCov">    6827738 : varpool_node::remove (void)</span>
+<span class="lineNum">     174 </span>            : {
+<span class="lineNum">     175 </span><span class="lineCov">    6827738 :   symtab-&gt;call_varpool_removal_hooks (this);</span>
+<span class="lineNum">     176 </span><span class="lineCov">    6827738 :   if (lto_file_data)</span>
+<span class="lineNum">     177 </span>            :     {
+<span class="lineNum">     178 </span><span class="lineCov">       3106 :       lto_free_function_in_decl_state_for_node (this);</span>
+<span class="lineNum">     179 </span><span class="lineCov">       3106 :       lto_file_data = NULL;</span>
+<span class="lineNum">     180 </span>            :     }
+<span class="lineNum">     181 </span>            : 
+<span class="lineNum">     182 </span>            :   /* When streaming we can have multiple nodes associated with decl.  */
+<span class="lineNum">     183 </span><span class="lineCov">    6827738 :   if (symtab-&gt;state == LTO_STREAMING)</span>
+<span class="lineNum">     184 </span>            :     ;
+<span class="lineNum">     185 </span>            :   /* Keep constructor when it may be used for folding. We remove
+<span class="lineNum">     186 </span>            :      references to external variables before final compilation.  */
+<span class="lineNum">     187 </span><span class="lineCov">   18275108 :   else if (DECL_INITIAL (decl) &amp;&amp; DECL_INITIAL (decl) != error_mark_node</span>
+<span class="lineNum">     188 </span><span class="lineCov">   12550242 :            &amp;&amp; !ctor_useable_for_folding_p ())</span>
+<span class="lineNum">     189 </span><span class="lineCov">       1937 :     remove_initializer ();</span>
+<span class="lineNum">     190 </span>            : 
+<span class="lineNum">     191 </span><span class="lineCov">    6827738 :   unregister ();</span>
+<span class="lineNum">     192 </span><span class="lineCov">    6827738 :   ggc_free (this);</span>
+<span class="lineNum">     193 </span><span class="lineCov">    6827738 : }</span>
+<span class="lineNum">     194 </span>            : 
+<a name="195"><span class="lineNum">     195 </span>            : /* Remove node initializer when it is no longer needed.  */</a>
+<span class="lineNum">     196 </span>            : void
+<span class="lineNum">     197 </span><span class="lineCov">    1722386 : varpool_node::remove_initializer (void)</span>
+<span class="lineNum">     198 </span>            : {
+<span class="lineNum">     199 </span><span class="lineCov">    1722386 :   if (DECL_INITIAL (decl)</span>
+<span class="lineNum">     200 </span><span class="lineCov">       2438 :       &amp;&amp; !DECL_IN_CONSTANT_POOL (decl)</span>
+<span class="lineNum">     201 </span>            :       /* Keep vtables for BINFO folding.  */
+<span class="lineNum">     202 </span><span class="lineCov">       4876 :       &amp;&amp; !DECL_VIRTUAL_P (decl)</span>
+<span class="lineNum">     203 </span>            :       /* FIXME: http://gcc.gnu.org/PR55395 */
+<span class="lineNum">     204 </span><span class="lineCov">       2318 :       &amp;&amp; debug_info_level == DINFO_LEVEL_NONE</span>
+<span class="lineNum">     205 </span>            :       /* When doing declaration merging we have duplicate
+<span class="lineNum">     206 </span>            :          entries for given decl.  Do not attempt to remove
+<span class="lineNum">     207 </span>            :          the boides, or we will end up remiving
+<span class="lineNum">     208 </span>            :          wrong one.  */
+<span class="lineNum">     209 </span><span class="lineCov">    1724185 :       &amp;&amp; symtab-&gt;state != LTO_STREAMING)</span>
+<span class="lineNum">     210 </span><span class="lineCov">       3598 :     DECL_INITIAL (decl) = error_mark_node;</span>
+<span class="lineNum">     211 </span><span class="lineCov">    1722386 : }</span>
+<span class="lineNum">     212 </span>            : 
+<a name="213"><span class="lineNum">     213 </span>            : /* Dump given varpool node to F.  */</a>
+<span class="lineNum">     214 </span>            : void
+<span class="lineNum">     215 </span><span class="lineCov">       2102 : varpool_node::dump (FILE *f)</span>
+<span class="lineNum">     216 </span>            : {
+<span class="lineNum">     217 </span><span class="lineCov">       2102 :   dump_base (f);</span>
+<span class="lineNum">     218 </span><span class="lineCov">       2102 :   fprintf (f, &quot;  Availability: %s\n&quot;,</span>
+<span class="lineNum">     219 </span><span class="lineCov">       2102 :            symtab-&gt;function_flags_ready</span>
+<span class="lineNum">     220 </span><span class="lineCov">       2000 :            ? cgraph_availability_names[get_availability ()]</span>
+<span class="lineNum">     221 </span>            :            : &quot;not-ready&quot;);
+<span class="lineNum">     222 </span><span class="lineCov">       2102 :   fprintf (f, &quot;  Varpool flags:&quot;);</span>
+<span class="lineNum">     223 </span><span class="lineCov">       2102 :   if (DECL_INITIAL (decl))</span>
+<span class="lineNum">     224 </span><span class="lineCov">       1358 :     fprintf (f, &quot; initialized&quot;);</span>
+<span class="lineNum">     225 </span><span class="lineCov">       2102 :   if (output)</span>
+<span class="lineNum">     226 </span><span class="lineNoCov">          0 :     fprintf (f, &quot; output&quot;);</span>
+<span class="lineNum">     227 </span><span class="lineCov">       2102 :   if (used_by_single_function)</span>
+<span class="lineNum">     228 </span><span class="lineCov">         43 :     fprintf (f, &quot; used-by-single-function&quot;);</span>
+<span class="lineNum">     229 </span><span class="lineCov">       2102 :   if (need_bounds_init)</span>
+<span class="lineNum">     230 </span><span class="lineNoCov">          0 :     fprintf (f, &quot; need-bounds-init&quot;);</span>
+<span class="lineNum">     231 </span><span class="lineCov">       2102 :   if (TREE_READONLY (decl))</span>
+<span class="lineNum">     232 </span><span class="lineCov">       1330 :     fprintf (f, &quot; read-only&quot;);</span>
+<span class="lineNum">     233 </span><span class="lineCov">       2102 :   if (ctor_useable_for_folding_p ())</span>
+<span class="lineNum">     234 </span><span class="lineCov">       1064 :     fprintf (f, &quot; const-value-known&quot;);</span>
+<span class="lineNum">     235 </span><span class="lineCov">       2102 :   if (writeonly)</span>
+<span class="lineNum">     236 </span><span class="lineNoCov">          0 :     fprintf (f, &quot; write-only&quot;);</span>
+<span class="lineNum">     237 </span><span class="lineCov">       2102 :   if (tls_model)</span>
+<span class="lineNum">     238 </span><span class="lineCov">         48 :     fprintf (f, &quot; tls-%s&quot;, tls_model_names [tls_model]);</span>
+<span class="lineNum">     239 </span><span class="lineCov">       2102 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">     240 </span><span class="lineCov">       2102 : }</span>
+<span class="lineNum">     241 </span>            : 
+<a name="242"><span class="lineNum">     242 </span>            : </a>
+<span class="lineNum">     243 </span>            : /* Dump given varpool node to stderr.  */
+<span class="lineNum">     244 </span><span class="lineNoCov">          0 : void varpool_node::debug (void)</span>
+<span class="lineNum">     245 </span>            : {
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 :   varpool_node::dump (stderr);</span>
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     248 </span>            : 
+<a name="249"><span class="lineNum">     249 </span>            : /* Dump the variable pool to F.  */</a>
+<span class="lineNum">     250 </span>            : void
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 : varpool_node::dump_varpool (FILE *f)</span>
+<span class="lineNum">     252 </span>            : {
+<span class="lineNum">     253 </span><span class="lineNoCov">          0 :   varpool_node *node;</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :   fprintf (f, &quot;variable pool:\n\n&quot;);</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 :   FOR_EACH_VARIABLE (node)</span>
+<span class="lineNum">     257 </span><span class="lineNoCov">          0 :     node-&gt;dump (f);</span>
+<span class="lineNum">     258 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : /* Dump the variable pool to stderr.  */
+<a name="261"><span class="lineNum">     261 </span>            : </a>
+<span class="lineNum">     262 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 : varpool_node::debug_varpool (void)</span>
+<span class="lineNum">     264 </span>            : {
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 :   dump_varpool (stderr);</span>
+<span class="lineNum">     266 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     267 </span>            : 
+<a name="268"><span class="lineNum">     268 </span>            : /* Given an assembler name, lookup node.  */</a>
+<span class="lineNum">     269 </span>            : varpool_node *
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 : varpool_node::get_for_asmname (tree asmname)</span>
+<span class="lineNum">     271 </span>            : {
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :   if (symtab_node *node = symtab_node::get_for_asmname (asmname))</span>
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :     return dyn_cast &lt;varpool_node *&gt; (node);</span>
+<span class="lineNum">     274 </span>            :   else
+<span class="lineNum">     275 </span>            :     return NULL;
+<span class="lineNum">     276 </span>            : }
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            : /* When doing LTO, read variable's constructor from disk if
+<span class="lineNum">     279 </span>            :    it is not already present.  */
+<a name="280"><span class="lineNum">     280 </span>            : </a>
+<span class="lineNum">     281 </span>            : tree
+<span class="lineNum">     282 </span><span class="lineCov">    5133100 : varpool_node::get_constructor (void)</span>
+<span class="lineNum">     283 </span>            : {
+<span class="lineNum">     284 </span><span class="lineCov">    5133100 :   lto_file_decl_data *file_data;</span>
+<span class="lineNum">     285 </span><span class="lineCov">    5133100 :   const char *data, *name;</span>
+<span class="lineNum">     286 </span><span class="lineCov">    5133100 :   size_t len;</span>
+<span class="lineNum">     287 </span>            : 
+<span class="lineNum">     288 </span><span class="lineCov">    5133100 :   if (DECL_INITIAL (decl) != error_mark_node</span>
+<span class="lineNum">     289 </span><span class="lineCov">       8436 :       || !in_lto_p</span>
+<span class="lineNum">     290 </span><span class="lineCov">    5141532 :       || !lto_file_data)</span>
+<span class="lineNum">     291 </span>            :     return DECL_INITIAL (decl);
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span><span class="lineCov">       8432 :   timevar_push (TV_IPA_LTO_CTORS_IN);</span>
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">       8432 :   file_data = lto_file_data;</span>
+<span class="lineNum">     296 </span><span class="lineCov">       8432 :   name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl));</span>
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span>            :   /* We may have renamed the declaration, e.g., a static function.  */
+<span class="lineNum">     299 </span><span class="lineCov">       8432 :   name = lto_get_decl_name_mapping (file_data, name);</span>
+<span class="lineNum">     300 </span><span class="lineCov">       8432 :   struct lto_in_decl_state *decl_state</span>
+<span class="lineNum">     301 </span><span class="lineCov">       8432 :          = lto_get_function_in_decl_state (file_data, decl);</span>
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span><span class="lineCov">      25296 :   data = lto_get_section_data (file_data, LTO_section_function_body,</span>
+<span class="lineNum">     304 </span><span class="lineCov">       8432 :                                name, &amp;len, decl_state-&gt;compressed);</span>
+<span class="lineNum">     305 </span><span class="lineCov">       8432 :   if (!data)</span>
+<span class="lineNum">     306 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;%s: section %s is missing&quot;,</span>
+<span class="lineNum">     307 </span>            :                  file_data-&gt;file_name,
+<span class="lineNum">     308 </span>            :                  name);
+<span class="lineNum">     309 </span>            : 
+<span class="lineNum">     310 </span><span class="lineCov">       8432 :   if (!quiet_flag)</span>
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 :     fprintf (stderr, &quot; in:%s&quot;, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));</span>
+<span class="lineNum">     312 </span><span class="lineCov">       8432 :   lto_input_variable_constructor (file_data, this, data);</span>
+<span class="lineNum">     313 </span><span class="lineCov">       8432 :   gcc_assert (DECL_INITIAL (decl) != error_mark_node);</span>
+<span class="lineNum">     314 </span><span class="lineCov">       8432 :   lto_stats.num_function_bodies++;</span>
+<span class="lineNum">     315 </span><span class="lineCov">      16864 :   lto_free_section_data (file_data, LTO_section_function_body, name,</span>
+<span class="lineNum">     316 </span><span class="lineCov">       8432 :                          data, len, decl_state-&gt;compressed);</span>
+<span class="lineNum">     317 </span><span class="lineCov">       8432 :   lto_free_function_in_decl_state_for_node (this);</span>
+<span class="lineNum">     318 </span><span class="lineCov">       8432 :   timevar_pop (TV_IPA_LTO_CTORS_IN);</span>
+<span class="lineNum">     319 </span><span class="lineCov">       8432 :   return DECL_INITIAL (decl);</span>
+<span class="lineNum">     320 </span>            : }
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span>            : /* Return true if variable has constructor that can be used for folding.  */
+<a name="323"><span class="lineNum">     323 </span>            : </a>
+<span class="lineNum">     324 </span>            : bool
+<span class="lineNum">     325 </span><span class="lineCov">   20989847 : varpool_node::ctor_useable_for_folding_p (void)</span>
+<span class="lineNum">     326 </span>            : {
+<span class="lineNum">     327 </span><span class="lineCov">   20989847 :   varpool_node *real_node = this;</span>
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span><span class="lineCov">   20989847 :   if (real_node-&gt;alias &amp;&amp; real_node-&gt;definition)</span>
+<span class="lineNum">     330 </span><span class="lineCov">      78367 :     real_node = ultimate_alias_target ();</span>
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span><span class="lineCov">   20989847 :   if (TREE_CODE (decl) == CONST_DECL</span>
+<span class="lineNum">     333 </span><span class="lineCov">   20989847 :       || DECL_IN_CONSTANT_POOL (decl))</span>
+<span class="lineNum">     334 </span>            :     return true;
+<span class="lineNum">     335 </span><span class="lineCov">   20989815 :   if (TREE_THIS_VOLATILE (decl))</span>
+<span class="lineNum">     336 </span>            :     return false;
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span>            :   /* If we do not have a constructor, we can't use it.  */
+<span class="lineNum">     339 </span><span class="lineCov">   20956546 :   if (DECL_INITIAL (real_node-&gt;decl) == error_mark_node</span>
+<span class="lineNum">     340 </span><span class="lineCov">   20956546 :       &amp;&amp; !real_node-&gt;lto_file_data)</span>
+<span class="lineNum">     341 </span>            :     return false;
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span>            :   /* Avoid attempts to load constructors that was not streamed.  */
+<span class="lineNum">     344 </span><span class="lineCov">     365762 :   if (flag_ltrans &amp;&amp; DECL_INITIAL (real_node-&gt;decl) == error_mark_node</span>
+<span class="lineNum">     345 </span><span class="lineCov">   20968534 :       &amp;&amp; real_node-&gt;body_removed)</span>
+<span class="lineNum">     346 </span>            :     return false;
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span>            :   /* Vtables are defined by their types and must match no matter of interposition
+<span class="lineNum">     349 </span>            :      rules.  */
+<span class="lineNum">     350 </span><span class="lineCov">   20955920 :   if (DECL_VIRTUAL_P (decl))</span>
+<span class="lineNum">     351 </span>            :     {
+<span class="lineNum">     352 </span>            :       /* The C++ front end creates VAR_DECLs for vtables of typeinfo
+<span class="lineNum">     353 </span>            :          classes not defined in the current TU so that it can refer
+<span class="lineNum">     354 </span>            :          to them from typeinfo objects.  Avoid returning NULL_TREE.  */
+<span class="lineNum">     355 </span><span class="lineCov">    1334126 :       return DECL_INITIAL (real_node-&gt;decl) != NULL;</span>
+<span class="lineNum">     356 </span>            :     }
+<span class="lineNum">     357 </span>            : 
+<span class="lineNum">     358 </span>            :   /* Alias of readonly variable is also readonly, since the variable is stored
+<span class="lineNum">     359 </span>            :      in readonly memory.  We also accept readonly aliases of non-readonly
+<span class="lineNum">     360 </span>            :      locations assuming that user knows what he is asking for.  */
+<span class="lineNum">     361 </span><span class="lineCov">   20288857 :   if (!TREE_READONLY (decl) &amp;&amp; !TREE_READONLY (real_node-&gt;decl))</span>
+<span class="lineNum">     362 </span>            :     return false;
+<span class="lineNum">     363 </span>            : 
+<span class="lineNum">     364 </span>            :   /* Variables declared 'const' without an initializer
+<span class="lineNum">     365 </span>            :      have zero as the initializer if they may not be
+<span class="lineNum">     366 </span>            :      overridden at link or run time.
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            :      It is actually requirement for C++ compiler to optimize const variables
+<span class="lineNum">     369 </span>            :      consistently. As a GNU extension, do not enfore this rule for user defined
+<span class="lineNum">     370 </span>            :      weak variables, so we support interposition on:
+<span class="lineNum">     371 </span>            :      static const int dummy = 0;
+<span class="lineNum">     372 </span>            :      extern const int foo __attribute__((__weak__, __alias__(&quot;dummy&quot;))); 
+<span class="lineNum">     373 </span>            :    */
+<span class="lineNum">     374 </span><span class="lineCov">    7146133 :   if ((!DECL_INITIAL (real_node-&gt;decl)</span>
+<span class="lineNum">     375 </span><span class="lineCov">    5788175 :        || (DECL_WEAK (decl) &amp;&amp; !DECL_COMDAT (decl)))</span>
+<span class="lineNum">     376 </span><span class="lineCov">    7255519 :       &amp;&amp; (DECL_EXTERNAL (decl) || decl_replaceable_p (decl)))</span>
+<span class="lineNum">     377 </span><span class="lineCov">    1409466 :     return false;</span>
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            :   /* Variables declared `const' with an initializer are considered
+<span class="lineNum">     380 </span>            :      to not be overwritable with different initializer by default. 
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            :      ??? Previously we behaved so for scalar variables but not for array
+<span class="lineNum">     383 </span>            :      accesses.  */
+<span class="lineNum">     384 </span>            :   return true;
+<span class="lineNum">     385 </span>            : }
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            : /* If DECLARATION is constant variable and its initial value is known
+<span class="lineNum">     388 </span>            :    (so we can do constant folding), return its constructor (DECL_INITIAL).
+<span class="lineNum">     389 </span>            :    This may be an expression or NULL when DECL is initialized to 0.
+<span class="lineNum">     390 </span>            :    Return ERROR_MARK_NODE otherwise.
+<span class="lineNum">     391 </span>            : 
+<span class="lineNum">     392 </span>            :    In LTO this may actually trigger reading the constructor from disk.
+<span class="lineNum">     393 </span>            :    For this reason varpool_ctor_useable_for_folding_p should be used when
+<span class="lineNum">     394 </span>            :    the actual constructor value is not needed.  */
+<a name="395"><span class="lineNum">     395 </span>            : </a>
+<span class="lineNum">     396 </span>            : tree
+<span class="lineNum">     397 </span><span class="lineCov">   76206203 : ctor_for_folding (tree decl)</span>
+<span class="lineNum">     398 </span>            : {
+<span class="lineNum">     399 </span><span class="lineCov">   76206203 :   varpool_node *node, *real_node;</span>
+<span class="lineNum">     400 </span><span class="lineCov">   76206203 :   tree real_decl;</span>
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span><span class="lineCov">   76206203 :   if (!VAR_P (decl) &amp;&amp; TREE_CODE (decl) != CONST_DECL)</span>
+<span class="lineNum">     403 </span><span class="lineCov">    1702807 :     return error_mark_node;</span>
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span><span class="lineCov">   74503396 :   if (TREE_CODE (decl) == CONST_DECL</span>
+<span class="lineNum">     406 </span><span class="lineCov">   74503396 :       || DECL_IN_CONSTANT_POOL (decl))</span>
+<span class="lineNum">     407 </span><span class="lineCov">      30898 :     return DECL_INITIAL (decl);</span>
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span><span class="lineCov">   74472498 :   if (TREE_THIS_VOLATILE (decl))</span>
+<span class="lineNum">     410 </span><span class="lineCov">    1629650 :     return error_mark_node;</span>
+<span class="lineNum">     411 </span>            : 
+<span class="lineNum">     412 </span>            :   /* Do not care about automatic variables.  Those are never initialized
+<span class="lineNum">     413 </span>            :      anyway, because gimplifier exapnds the code.  */
+<span class="lineNum">     414 </span><span class="lineCov">   72842848 :   if (!TREE_STATIC (decl) &amp;&amp; !DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     415 </span>            :     {
+<span class="lineNum">     416 </span><span class="lineCov">   56834453 :       gcc_assert (!TREE_PUBLIC (decl));</span>
+<span class="lineNum">     417 </span><span class="lineCov">   56834453 :       return error_mark_node;</span>
+<span class="lineNum">     418 </span>            :     }
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span><span class="lineCov">   16008395 :   gcc_assert (VAR_P (decl));</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span><span class="lineCov">   16008395 :   real_node = node = varpool_node::get (decl);</span>
+<span class="lineNum">     423 </span><span class="lineCov">   16008395 :   if (node)</span>
+<span class="lineNum">     424 </span>            :     {
+<span class="lineNum">     425 </span><span class="lineCov">   15483178 :       real_node = node-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     426 </span><span class="lineCov">   15483178 :       real_decl = real_node-&gt;decl;</span>
+<span class="lineNum">     427 </span>            :     }
+<span class="lineNum">     428 </span>            :   else
+<span class="lineNum">     429 </span>            :     real_decl = decl;
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span>            :   /* See if we are dealing with alias.
+<span class="lineNum">     432 </span>            :      In most cases alias is just alternative symbol pointing to a given
+<span class="lineNum">     433 </span>            :      constructor.  This allows us to use interposition rules of DECL
+<span class="lineNum">     434 </span>            :      constructor of REAL_NODE.  However weakrefs are special by being just
+<span class="lineNum">     435 </span>            :      alternative name of their target (if defined).  */
+<span class="lineNum">     436 </span><span class="lineCov">   16008395 :   if (decl != real_decl)</span>
+<span class="lineNum">     437 </span>            :     {
+<span class="lineNum">     438 </span><span class="lineCov">      78120 :       gcc_assert (!DECL_INITIAL (decl)</span>
+<span class="lineNum">     439 </span>            :                   || (node-&gt;alias &amp;&amp; node-&gt;get_alias_target () == real_node)
+<span class="lineNum">     440 </span>            :                   || DECL_INITIAL (decl) == error_mark_node);
+<span class="lineNum">     441 </span><span class="lineCov">      78120 :       while (node-&gt;transparent_alias &amp;&amp; node-&gt;analyzed)</span>
+<span class="lineNum">     442 </span>            :         {
+<span class="lineNum">     443 </span><span class="lineNoCov">          0 :           node = node-&gt;get_alias_target ();</span>
+<span class="lineNum">     444 </span><span class="lineNoCov">          0 :           decl = node-&gt;decl;</span>
+<span class="lineNum">     445 </span>            :         }
+<span class="lineNum">     446 </span>            :     }
+<span class="lineNum">     447 </span>            : 
+<span class="lineNum">     448 </span><span class="lineCov">   16008395 :   if ((!DECL_VIRTUAL_P (real_decl)</span>
+<span class="lineNum">     449 </span><span class="lineCov">     900728 :        || DECL_INITIAL (real_decl) == error_mark_node</span>
+<span class="lineNum">     450 </span><span class="lineCov">     900188 :        || !DECL_INITIAL (real_decl))</span>
+<span class="lineNum">     451 </span><span class="lineCov">   16067396 :       &amp;&amp; (!node || !node-&gt;ctor_useable_for_folding_p ()))</span>
+<span class="lineNum">     452 </span><span class="lineCov">   15001835 :     return error_mark_node;</span>
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span>            :   /* OK, we can return constructor.  See if we need to fetch it from disk
+<span class="lineNum">     455 </span>            :      in LTO mode.  */
+<span class="lineNum">     456 </span><span class="lineCov">    1006560 :   if (DECL_INITIAL (real_decl) != error_mark_node</span>
+<span class="lineNum">     457 </span><span class="lineCov">    1006560 :       || !in_lto_p)</span>
+<span class="lineNum">     458 </span>            :     return DECL_INITIAL (real_decl);
+<span class="lineNum">     459 </span><span class="lineCov">       1094 :   return real_node-&gt;get_constructor ();</span>
+<span class="lineNum">     460 </span>            : }
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span>            : /* Add the variable DECL to the varpool.
+<span class="lineNum">     463 </span>            :    Unlike finalize_decl function is intended to be used
+<span class="lineNum">     464 </span>            :    by middle end and allows insertion of new variable at arbitrary point
+<a name="465"><span class="lineNum">     465 </span>            :    of compilation.  */</a>
+<span class="lineNum">     466 </span>            : void
+<span class="lineNum">     467 </span><span class="lineCov">       3791 : varpool_node::add (tree decl)</span>
+<span class="lineNum">     468 </span>            : {
+<span class="lineNum">     469 </span><span class="lineCov">       3791 :   varpool_node *node;</span>
+<span class="lineNum">     470 </span><span class="lineCov">       3791 :   varpool_node::finalize_decl (decl);</span>
+<span class="lineNum">     471 </span><span class="lineCov">       3791 :   node = varpool_node::get_create (decl);</span>
+<span class="lineNum">     472 </span><span class="lineCov">       3791 :   symtab-&gt;call_varpool_insertion_hooks (node);</span>
+<span class="lineNum">     473 </span><span class="lineCov">       3791 :   if (node-&gt;externally_visible_p ())</span>
+<span class="lineNum">     474 </span><span class="lineCov">       3791 :     node-&gt;externally_visible = true;</span>
+<span class="lineNum">     475 </span><span class="lineCov">       3791 :   if (lookup_attribute (&quot;no_reorder&quot;, DECL_ATTRIBUTES (decl)))</span>
+<span class="lineNum">     476 </span><span class="lineNoCov">          0 :     node-&gt;no_reorder = 1;</span>
+<span class="lineNum">     477 </span><span class="lineCov">       3791 : }</span>
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span>            : /* Return variable availability.  See cgraph.h for description of individual
+<a name="480"><span class="lineNum">     480 </span>            :    return values.  */</a>
+<span class="lineNum">     481 </span>            : enum availability
+<span class="lineNum">     482 </span><span class="lineCov">  153392242 : varpool_node::get_availability (symtab_node *ref)</span>
+<span class="lineNum">     483 </span>            : {
+<span class="lineNum">     484 </span><span class="lineCov">  153392242 :   if (!definition)</span>
+<span class="lineNum">     485 </span>            :     return AVAIL_NOT_AVAILABLE;
+<span class="lineNum">     486 </span><span class="lineCov">  131371097 :   if (!TREE_PUBLIC (decl))</span>
+<span class="lineNum">     487 </span>            :     return AVAIL_AVAILABLE;
+<span class="lineNum">     488 </span><span class="lineCov">   58237108 :   if (DECL_IN_CONSTANT_POOL (decl)</span>
+<span class="lineNum">     489 </span><span class="lineCov">   58237108 :       || DECL_VIRTUAL_P (decl))</span>
+<span class="lineNum">     490 </span>            :     return AVAIL_AVAILABLE;
+<span class="lineNum">     491 </span><span class="lineCov">   58181813 :   if (transparent_alias &amp;&amp; definition)</span>
+<span class="lineNum">     492 </span>            :     {
+<span class="lineNum">     493 </span><span class="lineNoCov">          0 :       enum availability avail;</span>
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span><span class="lineNoCov">          0 :       ultimate_alias_target (&amp;avail, ref);</span>
+<span class="lineNum">     496 </span><span class="lineNoCov">          0 :       return avail;</span>
+<span class="lineNum">     497 </span>            :     }
+<span class="lineNum">     498 </span>            :   /* If this is a reference from symbol itself and there are no aliases, we
+<span class="lineNum">     499 </span>            :      may be sure that the symbol was not interposed by something else because
+<span class="lineNum">     500 </span>            :      the symbol itself would be unreachable otherwise.  */
+<span class="lineNum">     501 </span><span class="lineNoCov">          0 :   if ((this == ref &amp;&amp; !has_aliases_p ())</span>
+<span class="lineNum">     502 </span><span class="lineCov">   58181813 :       || (ref &amp;&amp; get_comdat_group ()</span>
+<span class="lineNum">     503 </span><span class="lineNoCov">          0 :           &amp;&amp; get_comdat_group () == ref-&gt;get_comdat_group ()))</span>
+<span class="lineNum">     504 </span>            :     return AVAIL_AVAILABLE;
+<span class="lineNum">     505 </span>            :   /* If the variable can be overwritten, return OVERWRITABLE.  Takes
+<span class="lineNum">     506 </span>            :      care of at least one notable extension - the COMDAT variables
+<span class="lineNum">     507 </span>            :      used to share template instantiations in C++.  */
+<span class="lineNum">     508 </span><span class="lineCov">   58181813 :   if (decl_replaceable_p (decl)</span>
+<span class="lineNum">     509 </span><span class="lineCov">   58181813 :       || DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     510 </span><span class="lineCov">   36357069 :     return AVAIL_INTERPOSABLE;</span>
+<span class="lineNum">     511 </span>            :   return AVAIL_AVAILABLE;
+<span class="lineNum">     512 </span>            : }
+<a name="513"><span class="lineNum">     513 </span>            : </a>
+<span class="lineNum">     514 </span>            : void
+<span class="lineNum">     515 </span><span class="lineCov">    2221210 : varpool_node::analyze (void)</span>
+<span class="lineNum">     516 </span>            : {
+<span class="lineNum">     517 </span>            :   /* When reading back varpool at LTO time, we re-construct the queue in order
+<span class="lineNum">     518 </span>            :      to have &quot;needed&quot; list right by inserting all needed nodes into varpool.
+<span class="lineNum">     519 </span>            :      We however don't want to re-analyze already analyzed nodes.  */
+<span class="lineNum">     520 </span><span class="lineCov">    2221210 :   if (!analyzed)</span>
+<span class="lineNum">     521 </span>            :     {
+<span class="lineNum">     522 </span><span class="lineCov">    2221210 :       gcc_assert (!in_lto_p || symtab-&gt;function_flags_ready);</span>
+<span class="lineNum">     523 </span>            :       /* Compute the alignment early so function body expanders are
+<span class="lineNum">     524 </span>            :          already informed about increased alignment.  */
+<span class="lineNum">     525 </span><span class="lineCov">    2221210 :       align_variable (decl, 0);</span>
+<span class="lineNum">     526 </span>            :     }
+<span class="lineNum">     527 </span><span class="lineCov">    2221210 :   if (alias)</span>
+<span class="lineNum">     528 </span><span class="lineCov">        120 :     resolve_alias (varpool_node::get (alias_target));</span>
+<span class="lineNum">     529 </span><span class="lineCov">    2221090 :   else if (DECL_INITIAL (decl))</span>
+<span class="lineNum">     530 </span><span class="lineCov">    1314940 :     record_references_in_initializer (decl, analyzed);</span>
+<span class="lineNum">     531 </span><span class="lineCov">    2221210 :   analyzed = true;</span>
+<span class="lineNum">     532 </span><span class="lineCov">    2221210 : }</span>
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span>            : /* Assemble thunks and aliases associated to varpool node.  */
+<a name="535"><span class="lineNum">     535 </span>            : </a>
+<span class="lineNum">     536 </span>            : void
+<span class="lineNum">     537 </span><span class="lineCov">    2066737 : varpool_node::assemble_aliases (void)</span>
+<span class="lineNum">     538 </span>            : {
+<span class="lineNum">     539 </span><span class="lineCov">    2066737 :   ipa_ref *ref;</span>
+<span class="lineNum">     540 </span>            : 
+<span class="lineNum">     541 </span><span class="lineCov">    2351571 :   FOR_EACH_ALIAS (this, ref)</span>
+<span class="lineNum">     542 </span>            :     {
+<span class="lineNum">     543 </span><span class="lineCov">       1997 :       varpool_node *alias = dyn_cast &lt;varpool_node *&gt; (ref-&gt;referring);</span>
+<span class="lineNum">     544 </span><span class="lineCov">       1997 :       if (!alias-&gt;transparent_alias)</span>
+<span class="lineNum">     545 </span><span class="lineCov">       1996 :         do_assemble_alias (alias-&gt;decl,</span>
+<span class="lineNum">     546 </span>            :                            DECL_ASSEMBLER_NAME (decl));
+<span class="lineNum">     547 </span><span class="lineCov">       1997 :       alias-&gt;assemble_aliases ();</span>
+<span class="lineNum">     548 </span>            :     }
+<span class="lineNum">     549 </span><span class="lineCov">    2066737 : }</span>
+<span class="lineNum">     550 </span>            : 
+<span class="lineNum">     551 </span>            : /* Output one variable, if necessary.  Return whether we output it.  */
+<a name="552"><span class="lineNum">     552 </span>            : </a>
+<span class="lineNum">     553 </span>            : bool
+<span class="lineNum">     554 </span><span class="lineCov">    2067647 : varpool_node::assemble_decl (void)</span>
+<span class="lineNum">     555 </span>            : {
+<span class="lineNum">     556 </span>            :   /* Aliases are outout when their target is produced or by
+<span class="lineNum">     557 </span>            :      output_weakrefs.  */
+<span class="lineNum">     558 </span><span class="lineCov">    2067647 :   if (alias)</span>
+<span class="lineNum">     559 </span>            :     return false;
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span>            :   /* Constant pool is output from RTL land when the reference
+<span class="lineNum">     562 </span>            :      survive till this level.  */
+<span class="lineNum">     563 </span><span class="lineCov">    2065645 :   if (DECL_IN_CONSTANT_POOL (decl) &amp;&amp; TREE_ASM_WRITTEN (decl))</span>
+<span class="lineNum">     564 </span>            :     return false;
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span>            :   /* Decls with VALUE_EXPR should not be in the varpool at all.  They
+<span class="lineNum">     567 </span>            :      are not real variables, but just info for debugging and codegen.
+<span class="lineNum">     568 </span>            :      Unfortunately at the moment emutls is not updating varpool correctly
+<span class="lineNum">     569 </span>            :      after turning real vars into value_expr vars.  */
+<span class="lineNum">     570 </span><span class="lineCov">    2065257 :   if (DECL_HAS_VALUE_EXPR_P (decl)</span>
+<span class="lineNum">     571 </span><span class="lineCov">    2065257 :       &amp;&amp; !targetm.have_tls)</span>
+<span class="lineNum">     572 </span>            :     return false;
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span>            :   /* Hard register vars do not need to be output.  */
+<span class="lineNum">     575 </span><span class="lineCov">    4130514 :   if (DECL_HARD_REGISTER (decl))</span>
+<span class="lineNum">     576 </span>            :     return false;
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span><span class="lineCov">    2065257 :   gcc_checking_assert (!TREE_ASM_WRITTEN (decl)</span>
+<span class="lineNum">     579 </span>            :                        &amp;&amp; VAR_P (decl)
+<span class="lineNum">     580 </span>            :                        &amp;&amp; !DECL_HAS_VALUE_EXPR_P (decl));
+<span class="lineNum">     581 </span>            : 
+<span class="lineNum">     582 </span><span class="lineCov">    2065257 :   if (!in_other_partition</span>
+<span class="lineNum">     583 </span><span class="lineCov">    2065257 :       &amp;&amp; !DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     584 </span>            :     {
+<span class="lineNum">     585 </span><span class="lineCov">    2064740 :       get_constructor ();</span>
+<span class="lineNum">     586 </span><span class="lineCov">    2064740 :       assemble_variable (decl, 0, 1, 0);</span>
+<span class="lineNum">     587 </span><span class="lineCov">    2064740 :       gcc_assert (TREE_ASM_WRITTEN (decl));</span>
+<span class="lineNum">     588 </span><span class="lineCov">    2064740 :       gcc_assert (definition);</span>
+<span class="lineNum">     589 </span><span class="lineCov">    2064740 :       assemble_aliases ();</span>
+<span class="lineNum">     590 </span>            :       /* After the parser has generated debugging information, augment
+<span class="lineNum">     591 </span>            :          this information with any new location/etc information that may
+<span class="lineNum">     592 </span>            :          have become available after the compilation proper.  */
+<span class="lineNum">     593 </span><span class="lineCov">    2064740 :       debug_hooks-&gt;late_global_decl (decl);</span>
+<span class="lineNum">     594 </span><span class="lineCov">    2064740 :       return true;</span>
+<span class="lineNum">     595 </span>            :     }
+<span class="lineNum">     596 </span>            : 
+<span class="lineNum">     597 </span>            :   return false;
+<span class="lineNum">     598 </span>            : }
+<span class="lineNum">     599 </span>            : 
+<span class="lineNum">     600 </span>            : /* Add NODE to queue starting at FIRST. 
+<span class="lineNum">     601 </span>            :    The queue is linked via AUX pointers and terminated by pointer to 1.  */
+<a name="602"><span class="lineNum">     602 </span>            : </a>
+<span class="lineNum">     603 </span>            : static void
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 : enqueue_node (varpool_node *node, varpool_node **first)</span>
+<span class="lineNum">     605 </span>            : {
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :   if (node-&gt;aux)</span>
+<span class="lineNum">     607 </span>            :     return;
+<span class="lineNum">     608 </span><span class="lineCov">    2064585 :   gcc_checking_assert (*first);</span>
+<span class="lineNum">     609 </span><span class="lineCov">    2064585 :   node-&gt;aux = *first;</span>
+<span class="lineNum">     610 </span><span class="lineCov">    2064585 :   *first = node;</span>
+<span class="lineNum">     611 </span>            : }
+<span class="lineNum">     612 </span>            : 
+<span class="lineNum">     613 </span>            : /* Optimization of function bodies might've rendered some variables as
+<span class="lineNum">     614 </span>            :    unnecessary so we want to avoid these from being compiled.  Re-do
+<span class="lineNum">     615 </span>            :    reachability starting from variables that are either externally visible
+<span class="lineNum">     616 </span>            :    or was referred from the asm output routines.  */
+<a name="617"><span class="lineNum">     617 </span>            : </a>
+<span class="lineNum">     618 </span>            : void
+<span class="lineNum">     619 </span><span class="lineCov">     139750 : symbol_table::remove_unreferenced_decls (void)</span>
+<span class="lineNum">     620 </span>            : {
+<span class="lineNum">     621 </span><span class="lineCov">     139750 :   varpool_node *next, *node;</span>
+<span class="lineNum">     622 </span><span class="lineCov">     139750 :   varpool_node *first = (varpool_node *)(void *)1;</span>
+<span class="lineNum">     623 </span><span class="lineCov">     139750 :   int i;</span>
+<span class="lineNum">     624 </span><span class="lineCov">     139750 :   ipa_ref *ref = NULL;</span>
+<span class="lineNum">     625 </span><span class="lineCov">     279500 :   hash_set&lt;varpool_node *&gt; referenced;</span>
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span><span class="lineCov">     139750 :   if (seen_error ())</span>
+<span class="lineNum">     628 </span><span class="lineNoCov">          0 :     return;</span>
+<span class="lineNum">     629 </span>            : 
+<span class="lineNum">     630 </span><span class="lineCov">     139750 :   if (dump_file)</span>
+<span class="lineNum">     631 </span><span class="lineCov">         68 :     fprintf (dump_file, &quot;Trivially needed variables:&quot;);</span>
+<span class="lineNum">     632 </span><span class="lineCov">    4448958 :   FOR_EACH_DEFINED_VARIABLE (node)</span>
+<span class="lineNum">     633 </span>            :     {
+<span class="lineNum">     634 </span><span class="lineCov">    2084729 :       if (node-&gt;analyzed</span>
+<span class="lineNum">     635 </span><span class="lineCov">    2084729 :           &amp;&amp; (!node-&gt;can_remove_if_no_refs_p ()</span>
+<span class="lineNum">     636 </span>            :               /* We just expanded all function bodies.  See if any of
+<span class="lineNum">     637 </span>            :                  them needed the variable.  */
+<span class="lineNum">     638 </span><span class="lineCov">    3040566 :               || DECL_RTL_SET_P (node-&gt;decl)))</span>
+<span class="lineNum">     639 </span>            :         {
+<span class="lineNum">     640 </span><span class="lineCov">    1614031 :           enqueue_node (node, &amp;first);</span>
+<span class="lineNum">     641 </span><span class="lineCov">    1614031 :           if (dump_file)</span>
+<span class="lineNum">     642 </span><span class="lineCov">         55 :             fprintf (dump_file, &quot; %s&quot;, node-&gt;asm_name ());</span>
+<span class="lineNum">     643 </span>            :         }
+<span class="lineNum">     644 </span>            :     }
+<span class="lineNum">     645 </span><span class="lineCov">    2204335 :   while (first != (varpool_node *)(void *)1)</span>
+<span class="lineNum">     646 </span>            :     {
+<span class="lineNum">     647 </span><span class="lineCov">    2064585 :       node = first;</span>
+<span class="lineNum">     648 </span><span class="lineCov">    2064585 :       first = (varpool_node *)first-&gt;aux;</span>
+<span class="lineNum">     649 </span>            : 
+<span class="lineNum">     650 </span><span class="lineCov">    2064585 :       if (node-&gt;same_comdat_group)</span>
+<span class="lineNum">     651 </span>            :         {
+<span class="lineNum">     652 </span>            :           symtab_node *next;
+<span class="lineNum">     653 </span><span class="lineCov">     206992 :           for (next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     654 </span><span class="lineCov">     215579 :                next != node;</span>
+<span class="lineNum">     655 </span><span class="lineCov">     206992 :                next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     656 </span>            :             {
+<span class="lineNum">     657 </span><span class="lineCov">     206992 :               varpool_node *vnext = dyn_cast &lt;varpool_node *&gt; (next);</span>
+<span class="lineNum">     658 </span><span class="lineCov">     206992 :               if (vnext &amp;&amp; vnext-&gt;analyzed &amp;&amp; !next-&gt;comdat_local_p ())</span>
+<span class="lineNum">     659 </span><span class="lineCov">     206985 :                 enqueue_node (vnext, &amp;first);</span>
+<span class="lineNum">     660 </span>            :             }
+<span class="lineNum">     661 </span>            :         }
+<span class="lineNum">     662 </span><span class="lineCov">    4694191 :       for (i = 0; node-&gt;iterate_reference (i, ref); i++)</span>
+<span class="lineNum">     663 </span>            :         {
+<span class="lineNum">     664 </span><span class="lineCov">    2629606 :           varpool_node *vnode = dyn_cast &lt;varpool_node *&gt; (ref-&gt;referred);</span>
+<span class="lineNum">     665 </span><span class="lineCov">    2629606 :           if (vnode</span>
+<span class="lineNum">     666 </span><span class="lineCov">    1791227 :               &amp;&amp; !vnode-&gt;in_other_partition</span>
+<span class="lineNum">     667 </span><span class="lineCov">    1791220 :               &amp;&amp; (!DECL_EXTERNAL (ref-&gt;referred-&gt;decl)</span>
+<span class="lineNum">     668 </span><span class="lineCov">     192946 :                   || vnode-&gt;alias)</span>
+<span class="lineNum">     669 </span><span class="lineCov">    4227880 :               &amp;&amp; vnode-&gt;analyzed)</span>
+<span class="lineNum">     670 </span><span class="lineCov">    1598267 :             enqueue_node (vnode, &amp;first);</span>
+<span class="lineNum">     671 </span>            :           else
+<span class="lineNum">     672 </span>            :             {
+<span class="lineNum">     673 </span><span class="lineCov">    1031339 :               referenced.add (vnode);</span>
+<span class="lineNum">     674 </span><span class="lineCov">    1031339 :               while (vnode &amp;&amp; vnode-&gt;alias &amp;&amp; vnode-&gt;definition)</span>
+<span class="lineNum">     675 </span>            :                 {
+<span class="lineNum">     676 </span><span class="lineNoCov">          0 :                   vnode = vnode-&gt;get_alias_target ();</span>
+<span class="lineNum">     677 </span><span class="lineNoCov">          0 :                   referenced.add (vnode);</span>
+<span class="lineNum">     678 </span>            :                 }
+<span class="lineNum">     679 </span>            :             }
+<span class="lineNum">     680 </span>            :         }
+<span class="lineNum">     681 </span>            :     }
+<span class="lineNum">     682 </span><span class="lineCov">     139750 :   if (dump_file)</span>
+<span class="lineNum">     683 </span><span class="lineCov">         68 :     fprintf (dump_file, &quot;\nRemoving variables:&quot;);</span>
+<span class="lineNum">     684 </span><span class="lineCov">    2364229 :   for (node = first_defined_variable (); node; node = next)</span>
+<span class="lineNum">     685 </span>            :     {
+<span class="lineNum">     686 </span><span class="lineCov">    2084729 :       next = next_defined_variable (node);</span>
+<span class="lineNum">     687 </span><span class="lineCov">    2084729 :       if (!node-&gt;aux &amp;&amp; !node-&gt;no_reorder)</span>
+<span class="lineNum">     688 </span>            :         {
+<span class="lineNum">     689 </span><span class="lineCov">      20144 :           if (dump_file)</span>
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot; %s&quot;, node-&gt;asm_name ());</span>
+<span class="lineNum">     691 </span><span class="lineCov">      20144 :           if (referenced.contains(node))</span>
+<span class="lineNum">     692 </span><span class="lineNoCov">          0 :             node-&gt;remove_initializer ();</span>
+<span class="lineNum">     693 </span>            :           else
+<span class="lineNum">     694 </span><span class="lineCov">      20144 :             node-&gt;remove ();</span>
+<span class="lineNum">     695 </span>            :         }
+<span class="lineNum">     696 </span>            :     }
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span><span class="lineCov">     139750 :   if (dump_file)</span>
+<span class="lineNum">     699 </span><span class="lineCov">         68 :     fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     700 </span>            : }
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span>            : /* For variables in named sections make sure get_variable_section
+<span class="lineNum">     703 </span>            :    is called before we switch to those sections.  Then section
+<span class="lineNum">     704 </span>            :    conflicts between read-only and read-only requiring relocations
+<a name="705"><span class="lineNum">     705 </span>            :    sections can be resolved.  */</a>
+<span class="lineNum">     706 </span>            : void
+<span class="lineNum">     707 </span><span class="lineCov">    2062197 : varpool_node::finalize_named_section_flags (void)</span>
+<span class="lineNum">     708 </span>            : {
+<span class="lineNum">     709 </span><span class="lineCov">    2062197 :   if (!TREE_ASM_WRITTEN (decl)</span>
+<span class="lineNum">     710 </span>            :       &amp;&amp; !alias
+<span class="lineNum">     711 </span><span class="lineCov">    2061798 :       &amp;&amp; !in_other_partition</span>
+<span class="lineNum">     712 </span><span class="lineCov">    2059822 :       &amp;&amp; !DECL_EXTERNAL (decl)</span>
+<span class="lineNum">     713 </span><span class="lineCov">    2059428 :       &amp;&amp; VAR_P (decl)</span>
+<span class="lineNum">     714 </span><span class="lineCov">    4118856 :       &amp;&amp; !DECL_HAS_VALUE_EXPR_P (decl)</span>
+<span class="lineNum">     715 </span><span class="lineCov">    4121625 :       &amp;&amp; get_section ())</span>
+<span class="lineNum">     716 </span><span class="lineCov">    1002606 :     get_variable_section (decl, false);</span>
+<span class="lineNum">     717 </span><span class="lineCov">    2062197 : }</span>
+<span class="lineNum">     718 </span>            : 
+<a name="719"><span class="lineNum">     719 </span>            : /* Output all variables enqueued to be assembled.  */</a>
+<span class="lineNum">     720 </span>            : bool
+<span class="lineNum">     721 </span><span class="lineCov">     139909 : symbol_table::output_variables (void)</span>
+<span class="lineNum">     722 </span>            : {
+<span class="lineNum">     723 </span><span class="lineCov">     139909 :   bool changed = false;</span>
+<span class="lineNum">     724 </span><span class="lineCov">     139909 :   varpool_node *node;</span>
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span><span class="lineCov">     139909 :   if (seen_error ())</span>
+<span class="lineNum">     727 </span>            :     return false;
+<span class="lineNum">     728 </span>            : 
+<span class="lineNum">     729 </span><span class="lineCov">     139750 :   remove_unreferenced_decls ();</span>
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span><span class="lineCov">     139750 :   timevar_push (TV_VAROUT);</span>
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span><span class="lineCov">    4408670 :   FOR_EACH_DEFINED_VARIABLE (node)</span>
+<span class="lineNum">     734 </span>            :     {
+<span class="lineNum">     735 </span>            :       /* Handled in output_in_order.  */
+<span class="lineNum">     736 </span><span class="lineCov">    2064585 :       if (node-&gt;no_reorder)</span>
+<span class="lineNum">     737 </span>            :         continue;
+<span class="lineNum">     738 </span>            : 
+<span class="lineNum">     739 </span><span class="lineCov">    1390933 :       node-&gt;finalize_named_section_flags ();</span>
+<span class="lineNum">     740 </span>            :     }
+<span class="lineNum">     741 </span>            : 
+<span class="lineNum">     742 </span>            :   /* There is a similar loop in output_in_order.  Please keep them in sync.  */
+<span class="lineNum">     743 </span><span class="lineCov">    4871788 :   FOR_EACH_VARIABLE (node)</span>
+<span class="lineNum">     744 </span>            :     {
+<span class="lineNum">     745 </span>            :       /* Handled in output_in_order.  */
+<span class="lineNum">     746 </span><span class="lineCov">    2296144 :       if (node-&gt;no_reorder)</span>
+<span class="lineNum">     747 </span>            :         continue;
+<span class="lineNum">     748 </span><span class="lineCov">    1622031 :       if (DECL_HARD_REGISTER (node-&gt;decl)</span>
+<span class="lineNum">     749 </span><span class="lineCov">    1622031 :           || DECL_HAS_VALUE_EXPR_P (node-&gt;decl))</span>
+<span class="lineNum">     750 </span>            :         continue;
+<span class="lineNum">     751 </span><span class="lineCov">    1622000 :       if (node-&gt;definition)</span>
+<span class="lineNum">     752 </span><span class="lineCov">    1390902 :         changed |= node-&gt;assemble_decl ();</span>
+<span class="lineNum">     753 </span>            :       else
+<span class="lineNum">     754 </span><span class="lineCov">     231098 :         assemble_undefined_decl (node-&gt;decl);</span>
+<span class="lineNum">     755 </span>            :     }
+<span class="lineNum">     756 </span><span class="lineCov">     139750 :   timevar_pop (TV_VAROUT);</span>
+<span class="lineNum">     757 </span>            :   return changed;
+<span class="lineNum">     758 </span>            : }
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span>            : /* Attempt to mark ALIAS as an alias to DECL.  Return TRUE if successful.
+<span class="lineNum">     761 </span>            :    Extra name aliases are output whenever DECL is output.  */
+<a name="762"><span class="lineNum">     762 </span>            : </a>
+<span class="lineNum">     763 </span>            : varpool_node *
+<span class="lineNum">     764 </span><span class="lineCov">       5430 : varpool_node::create_alias (tree alias, tree decl)</span>
+<span class="lineNum">     765 </span>            : {
+<span class="lineNum">     766 </span><span class="lineCov">       5430 :   varpool_node *alias_node;</span>
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span><span class="lineCov">       5430 :   gcc_assert (VAR_P (decl));</span>
+<span class="lineNum">     769 </span><span class="lineCov">       5430 :   gcc_assert (VAR_P (alias));</span>
+<span class="lineNum">     770 </span><span class="lineCov">       5430 :   alias_node = varpool_node::get_create (alias);</span>
+<span class="lineNum">     771 </span><span class="lineCov">       5430 :   alias_node-&gt;alias = true;</span>
+<span class="lineNum">     772 </span><span class="lineCov">       5430 :   alias_node-&gt;definition = true;</span>
+<span class="lineNum">     773 </span><span class="lineCov">       5430 :   alias_node-&gt;alias_target = decl;</span>
+<span class="lineNum">     774 </span><span class="lineCov">       5430 :   if (lookup_attribute (&quot;weakref&quot;, DECL_ATTRIBUTES (alias)) != NULL)</span>
+<span class="lineNum">     775 </span><span class="lineCov">         10 :     alias_node-&gt;weakref = alias_node-&gt;transparent_alias = true;</span>
+<span class="lineNum">     776 </span><span class="lineCov">       5430 :   return alias_node;</span>
+<span class="lineNum">     777 </span>            : }
+<span class="lineNum">     778 </span>            : 
+<span class="lineNum">     779 </span>            : /* Attempt to mark ALIAS as an alias to DECL.  Return TRUE if successful.
+<span class="lineNum">     780 </span>            :    Extra name aliases are output whenever DECL is output.  */
+<a name="781"><span class="lineNum">     781 </span>            : </a>
+<span class="lineNum">     782 </span>            : varpool_node *
+<span class="lineNum">     783 </span><span class="lineCov">         76 : varpool_node::create_extra_name_alias (tree alias, tree decl)</span>
+<span class="lineNum">     784 </span>            : {
+<span class="lineNum">     785 </span><span class="lineCov">         76 :   varpool_node *alias_node;</span>
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span>            :   /* If aliases aren't supported by the assembler, fail.  */
+<span class="lineNum">     788 </span><span class="lineCov">         76 :   if (!TARGET_SUPPORTS_ALIASES)</span>
+<span class="lineNum">     789 </span>            :     return NULL;
+<span class="lineNum">     790 </span>            : 
+<span class="lineNum">     791 </span><span class="lineCov">         76 :   alias_node = varpool_node::create_alias (alias, decl);</span>
+<span class="lineNum">     792 </span><span class="lineCov">         76 :   alias_node-&gt;cpp_implicit_alias = true;</span>
+<span class="lineNum">     793 </span>            : 
+<span class="lineNum">     794 </span>            :   /* Extra name alias mechanizm creates aliases really late
+<span class="lineNum">     795 </span>            :      via DECL_ASSEMBLER_NAME mechanizm.
+<span class="lineNum">     796 </span>            :      This is unfortunate because they are not going through the
+<span class="lineNum">     797 </span>            :      standard channels.  Ensure they get output.  */
+<span class="lineNum">     798 </span><span class="lineCov">         76 :   if (symtab-&gt;cpp_implicit_aliases_done)</span>
+<span class="lineNum">     799 </span><span class="lineCov">         76 :     alias_node-&gt;resolve_alias (varpool_node::get_create (decl));</span>
+<span class="lineNum">     800 </span><span class="lineCov">         76 :   return alias_node;</span>
+<span class="lineNum">     801 </span>            : }
+<span class="lineNum">     802 </span>            : 
+<span class="lineNum">     803 </span>            : /* Worker for call_for_symbol_and_aliases.  */
+<a name="804"><span class="lineNum">     804 </span>            : </a>
+<span class="lineNum">     805 </span>            : bool
+<span class="lineNum">     806 </span><span class="lineCov">       4184 : varpool_node::call_for_symbol_and_aliases_1 (bool (*callback) (varpool_node *,</span>
+<span class="lineNum">     807 </span>            :                                                                void *),
+<span class="lineNum">     808 </span>            :                                              void *data,
+<span class="lineNum">     809 </span>            :                                              bool include_overwritable)
+<span class="lineNum">     810 </span>            : {
+<span class="lineNum">     811 </span><span class="lineCov">       4184 :   ipa_ref *ref;</span>
+<span class="lineNum">     812 </span>            : 
+<span class="lineNum">     813 </span><span class="lineCov">      24317 :   FOR_EACH_ALIAS (this, ref)</span>
+<span class="lineNum">     814 </span>            :     {
+<span class="lineNum">     815 </span><span class="lineCov">      10066 :       varpool_node *alias = dyn_cast &lt;varpool_node *&gt; (ref-&gt;referring);</span>
+<span class="lineNum">     816 </span><span class="lineCov">      10066 :       if (include_overwritable</span>
+<span class="lineNum">     817 </span><span class="lineCov">      10066 :           || alias-&gt;get_availability () &gt; AVAIL_INTERPOSABLE)</span>
+<span class="lineNum">     818 </span><span class="lineCov">      10066 :         if (alias-&gt;call_for_symbol_and_aliases (callback, data,</span>
+<span class="lineNum">     819 </span>            :                                                 include_overwritable))
+<span class="lineNum">     820 </span>            :           return true;
+<span class="lineNum">     821 </span>            :     }
+<span class="lineNum">     822 </span>            :   return false;
+<span class="lineNum">     823 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

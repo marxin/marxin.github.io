@@ -1,0 +1,1250 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-address.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-address.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-address.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">410</td>
+            <td class="headerCovTableEntry">494</td>
+            <td class="headerCovTableEntryMed">83.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntryHi">91.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Memory address lowering and addressing mode selection.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       7 </span>            : under the terms of the GNU General Public License as published by the
+<span class="lineNum">       8 </span>            : Free Software Foundation; either version 3, or (at your option) any
+<span class="lineNum">       9 </span>            : later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT
+<span class="lineNum">      12 </span>            : ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* Utility functions for manipulation with TARGET_MEM_REFs -- tree expressions
+<span class="lineNum">      21 </span>            :    that directly map to addressing modes of the target.  */
+<span class="lineNum">      22 </span>            : 
+<span class="lineNum">      23 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;tree-vrp.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-ssanames.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;expmed.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;tree-ssa-loop-ivopts.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;expr.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;tree-affine.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : /* FIXME: We compute address costs using RTL.  */
+<span class="lineNum">      52 </span>            : #include &quot;tree-ssa-address.h&quot;
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            : /* TODO -- handling of symbols (according to Richard Hendersons
+<span class="lineNum">      55 </span>            :    comments, http://gcc.gnu.org/ml/gcc-patches/2005-04/msg00949.html):
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            :    There are at least 5 different kinds of symbols that we can run up against:
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :      (1) binds_local_p, small data area.
+<span class="lineNum">      60 </span>            :      (2) binds_local_p, eg local statics
+<span class="lineNum">      61 </span>            :      (3) !binds_local_p, eg global variables
+<span class="lineNum">      62 </span>            :      (4) thread local, local_exec
+<span class="lineNum">      63 </span>            :      (5) thread local, !local_exec
+<span class="lineNum">      64 </span>            : 
+<span class="lineNum">      65 </span>            :    Now, (1) won't appear often in an array context, but it certainly can.
+<span class="lineNum">      66 </span>            :    All you have to do is set -GN high enough, or explicitly mark any
+<span class="lineNum">      67 </span>            :    random object __attribute__((section (&quot;.sdata&quot;))).
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :    All of these affect whether or not a symbol is in fact a valid address.
+<span class="lineNum">      70 </span>            :    The only one tested here is (3).  And that result may very well
+<span class="lineNum">      71 </span>            :    be incorrect for (4) or (5).
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            :    An incorrect result here does not cause incorrect results out the
+<span class="lineNum">      74 </span>            :    back end, because the expander in expr.c validizes the address.  However
+<span class="lineNum">      75 </span>            :    it would be nice to improve the handling here in order to produce more
+<span class="lineNum">      76 </span>            :    precise results.  */
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* A &quot;template&quot; for memory address, used to determine whether the address is
+<span class="lineNum">      79 </span>            :    valid for mode.  */
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : struct GTY (()) mem_addr_template {
+<span class="lineNum">      82 </span>            :   rtx ref;                      /* The template.  */
+<span class="lineNum">      83 </span>            :   rtx * GTY ((skip)) step_p;    /* The point in template where the step should be
+<span class="lineNum">      84 </span>            :                                    filled in.  */
+<span class="lineNum">      85 </span>            :   rtx * GTY ((skip)) off_p;     /* The point in template where the offset should
+<span class="lineNum">      86 </span>            :                                    be filled in.  */
+<span class="lineNum">      87 </span>            : };
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            : /* The templates.  Each of the low five bits of the index corresponds to one
+<span class="lineNum">      91 </span>            :    component of TARGET_MEM_REF being present, while the high bits identify
+<span class="lineNum">      92 </span>            :    the address space.  See TEMPL_IDX.  */
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            : static GTY(()) vec&lt;mem_addr_template, va_gc&gt; *mem_addr_template_list;
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            : #define TEMPL_IDX(AS, SYMBOL, BASE, INDEX, STEP, OFFSET) \
+<span class="lineNum">      97 </span>            :   (((int) (AS) &lt;&lt; 5) \
+<span class="lineNum">      98 </span>            :    | ((SYMBOL != 0) &lt;&lt; 4) \
+<span class="lineNum">      99 </span>            :    | ((BASE != 0) &lt;&lt; 3) \
+<span class="lineNum">     100 </span>            :    | ((INDEX != 0) &lt;&lt; 2) \
+<span class="lineNum">     101 </span>            :    | ((STEP != 0) &lt;&lt; 1) \
+<span class="lineNum">     102 </span>            :    | (OFFSET != 0))
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span>            : /* Stores address for memory reference with parameters SYMBOL, BASE, INDEX,
+<span class="lineNum">     105 </span>            :    STEP and OFFSET to *ADDR using address mode ADDRESS_MODE.  Stores pointers
+<span class="lineNum">     106 </span>            :    to where step is placed to *STEP_P and offset to *OFFSET_P.  */
+<a name="107"><span class="lineNum">     107 </span>            : </a>
+<span class="lineNum">     108 </span>            : static void
+<span class="lineNum">     109 </span><span class="lineCov">     575712 : gen_addr_rtx (machine_mode address_mode,</span>
+<span class="lineNum">     110 </span>            :               rtx symbol, rtx base, rtx index, rtx step, rtx offset,
+<span class="lineNum">     111 </span>            :               rtx *addr, rtx **step_p, rtx **offset_p)
+<span class="lineNum">     112 </span>            : {
+<span class="lineNum">     113 </span><span class="lineCov">     575712 :   rtx act_elem;</span>
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span><span class="lineCov">     575712 :   *addr = NULL_RTX;</span>
+<span class="lineNum">     116 </span><span class="lineCov">     575712 :   if (step_p)</span>
+<span class="lineNum">     117 </span><span class="lineCov">     123453 :     *step_p = NULL;</span>
+<span class="lineNum">     118 </span><span class="lineCov">     575712 :   if (offset_p)</span>
+<span class="lineNum">     119 </span><span class="lineCov">     123453 :     *offset_p = NULL;</span>
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span><span class="lineCov">     575712 :   if (index &amp;&amp; index != const0_rtx)</span>
+<span class="lineNum">     122 </span>            :     {
+<span class="lineNum">     123 </span><span class="lineCov">     321700 :       act_elem = index;</span>
+<span class="lineNum">     124 </span><span class="lineCov">     321700 :       if (step)</span>
+<span class="lineNum">     125 </span>            :         {
+<span class="lineNum">     126 </span><span class="lineCov">     157137 :           act_elem = gen_rtx_MULT (address_mode, act_elem, step);</span>
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span><span class="lineCov">     157137 :           if (step_p)</span>
+<span class="lineNum">     129 </span><span class="lineCov">      43141 :             *step_p = &amp;XEXP (act_elem, 1);</span>
+<span class="lineNum">     130 </span>            :         }
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span><span class="lineCov">     321700 :       *addr = act_elem;</span>
+<span class="lineNum">     133 </span>            :     }
+<span class="lineNum">     134 </span>            : 
+<span class="lineNum">     135 </span><span class="lineCov">     575712 :   if (base &amp;&amp; base != const0_rtx)</span>
+<span class="lineNum">     136 </span>            :     {
+<span class="lineNum">     137 </span><span class="lineCov">     452869 :       if (*addr)</span>
+<span class="lineNum">     138 </span><span class="lineCov">     198857 :         *addr = simplify_gen_binary (PLUS, address_mode, base, *addr);</span>
+<span class="lineNum">     139 </span>            :       else
+<span class="lineNum">     140 </span><span class="lineCov">     254012 :         *addr = base;</span>
+<span class="lineNum">     141 </span>            :     }
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span><span class="lineCov">     575712 :   if (symbol)</span>
+<span class="lineNum">     144 </span>            :     {
+<span class="lineNum">     145 </span><span class="lineCov">     128234 :       act_elem = symbol;</span>
+<span class="lineNum">     146 </span><span class="lineCov">     128234 :       if (offset)</span>
+<span class="lineNum">     147 </span>            :         {
+<span class="lineNum">     148 </span><span class="lineCov">      32163 :           act_elem = gen_rtx_PLUS (address_mode, act_elem, offset);</span>
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">      32163 :           if (offset_p)</span>
+<span class="lineNum">     151 </span><span class="lineCov">       9049 :             *offset_p = &amp;XEXP (act_elem, 1);</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">      64326 :           if (GET_CODE (symbol) == SYMBOL_REF</span>
+<span class="lineNum">     154 </span><span class="lineCov">      32163 :               || GET_CODE (symbol) == LABEL_REF</span>
+<span class="lineNum">     155 </span><span class="lineCov">      13012 :               || GET_CODE (symbol) == CONST)</span>
+<span class="lineNum">     156 </span><span class="lineCov">      19151 :             act_elem = gen_rtx_CONST (address_mode, act_elem);</span>
+<span class="lineNum">     157 </span>            :         }
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineCov">     128234 :       if (*addr)</span>
+<span class="lineNum">     160 </span><span class="lineCov">     128234 :         *addr = gen_rtx_PLUS (address_mode, *addr, act_elem);</span>
+<span class="lineNum">     161 </span>            :       else
+<span class="lineNum">     162 </span><span class="lineNoCov">          0 :         *addr = act_elem;</span>
+<span class="lineNum">     163 </span>            :     }
+<span class="lineNum">     164 </span><span class="lineCov">     447478 :   else if (offset)</span>
+<span class="lineNum">     165 </span>            :     {
+<span class="lineNum">     166 </span><span class="lineCov">     199774 :       if (*addr)</span>
+<span class="lineNum">     167 </span>            :         {
+<span class="lineNum">     168 </span><span class="lineCov">     199774 :           *addr = gen_rtx_PLUS (address_mode, *addr, offset);</span>
+<span class="lineNum">     169 </span><span class="lineCov">     199774 :           if (offset_p)</span>
+<span class="lineNum">     170 </span><span class="lineCov">      45120 :             *offset_p = &amp;XEXP (*addr, 1);</span>
+<span class="lineNum">     171 </span>            :         }
+<span class="lineNum">     172 </span>            :       else
+<span class="lineNum">     173 </span>            :         {
+<span class="lineNum">     174 </span><span class="lineNoCov">          0 :           *addr = offset;</span>
+<span class="lineNum">     175 </span><span class="lineNoCov">          0 :           if (offset_p)</span>
+<span class="lineNum">     176 </span><span class="lineNoCov">          0 :             *offset_p = addr;</span>
+<span class="lineNum">     177 </span>            :         }
+<span class="lineNum">     178 </span>            :     }
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span><span class="lineCov">     575712 :   if (!*addr)</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :     *addr = const0_rtx;</span>
+<span class="lineNum">     182 </span><span class="lineCov">     575712 : }</span>
+<span class="lineNum">     183 </span>            : 
+<span class="lineNum">     184 </span>            : /* Returns address for TARGET_MEM_REF with parameters given by ADDR
+<span class="lineNum">     185 </span>            :    in address space AS.
+<span class="lineNum">     186 </span>            :    If REALLY_EXPAND is false, just make fake registers instead
+<span class="lineNum">     187 </span>            :    of really expanding the operands, and perform the expansion in-place
+<span class="lineNum">     188 </span>            :    by using one of the &quot;templates&quot;.  */
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span>            : rtx
+<span class="lineNum">     191 </span><span class="lineCov">   10104025 : addr_for_mem_ref (struct mem_address *addr, addr_space_t as,</span>
+<span class="lineNum">     192 </span>            :                   bool really_expand)
+<span class="lineNum">     193 </span>            : {
+<span class="lineNum">     194 </span><span class="lineCov">   10104025 :   scalar_int_mode address_mode = targetm.addr_space.address_mode (as);</span>
+<span class="lineNum">     195 </span><span class="lineCov">   10104025 :   scalar_int_mode pointer_mode = targetm.addr_space.pointer_mode (as);</span>
+<span class="lineNum">     196 </span><span class="lineCov">   10104025 :   rtx address, sym, bse, idx, st, off;</span>
+<span class="lineNum">     197 </span><span class="lineCov">   10104025 :   struct mem_addr_template *templ;</span>
+<span class="lineNum">     198 </span>            : 
+<span class="lineNum">     199 </span><span class="lineCov">   10104025 :   if (addr-&gt;step &amp;&amp; !integer_onep (addr-&gt;step))</span>
+<span class="lineNum">     200 </span><span class="lineCov">    5634450 :     st = immed_wide_int_const (wi::to_wide (addr-&gt;step), pointer_mode);</span>
+<span class="lineNum">     201 </span>            :   else
+<span class="lineNum">     202 </span>            :     st = NULL_RTX;
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span><span class="lineCov">   10104025 :   if (addr-&gt;offset &amp;&amp; !integer_zerop (addr-&gt;offset))</span>
+<span class="lineNum">     205 </span>            :     {
+<span class="lineNum">     206 </span><span class="lineCov">    4455540 :       poly_offset_int dc</span>
+<span class="lineNum">     207 </span><span class="lineCov">    8911080 :         = poly_offset_int::from (wi::to_poly_wide (addr-&gt;offset), SIGNED);</span>
+<span class="lineNum">     208 </span><span class="lineCov">   13366620 :       off = immed_wide_int_const (dc, pointer_mode);</span>
+<span class="lineNum">     209 </span>            :     }
+<span class="lineNum">     210 </span>            :   else
+<span class="lineNum">     211 </span>            :     off = NULL_RTX;
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span><span class="lineCov">   10104025 :   if (!really_expand)</span>
+<span class="lineNum">     214 </span>            :     {
+<span class="lineNum">     215 </span><span class="lineCov">   19303532 :       unsigned int templ_index</span>
+<span class="lineNum">     216 </span><span class="lineCov">   20956078 :         = TEMPL_IDX (as, addr-&gt;symbol, addr-&gt;base, addr-&gt;index, st, off);</span>
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span><span class="lineCov">   19282701 :       if (templ_index &gt;= vec_safe_length (mem_addr_template_list))</span>
+<span class="lineNum">     219 </span><span class="lineCov">      69908 :         vec_safe_grow_cleared (mem_addr_template_list, templ_index + 1);</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span>            :       /* Reuse the templates for addresses, so that we do not waste memory.  */
+<span class="lineNum">     222 </span><span class="lineCov">    9651766 :       templ = &amp;(*mem_addr_template_list)[templ_index];</span>
+<span class="lineNum">     223 </span><span class="lineCov">    9651766 :       if (!templ-&gt;ref)</span>
+<span class="lineNum">     224 </span>            :         {
+<span class="lineNum">     225 </span><span class="lineCov">     123453 :           sym = (addr-&gt;symbol ?</span>
+<span class="lineNum">     226 </span><span class="lineCov">      19003 :                  gen_rtx_SYMBOL_REF (pointer_mode, ggc_strdup (&quot;test_symbol&quot;))</span>
+<span class="lineNum">     227 </span>            :                  : NULL_RTX);
+<span class="lineNum">     228 </span><span class="lineCov">     123453 :           bse = (addr-&gt;base ?</span>
+<span class="lineNum">     229 </span><span class="lineCov">     214690 :                  gen_raw_REG (pointer_mode, LAST_VIRTUAL_REGISTER + 1)</span>
+<span class="lineNum">     230 </span>            :                  : NULL_RTX);
+<span class="lineNum">     231 </span><span class="lineCov">     123453 :           idx = (addr-&gt;index ?</span>
+<span class="lineNum">     232 </span><span class="lineCov">     178102 :                  gen_raw_REG (pointer_mode, LAST_VIRTUAL_REGISTER + 2)</span>
+<span class="lineNum">     233 </span>            :                  : NULL_RTX);
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span><span class="lineCov">     123453 :           gen_addr_rtx (pointer_mode, sym, bse, idx,</span>
+<span class="lineNum">     236 </span>            :                         st? const0_rtx : NULL_RTX,
+<span class="lineNum">     237 </span>            :                         off? const0_rtx : NULL_RTX,
+<span class="lineNum">     238 </span>            :                         &amp;templ-&gt;ref,
+<span class="lineNum">     239 </span>            :                         &amp;templ-&gt;step_p,
+<span class="lineNum">     240 </span>            :                         &amp;templ-&gt;off_p);
+<span class="lineNum">     241 </span>            :         }
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span><span class="lineCov">    9651766 :       if (st)</span>
+<span class="lineNum">     244 </span><span class="lineCov">    2703229 :         *templ-&gt;step_p = st;</span>
+<span class="lineNum">     245 </span><span class="lineCov">    9651766 :       if (off)</span>
+<span class="lineNum">     246 </span><span class="lineCov">    4277772 :         *templ-&gt;off_p = off;</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">    9651766 :       return templ-&gt;ref;</span>
+<span class="lineNum">     249 </span>            :     }
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            :   /* Otherwise really expand the expressions.  */
+<span class="lineNum">     252 </span><span class="lineCov">     904518 :   sym = (addr-&gt;symbol</span>
+<span class="lineNum">     253 </span><span class="lineCov">     452259 :          ? expand_expr (addr-&gt;symbol, NULL_RTX, pointer_mode, EXPAND_NORMAL)</span>
+<span class="lineNum">     254 </span>            :          : NULL_RTX);
+<span class="lineNum">     255 </span><span class="lineCov">     904518 :   bse = (addr-&gt;base</span>
+<span class="lineNum">     256 </span><span class="lineCov">     452259 :          ? expand_expr (addr-&gt;base, NULL_RTX, pointer_mode, EXPAND_NORMAL)</span>
+<span class="lineNum">     257 </span>            :          : NULL_RTX);
+<span class="lineNum">     258 </span><span class="lineCov">     904518 :   idx = (addr-&gt;index</span>
+<span class="lineNum">     259 </span><span class="lineCov">     452259 :          ? expand_expr (addr-&gt;index, NULL_RTX, pointer_mode, EXPAND_NORMAL)</span>
+<span class="lineNum">     260 </span>            :          : NULL_RTX);
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span><span class="lineCov">     904518 :   gen_addr_rtx (pointer_mode, sym, bse, idx, st, off, &amp;address, NULL, NULL);</span>
+<span class="lineNum">     263 </span><span class="lineCov">    1356777 :   if (pointer_mode != address_mode)</span>
+<span class="lineNum">     264 </span><span class="lineCov">          8 :     address = convert_memory_address (address_mode, address);</span>
+<span class="lineNum">     265 </span><span class="lineCov">     452259 :   return address;</span>
+<span class="lineNum">     266 </span>            : }
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span>            : /* implement addr_for_mem_ref() directly from a tree, which avoids exporting
+<span class="lineNum">     269 </span>            :    the mem_address structure.  */
+<a name="270"><span class="lineNum">     270 </span>            : </a>
+<span class="lineNum">     271 </span>            : rtx
+<span class="lineNum">     272 </span><span class="lineCov">     452259 : addr_for_mem_ref (tree exp, addr_space_t as, bool really_expand)</span>
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span><span class="lineCov">     452259 :   struct mem_address addr;</span>
+<span class="lineNum">     275 </span><span class="lineCov">     452259 :   get_address_description (exp, &amp;addr);</span>
+<span class="lineNum">     276 </span><span class="lineCov">     452259 :   return addr_for_mem_ref (&amp;addr, as, really_expand);</span>
+<span class="lineNum">     277 </span>            : }
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : /* Returns address of MEM_REF in TYPE.  */
+<a name="280"><span class="lineNum">     280 </span>            : </a>
+<span class="lineNum">     281 </span>            : tree
+<span class="lineNum">     282 </span><span class="lineCov">       8532 : tree_mem_ref_addr (tree type, tree mem_ref)</span>
+<span class="lineNum">     283 </span>            : {
+<span class="lineNum">     284 </span><span class="lineCov">       8532 :   tree addr;</span>
+<span class="lineNum">     285 </span><span class="lineCov">       8532 :   tree act_elem;</span>
+<span class="lineNum">     286 </span><span class="lineCov">       8532 :   tree step = TMR_STEP (mem_ref), offset = TMR_OFFSET (mem_ref);</span>
+<span class="lineNum">     287 </span><span class="lineCov">       8532 :   tree addr_base = NULL_TREE, addr_off = NULL_TREE;</span>
+<span class="lineNum">     288 </span>            : 
+<span class="lineNum">     289 </span><span class="lineCov">      17064 :   addr_base = fold_convert (type, TMR_BASE (mem_ref));</span>
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span><span class="lineCov">       8532 :   act_elem = TMR_INDEX (mem_ref);</span>
+<span class="lineNum">     292 </span><span class="lineCov">       8532 :   if (act_elem)</span>
+<span class="lineNum">     293 </span>            :     {
+<span class="lineNum">     294 </span><span class="lineCov">        470 :       if (step)</span>
+<span class="lineNum">     295 </span><span class="lineCov">        241 :         act_elem = fold_build2 (MULT_EXPR, TREE_TYPE (act_elem),</span>
+<span class="lineNum">     296 </span>            :                                 act_elem, step);
+<span class="lineNum">     297 </span>            :       addr_off = act_elem;
+<span class="lineNum">     298 </span>            :     }
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineCov">       8532 :   act_elem = TMR_INDEX2 (mem_ref);</span>
+<span class="lineNum">     301 </span><span class="lineCov">       8532 :   if (act_elem)</span>
+<span class="lineNum">     302 </span>            :     {
+<span class="lineNum">     303 </span><span class="lineNoCov">          0 :       if (addr_off)</span>
+<span class="lineNum">     304 </span><span class="lineNoCov">          0 :         addr_off = fold_build2 (PLUS_EXPR, TREE_TYPE (addr_off),</span>
+<span class="lineNum">     305 </span>            :                                 addr_off, act_elem);
+<span class="lineNum">     306 </span>            :       else
+<span class="lineNum">     307 </span>            :         addr_off = act_elem;
+<span class="lineNum">     308 </span>            :     }
+<span class="lineNum">     309 </span>            : 
+<span class="lineNum">     310 </span><span class="lineCov">       8532 :   if (offset &amp;&amp; !integer_zerop (offset))</span>
+<span class="lineNum">     311 </span>            :     {
+<span class="lineNum">     312 </span><span class="lineCov">       3567 :       if (addr_off)</span>
+<span class="lineNum">     313 </span><span class="lineCov">         63 :         addr_off = fold_build2 (PLUS_EXPR, TREE_TYPE (addr_off), addr_off,</span>
+<span class="lineNum">     314 </span>            :                                 fold_convert (TREE_TYPE (addr_off), offset));
+<span class="lineNum">     315 </span>            :       else
+<span class="lineNum">     316 </span>            :         addr_off = offset;
+<span class="lineNum">     317 </span>            :     }
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span><span class="lineCov">       8532 :   if (addr_off)</span>
+<span class="lineNum">     320 </span><span class="lineCov">       3974 :     addr = fold_build_pointer_plus (addr_base, addr_off);</span>
+<span class="lineNum">     321 </span>            :   else
+<span class="lineNum">     322 </span>            :     addr = addr_base;
+<span class="lineNum">     323 </span>            : 
+<span class="lineNum">     324 </span><span class="lineCov">       8532 :   return addr;</span>
+<span class="lineNum">     325 </span>            : }
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            : /* Returns true if a memory reference in MODE and with parameters given by
+<span class="lineNum">     328 </span>            :    ADDR is valid on the current target.  */
+<a name="329"><span class="lineNum">     329 </span>            : </a>
+<span class="lineNum">     330 </span>            : bool
+<span class="lineNum">     331 </span><span class="lineCov">    6432307 : valid_mem_ref_p (machine_mode mode, addr_space_t as,</span>
+<span class="lineNum">     332 </span>            :                  struct mem_address *addr)
+<span class="lineNum">     333 </span>            : {
+<span class="lineNum">     334 </span><span class="lineCov">    6432307 :   rtx address;</span>
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineCov">    6432307 :   address = addr_for_mem_ref (addr, as, false);</span>
+<span class="lineNum">     337 </span><span class="lineCov">    6432307 :   if (!address)</span>
+<span class="lineNum">     338 </span>            :     return false;
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span><span class="lineCov">    6432307 :   return memory_address_addr_space_p (mode, address, as);</span>
+<span class="lineNum">     341 </span>            : }
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span>            : /* Checks whether a TARGET_MEM_REF with type TYPE and parameters given by ADDR
+<span class="lineNum">     344 </span>            :    is valid on the current target and if so, creates and returns the
+<span class="lineNum">     345 </span>            :    TARGET_MEM_REF.  If VERIFY is false omit the verification step.  */
+<a name="346"><span class="lineNum">     346 </span>            : </a>
+<span class="lineNum">     347 </span>            : static tree
+<span class="lineNum">     348 </span><span class="lineCov">     475867 : create_mem_ref_raw (tree type, tree alias_ptr_type, struct mem_address *addr,</span>
+<span class="lineNum">     349 </span>            :                     bool verify)
+<span class="lineNum">     350 </span>            : {
+<span class="lineNum">     351 </span><span class="lineCov">     475867 :   tree base, index2;</span>
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span><span class="lineCov">     475867 :   if (verify</span>
+<span class="lineNum">     354 </span><span class="lineCov">     475867 :       &amp;&amp; !valid_mem_ref_p (TYPE_MODE (type), TYPE_ADDR_SPACE (type), addr))</span>
+<span class="lineNum">     355 </span>            :     return NULL_TREE;
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span><span class="lineCov">     454015 :   if (addr-&gt;step &amp;&amp; integer_onep (addr-&gt;step))</span>
+<span class="lineNum">     358 </span><span class="lineCov">      92821 :     addr-&gt;step = NULL_TREE;</span>
+<span class="lineNum">     359 </span>            : 
+<span class="lineNum">     360 </span><span class="lineCov">     454015 :   if (addr-&gt;offset)</span>
+<span class="lineNum">     361 </span><span class="lineCov">     178054 :     addr-&gt;offset = fold_convert (alias_ptr_type, addr-&gt;offset);</span>
+<span class="lineNum">     362 </span>            :   else
+<span class="lineNum">     363 </span><span class="lineCov">     551922 :     addr-&gt;offset = build_int_cst (alias_ptr_type, 0);</span>
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span><span class="lineCov">     454015 :   if (addr-&gt;symbol)</span>
+<span class="lineNum">     366 </span>            :     {
+<span class="lineNum">     367 </span><span class="lineCov">      41690 :       base = addr-&gt;symbol;</span>
+<span class="lineNum">     368 </span><span class="lineCov">      41690 :       index2 = addr-&gt;base;</span>
+<span class="lineNum">     369 </span>            :     }
+<span class="lineNum">     370 </span><span class="lineCov">     412325 :   else if (addr-&gt;base</span>
+<span class="lineNum">     371 </span><span class="lineCov">     412325 :            &amp;&amp; POINTER_TYPE_P (TREE_TYPE (addr-&gt;base)))</span>
+<span class="lineNum">     372 </span>            :     {
+<span class="lineNum">     373 </span>            :       base = addr-&gt;base;
+<span class="lineNum">     374 </span>            :       index2 = NULL_TREE;
+<span class="lineNum">     375 </span>            :     }
+<span class="lineNum">     376 </span>            :   else
+<span class="lineNum">     377 </span>            :     {
+<span class="lineNum">     378 </span><span class="lineCov">        596 :       base = build_int_cst (build_pointer_type (type), 0);</span>
+<span class="lineNum">     379 </span><span class="lineCov">        298 :       index2 = addr-&gt;base;</span>
+<span class="lineNum">     380 </span>            :     }
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            :   /* If possible use a plain MEM_REF instead of a TARGET_MEM_REF.
+<span class="lineNum">     383 </span>            :      ???  As IVOPTs does not follow restrictions to where the base
+<span class="lineNum">     384 </span>            :      pointer may point to create a MEM_REF only if we know that
+<span class="lineNum">     385 </span>            :      base is valid.  */
+<span class="lineNum">     386 </span><span class="lineCov">     454015 :   if ((TREE_CODE (base) == ADDR_EXPR || TREE_CODE (base) == INTEGER_CST)</span>
+<span class="lineNum">     387 </span><span class="lineCov">     110011 :       &amp;&amp; (!index2 || integer_zerop (index2))</span>
+<span class="lineNum">     388 </span><span class="lineCov">     561212 :       &amp;&amp; (!addr-&gt;index || integer_zerop (addr-&gt;index)))</span>
+<span class="lineNum">     389 </span><span class="lineCov">         87 :     return fold_build2 (MEM_REF, type, base, addr-&gt;offset);</span>
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span><span class="lineCov">     453928 :   return build5 (TARGET_MEM_REF, type,</span>
+<span class="lineNum">     392 </span><span class="lineCov">     453928 :                  base, addr-&gt;offset, addr-&gt;index, addr-&gt;step, index2);</span>
+<span class="lineNum">     393 </span>            : }
+<span class="lineNum">     394 </span>            : 
+<span class="lineNum">     395 </span>            : /* Returns true if OBJ is an object whose address is a link time constant.  */
+<a name="396"><span class="lineNum">     396 </span>            : </a>
+<span class="lineNum">     397 </span>            : static bool
+<span class="lineNum">     398 </span><span class="lineCov">     920200 : fixed_address_object_p (tree obj)</span>
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">     920200 :   return (VAR_P (obj)</span>
+<span class="lineNum">     401 </span><span class="lineCov">     899242 :           &amp;&amp; (TREE_STATIC (obj) || DECL_EXTERNAL (obj))</span>
+<span class="lineNum">     402 </span><span class="lineCov">    1201726 :           &amp;&amp; ! DECL_DLLIMPORT_P (obj));</span>
+<span class="lineNum">     403 </span>            : }
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            : /* If ADDR contains an address of object that is a link time constant,
+<span class="lineNum">     406 </span>            :    move it to PARTS-&gt;symbol.  */
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span>            : void
+<span class="lineNum">     409 </span><span class="lineCov">    2709455 : move_fixed_address_to_symbol (struct mem_address *parts, aff_tree *addr)</span>
+<span class="lineNum">     410 </span>            : {
+<span class="lineNum">     411 </span><span class="lineCov">    2709455 :   unsigned i;</span>
+<span class="lineNum">     412 </span><span class="lineCov">    2709455 :   tree val = NULL_TREE;</span>
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span><span class="lineCov">    6065200 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     415 </span>            :     {
+<span class="lineNum">     416 </span><span class="lineCov">    3637271 :       if (addr-&gt;elts[i].coef != 1)</span>
+<span class="lineNum">     417 </span>            :         continue;
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span><span class="lineCov">    2687393 :       val = addr-&gt;elts[i].val;</span>
+<span class="lineNum">     420 </span><span class="lineCov">    2687393 :       if (TREE_CODE (val) == ADDR_EXPR</span>
+<span class="lineNum">     421 </span><span class="lineCov">    2687393 :           &amp;&amp; fixed_address_object_p (TREE_OPERAND (val, 0)))</span>
+<span class="lineNum">     422 </span>            :         break;
+<span class="lineNum">     423 </span>            :     }
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">    2709455 :   if (i == addr-&gt;n)</span>
+<span class="lineNum">     426 </span>            :     return;
+<span class="lineNum">     427 </span>            : 
+<span class="lineNum">     428 </span><span class="lineCov">     281526 :   parts-&gt;symbol = val;</span>
+<span class="lineNum">     429 </span><span class="lineCov">     281526 :   aff_combination_remove_elt (addr, i);</span>
+<span class="lineNum">     430 </span>            : }
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            : /* Return true if ADDR contains an instance of BASE_HINT and it's moved to
+<span class="lineNum">     433 </span>            :    PARTS-&gt;base.  */
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span>            : static bool
+<span class="lineNum">     436 </span><span class="lineCov">     229684 : move_hint_to_base (tree type, struct mem_address *parts, tree base_hint,</span>
+<span class="lineNum">     437 </span>            :                    aff_tree *addr)
+<span class="lineNum">     438 </span>            : {
+<span class="lineNum">     439 </span><span class="lineCov">     229684 :   unsigned i;</span>
+<span class="lineNum">     440 </span><span class="lineCov">     229684 :   tree val = NULL_TREE;</span>
+<span class="lineNum">     441 </span><span class="lineCov">     229684 :   int qual;</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">     245303 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     444 </span>            :     {
+<span class="lineNum">     445 </span><span class="lineCov">     245266 :       if (addr-&gt;elts[i].coef != 1)</span>
+<span class="lineNum">     446 </span>            :         continue;
+<span class="lineNum">     447 </span>            : 
+<span class="lineNum">     448 </span><span class="lineCov">     232254 :       val = addr-&gt;elts[i].val;</span>
+<span class="lineNum">     449 </span><span class="lineCov">     232254 :       if (operand_equal_p (val, base_hint, 0))</span>
+<span class="lineNum">     450 </span>            :         break;
+<span class="lineNum">     451 </span>            :     }
+<span class="lineNum">     452 </span>            : 
+<span class="lineNum">     453 </span><span class="lineCov">     229684 :   if (i == addr-&gt;n)</span>
+<span class="lineNum">     454 </span>            :     return false;
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span>            :   /* Cast value to appropriate pointer type.  We cannot use a pointer
+<span class="lineNum">     457 </span>            :      to TYPE directly, as the back-end will assume registers of pointer
+<span class="lineNum">     458 </span>            :      type are aligned, and just the base itself may not actually be.
+<span class="lineNum">     459 </span>            :      We use void pointer to the type's address space instead.  */
+<span class="lineNum">     460 </span><span class="lineCov">     229647 :   qual = ENCODE_QUAL_ADDR_SPACE (TYPE_ADDR_SPACE (type));</span>
+<span class="lineNum">     461 </span><span class="lineCov">     229647 :   type = build_qualified_type (void_type_node, qual);</span>
+<span class="lineNum">     462 </span><span class="lineCov">     229647 :   parts-&gt;base = fold_convert (build_pointer_type (type), val);</span>
+<span class="lineNum">     463 </span><span class="lineCov">     229647 :   aff_combination_remove_elt (addr, i);</span>
+<span class="lineNum">     464 </span><span class="lineCov">     229647 :   return true;</span>
+<span class="lineNum">     465 </span>            : }
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            : /* If ADDR contains an address of a dereferenced pointer, move it to
+<span class="lineNum">     468 </span>            :    PARTS-&gt;base.  */
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span>            : static void
+<span class="lineNum">     471 </span><span class="lineCov">     181987 : move_pointer_to_base (struct mem_address *parts, aff_tree *addr)</span>
+<span class="lineNum">     472 </span>            : {
+<span class="lineNum">     473 </span><span class="lineCov">     181987 :   unsigned i;</span>
+<span class="lineNum">     474 </span><span class="lineCov">     181987 :   tree val = NULL_TREE;</span>
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span><span class="lineCov">     182031 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     477 </span>            :     {
+<span class="lineNum">     478 </span><span class="lineCov">     181733 :       if (addr-&gt;elts[i].coef != 1)</span>
+<span class="lineNum">     479 </span>            :         continue;
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span><span class="lineCov">     181689 :       val = addr-&gt;elts[i].val;</span>
+<span class="lineNum">     482 </span><span class="lineCov">     181689 :       if (POINTER_TYPE_P (TREE_TYPE (val)))</span>
+<span class="lineNum">     483 </span>            :         break;
+<span class="lineNum">     484 </span>            :     }
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineCov">     181987 :   if (i == addr-&gt;n)</span>
+<span class="lineNum">     487 </span>            :     return;
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span><span class="lineCov">     181689 :   parts-&gt;base = val;</span>
+<span class="lineNum">     490 </span><span class="lineCov">     181689 :   aff_combination_remove_elt (addr, i);</span>
+<span class="lineNum">     491 </span>            : }
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : /* Moves the loop variant part V in linear address ADDR to be the index
+<span class="lineNum">     494 </span>            :    of PARTS.  */
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span>            : static void
+<span class="lineNum">     497 </span><span class="lineCov">     224136 : move_variant_to_index (struct mem_address *parts, aff_tree *addr, tree v)</span>
+<span class="lineNum">     498 </span>            : {
+<span class="lineNum">     499 </span><span class="lineCov">     224136 :   unsigned i;</span>
+<span class="lineNum">     500 </span><span class="lineCov">     224136 :   tree val = NULL_TREE;</span>
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineCov">     224136 :   gcc_assert (!parts-&gt;index);</span>
+<span class="lineNum">     503 </span><span class="lineCov">     421081 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     504 </span>            :     {
+<span class="lineNum">     505 </span><span class="lineCov">     420991 :       val = addr-&gt;elts[i].val;</span>
+<span class="lineNum">     506 </span><span class="lineCov">     420991 :       if (operand_equal_p (val, v, 0))</span>
+<span class="lineNum">     507 </span>            :         break;
+<span class="lineNum">     508 </span>            :     }
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span><span class="lineCov">     224136 :   if (i == addr-&gt;n)</span>
+<span class="lineNum">     511 </span>            :     return;
+<span class="lineNum">     512 </span>            : 
+<span class="lineNum">     513 </span><span class="lineCov">     224046 :   parts-&gt;index = fold_convert (sizetype, val);</span>
+<span class="lineNum">     514 </span><span class="lineCov">     448092 :   parts-&gt;step = wide_int_to_tree (sizetype, addr-&gt;elts[i].coef);</span>
+<span class="lineNum">     515 </span><span class="lineCov">     224046 :   aff_combination_remove_elt (addr, i);</span>
+<span class="lineNum">     516 </span>            : }
+<span class="lineNum">     517 </span>            : 
+<span class="lineNum">     518 </span>            : /* Adds ELT to PARTS.  */
+<a name="519"><span class="lineNum">     519 </span>            : </a>
+<span class="lineNum">     520 </span>            : static void
+<span class="lineNum">     521 </span><span class="lineCov">      27721 : add_to_parts (struct mem_address *parts, tree elt)</span>
+<span class="lineNum">     522 </span>            : {
+<span class="lineNum">     523 </span><span class="lineCov">      27721 :   tree type;</span>
+<span class="lineNum">     524 </span>            : 
+<span class="lineNum">     525 </span><span class="lineCov">      27721 :   if (!parts-&gt;index)</span>
+<span class="lineNum">     526 </span>            :     {
+<span class="lineNum">     527 </span><span class="lineCov">       5198 :       parts-&gt;index = fold_convert (sizetype, elt);</span>
+<span class="lineNum">     528 </span><span class="lineCov">       5198 :       return;</span>
+<span class="lineNum">     529 </span>            :     }
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span><span class="lineCov">      22523 :   if (!parts-&gt;base)</span>
+<span class="lineNum">     532 </span>            :     {
+<span class="lineNum">     533 </span><span class="lineCov">       2844 :       parts-&gt;base = elt;</span>
+<span class="lineNum">     534 </span><span class="lineCov">       2844 :       return;</span>
+<span class="lineNum">     535 </span>            :     }
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span>            :   /* Add ELT to base.  */
+<span class="lineNum">     538 </span><span class="lineCov">      19679 :   type = TREE_TYPE (parts-&gt;base);</span>
+<span class="lineNum">     539 </span><span class="lineCov">      19679 :   if (POINTER_TYPE_P (type))</span>
+<span class="lineNum">     540 </span><span class="lineCov">      17693 :     parts-&gt;base = fold_build_pointer_plus (parts-&gt;base, elt);</span>
+<span class="lineNum">     541 </span>            :   else
+<span class="lineNum">     542 </span><span class="lineCov">       1986 :     parts-&gt;base = fold_build2 (PLUS_EXPR, type, parts-&gt;base, elt);</span>
+<span class="lineNum">     543 </span>            : }
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span>            : /* Returns true if multiplying by RATIO is allowed in an address.  Test the
+<span class="lineNum">     546 </span>            :    validity for a memory reference accessing memory of mode MODE in address
+<span class="lineNum">     547 </span>            :    space AS.  */
+<a name="548"><span class="lineNum">     548 </span>            : </a>
+<span class="lineNum">     549 </span>            : static bool
+<span class="lineNum">     550 </span><span class="lineCov">      13104 : multiplier_allowed_in_address_p (HOST_WIDE_INT ratio, machine_mode mode,</span>
+<span class="lineNum">     551 </span>            :                                  addr_space_t as)
+<span class="lineNum">     552 </span>            : {
+<span class="lineNum">     553 </span>            : #define MAX_RATIO 128
+<span class="lineNum">     554 </span><span class="lineCov">      13104 :   unsigned int data_index = (int) as * MAX_MACHINE_MODE + (int) mode;</span>
+<span class="lineNum">     555 </span><span class="lineCov">      13104 :   static vec&lt;sbitmap&gt; valid_mult_list;</span>
+<span class="lineNum">     556 </span><span class="lineCov">      13104 :   sbitmap valid_mult;</span>
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span><span class="lineCov">      25510 :   if (data_index &gt;= valid_mult_list.length ())</span>
+<span class="lineNum">     559 </span><span class="lineCov">        755 :     valid_mult_list.safe_grow_cleared (data_index + 1);</span>
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span><span class="lineCov">      13104 :   valid_mult = valid_mult_list[data_index];</span>
+<span class="lineNum">     562 </span><span class="lineCov">      13104 :   if (!valid_mult)</span>
+<span class="lineNum">     563 </span>            :     {
+<span class="lineNum">     564 </span><span class="lineCov">        791 :       machine_mode address_mode = targetm.addr_space.address_mode (as);</span>
+<span class="lineNum">     565 </span><span class="lineCov">        791 :       rtx reg1 = gen_raw_REG (address_mode, LAST_VIRTUAL_REGISTER + 1);</span>
+<span class="lineNum">     566 </span><span class="lineCov">        791 :       rtx reg2 = gen_raw_REG (address_mode, LAST_VIRTUAL_REGISTER + 2);</span>
+<span class="lineNum">     567 </span><span class="lineCov">        791 :       rtx addr, scaled;</span>
+<span class="lineNum">     568 </span><span class="lineCov">        791 :       HOST_WIDE_INT i;</span>
+<span class="lineNum">     569 </span>            : 
+<span class="lineNum">     570 </span><span class="lineCov">        791 :       valid_mult = sbitmap_alloc (2 * MAX_RATIO + 1);</span>
+<span class="lineNum">     571 </span><span class="lineCov">        791 :       bitmap_clear (valid_mult);</span>
+<span class="lineNum">     572 </span><span class="lineCov">        791 :       scaled = gen_rtx_fmt_ee (MULT, address_mode, reg1, NULL_RTX);</span>
+<span class="lineNum">     573 </span><span class="lineCov">        791 :       addr = gen_rtx_fmt_ee (PLUS, address_mode, scaled, reg2);</span>
+<span class="lineNum">     574 </span><span class="lineCov">     204078 :       for (i = -MAX_RATIO; i &lt;= MAX_RATIO; i++)</span>
+<span class="lineNum">     575 </span>            :         {
+<span class="lineNum">     576 </span><span class="lineCov">     406574 :           XEXP (scaled, 1) = gen_int_mode (i, address_mode);</span>
+<span class="lineNum">     577 </span><span class="lineCov">     203287 :           if (memory_address_addr_space_p (mode, addr, as)</span>
+<span class="lineNum">     578 </span><span class="lineCov">     203287 :               || memory_address_addr_space_p (mode, scaled, as))</span>
+<span class="lineNum">     579 </span><span class="lineCov">       3164 :             bitmap_set_bit (valid_mult, i + MAX_RATIO);</span>
+<span class="lineNum">     580 </span>            :         }
+<span class="lineNum">     581 </span>            : 
+<span class="lineNum">     582 </span><span class="lineCov">        791 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     583 </span>            :         {
+<span class="lineNum">     584 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;  allowed multipliers:&quot;);</span>
+<span class="lineNum">     585 </span><span class="lineNoCov">          0 :           for (i = -MAX_RATIO; i &lt;= MAX_RATIO; i++)</span>
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :             if (bitmap_bit_p (valid_mult, i + MAX_RATIO))</span>
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot; %d&quot;, (int) i);</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     589 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     590 </span>            :         }
+<span class="lineNum">     591 </span>            : 
+<span class="lineNum">     592 </span><span class="lineCov">        791 :       valid_mult_list[data_index] = valid_mult;</span>
+<span class="lineNum">     593 </span>            :     }
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span><span class="lineCov">      13104 :   if (ratio &gt; MAX_RATIO || ratio &lt; -MAX_RATIO)</span>
+<span class="lineNum">     596 </span>            :     return false;
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span><span class="lineCov">      12982 :   return bitmap_bit_p (valid_mult, ratio + MAX_RATIO);</span>
+<span class="lineNum">     599 </span>            : }
+<span class="lineNum">     600 </span>            : 
+<span class="lineNum">     601 </span>            : /* Finds the most expensive multiplication in ADDR that can be
+<span class="lineNum">     602 </span>            :    expressed in an addressing mode and move the corresponding
+<span class="lineNum">     603 </span>            :    element(s) to PARTS.  */
+<span class="lineNum">     604 </span>            : 
+<span class="lineNum">     605 </span>            : static void
+<span class="lineNum">     606 </span><span class="lineCov">     229774 : most_expensive_mult_to_index (tree type, struct mem_address *parts,</span>
+<span class="lineNum">     607 </span>            :                               aff_tree *addr, bool speed)
+<span class="lineNum">     608 </span>            : {
+<span class="lineNum">     609 </span><span class="lineCov">     229774 :   addr_space_t as = TYPE_ADDR_SPACE (type);</span>
+<span class="lineNum">     610 </span><span class="lineCov">     229774 :   machine_mode address_mode = targetm.addr_space.address_mode (as);</span>
+<span class="lineNum">     611 </span><span class="lineCov">     229774 :   HOST_WIDE_INT coef;</span>
+<span class="lineNum">     612 </span><span class="lineCov">     229774 :   unsigned best_mult_cost = 0, acost;</span>
+<span class="lineNum">     613 </span><span class="lineCov">     229774 :   tree mult_elt = NULL_TREE, elt;</span>
+<span class="lineNum">     614 </span><span class="lineCov">     229774 :   unsigned i, j;</span>
+<span class="lineNum">     615 </span><span class="lineCov">     229774 :   enum tree_code op_code;</span>
+<span class="lineNum">     616 </span>            : 
+<span class="lineNum">     617 </span><span class="lineCov">     229774 :   offset_int best_mult = 0;</span>
+<span class="lineNum">     618 </span><span class="lineCov">     245577 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     619 </span>            :     {
+<span class="lineNum">     620 </span><span class="lineCov">      31606 :       if (!wi::fits_shwi_p (addr-&gt;elts[i].coef))</span>
+<span class="lineNum">     621 </span>            :         continue;
+<span class="lineNum">     622 </span>            : 
+<span class="lineNum">     623 </span><span class="lineCov">      15803 :       coef = addr-&gt;elts[i].coef.to_shwi ();</span>
+<span class="lineNum">     624 </span><span class="lineCov">      15803 :       if (coef == 1</span>
+<span class="lineNum">     625 </span><span class="lineCov">      15803 :           || !multiplier_allowed_in_address_p (coef, TYPE_MODE (type), as))</span>
+<span class="lineNum">     626 </span><span class="lineCov">      11256 :         continue;</span>
+<span class="lineNum">     627 </span>            : 
+<span class="lineNum">     628 </span><span class="lineCov">       4547 :       acost = mult_by_coeff_cost (coef, address_mode, speed);</span>
+<span class="lineNum">     629 </span>            : 
+<span class="lineNum">     630 </span><span class="lineCov">       4547 :       if (acost &gt; best_mult_cost)</span>
+<span class="lineNum">     631 </span>            :         {
+<span class="lineNum">     632 </span><span class="lineCov">       4403 :           best_mult_cost = acost;</span>
+<span class="lineNum">     633 </span><span class="lineCov">       8806 :           best_mult = offset_int::from (addr-&gt;elts[i].coef, SIGNED);</span>
+<span class="lineNum">     634 </span>            :         }
+<span class="lineNum">     635 </span>            :     }
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span><span class="lineCov">     229774 :   if (!best_mult_cost)</span>
+<span class="lineNum">     638 </span><span class="lineCov">     225371 :     return;</span>
+<span class="lineNum">     639 </span>            : 
+<span class="lineNum">     640 </span>            :   /* Collect elements multiplied by best_mult.  */
+<span class="lineNum">     641 </span><span class="lineCov">      12453 :   for (i = j = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     642 </span>            :     {
+<span class="lineNum">     643 </span><span class="lineCov">      16100 :       offset_int amult = offset_int::from (addr-&gt;elts[i].coef, SIGNED);</span>
+<span class="lineNum">     644 </span><span class="lineCov">       8050 :       offset_int amult_neg = -wi::sext (amult, TYPE_PRECISION (addr-&gt;type));</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span><span class="lineCov">      16100 :       if (amult == best_mult)</span>
+<span class="lineNum">     647 </span>            :         op_code = PLUS_EXPR;
+<span class="lineNum">     648 </span><span class="lineCov">       7020 :       else if (amult_neg == best_mult)</span>
+<span class="lineNum">     649 </span>            :         op_code = MINUS_EXPR;
+<span class="lineNum">     650 </span>            :       else
+<span class="lineNum">     651 </span>            :         {
+<span class="lineNum">     652 </span><span class="lineCov">        110 :           addr-&gt;elts[j] = addr-&gt;elts[i];</span>
+<span class="lineNum">     653 </span><span class="lineCov">        110 :           j++;</span>
+<span class="lineNum">     654 </span><span class="lineCov">        110 :           continue;</span>
+<span class="lineNum">     655 </span>            :         }
+<span class="lineNum">     656 </span>            : 
+<span class="lineNum">     657 </span><span class="lineCov">       7940 :       elt = fold_convert (sizetype, addr-&gt;elts[i].val);</span>
+<span class="lineNum">     658 </span><span class="lineCov">       7940 :       if (mult_elt)</span>
+<span class="lineNum">     659 </span><span class="lineCov">       3537 :         mult_elt = fold_build2 (op_code, sizetype, mult_elt, elt);</span>
+<span class="lineNum">     660 </span><span class="lineCov">       4403 :       else if (op_code == PLUS_EXPR)</span>
+<span class="lineNum">     661 </span>            :         mult_elt = elt;
+<span class="lineNum">     662 </span>            :       else
+<span class="lineNum">     663 </span><span class="lineCov">        796 :         mult_elt = fold_build1 (NEGATE_EXPR, sizetype, elt);</span>
+<span class="lineNum">     664 </span>            :     }
+<span class="lineNum">     665 </span><span class="lineCov">       4403 :   addr-&gt;n = j;</span>
+<span class="lineNum">     666 </span>            : 
+<span class="lineNum">     667 </span><span class="lineCov">       4403 :   parts-&gt;index = mult_elt;</span>
+<span class="lineNum">     668 </span><span class="lineCov">       8806 :   parts-&gt;step = wide_int_to_tree (sizetype, best_mult);</span>
+<span class="lineNum">     669 </span>            : }
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            : /* Splits address ADDR for a memory access of type TYPE into PARTS.
+<span class="lineNum">     672 </span>            :    If BASE_HINT is non-NULL, it specifies an SSA name to be used
+<span class="lineNum">     673 </span>            :    preferentially as base of the reference, and IV_CAND is the selected
+<span class="lineNum">     674 </span>            :    iv candidate used in ADDR.  Store true to VAR_IN_BASE if variant
+<span class="lineNum">     675 </span>            :    part of address is split to PARTS.base.
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span>            :    TODO -- be more clever about the distribution of the elements of ADDR
+<span class="lineNum">     678 </span>            :    to PARTS.  Some architectures do not support anything but single
+<span class="lineNum">     679 </span>            :    register in address, possibly with a small integer offset; while
+<span class="lineNum">     680 </span>            :    create_mem_ref will simplify the address to an acceptable shape
+<span class="lineNum">     681 </span>            :    later, it would be more efficient to know that asking for complicated
+<span class="lineNum">     682 </span>            :    addressing modes is useless.  */
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span>            : static void
+<span class="lineNum">     685 </span><span class="lineCov">     453820 : addr_to_parts (tree type, aff_tree *addr, tree iv_cand, tree base_hint,</span>
+<span class="lineNum">     686 </span>            :                struct mem_address *parts, bool *var_in_base, bool speed)
+<span class="lineNum">     687 </span>            : {
+<span class="lineNum">     688 </span><span class="lineCov">     453820 :   tree part;</span>
+<span class="lineNum">     689 </span><span class="lineCov">     453820 :   unsigned i;</span>
+<span class="lineNum">     690 </span>            : 
+<span class="lineNum">     691 </span><span class="lineCov">     453820 :   parts-&gt;symbol = NULL_TREE;</span>
+<span class="lineNum">     692 </span><span class="lineCov">     453820 :   parts-&gt;base = NULL_TREE;</span>
+<span class="lineNum">     693 </span><span class="lineCov">     453820 :   parts-&gt;index = NULL_TREE;</span>
+<span class="lineNum">     694 </span><span class="lineCov">     453820 :   parts-&gt;step = NULL_TREE;</span>
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span><span class="lineCov">     453820 :   if (maybe_ne (addr-&gt;offset, 0))</span>
+<span class="lineNum">     697 </span><span class="lineCov">     355742 :     parts-&gt;offset = wide_int_to_tree (sizetype, addr-&gt;offset);</span>
+<span class="lineNum">     698 </span>            :   else
+<span class="lineNum">     699 </span><span class="lineCov">     275949 :     parts-&gt;offset = NULL_TREE;</span>
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span>            :   /* Try to find a symbol.  */
+<span class="lineNum">     702 </span><span class="lineCov">     453820 :   move_fixed_address_to_symbol (parts, addr);</span>
+<span class="lineNum">     703 </span>            : 
+<span class="lineNum">     704 </span>            :   /* Since at the moment there is no reliable way to know how to
+<span class="lineNum">     705 </span>            :      distinguish between pointer and its offset, we decide if var
+<span class="lineNum">     706 </span>            :      part is the pointer based on guess.  */
+<span class="lineNum">     707 </span><span class="lineCov">     453820 :   *var_in_base = (base_hint != NULL &amp;&amp; parts-&gt;symbol == NULL);</span>
+<span class="lineNum">     708 </span><span class="lineCov">     453820 :   if (*var_in_base)</span>
+<span class="lineNum">     709 </span><span class="lineCov">     229684 :     *var_in_base = move_hint_to_base (type, parts, base_hint, addr);</span>
+<span class="lineNum">     710 </span>            :   else
+<span class="lineNum">     711 </span><span class="lineCov">     224136 :     move_variant_to_index (parts, addr, iv_cand);</span>
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span>            :   /* First move the most expensive feasible multiplication to index.  */
+<span class="lineNum">     714 </span><span class="lineCov">     453820 :   if (!parts-&gt;index)</span>
+<span class="lineNum">     715 </span><span class="lineCov">     229774 :     most_expensive_mult_to_index (type, parts, addr, speed);</span>
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span>            :   /* Move pointer into base.  */
+<span class="lineNum">     718 </span><span class="lineCov">     453820 :   if (!parts-&gt;symbol &amp;&amp; !parts-&gt;base)</span>
+<span class="lineNum">     719 </span><span class="lineCov">     181987 :     move_pointer_to_base (parts, addr);</span>
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span>            :   /* Then try to process the remaining elements.  */
+<span class="lineNum">     722 </span><span class="lineCov">     481541 :   for (i = 0; i &lt; addr-&gt;n; i++)</span>
+<span class="lineNum">     723 </span>            :     {
+<span class="lineNum">     724 </span><span class="lineCov">      27721 :       part = fold_convert (sizetype, addr-&gt;elts[i].val);</span>
+<span class="lineNum">     725 </span><span class="lineCov">      27721 :       if (addr-&gt;elts[i].coef != 1)</span>
+<span class="lineNum">     726 </span><span class="lineCov">      46652 :         part = fold_build2 (MULT_EXPR, sizetype, part,</span>
+<span class="lineNum">     727 </span>            :                             wide_int_to_tree (sizetype, addr-&gt;elts[i].coef));
+<span class="lineNum">     728 </span><span class="lineCov">      27721 :       add_to_parts (parts, part);</span>
+<span class="lineNum">     729 </span>            :     }
+<span class="lineNum">     730 </span><span class="lineCov">     453820 :   if (addr-&gt;rest)</span>
+<span class="lineNum">     731 </span><span class="lineNoCov">          0 :     add_to_parts (parts, fold_convert (sizetype, addr-&gt;rest));</span>
+<span class="lineNum">     732 </span><span class="lineCov">     453820 : }</span>
+<span class="lineNum">     733 </span>            : 
+<span class="lineNum">     734 </span>            : /* Force the PARTS to register.  */
+<a name="735"><span class="lineNum">     735 </span>            : </a>
+<span class="lineNum">     736 </span>            : static void
+<span class="lineNum">     737 </span><span class="lineCov">     453820 : gimplify_mem_ref_parts (gimple_stmt_iterator *gsi, struct mem_address *parts)</span>
+<span class="lineNum">     738 </span>            : {
+<span class="lineNum">     739 </span><span class="lineCov">     453820 :   if (parts-&gt;base)</span>
+<span class="lineNum">     740 </span><span class="lineCov">     414180 :     parts-&gt;base = force_gimple_operand_gsi_1 (gsi, parts-&gt;base,</span>
+<span class="lineNum">     741 </span>            :                                             is_gimple_mem_ref_addr, NULL_TREE,
+<span class="lineNum">     742 </span>            :                                             true, GSI_SAME_STMT);
+<span class="lineNum">     743 </span><span class="lineCov">     453820 :   if (parts-&gt;index)</span>
+<span class="lineNum">     744 </span><span class="lineCov">     233647 :     parts-&gt;index = force_gimple_operand_gsi (gsi, parts-&gt;index,</span>
+<span class="lineNum">     745 </span>            :                                              true, NULL_TREE,
+<span class="lineNum">     746 </span>            :                                              true, GSI_SAME_STMT);
+<span class="lineNum">     747 </span><span class="lineCov">     453820 : }</span>
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span>            : /* Return true if the OFFSET in PARTS is the only thing that is making
+<span class="lineNum">     750 </span>            :    it an invalid address for type TYPE.  */
+<a name="751"><span class="lineNum">     751 </span>            : </a>
+<span class="lineNum">     752 </span>            : static bool
+<span class="lineNum">     753 </span><span class="lineCov">      15336 : mem_ref_valid_without_offset_p (tree type, mem_address parts)</span>
+<span class="lineNum">     754 </span>            : {
+<span class="lineNum">     755 </span><span class="lineCov">      15336 :   if (!parts.base)</span>
+<span class="lineNum">     756 </span><span class="lineNoCov">          0 :     parts.base = parts.offset;</span>
+<span class="lineNum">     757 </span><span class="lineCov">      15336 :   parts.offset = NULL_TREE;</span>
+<span class="lineNum">     758 </span><span class="lineCov">      15336 :   return valid_mem_ref_p (TYPE_MODE (type), TYPE_ADDR_SPACE (type), &amp;parts);</span>
+<span class="lineNum">     759 </span>            : }
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span>            : /* Fold PARTS-&gt;offset into PARTS-&gt;base, so that there is no longer
+<span class="lineNum">     762 </span>            :    a separate offset.  Emit any new instructions before GSI.  */
+<a name="763"><span class="lineNum">     763 </span>            : </a>
+<span class="lineNum">     764 </span>            : static void
+<span class="lineNum">     765 </span><span class="lineNoCov">          0 : add_offset_to_base (gimple_stmt_iterator *gsi, mem_address *parts)</span>
+<span class="lineNum">     766 </span>            : {
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :   tree tmp = parts-&gt;offset;</span>
+<span class="lineNum">     768 </span><span class="lineNoCov">          0 :   if (parts-&gt;base)</span>
+<span class="lineNum">     769 </span>            :     {
+<span class="lineNum">     770 </span><span class="lineNoCov">          0 :       tmp = fold_build_pointer_plus (parts-&gt;base, tmp);</span>
+<span class="lineNum">     771 </span><span class="lineNoCov">          0 :       tmp = force_gimple_operand_gsi_1 (gsi, tmp, is_gimple_mem_ref_addr,</span>
+<span class="lineNum">     772 </span>            :                                         NULL_TREE, true, GSI_SAME_STMT);
+<span class="lineNum">     773 </span>            :     }
+<span class="lineNum">     774 </span><span class="lineNoCov">          0 :   parts-&gt;base = tmp;</span>
+<span class="lineNum">     775 </span><span class="lineNoCov">          0 :   parts-&gt;offset = NULL_TREE;</span>
+<span class="lineNum">     776 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     777 </span>            : 
+<span class="lineNum">     778 </span>            : /* Creates and returns a TARGET_MEM_REF for address ADDR.  If necessary
+<span class="lineNum">     779 </span>            :    computations are emitted in front of GSI.  TYPE is the mode
+<span class="lineNum">     780 </span>            :    of created memory reference. IV_CAND is the selected iv candidate in ADDR,
+<span class="lineNum">     781 </span>            :    and BASE_HINT is non NULL if IV_CAND comes from a base address
+<span class="lineNum">     782 </span>            :    object.  */
+<a name="783"><span class="lineNum">     783 </span>            : </a>
+<span class="lineNum">     784 </span>            : tree
+<span class="lineNum">     785 </span><span class="lineCov">     453820 : create_mem_ref (gimple_stmt_iterator *gsi, tree type, aff_tree *addr,</span>
+<span class="lineNum">     786 </span>            :                 tree alias_ptr_type, tree iv_cand, tree base_hint, bool speed)
+<span class="lineNum">     787 </span>            : {
+<span class="lineNum">     788 </span><span class="lineCov">     453820 :   bool var_in_base;</span>
+<span class="lineNum">     789 </span><span class="lineCov">     453820 :   tree mem_ref, tmp;</span>
+<span class="lineNum">     790 </span><span class="lineCov">     453820 :   struct mem_address parts;</span>
+<span class="lineNum">     791 </span>            : 
+<span class="lineNum">     792 </span><span class="lineCov">     453820 :   addr_to_parts (type, addr, iv_cand, base_hint, &amp;parts, &amp;var_in_base, speed);</span>
+<span class="lineNum">     793 </span><span class="lineCov">     453820 :   gimplify_mem_ref_parts (gsi, &amp;parts);</span>
+<span class="lineNum">     794 </span><span class="lineCov">     453820 :   mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     795 </span><span class="lineCov">     453820 :   if (mem_ref)</span>
+<span class="lineNum">     796 </span>            :     return mem_ref;
+<span class="lineNum">     797 </span>            : 
+<span class="lineNum">     798 </span>            :   /* The expression is too complicated.  Try making it simpler.  */
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span>            :   /* Merge symbol into other parts.  */
+<span class="lineNum">     801 </span><span class="lineCov">      21628 :   if (parts.symbol)</span>
+<span class="lineNum">     802 </span>            :     {
+<span class="lineNum">     803 </span><span class="lineCov">        613 :       tmp = parts.symbol;</span>
+<span class="lineNum">     804 </span><span class="lineCov">        613 :       parts.symbol = NULL_TREE;</span>
+<span class="lineNum">     805 </span><span class="lineCov">        613 :       gcc_assert (is_gimple_val (tmp));</span>
+<span class="lineNum">     806 </span>            : 
+<span class="lineNum">     807 </span><span class="lineCov">        613 :       if (parts.base)</span>
+<span class="lineNum">     808 </span>            :         {
+<span class="lineNum">     809 </span><span class="lineCov">         27 :           gcc_assert (useless_type_conversion_p (sizetype,</span>
+<span class="lineNum">     810 </span>            :                                                  TREE_TYPE (parts.base)));
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span><span class="lineCov">         27 :           if (parts.index)</span>
+<span class="lineNum">     813 </span>            :             {
+<span class="lineNum">     814 </span>            :               /* Add the symbol to base, eventually forcing it to register.  */
+<span class="lineNum">     815 </span><span class="lineCov">         27 :               tmp = fold_build_pointer_plus (tmp, parts.base);</span>
+<span class="lineNum">     816 </span><span class="lineCov">         27 :               tmp = force_gimple_operand_gsi_1 (gsi, tmp,</span>
+<span class="lineNum">     817 </span>            :                                                 is_gimple_mem_ref_addr,
+<span class="lineNum">     818 </span>            :                                                 NULL_TREE, true,
+<span class="lineNum">     819 </span>            :                                                 GSI_SAME_STMT);
+<span class="lineNum">     820 </span>            :             }
+<span class="lineNum">     821 </span>            :           else
+<span class="lineNum">     822 </span>            :             {
+<span class="lineNum">     823 </span>            :               /* Move base to index, then move the symbol to base.  */
+<span class="lineNum">     824 </span><span class="lineNoCov">          0 :               parts.index = parts.base;</span>
+<span class="lineNum">     825 </span>            :             }
+<span class="lineNum">     826 </span><span class="lineCov">         27 :           parts.base = tmp;</span>
+<span class="lineNum">     827 </span>            :         }
+<span class="lineNum">     828 </span>            :       else
+<span class="lineNum">     829 </span><span class="lineCov">        586 :         parts.base = tmp;</span>
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span><span class="lineCov">        613 :       mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     832 </span><span class="lineCov">        613 :       if (mem_ref)</span>
+<span class="lineNum">     833 </span>            :         return mem_ref;
+<span class="lineNum">     834 </span>            :     }
+<span class="lineNum">     835 </span>            : 
+<span class="lineNum">     836 </span>            :   /* Move multiplication to index by transforming address expression:
+<span class="lineNum">     837 </span>            :        [... + index &lt;&lt; step + ...]
+<span class="lineNum">     838 </span>            :      into:
+<span class="lineNum">     839 </span>            :        index' = index &lt;&lt; step;
+<span class="lineNum">     840 </span>            :        [... + index' + ,,,].  */
+<span class="lineNum">     841 </span><span class="lineCov">      21239 :   if (parts.step &amp;&amp; !integer_onep (parts.step))</span>
+<span class="lineNum">     842 </span>            :     {
+<span class="lineNum">     843 </span><span class="lineCov">      21227 :       gcc_assert (parts.index);</span>
+<span class="lineNum">     844 </span><span class="lineCov">      21227 :       if (parts.offset &amp;&amp; mem_ref_valid_without_offset_p (type, parts))</span>
+<span class="lineNum">     845 </span>            :         {
+<span class="lineNum">     846 </span><span class="lineNoCov">          0 :           add_offset_to_base (gsi, &amp;parts);</span>
+<span class="lineNum">     847 </span><span class="lineNoCov">          0 :           mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     848 </span><span class="lineNoCov">          0 :           gcc_assert (mem_ref);</span>
+<span class="lineNum">     849 </span>            :           return mem_ref;
+<span class="lineNum">     850 </span>            :         }
+<span class="lineNum">     851 </span>            : 
+<span class="lineNum">     852 </span><span class="lineCov">      21227 :       parts.index = force_gimple_operand_gsi (gsi,</span>
+<span class="lineNum">     853 </span>            :                                 fold_build2 (MULT_EXPR, sizetype,
+<span class="lineNum">     854 </span>            :                                              parts.index, parts.step),
+<span class="lineNum">     855 </span>            :                                 true, NULL_TREE, true, GSI_SAME_STMT);
+<span class="lineNum">     856 </span><span class="lineCov">      21227 :       parts.step = NULL_TREE;</span>
+<span class="lineNum">     857 </span>            : 
+<span class="lineNum">     858 </span><span class="lineCov">      21227 :       mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     859 </span><span class="lineCov">      21227 :       if (mem_ref)</span>
+<span class="lineNum">     860 </span>            :         return mem_ref;
+<span class="lineNum">     861 </span>            :     }
+<span class="lineNum">     862 </span>            : 
+<span class="lineNum">     863 </span>            :   /* Add offset to invariant part by transforming address expression:
+<span class="lineNum">     864 </span>            :        [base + index + offset]
+<span class="lineNum">     865 </span>            :      into:
+<span class="lineNum">     866 </span>            :        base' = base + offset;
+<span class="lineNum">     867 </span>            :        [base' + index]
+<span class="lineNum">     868 </span>            :      or:
+<span class="lineNum">     869 </span>            :        index' = index + offset;
+<span class="lineNum">     870 </span>            :        [base + index']
+<span class="lineNum">     871 </span>            :      depending on which one is invariant.  */
+<span class="lineNum">     872 </span><span class="lineCov">         12 :   if (parts.offset &amp;&amp; !integer_zerop (parts.offset))</span>
+<span class="lineNum">     873 </span>            :     {
+<span class="lineNum">     874 </span><span class="lineCov">         12 :       tree old_base = unshare_expr (parts.base);</span>
+<span class="lineNum">     875 </span><span class="lineCov">         12 :       tree old_index = unshare_expr (parts.index);</span>
+<span class="lineNum">     876 </span><span class="lineCov">         12 :       tree old_offset = unshare_expr (parts.offset);</span>
+<span class="lineNum">     877 </span>            : 
+<span class="lineNum">     878 </span><span class="lineCov">         12 :       tmp = parts.offset;</span>
+<span class="lineNum">     879 </span><span class="lineCov">         12 :       parts.offset = NULL_TREE;</span>
+<span class="lineNum">     880 </span>            :       /* Add offset to invariant part.  */
+<span class="lineNum">     881 </span><span class="lineCov">         12 :       if (!var_in_base)</span>
+<span class="lineNum">     882 </span>            :         {
+<span class="lineNum">     883 </span><span class="lineCov">         12 :           if (parts.base)</span>
+<span class="lineNum">     884 </span>            :             {
+<span class="lineNum">     885 </span><span class="lineCov">         12 :               tmp = fold_build_pointer_plus (parts.base, tmp);</span>
+<span class="lineNum">     886 </span><span class="lineCov">         12 :               tmp = force_gimple_operand_gsi_1 (gsi, tmp,</span>
+<span class="lineNum">     887 </span>            :                                                 is_gimple_mem_ref_addr,
+<span class="lineNum">     888 </span>            :                                                 NULL_TREE, true,
+<span class="lineNum">     889 </span>            :                                                 GSI_SAME_STMT);
+<span class="lineNum">     890 </span>            :             }
+<span class="lineNum">     891 </span><span class="lineCov">         12 :           parts.base = tmp;</span>
+<span class="lineNum">     892 </span>            :         }
+<span class="lineNum">     893 </span>            :       else
+<span class="lineNum">     894 </span>            :         {
+<span class="lineNum">     895 </span><span class="lineNoCov">          0 :           if (parts.index)</span>
+<span class="lineNum">     896 </span>            :             {
+<span class="lineNum">     897 </span><span class="lineNoCov">          0 :               tmp = fold_build_pointer_plus (parts.index, tmp);</span>
+<span class="lineNum">     898 </span><span class="lineNoCov">          0 :               tmp = force_gimple_operand_gsi_1 (gsi, tmp,</span>
+<span class="lineNum">     899 </span>            :                                                 is_gimple_mem_ref_addr,
+<span class="lineNum">     900 </span>            :                                                 NULL_TREE, true,
+<span class="lineNum">     901 </span>            :                                                 GSI_SAME_STMT);
+<span class="lineNum">     902 </span>            :             }
+<span class="lineNum">     903 </span><span class="lineNoCov">          0 :           parts.index = tmp;</span>
+<span class="lineNum">     904 </span>            :         }
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span><span class="lineCov">         12 :       mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     907 </span><span class="lineCov">         12 :       if (mem_ref)</span>
+<span class="lineNum">     908 </span>            :         return mem_ref;
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span>            :       /* Restore parts.base, index and offset so that we can check if
+<span class="lineNum">     911 </span>            :          [base + offset] addressing mode is supported in next step.
+<span class="lineNum">     912 </span>            :          This is necessary for targets only support [base + offset],
+<span class="lineNum">     913 </span>            :          but not [base + index] addressing mode.  */
+<span class="lineNum">     914 </span><span class="lineNoCov">          0 :       parts.base = old_base;</span>
+<span class="lineNum">     915 </span><span class="lineNoCov">          0 :       parts.index = old_index;</span>
+<span class="lineNum">     916 </span><span class="lineNoCov">          0 :       parts.offset = old_offset;</span>
+<span class="lineNum">     917 </span>            :     }
+<span class="lineNum">     918 </span>            : 
+<span class="lineNum">     919 </span>            :   /* Transform [base + index + ...] into:
+<span class="lineNum">     920 </span>            :        base' = base + index;
+<span class="lineNum">     921 </span>            :        [base' + ...].  */
+<span class="lineNum">     922 </span><span class="lineNoCov">          0 :   if (parts.index)</span>
+<span class="lineNum">     923 </span>            :     {
+<span class="lineNum">     924 </span><span class="lineNoCov">          0 :       tmp = parts.index;</span>
+<span class="lineNum">     925 </span><span class="lineNoCov">          0 :       parts.index = NULL_TREE;</span>
+<span class="lineNum">     926 </span>            :       /* Add index to base.  */
+<span class="lineNum">     927 </span><span class="lineNoCov">          0 :       if (parts.base)</span>
+<span class="lineNum">     928 </span>            :         {
+<span class="lineNum">     929 </span><span class="lineNoCov">          0 :           tmp = fold_build_pointer_plus (parts.base, tmp);</span>
+<span class="lineNum">     930 </span><span class="lineNoCov">          0 :           tmp = force_gimple_operand_gsi_1 (gsi, tmp,</span>
+<span class="lineNum">     931 </span>            :                                             is_gimple_mem_ref_addr,
+<span class="lineNum">     932 </span>            :                                             NULL_TREE, true, GSI_SAME_STMT);
+<span class="lineNum">     933 </span>            :         }
+<span class="lineNum">     934 </span><span class="lineNoCov">          0 :       parts.base = tmp;</span>
+<span class="lineNum">     935 </span>            : 
+<span class="lineNum">     936 </span><span class="lineNoCov">          0 :       mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     937 </span><span class="lineNoCov">          0 :       if (mem_ref)</span>
+<span class="lineNum">     938 </span>            :         return mem_ref;
+<span class="lineNum">     939 </span>            :     }
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span>            :   /* Transform [base + offset] into:
+<span class="lineNum">     942 </span>            :        base' = base + offset;
+<span class="lineNum">     943 </span>            :        [base'].  */
+<span class="lineNum">     944 </span><span class="lineNoCov">          0 :   if (parts.offset &amp;&amp; !integer_zerop (parts.offset))</span>
+<span class="lineNum">     945 </span>            :     {
+<span class="lineNum">     946 </span><span class="lineNoCov">          0 :       add_offset_to_base (gsi, &amp;parts);</span>
+<span class="lineNum">     947 </span><span class="lineNoCov">          0 :       mem_ref = create_mem_ref_raw (type, alias_ptr_type, &amp;parts, true);</span>
+<span class="lineNum">     948 </span><span class="lineNoCov">          0 :       if (mem_ref)</span>
+<span class="lineNum">     949 </span>            :         return mem_ref;
+<span class="lineNum">     950 </span>            :     }
+<span class="lineNum">     951 </span>            : 
+<span class="lineNum">     952 </span>            :   /* Verify that the address is in the simplest possible shape
+<span class="lineNum">     953 </span>            :      (only a register).  If we cannot create such a memory reference,
+<span class="lineNum">     954 </span>            :      something is really wrong.  */
+<span class="lineNum">     955 </span><span class="lineNoCov">          0 :   gcc_assert (parts.symbol == NULL_TREE);</span>
+<span class="lineNum">     956 </span><span class="lineNoCov">          0 :   gcc_assert (parts.index == NULL_TREE);</span>
+<span class="lineNum">     957 </span><span class="lineNoCov">          0 :   gcc_assert (!parts.step || integer_onep (parts.step));</span>
+<span class="lineNum">     958 </span><span class="lineNoCov">          0 :   gcc_assert (!parts.offset || integer_zerop (parts.offset));</span>
+<span class="lineNum">     959 </span><span class="lineNoCov">          0 :   gcc_unreachable ();</span>
+<span class="lineNum">     960 </span>            : }
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span>            : /* Copies components of the address from OP to ADDR.  */
+<a name="963"><span class="lineNum">     963 </span>            : </a>
+<span class="lineNum">     964 </span>            : void
+<span class="lineNum">     965 </span><span class="lineCov">    1079420 : get_address_description (tree op, struct mem_address *addr)</span>
+<span class="lineNum">     966 </span>            : {
+<span class="lineNum">     967 </span><span class="lineCov">    1079420 :   if (TREE_CODE (TMR_BASE (op)) == ADDR_EXPR)</span>
+<span class="lineNum">     968 </span>            :     {
+<span class="lineNum">     969 </span><span class="lineCov">     498464 :       addr-&gt;symbol = TMR_BASE (op);</span>
+<span class="lineNum">     970 </span><span class="lineCov">     249232 :       addr-&gt;base = TMR_INDEX2 (op);</span>
+<span class="lineNum">     971 </span>            :     }
+<span class="lineNum">     972 </span>            :   else
+<span class="lineNum">     973 </span>            :     {
+<span class="lineNum">     974 </span><span class="lineCov">     830188 :       addr-&gt;symbol = NULL_TREE;</span>
+<span class="lineNum">     975 </span><span class="lineCov">     830188 :       if (TMR_INDEX2 (op))</span>
+<span class="lineNum">     976 </span>            :         {
+<span class="lineNum">     977 </span><span class="lineCov">        188 :           gcc_assert (integer_zerop (TMR_BASE (op)));</span>
+<span class="lineNum">     978 </span><span class="lineCov">         94 :           addr-&gt;base = TMR_INDEX2 (op);</span>
+<span class="lineNum">     979 </span>            :         }
+<span class="lineNum">     980 </span>            :       else
+<span class="lineNum">     981 </span><span class="lineCov">    1660188 :         addr-&gt;base = TMR_BASE (op);</span>
+<span class="lineNum">     982 </span>            :     }
+<span class="lineNum">     983 </span><span class="lineCov">    1079420 :   addr-&gt;index = TMR_INDEX (op);</span>
+<span class="lineNum">     984 </span><span class="lineCov">    1079420 :   addr-&gt;step = TMR_STEP (op);</span>
+<span class="lineNum">     985 </span><span class="lineCov">    1079420 :   addr-&gt;offset = TMR_OFFSET (op);</span>
+<span class="lineNum">     986 </span><span class="lineCov">    1079420 : }</span>
+<span class="lineNum">     987 </span>            : 
+<span class="lineNum">     988 </span>            : /* Copies the reference information from OLD_REF to NEW_REF, where
+<span class="lineNum">     989 </span>            :    NEW_REF should be either a MEM_REF or a TARGET_MEM_REF.  */
+<span class="lineNum">     990 </span>            : 
+<span class="lineNum">     991 </span>            : void
+<span class="lineNum">     992 </span><span class="lineCov">     483277 : copy_ref_info (tree new_ref, tree old_ref)</span>
+<span class="lineNum">     993 </span>            : {
+<span class="lineNum">     994 </span><span class="lineCov">     483277 :   tree new_ptr_base = NULL_TREE;</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span><span class="lineCov">     483277 :   gcc_assert (TREE_CODE (new_ref) == MEM_REF</span>
+<span class="lineNum">     997 </span>            :               || TREE_CODE (new_ref) == TARGET_MEM_REF);
+<span class="lineNum">     998 </span>            : 
+<span class="lineNum">     999 </span><span class="lineCov">     483277 :   TREE_SIDE_EFFECTS (new_ref) = TREE_SIDE_EFFECTS (old_ref);</span>
+<span class="lineNum">    1000 </span><span class="lineCov">     483277 :   TREE_THIS_VOLATILE (new_ref) = TREE_THIS_VOLATILE (old_ref);</span>
+<span class="lineNum">    1001 </span>            : 
+<span class="lineNum">    1002 </span><span class="lineCov">     483277 :   new_ptr_base = TREE_OPERAND (new_ref, 0);</span>
+<span class="lineNum">    1003 </span>            : 
+<span class="lineNum">    1004 </span>            :   /* We can transfer points-to information from an old pointer
+<span class="lineNum">    1005 </span>            :      or decl base to the new one.  */
+<span class="lineNum">    1006 </span><span class="lineCov">     483277 :   if (new_ptr_base</span>
+<span class="lineNum">    1007 </span><span class="lineCov">     483277 :       &amp;&amp; TREE_CODE (new_ptr_base) == SSA_NAME</span>
+<span class="lineNum">    1008 </span><span class="lineCov">    1230105 :       &amp;&amp; !SSA_NAME_PTR_INFO (new_ptr_base))</span>
+<span class="lineNum">    1009 </span>            :     {
+<span class="lineNum">    1010 </span><span class="lineCov">     222031 :       tree base = get_base_address (old_ref);</span>
+<span class="lineNum">    1011 </span><span class="lineCov">     222031 :       if (!base)</span>
+<span class="lineNum">    1012 </span>            :         ;
+<span class="lineNum">    1013 </span><span class="lineCov">     222031 :       else if ((TREE_CODE (base) == MEM_REF</span>
+<span class="lineNum">    1014 </span><span class="lineCov">     222031 :                 || TREE_CODE (base) == TARGET_MEM_REF)</span>
+<span class="lineNum">    1015 </span><span class="lineCov">     186927 :                &amp;&amp; TREE_CODE (TREE_OPERAND (base, 0)) == SSA_NAME</span>
+<span class="lineNum">    1016 </span><span class="lineCov">     408954 :                &amp;&amp; SSA_NAME_PTR_INFO (TREE_OPERAND (base, 0)))</span>
+<span class="lineNum">    1017 </span>            :         {
+<span class="lineNum">    1018 </span><span class="lineCov">     171592 :           struct ptr_info_def *new_pi;</span>
+<span class="lineNum">    1019 </span><span class="lineCov">     171592 :           unsigned int align, misalign;</span>
+<span class="lineNum">    1020 </span>            : 
+<span class="lineNum">    1021 </span><span class="lineCov">     171592 :           duplicate_ssa_name_ptr_info</span>
+<span class="lineNum">    1022 </span><span class="lineCov">     171592 :             (new_ptr_base, SSA_NAME_PTR_INFO (TREE_OPERAND (base, 0)));</span>
+<span class="lineNum">    1023 </span><span class="lineCov">     171592 :           new_pi = SSA_NAME_PTR_INFO (new_ptr_base);</span>
+<span class="lineNum">    1024 </span>            :           /* We have to be careful about transferring alignment information.  */
+<span class="lineNum">    1025 </span><span class="lineCov">     171592 :           if (get_ptr_info_alignment (new_pi, &amp;align, &amp;misalign)</span>
+<span class="lineNum">    1026 </span><span class="lineCov">      40756 :               &amp;&amp; TREE_CODE (old_ref) == MEM_REF</span>
+<span class="lineNum">    1027 </span><span class="lineCov">     190099 :               &amp;&amp; !(TREE_CODE (new_ref) == TARGET_MEM_REF</span>
+<span class="lineNum">    1028 </span><span class="lineCov">      37014 :                    &amp;&amp; (TMR_INDEX2 (new_ref)</span>
+<span class="lineNum">    1029 </span>            :                        /* TODO: Below conditions can be relaxed if TMR_INDEX
+<span class="lineNum">    1030 </span>            :                           is an indcution variable and its initial value and
+<span class="lineNum">    1031 </span>            :                           step are aligned.  */
+<span class="lineNum">    1032 </span><span class="lineCov">      37014 :                        || (TMR_INDEX (new_ref) &amp;&amp; !TMR_STEP (new_ref))</span>
+<span class="lineNum">    1033 </span><span class="lineCov">      32904 :                        || (TMR_STEP (new_ref)</span>
+<span class="lineNum">    1034 </span><span class="lineCov">       1014 :                            &amp;&amp; (TREE_INT_CST_LOW (TMR_STEP (new_ref))</span>
+<span class="lineNum">    1035 </span><span class="lineCov">        507 :                                &lt; align)))))</span>
+<span class="lineNum">    1036 </span>            :             {
+<span class="lineNum">    1037 </span><span class="lineCov">      16414 :               poly_uint64 inc = (mem_ref_offset (old_ref)</span>
+<span class="lineNum">    1038 </span><span class="lineCov">      32828 :                                  - mem_ref_offset (new_ref)).force_uhwi ();</span>
+<span class="lineNum">    1039 </span><span class="lineCov">      16414 :               adjust_ptr_info_misalignment (new_pi, inc);</span>
+<span class="lineNum">    1040 </span>            :             }
+<span class="lineNum">    1041 </span>            :           else
+<span class="lineNum">    1042 </span><span class="lineCov">     155178 :             mark_ptr_info_alignment_unknown (new_pi);</span>
+<span class="lineNum">    1043 </span>            :         }
+<span class="lineNum">    1044 </span><span class="lineCov">      50439 :       else if (VAR_P (base)</span>
+<span class="lineNum">    1045 </span><span class="lineCov">      15527 :                || TREE_CODE (base) == PARM_DECL</span>
+<span class="lineNum">    1046 </span><span class="lineCov">      15335 :                || TREE_CODE (base) == RESULT_DECL)</span>
+<span class="lineNum">    1047 </span>            :         {
+<span class="lineNum">    1048 </span><span class="lineCov">      35104 :           struct ptr_info_def *pi = get_ptr_info (new_ptr_base);</span>
+<span class="lineNum">    1049 </span><span class="lineCov">      35104 :           pt_solution_set_var (&amp;pi-&gt;pt, base);</span>
+<span class="lineNum">    1050 </span>            :         }
+<span class="lineNum">    1051 </span>            :     }
+<span class="lineNum">    1052 </span><span class="lineCov">     483277 : }</span>
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span>            : /* Move constants in target_mem_ref REF to offset.  Returns the new target
+<span class="lineNum">    1055 </span>            :    mem ref if anything changes, NULL_TREE otherwise.  */
+<a name="1056"><span class="lineNum">    1056 </span>            : </a>
+<span class="lineNum">    1057 </span>            : tree
+<span class="lineNum">    1058 </span><span class="lineCov">     627161 : maybe_fold_tmr (tree ref)</span>
+<span class="lineNum">    1059 </span>            : {
+<span class="lineNum">    1060 </span><span class="lineCov">     627161 :   struct mem_address addr;</span>
+<span class="lineNum">    1061 </span><span class="lineCov">     627161 :   bool changed = false;</span>
+<span class="lineNum">    1062 </span><span class="lineCov">     627161 :   tree new_ref, off;</span>
+<span class="lineNum">    1063 </span>            : 
+<span class="lineNum">    1064 </span><span class="lineCov">     627161 :   get_address_description (ref, &amp;addr);</span>
+<span class="lineNum">    1065 </span>            : 
+<span class="lineNum">    1066 </span><span class="lineCov">     627161 :   if (addr.base</span>
+<span class="lineNum">    1067 </span><span class="lineCov">     492590 :       &amp;&amp; TREE_CODE (addr.base) == INTEGER_CST</span>
+<span class="lineNum">    1068 </span><span class="lineCov">     627461 :       &amp;&amp; !integer_zerop (addr.base))</span>
+<span class="lineNum">    1069 </span>            :     {
+<span class="lineNum">    1070 </span><span class="lineCov">         90 :       addr.offset = fold_binary_to_constant (PLUS_EXPR,</span>
+<span class="lineNum">    1071 </span><span class="lineCov">         30 :                                              TREE_TYPE (addr.offset),</span>
+<span class="lineNum">    1072 </span>            :                                              addr.offset, addr.base);
+<span class="lineNum">    1073 </span><span class="lineCov">         30 :       addr.base = NULL_TREE;</span>
+<span class="lineNum">    1074 </span><span class="lineCov">         30 :       changed = true;</span>
+<span class="lineNum">    1075 </span>            :     }
+<span class="lineNum">    1076 </span>            : 
+<span class="lineNum">    1077 </span><span class="lineCov">     627161 :   if (addr.symbol</span>
+<span class="lineNum">    1078 </span><span class="lineCov">     627161 :       &amp;&amp; TREE_CODE (TREE_OPERAND (addr.symbol, 0)) == MEM_REF)</span>
+<span class="lineNum">    1079 </span>            :     {
+<span class="lineNum">    1080 </span><span class="lineNoCov">          0 :       addr.offset = fold_binary_to_constant</span>
+<span class="lineNum">    1081 </span><span class="lineNoCov">          0 :                         (PLUS_EXPR, TREE_TYPE (addr.offset),</span>
+<span class="lineNum">    1082 </span>            :                          addr.offset,
+<span class="lineNum">    1083 </span><span class="lineNoCov">          0 :                          TREE_OPERAND (TREE_OPERAND (addr.symbol, 0), 1));</span>
+<span class="lineNum">    1084 </span><span class="lineNoCov">          0 :       addr.symbol = TREE_OPERAND (TREE_OPERAND (addr.symbol, 0), 0);</span>
+<span class="lineNum">    1085 </span><span class="lineNoCov">          0 :       changed = true;</span>
+<span class="lineNum">    1086 </span>            :     }
+<span class="lineNum">    1087 </span><span class="lineCov">     627161 :   else if (addr.symbol</span>
+<span class="lineNum">    1088 </span><span class="lineCov">     627161 :            &amp;&amp; handled_component_p (TREE_OPERAND (addr.symbol, 0)))</span>
+<span class="lineNum">    1089 </span>            :     {
+<span class="lineNum">    1090 </span><span class="lineNoCov">          0 :       poly_int64 offset;</span>
+<span class="lineNum">    1091 </span><span class="lineNoCov">          0 :       addr.symbol = build_fold_addr_expr</span>
+<span class="lineNum">    1092 </span>            :                       (get_addr_base_and_unit_offset
+<span class="lineNum">    1093 </span>            :                          (TREE_OPERAND (addr.symbol, 0), &amp;offset));
+<span class="lineNum">    1094 </span><span class="lineNoCov">          0 :       addr.offset = int_const_binop (PLUS_EXPR,</span>
+<span class="lineNum">    1095 </span><span class="lineNoCov">          0 :                                      addr.offset, size_int (offset));</span>
+<span class="lineNum">    1096 </span><span class="lineNoCov">          0 :       changed = true;</span>
+<span class="lineNum">    1097 </span>            :     }
+<span class="lineNum">    1098 </span>            : 
+<span class="lineNum">    1099 </span><span class="lineCov">     627161 :   if (addr.index &amp;&amp; TREE_CODE (addr.index) == INTEGER_CST)</span>
+<span class="lineNum">    1100 </span>            :     {
+<span class="lineNum">    1101 </span><span class="lineCov">        165 :       off = addr.index;</span>
+<span class="lineNum">    1102 </span><span class="lineCov">        165 :       if (addr.step)</span>
+<span class="lineNum">    1103 </span>            :         {
+<span class="lineNum">    1104 </span><span class="lineCov">        103 :           off = fold_binary_to_constant (MULT_EXPR, sizetype,</span>
+<span class="lineNum">    1105 </span>            :                                          off, addr.step);
+<span class="lineNum">    1106 </span><span class="lineCov">        103 :           addr.step = NULL_TREE;</span>
+<span class="lineNum">    1107 </span>            :         }
+<span class="lineNum">    1108 </span>            : 
+<span class="lineNum">    1109 </span><span class="lineCov">        495 :       addr.offset = fold_binary_to_constant (PLUS_EXPR,</span>
+<span class="lineNum">    1110 </span><span class="lineCov">        165 :                                              TREE_TYPE (addr.offset),</span>
+<span class="lineNum">    1111 </span>            :                                              addr.offset, off);
+<span class="lineNum">    1112 </span><span class="lineCov">        165 :       addr.index = NULL_TREE;</span>
+<span class="lineNum">    1113 </span><span class="lineCov">        165 :       changed = true;</span>
+<span class="lineNum">    1114 </span>            :     }
+<span class="lineNum">    1115 </span>            : 
+<span class="lineNum">    1116 </span><span class="lineCov">     627161 :   if (!changed)</span>
+<span class="lineNum">    1117 </span>            :     return NULL_TREE;
+<span class="lineNum">    1118 </span>            : 
+<span class="lineNum">    1119 </span>            :   /* If we have propagated something into this TARGET_MEM_REF and thus
+<span class="lineNum">    1120 </span>            :      ended up folding it, always create a new TARGET_MEM_REF regardless
+<span class="lineNum">    1121 </span>            :      if it is valid in this for on the target - the propagation result
+<span class="lineNum">    1122 </span>            :      wouldn't be anyway.  */
+<span class="lineNum">    1123 </span><span class="lineCov">        195 :   new_ref = create_mem_ref_raw (TREE_TYPE (ref),</span>
+<span class="lineNum">    1124 </span><span class="lineCov">        195 :                                 TREE_TYPE (addr.offset), &amp;addr, false);</span>
+<span class="lineNum">    1125 </span><span class="lineCov">        195 :   TREE_SIDE_EFFECTS (new_ref) = TREE_SIDE_EFFECTS (ref);</span>
+<span class="lineNum">    1126 </span><span class="lineCov">        195 :   TREE_THIS_VOLATILE (new_ref) = TREE_THIS_VOLATILE (ref);</span>
+<span class="lineNum">    1127 </span><span class="lineCov">        195 :   return new_ref;</span>
+<span class="lineNum">    1128 </span>            : }
+<span class="lineNum">    1129 </span>            : 
+<span class="lineNum">    1130 </span>            : /* Dump PARTS to FILE.  */
+<span class="lineNum">    1131 </span>            : 
+<a name="1132"><span class="lineNum">    1132 </span>            : extern void dump_mem_address (FILE *, struct mem_address *);</a>
+<span class="lineNum">    1133 </span>            : void
+<span class="lineNum">    1134 </span><span class="lineNoCov">          0 : dump_mem_address (FILE *file, struct mem_address *parts)</span>
+<span class="lineNum">    1135 </span>            : {
+<span class="lineNum">    1136 </span><span class="lineNoCov">          0 :   if (parts-&gt;symbol)</span>
+<span class="lineNum">    1137 </span>            :     {
+<span class="lineNum">    1138 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;symbol: &quot;);</span>
+<span class="lineNum">    1139 </span><span class="lineNoCov">          0 :       print_generic_expr (file, TREE_OPERAND (parts-&gt;symbol, 0), TDF_SLIM);</span>
+<span class="lineNum">    1140 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1141 </span>            :     }
+<span class="lineNum">    1142 </span><span class="lineNoCov">          0 :   if (parts-&gt;base)</span>
+<span class="lineNum">    1143 </span>            :     {
+<span class="lineNum">    1144 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;base: &quot;);</span>
+<span class="lineNum">    1145 </span><span class="lineNoCov">          0 :       print_generic_expr (file, parts-&gt;base, TDF_SLIM);</span>
+<span class="lineNum">    1146 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1147 </span>            :     }
+<span class="lineNum">    1148 </span><span class="lineNoCov">          0 :   if (parts-&gt;index)</span>
+<span class="lineNum">    1149 </span>            :     {
+<span class="lineNum">    1150 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;index: &quot;);</span>
+<span class="lineNum">    1151 </span><span class="lineNoCov">          0 :       print_generic_expr (file, parts-&gt;index, TDF_SLIM);</span>
+<span class="lineNum">    1152 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1153 </span>            :     }
+<span class="lineNum">    1154 </span><span class="lineNoCov">          0 :   if (parts-&gt;step)</span>
+<span class="lineNum">    1155 </span>            :     {
+<span class="lineNum">    1156 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;step: &quot;);</span>
+<span class="lineNum">    1157 </span><span class="lineNoCov">          0 :       print_generic_expr (file, parts-&gt;step, TDF_SLIM);</span>
+<span class="lineNum">    1158 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1159 </span>            :     }
+<span class="lineNum">    1160 </span><span class="lineNoCov">          0 :   if (parts-&gt;offset)</span>
+<span class="lineNum">    1161 </span>            :     {
+<span class="lineNum">    1162 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;offset: &quot;);</span>
+<span class="lineNum">    1163 </span><span class="lineNoCov">          0 :       print_generic_expr (file, parts-&gt;offset, TDF_SLIM);</span>
+<span class="lineNum">    1164 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1165 </span>            :     }
+<span class="lineNum">    1166 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            : #include &quot;gt-tree-ssa-address.h&quot;
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

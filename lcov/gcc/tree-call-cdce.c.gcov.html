@@ -1,0 +1,1242 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-call-cdce.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-call-cdce.c<span style="font-size: 80%;"> (source / <a href="tree-call-cdce.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">410</td>
+            <td class="headerCovTableEntry">441</td>
+            <td class="headerCovTableEntryHi">93.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntryHi">95.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Conditional Dead Call Elimination pass for the GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2008-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Xinliang David Li &lt;davidxl@google.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       8 </span>            : under the terms of the GNU General Public License as published by the
+<span class="lineNum">       9 </span>            : Free Software Foundation; either version 3, or (at your option) any
+<span class="lineNum">      10 </span>            : later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT
+<span class="lineNum">      13 </span>            : ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-into-ssa.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;builtins.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;internal-fn.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : /* This pass serves two closely-related purposes:
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :    1. It conditionally executes calls that set errno if (a) the result of
+<span class="lineNum">      44 </span>            :       the call is unused and (b) a simple range check on the arguments can
+<span class="lineNum">      45 </span>            :       detect most cases where errno does not need to be set.
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :       This is the &quot;conditional dead-code elimination&quot; that gave the pass
+<span class="lineNum">      48 </span>            :       its original name, since the call is dead for most argument values.
+<span class="lineNum">      49 </span>            :       The calls for which it helps are usually part of the C++ abstraction
+<span class="lineNum">      50 </span>            :       penalty exposed after inlining.
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            :    2. It looks for calls to built-in functions that set errno and whose
+<span class="lineNum">      53 </span>            :       result is used.  It checks whether there is an associated internal
+<span class="lineNum">      54 </span>            :       function that doesn't set errno and whether the target supports
+<span class="lineNum">      55 </span>            :       that internal function.  If so, the pass uses the internal function
+<span class="lineNum">      56 </span>            :       to compute the result of the built-in function but still arranges
+<span class="lineNum">      57 </span>            :       for errno to be set when necessary.  There are two ways of setting
+<span class="lineNum">      58 </span>            :       errno:
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :       a. by protecting the original call with the same argument checks as (1)
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            :       b. by protecting the original call with a check that the result
+<span class="lineNum">      63 </span>            :          of the internal function is not equal to itself (i.e. is NaN).
+<span class="lineNum">      64 </span>            : 
+<span class="lineNum">      65 </span>            :       (b) requires that NaNs are the only erroneous results.  It is not
+<span class="lineNum">      66 </span>            :       appropriate for functions like log, which returns ERANGE for zero
+<span class="lineNum">      67 </span>            :       arguments.  (b) is also likely to perform worse than (a) because it
+<span class="lineNum">      68 </span>            :       requires the result to be calculated first.  The pass therefore uses
+<span class="lineNum">      69 </span>            :       (a) when it can and uses (b) as a fallback.
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            :       For (b) the pass can replace the original call with a call to
+<span class="lineNum">      72 </span>            :       IFN_SET_EDOM, if the target supports direct assignments to errno.
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :    In both cases, arguments that require errno to be set should occur
+<span class="lineNum">      75 </span>            :    rarely in practice.  Checks of the errno result should also be rare,
+<span class="lineNum">      76 </span>            :    but the compiler would need powerful interprocedural analysis to
+<span class="lineNum">      77 </span>            :    prove that errno is not checked.  It's much easier to add argument
+<span class="lineNum">      78 </span>            :    checks or result checks instead.
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            :      An example of (1) is:
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            :          log (x);   // Mostly dead call
+<span class="lineNum">      83 </span>            :      ==&gt;
+<span class="lineNum">      84 </span>            :          if (__builtin_islessequal (x, 0))
+<span class="lineNum">      85 </span>            :              log (x);
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            :      With this change, call to log (x) is effectively eliminated, as
+<span class="lineNum">      88 </span>            :      in the majority of the cases, log won't be called with x out of
+<span class="lineNum">      89 </span>            :      range.  The branch is totally predictable, so the branch cost
+<span class="lineNum">      90 </span>            :      is low.
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            :      An example of (2) is:
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            :         y = sqrt (x);
+<span class="lineNum">      95 </span>            :      ==&gt;
+<span class="lineNum">      96 </span>            :         y = IFN_SQRT (x);
+<span class="lineNum">      97 </span>            :         if (__builtin_isless (x, 0))
+<span class="lineNum">      98 </span>            :             sqrt (x);
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            :      In the vast majority of cases we should then never need to call sqrt.
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            :    Note that library functions are not supposed to clear errno to zero without
+<span class="lineNum">     103 </span>            :    error.  See IEEE Std 1003.1, section 2.3 Error Numbers, and section 7.5:3 of
+<span class="lineNum">     104 </span>            :    ISO/IEC 9899 (C99).
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span>            :    The condition wrapping the builtin call is conservatively set to avoid too
+<span class="lineNum">     107 </span>            :    aggressive (wrong) shrink wrapping.  */
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span>            : /* A structure for representing input domain of
+<span class="lineNum">     111 </span>            :    a function argument in integer.  If the lower
+<span class="lineNum">     112 </span>            :    bound is -inf, has_lb is set to false.  If the
+<span class="lineNum">     113 </span>            :    upper bound is +inf, has_ub is false.
+<span class="lineNum">     114 </span>            :    is_lb_inclusive and is_ub_inclusive are flags
+<span class="lineNum">     115 </span>            :    to indicate if lb and ub value are inclusive
+<span class="lineNum">     116 </span>            :    respectively.  */
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            : struct inp_domain
+<span class="lineNum">     119 </span>            : {
+<span class="lineNum">     120 </span>            :   int lb;
+<span class="lineNum">     121 </span>            :   int ub;
+<span class="lineNum">     122 </span>            :   bool has_lb;
+<span class="lineNum">     123 </span>            :   bool has_ub;
+<span class="lineNum">     124 </span>            :   bool is_lb_inclusive;
+<span class="lineNum">     125 </span>            :   bool is_ub_inclusive;
+<span class="lineNum">     126 </span>            : };
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span>            : /* A helper function to construct and return an input
+<span class="lineNum">     129 </span>            :    domain object.  LB is the lower bound, HAS_LB is
+<span class="lineNum">     130 </span>            :    a boolean flag indicating if the lower bound exists,
+<span class="lineNum">     131 </span>            :    and LB_INCLUSIVE is a boolean flag indicating if the
+<span class="lineNum">     132 </span>            :    lower bound is inclusive or not.  UB, HAS_UB, and
+<span class="lineNum">     133 </span>            :    UB_INCLUSIVE have the same meaning, but for upper
+<span class="lineNum">     134 </span>            :    bound of the domain.  */
+<a name="135"><span class="lineNum">     135 </span>            : </a>
+<span class="lineNum">     136 </span>            : static inp_domain
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 : get_domain (int lb, bool has_lb, bool lb_inclusive,</span>
+<span class="lineNum">     138 </span>            :             int ub, bool has_ub, bool ub_inclusive)
+<span class="lineNum">     139 </span>            : {
+<span class="lineNum">     140 </span><span class="lineCov">       1997 :   inp_domain domain;</span>
+<span class="lineNum">     141 </span><span class="lineCov">       1997 :   domain.lb = lb;</span>
+<span class="lineNum">     142 </span><span class="lineCov">       1997 :   domain.has_lb = has_lb;</span>
+<span class="lineNum">     143 </span><span class="lineCov">       1997 :   domain.is_lb_inclusive = lb_inclusive;</span>
+<span class="lineNum">     144 </span><span class="lineCov">       1997 :   domain.ub = ub;</span>
+<span class="lineNum">     145 </span><span class="lineCov">       1997 :   domain.has_ub = has_ub;</span>
+<span class="lineNum">     146 </span><span class="lineCov">       1997 :   domain.is_ub_inclusive = ub_inclusive;</span>
+<span class="lineNum">     147 </span><span class="lineCov">       1997 :   return domain;</span>
+<span class="lineNum">     148 </span>            : }
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            : /* A helper function to check the target format for the
+<span class="lineNum">     151 </span>            :    argument type. In this implementation, only IEEE formats
+<span class="lineNum">     152 </span>            :    are supported.  ARG is the call argument to be checked.
+<span class="lineNum">     153 </span>            :    Returns true if the format is supported.  To support other
+<span class="lineNum">     154 </span>            :    target formats,  function get_no_error_domain needs to be
+<span class="lineNum">     155 </span>            :    enhanced to have range bounds properly computed. Since
+<span class="lineNum">     156 </span>            :    the check is cheap (very small number of candidates
+<span class="lineNum">     157 </span>            :    to be checked), the result is not cached for each float type.  */
+<a name="158"><span class="lineNum">     158 </span>            : </a>
+<span class="lineNum">     159 </span>            : static bool
+<span class="lineNum">     160 </span><span class="lineCov">       3556 : check_target_format (tree arg)</span>
+<span class="lineNum">     161 </span>            : {
+<span class="lineNum">     162 </span><span class="lineCov">       3556 :   tree type;</span>
+<span class="lineNum">     163 </span><span class="lineCov">       3556 :   machine_mode mode;</span>
+<span class="lineNum">     164 </span><span class="lineCov">       3556 :   const struct real_format *rfmt;</span>
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span><span class="lineCov">       3556 :   type = TREE_TYPE (arg);</span>
+<span class="lineNum">     167 </span><span class="lineCov">       3556 :   mode = TYPE_MODE (type);</span>
+<span class="lineNum">     168 </span><span class="lineCov">       3556 :   rfmt = REAL_MODE_FORMAT (mode);</span>
+<span class="lineNum">     169 </span><span class="lineCov">       3556 :   if ((mode == SFmode</span>
+<span class="lineNum">     170 </span><span class="lineCov">        877 :        &amp;&amp; (rfmt == &amp;ieee_single_format || rfmt == &amp;mips_single_format</span>
+<span class="lineNum">     171 </span><span class="lineNoCov">          0 :            || rfmt == &amp;motorola_single_format))</span>
+<span class="lineNum">     172 </span><span class="lineCov">       5358 :       || (mode == DFmode</span>
+<span class="lineNum">     173 </span><span class="lineCov">       1835 :           &amp;&amp; (rfmt == &amp;ieee_double_format || rfmt == &amp;mips_double_format</span>
+<span class="lineNum">     174 </span><span class="lineNoCov">          0 :               || rfmt == &amp;motorola_double_format))</span>
+<span class="lineNum">     175 </span>            :       /* For long double, we can not really check XFmode
+<span class="lineNum">     176 </span>            :          which is only defined on intel platforms.
+<span class="lineNum">     177 </span>            :          Candidate pre-selection using builtin function
+<span class="lineNum">     178 </span>            :          code guarantees that we are checking formats
+<span class="lineNum">     179 </span>            :          for long double modes: double, quad, and extended.  */
+<span class="lineNum">     180 </span><span class="lineCov">       5244 :       || (mode != SFmode &amp;&amp; mode != DFmode</span>
+<span class="lineNum">     181 </span><span class="lineCov">        844 :           &amp;&amp; (rfmt == &amp;ieee_quad_format</span>
+<span class="lineNum">     182 </span><span class="lineCov">        844 :               || rfmt == &amp;mips_quad_format</span>
+<span class="lineNum">     183 </span><span class="lineCov">        844 :               || rfmt == &amp;ieee_extended_motorola_format</span>
+<span class="lineNum">     184 </span><span class="lineCov">        844 :               || rfmt == &amp;ieee_extended_intel_96_format</span>
+<span class="lineNum">     185 </span><span class="lineCov">        836 :               || rfmt == &amp;ieee_extended_intel_128_format</span>
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 :               || rfmt == &amp;ieee_extended_intel_96_round_53_format)))</span>
+<span class="lineNum">     187 </span><span class="lineCov">       3556 :     return true;</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            :   return false;
+<span class="lineNum">     190 </span>            : }
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span>            : /* A helper function to help select calls to pow that are suitable for
+<span class="lineNum">     194 </span>            :    conditional DCE transformation.  It looks for pow calls that can be
+<span class="lineNum">     195 </span>            :    guided with simple conditions.  Such calls either have constant base
+<span class="lineNum">     196 </span>            :    values or base values converted from integers.  Returns true if
+<span class="lineNum">     197 </span>            :    the pow call POW_CALL is a candidate.  */
+<span class="lineNum">     198 </span>            : 
+<span class="lineNum">     199 </span>            : /* The maximum integer bit size for base argument of a pow call
+<span class="lineNum">     200 </span>            :    that is suitable for shrink-wrapping transformation.  */
+<span class="lineNum">     201 </span>            : #define MAX_BASE_INT_BIT_SIZE 32
+<a name="202"><span class="lineNum">     202 </span>            : </a>
+<span class="lineNum">     203 </span>            : static bool
+<span class="lineNum">     204 </span><span class="lineCov">         35 : check_pow (gcall *pow_call)</span>
+<span class="lineNum">     205 </span>            : {
+<span class="lineNum">     206 </span><span class="lineCov">         35 :   tree base, expn;</span>
+<span class="lineNum">     207 </span><span class="lineCov">         35 :   enum tree_code bc, ec;</span>
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span><span class="lineCov">         70 :   if (gimple_call_num_args (pow_call) != 2)</span>
+<span class="lineNum">     210 </span>            :     return false;
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span><span class="lineCov">         35 :   base = gimple_call_arg (pow_call, 0);</span>
+<span class="lineNum">     213 </span><span class="lineCov">         35 :   expn = gimple_call_arg (pow_call, 1);</span>
+<span class="lineNum">     214 </span>            : 
+<span class="lineNum">     215 </span><span class="lineCov">         35 :   if (!check_target_format (expn))</span>
+<span class="lineNum">     216 </span>            :     return false;
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span><span class="lineCov">         35 :   bc = TREE_CODE (base);</span>
+<span class="lineNum">     219 </span><span class="lineCov">         35 :   ec = TREE_CODE (expn);</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span>            :   /* Folding candidates are not interesting.
+<span class="lineNum">     222 </span>            :      Can actually assert that it is already folded.  */
+<span class="lineNum">     223 </span><span class="lineCov">         35 :   if (ec == REAL_CST &amp;&amp; bc == REAL_CST)</span>
+<span class="lineNum">     224 </span>            :     return false;
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span><span class="lineCov">         35 :   if (bc == REAL_CST)</span>
+<span class="lineNum">     227 </span>            :     {
+<span class="lineNum">     228 </span>            :       /* Only handle a fixed range of constant.  */
+<span class="lineNum">     229 </span><span class="lineCov">         12 :       REAL_VALUE_TYPE mv;</span>
+<span class="lineNum">     230 </span><span class="lineCov">         12 :       REAL_VALUE_TYPE bcv = TREE_REAL_CST (base);</span>
+<span class="lineNum">     231 </span><span class="lineCov">         12 :       if (real_equal (&amp;bcv, &amp;dconst1))</span>
+<span class="lineNum">     232 </span>            :         return false;
+<span class="lineNum">     233 </span><span class="lineCov">         12 :       if (real_less (&amp;bcv, &amp;dconst1))</span>
+<span class="lineNum">     234 </span>            :         return false;
+<span class="lineNum">     235 </span><span class="lineCov">         24 :       real_from_integer (&amp;mv, TYPE_MODE (TREE_TYPE (base)), 256, UNSIGNED);</span>
+<span class="lineNum">     236 </span><span class="lineCov">         12 :       if (real_less (&amp;mv, &amp;bcv))</span>
+<span class="lineNum">     237 </span>            :         return false;
+<span class="lineNum">     238 </span><span class="lineCov">         12 :       return true;</span>
+<span class="lineNum">     239 </span>            :     }
+<span class="lineNum">     240 </span><span class="lineCov">         23 :   else if (bc == SSA_NAME)</span>
+<span class="lineNum">     241 </span>            :     {
+<span class="lineNum">     242 </span><span class="lineCov">         23 :       tree base_val0, type;</span>
+<span class="lineNum">     243 </span><span class="lineCov">         23 :       gimple *base_def;</span>
+<span class="lineNum">     244 </span><span class="lineCov">         23 :       int bit_sz;</span>
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span>            :       /* Only handles cases where base value is converted
+<span class="lineNum">     247 </span>            :          from integer values.  */
+<span class="lineNum">     248 </span><span class="lineCov">         23 :       base_def = SSA_NAME_DEF_STMT (base);</span>
+<span class="lineNum">     249 </span><span class="lineCov">         46 :       if (gimple_code (base_def) != GIMPLE_ASSIGN)</span>
+<span class="lineNum">     250 </span>            :         return false;
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span><span class="lineCov">         15 :       if (gimple_assign_rhs_code (base_def) != FLOAT_EXPR)</span>
+<span class="lineNum">     253 </span>            :         return false;
+<span class="lineNum">     254 </span><span class="lineCov">         14 :       base_val0 = gimple_assign_rhs1 (base_def);</span>
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">         14 :       type = TREE_TYPE (base_val0);</span>
+<span class="lineNum">     257 </span><span class="lineCov">         14 :       if (TREE_CODE (type) != INTEGER_TYPE)</span>
+<span class="lineNum">     258 </span>            :         return false;
+<span class="lineNum">     259 </span><span class="lineCov">         14 :       bit_sz = TYPE_PRECISION (type);</span>
+<span class="lineNum">     260 </span>            :       /* If the type of the base is too wide,
+<span class="lineNum">     261 </span>            :          the resulting shrink wrapping condition
+<span class="lineNum">     262 </span>            :          will be too conservative.  */
+<span class="lineNum">     263 </span><span class="lineCov">         14 :       if (bit_sz &gt; MAX_BASE_INT_BIT_SIZE)</span>
+<span class="lineNum">     264 </span>            :         return false;
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span><span class="lineCov">         14 :       return true;</span>
+<span class="lineNum">     267 </span>            :     }
+<span class="lineNum">     268 </span>            :   else
+<span class="lineNum">     269 </span>            :     return false;
+<span class="lineNum">     270 </span>            : }
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : /* A helper function to help select candidate function calls that are
+<span class="lineNum">     273 </span>            :    suitable for conditional DCE.  Candidate functions must have single
+<span class="lineNum">     274 </span>            :    valid input domain in this implementation except for pow (see check_pow).
+<span class="lineNum">     275 </span>            :    Returns true if the function call is a candidate.  */
+<a name="276"><span class="lineNum">     276 </span>            : </a>
+<span class="lineNum">     277 </span>            : static bool
+<span class="lineNum">     278 </span><span class="lineCov">       3521 : check_builtin_call (gcall *bcall)</span>
+<span class="lineNum">     279 </span>            : {
+<span class="lineNum">     280 </span><span class="lineCov">       3521 :   tree arg;</span>
+<span class="lineNum">     281 </span>            : 
+<span class="lineNum">     282 </span><span class="lineCov">       3521 :   arg = gimple_call_arg (bcall, 0);</span>
+<span class="lineNum">     283 </span><span class="lineCov">       3521 :   return check_target_format (arg);</span>
+<span class="lineNum">     284 </span>            : }
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span>            : /* Return true if built-in function call CALL calls a math function
+<span class="lineNum">     287 </span>            :    and if we know how to test the range of its arguments to detect _most_
+<span class="lineNum">     288 </span>            :    situations in which errno is not set.  The test must err on the side
+<span class="lineNum">     289 </span>            :    of treating non-erroneous values as potentially erroneous.  */
+<a name="290"><span class="lineNum">     290 </span>            : </a>
+<span class="lineNum">     291 </span>            : static bool
+<span class="lineNum">     292 </span><span class="lineCov">     157679 : can_test_argument_range (gcall *call)</span>
+<span class="lineNum">     293 </span>            : {
+<span class="lineNum">     294 </span><span class="lineCov">     157679 :   switch (DECL_FUNCTION_CODE (gimple_call_fndecl (call)))</span>
+<span class="lineNum">     295 </span>            :     {
+<span class="lineNum">     296 </span>            :     /* Trig functions.  */
+<span class="lineNum">     297 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_ACOS):</span>
+<span class="lineNum">     298 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_ASIN):</span>
+<span class="lineNum">     299 </span>            :     /* Hyperbolic functions.  */
+<span class="lineNum">     300 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_ACOSH):</span>
+<span class="lineNum">     301 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_ATANH):</span>
+<span class="lineNum">     302 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_COSH):</span>
+<span class="lineNum">     303 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_SINH):</span>
+<span class="lineNum">     304 </span>            :     /* Log functions.  */
+<span class="lineNum">     305 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_LOG):</span>
+<span class="lineNum">     306 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_LOG2):</span>
+<span class="lineNum">     307 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_LOG10):</span>
+<span class="lineNum">     308 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_LOG1P):</span>
+<span class="lineNum">     309 </span>            :     /* Exp functions.  */
+<span class="lineNum">     310 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_EXP):</span>
+<span class="lineNum">     311 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_EXP2):</span>
+<span class="lineNum">     312 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_EXP10):</span>
+<span class="lineNum">     313 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_EXPM1):</span>
+<span class="lineNum">     314 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_POW10):</span>
+<span class="lineNum">     315 </span>            :     /* Sqrt.  */
+<span class="lineNum">     316 </span><span class="lineCov">       3521 :     CASE_FLT_FN (BUILT_IN_SQRT):</span>
+<span class="lineNum">     317 </span><span class="lineCov">       3521 :     CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):</span>
+<span class="lineNum">     318 </span><span class="lineCov">       3521 :       return check_builtin_call (call);</span>
+<span class="lineNum">     319 </span>            :     /* Special one: two argument pow.  */
+<span class="lineNum">     320 </span><span class="lineCov">         22 :     case BUILT_IN_POW:</span>
+<span class="lineNum">     321 </span><span class="lineCov">         22 :       return check_pow (call);</span>
+<span class="lineNum">     322 </span>            :     default:
+<span class="lineNum">     323 </span>            :       break;
+<span class="lineNum">     324 </span>            :     }
+<span class="lineNum">     325 </span>            : 
+<span class="lineNum">     326 </span>            :   return false;
+<span class="lineNum">     327 </span>            : }
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span>            : /* Return true if CALL can produce a domain error (EDOM) but can never
+<span class="lineNum">     330 </span>            :    produce a pole, range overflow or range underflow error (all ERANGE).
+<span class="lineNum">     331 </span>            :    This means that we can tell whether a function would have set errno
+<span class="lineNum">     332 </span>            :    by testing whether the result is a NaN.  */
+<a name="333"><span class="lineNum">     333 </span>            : </a>
+<span class="lineNum">     334 </span>            : static bool
+<span class="lineNum">     335 </span><span class="lineCov">          2 : edom_only_function (gcall *call)</span>
+<span class="lineNum">     336 </span>            : {
+<span class="lineNum">     337 </span><span class="lineCov">          2 :   switch (DECL_FUNCTION_CODE (gimple_call_fndecl (call)))</span>
+<span class="lineNum">     338 </span>            :     {
+<span class="lineNum">     339 </span>            :     CASE_FLT_FN (BUILT_IN_ACOS):
+<span class="lineNum">     340 </span>            :     CASE_FLT_FN (BUILT_IN_ASIN):
+<span class="lineNum">     341 </span>            :     CASE_FLT_FN (BUILT_IN_ATAN):
+<span class="lineNum">     342 </span>            :     CASE_FLT_FN (BUILT_IN_COS):
+<span class="lineNum">     343 </span>            :     CASE_FLT_FN (BUILT_IN_SIGNIFICAND):
+<span class="lineNum">     344 </span>            :     CASE_FLT_FN (BUILT_IN_SIN):
+<span class="lineNum">     345 </span>            :     CASE_FLT_FN (BUILT_IN_SQRT):
+<span class="lineNum">     346 </span>            :     CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
+<span class="lineNum">     347 </span>            :     CASE_FLT_FN (BUILT_IN_FMOD):
+<span class="lineNum">     348 </span>            :     CASE_FLT_FN (BUILT_IN_REMAINDER):
+<span class="lineNum">     349 </span>            :       return true;
+<span class="lineNum">     350 </span>            : 
+<span class="lineNum">     351 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     352 </span><span class="lineNoCov">          0 :       return false;</span>
+<span class="lineNum">     353 </span>            :     }
+<span class="lineNum">     354 </span>            : }
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span>            : /* Return true if it is structurally possible to guard CALL.  */
+<a name="357"><span class="lineNum">     357 </span>            : </a>
+<span class="lineNum">     358 </span>            : static bool
+<span class="lineNum">     359 </span><span class="lineCov">       1998 : can_guard_call_p (gimple *call)</span>
+<span class="lineNum">     360 </span>            : {
+<span class="lineNum">     361 </span><span class="lineCov">       1998 :   return (!stmt_ends_bb_p (call)</span>
+<span class="lineNum">     362 </span><span class="lineCov">       1998 :           || find_fallthru_edge (gimple_bb (call)-&gt;succs));</span>
+<span class="lineNum">     363 </span>            : }
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span>            : /* A helper function to generate gimple statements for one bound
+<span class="lineNum">     366 </span>            :    comparison, so that the built-in function is called whenever
+<span class="lineNum">     367 </span>            :    TCODE &lt;ARG, LBUB&gt; is *false*.  TEMP_NAME1/TEMP_NAME2 are names
+<span class="lineNum">     368 </span>            :    of the temporaries, CONDS is a vector holding the produced GIMPLE
+<span class="lineNum">     369 </span>            :    statements, and NCONDS points to the variable holding the number of
+<span class="lineNum">     370 </span>            :    logical comparisons.  CONDS is either empty or a list ended with a
+<span class="lineNum">     371 </span>            :    null tree.  */
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            : static void
+<span class="lineNum">     374 </span><span class="lineCov">       2093 : gen_one_condition (tree arg, int lbub,</span>
+<span class="lineNum">     375 </span>            :                    enum tree_code tcode,
+<span class="lineNum">     376 </span>            :                    const char *temp_name1,
+<span class="lineNum">     377 </span>            :                    const char *temp_name2,
+<span class="lineNum">     378 </span>            :                    vec&lt;gimple *&gt; conds,
+<span class="lineNum">     379 </span>            :                    unsigned *nconds)
+<span class="lineNum">     380 </span>            : {
+<span class="lineNum">     381 </span><span class="lineCov">       2093 :   tree lbub_real_cst, lbub_cst, float_type;</span>
+<span class="lineNum">     382 </span><span class="lineCov">       2093 :   tree temp, tempn, tempc, tempcn;</span>
+<span class="lineNum">     383 </span><span class="lineCov">       2093 :   gassign *stmt1;</span>
+<span class="lineNum">     384 </span><span class="lineCov">       2093 :   gassign *stmt2;</span>
+<span class="lineNum">     385 </span><span class="lineCov">       2093 :   gcond *stmt3;</span>
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span><span class="lineCov">       2093 :   float_type = TREE_TYPE (arg);</span>
+<span class="lineNum">     388 </span><span class="lineCov">       4186 :   lbub_cst = build_int_cst (integer_type_node, lbub);</span>
+<span class="lineNum">     389 </span><span class="lineCov">       2093 :   lbub_real_cst = build_real_from_int_cst (float_type, lbub_cst);</span>
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span><span class="lineCov">       2093 :   temp = create_tmp_var (float_type, temp_name1);</span>
+<span class="lineNum">     392 </span><span class="lineCov">       2093 :   stmt1 = gimple_build_assign (temp, arg);</span>
+<span class="lineNum">     393 </span><span class="lineCov">       2093 :   tempn = make_ssa_name (temp, stmt1);</span>
+<span class="lineNum">     394 </span><span class="lineCov">       2093 :   gimple_assign_set_lhs (stmt1, tempn);</span>
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span><span class="lineCov">       2093 :   tempc = create_tmp_var (boolean_type_node, temp_name2);</span>
+<span class="lineNum">     397 </span><span class="lineCov">       2093 :   stmt2 = gimple_build_assign (tempc,</span>
+<span class="lineNum">     398 </span>            :                                fold_build2 (tcode,
+<span class="lineNum">     399 </span>            :                                             boolean_type_node,
+<span class="lineNum">     400 </span>            :                                             tempn, lbub_real_cst));
+<span class="lineNum">     401 </span><span class="lineCov">       2093 :   tempcn = make_ssa_name (tempc, stmt2);</span>
+<span class="lineNum">     402 </span><span class="lineCov">       2093 :   gimple_assign_set_lhs (stmt2, tempcn);</span>
+<span class="lineNum">     403 </span>            : 
+<span class="lineNum">     404 </span><span class="lineCov">       2093 :   stmt3 = gimple_build_cond_from_tree (tempcn, NULL_TREE, NULL_TREE);</span>
+<span class="lineNum">     405 </span><span class="lineCov">       2093 :   conds.quick_push (stmt1);</span>
+<span class="lineNum">     406 </span><span class="lineCov">       2093 :   conds.quick_push (stmt2);</span>
+<span class="lineNum">     407 </span><span class="lineCov">       2093 :   conds.quick_push (stmt3);</span>
+<span class="lineNum">     408 </span><span class="lineCov">       2093 :   (*nconds)++;</span>
+<span class="lineNum">     409 </span><span class="lineCov">       2093 : }</span>
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            : /* A helper function to generate GIMPLE statements for
+<span class="lineNum">     412 </span>            :    out of input domain check.  ARG is the call argument
+<span class="lineNum">     413 </span>            :    to be runtime checked, DOMAIN holds the valid domain
+<span class="lineNum">     414 </span>            :    for the given function, CONDS points to the vector
+<span class="lineNum">     415 </span>            :    holding the result GIMPLE statements.  *NCONDS is
+<span class="lineNum">     416 </span>            :    the number of logical comparisons.  This function
+<span class="lineNum">     417 </span>            :    produces no more than two logical comparisons, one
+<span class="lineNum">     418 </span>            :    for lower bound check, one for upper bound check.  */
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span>            : static void
+<span class="lineNum">     421 </span><span class="lineCov">       1997 : gen_conditions_for_domain (tree arg, inp_domain domain,</span>
+<span class="lineNum">     422 </span>            :                            vec&lt;gimple *&gt; conds,
+<span class="lineNum">     423 </span>            :                            unsigned *nconds)
+<span class="lineNum">     424 </span>            : {
+<span class="lineNum">     425 </span><span class="lineCov">       1997 :   if (domain.has_lb)</span>
+<span class="lineNum">     426 </span><span class="lineCov">       1802 :     gen_one_condition (arg, domain.lb,</span>
+<span class="lineNum">     427 </span><span class="lineCov">       1802 :                        (domain.is_lb_inclusive</span>
+<span class="lineNum">     428 </span>            :                         ? UNGE_EXPR : UNGT_EXPR),
+<span class="lineNum">     429 </span>            :                        &quot;DCE_COND_LB&quot;, &quot;DCE_COND_LB_TEST&quot;,
+<span class="lineNum">     430 </span>            :                        conds, nconds);
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">       1997 :   if (domain.has_ub)</span>
+<span class="lineNum">     433 </span>            :     {
+<span class="lineNum">     434 </span>            :       /* Now push a separator.  */
+<span class="lineNum">     435 </span><span class="lineCov">        291 :       if (domain.has_lb)</span>
+<span class="lineNum">     436 </span><span class="lineCov">         96 :         conds.quick_push (NULL);</span>
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span><span class="lineCov">        291 :       gen_one_condition (arg, domain.ub,</span>
+<span class="lineNum">     439 </span><span class="lineCov">        291 :                          (domain.is_ub_inclusive</span>
+<span class="lineNum">     440 </span>            :                           ? UNLE_EXPR : UNLT_EXPR),
+<span class="lineNum">     441 </span>            :                          &quot;DCE_COND_UB&quot;, &quot;DCE_COND_UB_TEST&quot;,
+<span class="lineNum">     442 </span>            :                          conds, nconds);
+<span class="lineNum">     443 </span>            :     }
+<span class="lineNum">     444 </span><span class="lineCov">       1997 : }</span>
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            : /* A helper function to generate condition
+<span class="lineNum">     448 </span>            :    code for the y argument in call pow (some_const, y).
+<span class="lineNum">     449 </span>            :    See candidate selection in check_pow.  Since the
+<span class="lineNum">     450 </span>            :    candidates' base values have a limited range,
+<span class="lineNum">     451 </span>            :    the guarded code generated for y are simple:
+<span class="lineNum">     452 </span>            :    if (__builtin_isgreater (y, max_y))
+<span class="lineNum">     453 </span>            :      pow (const, y);
+<span class="lineNum">     454 </span>            :    Note max_y can be computed separately for each
+<span class="lineNum">     455 </span>            :    const base, but in this implementation, we
+<span class="lineNum">     456 </span>            :    choose to compute it using the max base
+<span class="lineNum">     457 </span>            :    in the allowed range for the purpose of
+<span class="lineNum">     458 </span>            :    simplicity.  BASE is the constant base value,
+<span class="lineNum">     459 </span>            :    EXPN is the expression for the exponent argument,
+<span class="lineNum">     460 </span>            :    *CONDS is the vector to hold resulting statements,
+<span class="lineNum">     461 </span>            :    and *NCONDS is the number of logical conditions.  */
+<a name="462"><span class="lineNum">     462 </span>            : </a>
+<span class="lineNum">     463 </span>            : static void
+<span class="lineNum">     464 </span><span class="lineCov">          6 : gen_conditions_for_pow_cst_base (tree base, tree expn,</span>
+<span class="lineNum">     465 </span>            :                                  vec&lt;gimple *&gt; conds,
+<span class="lineNum">     466 </span>            :                                  unsigned *nconds)
+<span class="lineNum">     467 </span>            : {
+<span class="lineNum">     468 </span><span class="lineCov">          6 :   inp_domain exp_domain;</span>
+<span class="lineNum">     469 </span>            :   /* Validate the range of the base constant to make
+<span class="lineNum">     470 </span>            :      sure it is consistent with check_pow.  */
+<span class="lineNum">     471 </span><span class="lineCov">          6 :   REAL_VALUE_TYPE mv;</span>
+<span class="lineNum">     472 </span><span class="lineCov">          6 :   REAL_VALUE_TYPE bcv = TREE_REAL_CST (base);</span>
+<span class="lineNum">     473 </span><span class="lineCov">          6 :   gcc_assert (!real_equal (&amp;bcv, &amp;dconst1)</span>
+<span class="lineNum">     474 </span>            :               &amp;&amp; !real_less (&amp;bcv, &amp;dconst1));
+<span class="lineNum">     475 </span><span class="lineCov">         12 :   real_from_integer (&amp;mv, TYPE_MODE (TREE_TYPE (base)), 256, UNSIGNED);</span>
+<span class="lineNum">     476 </span><span class="lineCov">          6 :   gcc_assert (!real_less (&amp;mv, &amp;bcv));</span>
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span><span class="lineCov">          6 :   exp_domain = get_domain (0, false, false,</span>
+<span class="lineNum">     479 </span><span class="lineCov">         12 :                            127, true, false);</span>
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span><span class="lineCov">          6 :   gen_conditions_for_domain (expn, exp_domain,</span>
+<span class="lineNum">     482 </span>            :                              conds, nconds);
+<span class="lineNum">     483 </span><span class="lineCov">          6 : }</span>
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span>            : /* Generate error condition code for pow calls with
+<span class="lineNum">     486 </span>            :    non constant base values.  The candidates selected
+<span class="lineNum">     487 </span>            :    have their base argument value converted from
+<span class="lineNum">     488 </span>            :    integer (see check_pow) value (1, 2, 4 bytes), and
+<span class="lineNum">     489 </span>            :    the max exp value is computed based on the size
+<span class="lineNum">     490 </span>            :    of the integer type (i.e. max possible base value).
+<span class="lineNum">     491 </span>            :    The resulting input domain for exp argument is thus
+<span class="lineNum">     492 </span>            :    conservative (smaller than the max value allowed by
+<span class="lineNum">     493 </span>            :    the runtime value of the base).  BASE is the integer
+<span class="lineNum">     494 </span>            :    base value, EXPN is the expression for the exponent
+<span class="lineNum">     495 </span>            :    argument, *CONDS is the vector to hold resulting
+<span class="lineNum">     496 </span>            :    statements, and *NCONDS is the number of logical
+<span class="lineNum">     497 </span>            :    conditions.  */
+<span class="lineNum">     498 </span>            : 
+<span class="lineNum">     499 </span>            : static void
+<span class="lineNum">     500 </span><span class="lineCov">          7 : gen_conditions_for_pow_int_base (tree base, tree expn,</span>
+<span class="lineNum">     501 </span>            :                                  vec&lt;gimple *&gt; conds,
+<span class="lineNum">     502 </span>            :                                  unsigned *nconds)
+<span class="lineNum">     503 </span>            : {
+<span class="lineNum">     504 </span><span class="lineCov">          7 :   gimple *base_def;</span>
+<span class="lineNum">     505 </span><span class="lineCov">          7 :   tree base_val0;</span>
+<span class="lineNum">     506 </span><span class="lineCov">          7 :   tree int_type;</span>
+<span class="lineNum">     507 </span><span class="lineCov">          7 :   tree temp, tempn;</span>
+<span class="lineNum">     508 </span><span class="lineCov">          7 :   tree cst0;</span>
+<span class="lineNum">     509 </span><span class="lineCov">          7 :   gimple *stmt1, *stmt2;</span>
+<span class="lineNum">     510 </span><span class="lineCov">          7 :   int bit_sz, max_exp;</span>
+<span class="lineNum">     511 </span><span class="lineCov">          7 :   inp_domain exp_domain;</span>
+<span class="lineNum">     512 </span>            : 
+<span class="lineNum">     513 </span><span class="lineCov">          7 :   base_def = SSA_NAME_DEF_STMT (base);</span>
+<span class="lineNum">     514 </span><span class="lineCov">          7 :   base_val0 = gimple_assign_rhs1 (base_def);</span>
+<span class="lineNum">     515 </span><span class="lineCov">          7 :   int_type = TREE_TYPE (base_val0);</span>
+<span class="lineNum">     516 </span><span class="lineCov">          7 :   bit_sz = TYPE_PRECISION (int_type);</span>
+<span class="lineNum">     517 </span><span class="lineCov">          7 :   gcc_assert (bit_sz &gt; 0</span>
+<span class="lineNum">     518 </span>            :               &amp;&amp; bit_sz &lt;= MAX_BASE_INT_BIT_SIZE);
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span>            :   /* Determine the max exp argument value according to
+<span class="lineNum">     521 </span>            :      the size of the base integer.  The max exp value
+<span class="lineNum">     522 </span>            :      is conservatively estimated assuming IEEE754 double
+<span class="lineNum">     523 </span>            :      precision format.  */
+<span class="lineNum">     524 </span><span class="lineCov">          7 :   if (bit_sz == 8)</span>
+<span class="lineNum">     525 </span>            :     max_exp = 128;
+<span class="lineNum">     526 </span><span class="lineCov">          7 :   else if (bit_sz == 16)</span>
+<span class="lineNum">     527 </span>            :     max_exp = 64;
+<span class="lineNum">     528 </span>            :   else
+<span class="lineNum">     529 </span>            :     {
+<span class="lineNum">     530 </span><span class="lineCov">          7 :       gcc_assert (bit_sz == MAX_BASE_INT_BIT_SIZE);</span>
+<span class="lineNum">     531 </span>            :       max_exp = 32;
+<span class="lineNum">     532 </span>            :     }
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span>            :   /* For pow ((double)x, y), generate the following conditions:
+<span class="lineNum">     535 </span>            :      cond 1:
+<span class="lineNum">     536 </span>            :      temp1 = x;
+<span class="lineNum">     537 </span>            :      if (__builtin_islessequal (temp1, 0))
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span>            :      cond 2:
+<span class="lineNum">     540 </span>            :      temp2 = y;
+<span class="lineNum">     541 </span>            :      if (__builtin_isgreater (temp2, max_exp_real_cst))  */
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            :   /* Generate condition in reverse order -- first
+<span class="lineNum">     544 </span>            :      the condition for the exp argument.  */
+<span class="lineNum">     545 </span>            : 
+<span class="lineNum">     546 </span><span class="lineCov">          7 :   exp_domain = get_domain (0, false, false,</span>
+<span class="lineNum">     547 </span><span class="lineCov">         14 :                            max_exp, true, true);</span>
+<span class="lineNum">     548 </span>            : 
+<span class="lineNum">     549 </span><span class="lineCov">          7 :   gen_conditions_for_domain (expn, exp_domain,</span>
+<span class="lineNum">     550 </span>            :                              conds, nconds);
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span>            :   /* Now generate condition for the base argument.
+<span class="lineNum">     553 </span>            :      Note it does not use the helper function
+<span class="lineNum">     554 </span>            :      gen_conditions_for_domain because the base
+<span class="lineNum">     555 </span>            :      type is integer.  */
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span>            :   /* Push a separator.  */
+<span class="lineNum">     558 </span><span class="lineCov">          7 :   conds.quick_push (NULL);</span>
+<span class="lineNum">     559 </span>            : 
+<span class="lineNum">     560 </span><span class="lineCov">          7 :   temp = create_tmp_var (int_type, &quot;DCE_COND1&quot;);</span>
+<span class="lineNum">     561 </span><span class="lineCov">         14 :   cst0 = build_int_cst (int_type, 0);</span>
+<span class="lineNum">     562 </span><span class="lineCov">          7 :   stmt1 = gimple_build_assign (temp, base_val0);</span>
+<span class="lineNum">     563 </span><span class="lineCov">          7 :   tempn = make_ssa_name (temp, stmt1);</span>
+<span class="lineNum">     564 </span><span class="lineCov">          7 :   gimple_assign_set_lhs (stmt1, tempn);</span>
+<span class="lineNum">     565 </span><span class="lineCov">          7 :   stmt2 = gimple_build_cond (GT_EXPR, tempn, cst0, NULL_TREE, NULL_TREE);</span>
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span><span class="lineCov">          7 :   conds.quick_push (stmt1);</span>
+<span class="lineNum">     568 </span><span class="lineCov">          7 :   conds.quick_push (stmt2);</span>
+<span class="lineNum">     569 </span><span class="lineCov">          7 :   (*nconds)++;</span>
+<span class="lineNum">     570 </span><span class="lineCov">          7 : }</span>
+<span class="lineNum">     571 </span>            : 
+<span class="lineNum">     572 </span>            : /* Method to generate conditional statements for guarding conditionally
+<span class="lineNum">     573 </span>            :    dead calls to pow.  One or more statements can be generated for
+<span class="lineNum">     574 </span>            :    each logical condition.  Statement groups of different conditions
+<span class="lineNum">     575 </span>            :    are separated by a NULL tree and they are stored in the vec
+<span class="lineNum">     576 </span>            :    conds.  The number of logical conditions are stored in *nconds.
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span>            :    See C99 standard, 7.12.7.4:2, for description of pow (x, y).
+<span class="lineNum">     579 </span>            :    The precise condition for domain errors are complex.  In this
+<span class="lineNum">     580 </span>            :    implementation, a simplified (but conservative) valid domain
+<span class="lineNum">     581 </span>            :    for x and y are used: x is positive to avoid dom errors, while
+<span class="lineNum">     582 </span>            :    y is smaller than a upper bound (depending on x) to avoid range
+<span class="lineNum">     583 </span>            :    errors.  Runtime code is generated to check x (if not constant)
+<span class="lineNum">     584 </span>            :    and y against the valid domain.  If it is out, jump to the call,
+<span class="lineNum">     585 </span>            :    otherwise the call is bypassed.  POW_CALL is the call statement,
+<span class="lineNum">     586 </span>            :    *CONDS is a vector holding the resulting condition statements,
+<span class="lineNum">     587 </span>            :    and *NCONDS is the number of logical conditions.  */
+<a name="588"><span class="lineNum">     588 </span>            : </a>
+<span class="lineNum">     589 </span>            : static void
+<span class="lineNum">     590 </span><span class="lineCov">         13 : gen_conditions_for_pow (gcall *pow_call, vec&lt;gimple *&gt; conds,</span>
+<span class="lineNum">     591 </span>            :                         unsigned *nconds)
+<span class="lineNum">     592 </span>            : {
+<span class="lineNum">     593 </span><span class="lineCov">         13 :   tree base, expn;</span>
+<span class="lineNum">     594 </span><span class="lineCov">         13 :   enum tree_code bc;</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span><span class="lineCov">         13 :   gcc_checking_assert (check_pow (pow_call));</span>
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span><span class="lineCov">         13 :   *nconds = 0;</span>
+<span class="lineNum">     599 </span>            : 
+<span class="lineNum">     600 </span><span class="lineCov">         13 :   base = gimple_call_arg (pow_call, 0);</span>
+<span class="lineNum">     601 </span><span class="lineCov">         13 :   expn = gimple_call_arg (pow_call, 1);</span>
+<span class="lineNum">     602 </span>            : 
+<span class="lineNum">     603 </span><span class="lineCov">         13 :   bc = TREE_CODE (base);</span>
+<span class="lineNum">     604 </span>            : 
+<span class="lineNum">     605 </span><span class="lineCov">         13 :   if (bc == REAL_CST)</span>
+<span class="lineNum">     606 </span><span class="lineCov">          6 :     gen_conditions_for_pow_cst_base (base, expn, conds, nconds);</span>
+<span class="lineNum">     607 </span><span class="lineCov">          7 :   else if (bc == SSA_NAME)</span>
+<span class="lineNum">     608 </span><span class="lineCov">          7 :     gen_conditions_for_pow_int_base (base, expn, conds, nconds);</span>
+<span class="lineNum">     609 </span>            :   else
+<span class="lineNum">     610 </span><span class="lineNoCov">          0 :     gcc_unreachable ();</span>
+<span class="lineNum">     611 </span><span class="lineCov">         13 : }</span>
+<span class="lineNum">     612 </span>            : 
+<span class="lineNum">     613 </span>            : /* A helper routine to help computing the valid input domain
+<span class="lineNum">     614 </span>            :    for a builtin function.  See C99 7.12.7 for details.  In this
+<span class="lineNum">     615 </span>            :    implementation, we only handle single region domain.  The
+<span class="lineNum">     616 </span>            :    resulting region can be conservative (smaller) than the actual
+<span class="lineNum">     617 </span>            :    one and rounded to integers.  Some of the bounds are documented
+<span class="lineNum">     618 </span>            :    in the standard, while other limit constants are computed
+<span class="lineNum">     619 </span>            :    assuming IEEE floating point format (for SF and DF modes).
+<span class="lineNum">     620 </span>            :    Since IEEE only sets minimum requirements for long double format,
+<span class="lineNum">     621 </span>            :    different long double formats exist under different implementations
+<span class="lineNum">     622 </span>            :    (e.g, 64 bit double precision (DF), 80 bit double-extended
+<span class="lineNum">     623 </span>            :    precision (XF), and 128 bit quad precision (QF) ).  For simplicity,
+<span class="lineNum">     624 </span>            :    in this implementation, the computed bounds for long double assume
+<span class="lineNum">     625 </span>            :    64 bit format (DF), and are therefore conservative.  Another
+<span class="lineNum">     626 </span>            :    assumption is that single precision float type is always SF mode,
+<span class="lineNum">     627 </span>            :    and double type is DF mode.  This function is quite
+<span class="lineNum">     628 </span>            :    implementation specific, so it may not be suitable to be part of
+<span class="lineNum">     629 </span>            :    builtins.c.  This needs to be revisited later to see if it can
+<span class="lineNum">     630 </span>            :    be leveraged in x87 assembly expansion.  */
+<a name="631"><span class="lineNum">     631 </span>            : </a>
+<span class="lineNum">     632 </span>            : static inp_domain
+<span class="lineNum">     633 </span><span class="lineCov">       1984 : get_no_error_domain (enum built_in_function fnc)</span>
+<span class="lineNum">     634 </span>            : {
+<span class="lineNum">     635 </span><span class="lineCov">       1984 :   switch (fnc)</span>
+<span class="lineNum">     636 </span>            :     {
+<span class="lineNum">     637 </span>            :     /* Trig functions: return [-1, +1]  */
+<span class="lineNum">     638 </span><span class="lineCov">         39 :     CASE_FLT_FN (BUILT_IN_ACOS):</span>
+<span class="lineNum">     639 </span><span class="lineCov">         39 :     CASE_FLT_FN (BUILT_IN_ASIN):</span>
+<span class="lineNum">     640 </span><span class="lineCov">         39 :       return get_domain (-1, true, true,</span>
+<span class="lineNum">     641 </span><span class="lineCov">         39 :                          1, true, true);</span>
+<span class="lineNum">     642 </span>            :     /* Hyperbolic functions.  */
+<span class="lineNum">     643 </span><span class="lineCov">         22 :     CASE_FLT_FN (BUILT_IN_ACOSH):</span>
+<span class="lineNum">     644 </span>            :       /* acosh: [1, +inf)  */
+<span class="lineNum">     645 </span><span class="lineCov">         22 :       return get_domain (1, true, true,</span>
+<span class="lineNum">     646 </span><span class="lineCov">         22 :                          1, false, false);</span>
+<span class="lineNum">     647 </span><span class="lineCov">         19 :     CASE_FLT_FN (BUILT_IN_ATANH):</span>
+<span class="lineNum">     648 </span>            :       /* atanh: (-1, +1)  */
+<span class="lineNum">     649 </span><span class="lineCov">         19 :       return get_domain (-1, true, false,</span>
+<span class="lineNum">     650 </span><span class="lineCov">         19 :                          1, true, false);</span>
+<span class="lineNum">     651 </span><span class="lineCov">          6 :     case BUILT_IN_COSHF:</span>
+<span class="lineNum">     652 </span><span class="lineCov">          6 :     case BUILT_IN_SINHF:</span>
+<span class="lineNum">     653 </span>            :       /* coshf: (-89, +89)  */
+<span class="lineNum">     654 </span><span class="lineCov">          6 :       return get_domain (-89, true, false,</span>
+<span class="lineNum">     655 </span><span class="lineCov">          6 :                          89, true, false);</span>
+<span class="lineNum">     656 </span><span class="lineCov">         32 :     case BUILT_IN_COSH:</span>
+<span class="lineNum">     657 </span><span class="lineCov">         32 :     case BUILT_IN_SINH:</span>
+<span class="lineNum">     658 </span><span class="lineCov">         32 :     case BUILT_IN_COSHL:</span>
+<span class="lineNum">     659 </span><span class="lineCov">         32 :     case BUILT_IN_SINHL:</span>
+<span class="lineNum">     660 </span>            :       /* cosh: (-710, +710)  */
+<span class="lineNum">     661 </span><span class="lineCov">         32 :       return get_domain (-710, true, false,</span>
+<span class="lineNum">     662 </span><span class="lineCov">         32 :                          710, true, false);</span>
+<span class="lineNum">     663 </span>            :     /* Log functions: (0, +inf)  */
+<span class="lineNum">     664 </span><span class="lineCov">         75 :     CASE_FLT_FN (BUILT_IN_LOG):</span>
+<span class="lineNum">     665 </span><span class="lineCov">         75 :     CASE_FLT_FN (BUILT_IN_LOG2):</span>
+<span class="lineNum">     666 </span><span class="lineCov">         75 :     CASE_FLT_FN (BUILT_IN_LOG10):</span>
+<span class="lineNum">     667 </span><span class="lineCov">         75 :       return get_domain (0, true, false,</span>
+<span class="lineNum">     668 </span><span class="lineCov">         75 :                          0, false, false);</span>
+<span class="lineNum">     669 </span><span class="lineCov">         19 :     CASE_FLT_FN (BUILT_IN_LOG1P):</span>
+<span class="lineNum">     670 </span><span class="lineCov">         19 :       return get_domain (-1, true, false,</span>
+<span class="lineNum">     671 </span><span class="lineCov">         19 :                          0, false, false);</span>
+<span class="lineNum">     672 </span>            :     /* Exp functions.  */
+<span class="lineNum">     673 </span><span class="lineCov">          6 :     case BUILT_IN_EXPF:</span>
+<span class="lineNum">     674 </span><span class="lineCov">          6 :     case BUILT_IN_EXPM1F:</span>
+<span class="lineNum">     675 </span>            :       /* expf: (-inf, 88)  */
+<span class="lineNum">     676 </span><span class="lineCov">          6 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     677 </span><span class="lineCov">          6 :                          88, true, false);</span>
+<span class="lineNum">     678 </span><span class="lineCov">        153 :     case BUILT_IN_EXP:</span>
+<span class="lineNum">     679 </span><span class="lineCov">        153 :     case BUILT_IN_EXPM1:</span>
+<span class="lineNum">     680 </span><span class="lineCov">        153 :     case BUILT_IN_EXPL:</span>
+<span class="lineNum">     681 </span><span class="lineCov">        153 :     case BUILT_IN_EXPM1L:</span>
+<span class="lineNum">     682 </span>            :       /* exp: (-inf, 709)  */
+<span class="lineNum">     683 </span><span class="lineCov">        153 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     684 </span><span class="lineCov">        153 :                          709, true, false);</span>
+<span class="lineNum">     685 </span><span class="lineCov">          3 :     case BUILT_IN_EXP2F:</span>
+<span class="lineNum">     686 </span>            :       /* exp2f: (-inf, 128)  */
+<span class="lineNum">     687 </span><span class="lineCov">          3 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     688 </span><span class="lineCov">          3 :                          128, true, false);</span>
+<span class="lineNum">     689 </span><span class="lineCov">         16 :     case BUILT_IN_EXP2:</span>
+<span class="lineNum">     690 </span><span class="lineCov">         16 :     case BUILT_IN_EXP2L:</span>
+<span class="lineNum">     691 </span>            :       /* exp2: (-inf, 1024)  */
+<span class="lineNum">     692 </span><span class="lineCov">         16 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     693 </span><span class="lineCov">         16 :                          1024, true, false);</span>
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 :     case BUILT_IN_EXP10F:</span>
+<span class="lineNum">     695 </span><span class="lineNoCov">          0 :     case BUILT_IN_POW10F:</span>
+<span class="lineNum">     696 </span>            :       /* exp10f: (-inf, 38)  */
+<span class="lineNum">     697 </span><span class="lineNoCov">          0 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     698 </span><span class="lineNoCov">          0 :                          38, true, false);</span>
+<span class="lineNum">     699 </span><span class="lineCov">          4 :     case BUILT_IN_EXP10:</span>
+<span class="lineNum">     700 </span><span class="lineCov">          4 :     case BUILT_IN_POW10:</span>
+<span class="lineNum">     701 </span><span class="lineCov">          4 :     case BUILT_IN_EXP10L:</span>
+<span class="lineNum">     702 </span><span class="lineCov">          4 :     case BUILT_IN_POW10L:</span>
+<span class="lineNum">     703 </span>            :       /* exp10: (-inf, 308)  */
+<span class="lineNum">     704 </span><span class="lineCov">          4 :       return get_domain (-1, false, false,</span>
+<span class="lineNum">     705 </span><span class="lineCov">          4 :                          308, true, false);</span>
+<span class="lineNum">     706 </span>            :     /* sqrt: [0, +inf)  */
+<span class="lineNum">     707 </span><span class="lineCov">       1590 :     CASE_FLT_FN (BUILT_IN_SQRT):</span>
+<span class="lineNum">     708 </span><span class="lineCov">       1590 :     CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):</span>
+<span class="lineNum">     709 </span><span class="lineCov">       1590 :       return get_domain (0, true, true,</span>
+<span class="lineNum">     710 </span><span class="lineCov">       1590 :                          0, false, false);</span>
+<span class="lineNum">     711 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     712 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     713 </span>            :     }
+<span class="lineNum">     714 </span>            : 
+<span class="lineNum">     715 </span>            :   gcc_unreachable ();
+<span class="lineNum">     716 </span>            : }
+<span class="lineNum">     717 </span>            : 
+<span class="lineNum">     718 </span>            : /* The function to generate shrink wrap conditions for a partially
+<span class="lineNum">     719 </span>            :    dead builtin call whose return value is not used anywhere,
+<span class="lineNum">     720 </span>            :    but has to be kept live due to potential error condition.
+<span class="lineNum">     721 </span>            :    BI_CALL is the builtin call, CONDS is the vector of statements
+<span class="lineNum">     722 </span>            :    for condition code, NCODES is the pointer to the number of
+<span class="lineNum">     723 </span>            :    logical conditions.  Statements belonging to different logical
+<span class="lineNum">     724 </span>            :    condition are separated by NULL tree in the vector.  */
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span>            : static void
+<span class="lineNum">     727 </span><span class="lineCov">       1997 : gen_shrink_wrap_conditions (gcall *bi_call, vec&lt;gimple *&gt; conds,</span>
+<span class="lineNum">     728 </span>            :                             unsigned int *nconds)
+<span class="lineNum">     729 </span>            : {
+<span class="lineNum">     730 </span><span class="lineCov">       1997 :   gcall *call;</span>
+<span class="lineNum">     731 </span><span class="lineCov">       1997 :   tree fn;</span>
+<span class="lineNum">     732 </span><span class="lineCov">       1997 :   enum built_in_function fnc;</span>
+<span class="lineNum">     733 </span>            : 
+<span class="lineNum">     734 </span><span class="lineCov">       1997 :   gcc_assert (nconds &amp;&amp; conds.exists ());</span>
+<span class="lineNum">     735 </span><span class="lineCov">       3994 :   gcc_assert (conds.length () == 0);</span>
+<span class="lineNum">     736 </span><span class="lineCov">       3994 :   gcc_assert (is_gimple_call (bi_call));</span>
+<span class="lineNum">     737 </span>            : 
+<span class="lineNum">     738 </span><span class="lineCov">       1997 :   call = bi_call;</span>
+<span class="lineNum">     739 </span><span class="lineCov">       1997 :   fn = gimple_call_fndecl (call);</span>
+<span class="lineNum">     740 </span><span class="lineCov">       1997 :   gcc_assert (fn &amp;&amp; fndecl_built_in_p (fn));</span>
+<span class="lineNum">     741 </span><span class="lineCov">       1997 :   fnc = DECL_FUNCTION_CODE (fn);</span>
+<span class="lineNum">     742 </span><span class="lineCov">       1997 :   *nconds = 0;</span>
+<span class="lineNum">     743 </span>            : 
+<span class="lineNum">     744 </span><span class="lineCov">       1997 :   if (fnc == BUILT_IN_POW)</span>
+<span class="lineNum">     745 </span><span class="lineCov">         13 :     gen_conditions_for_pow (call, conds, nconds);</span>
+<span class="lineNum">     746 </span>            :   else
+<span class="lineNum">     747 </span>            :     {
+<span class="lineNum">     748 </span><span class="lineCov">       1984 :       tree arg;</span>
+<span class="lineNum">     749 </span><span class="lineCov">       1984 :       inp_domain domain = get_no_error_domain (fnc);</span>
+<span class="lineNum">     750 </span><span class="lineCov">       1984 :       *nconds = 0;</span>
+<span class="lineNum">     751 </span><span class="lineCov">       1984 :       arg = gimple_call_arg (bi_call, 0);</span>
+<span class="lineNum">     752 </span><span class="lineCov">       1984 :       gen_conditions_for_domain (arg, domain, conds, nconds);</span>
+<span class="lineNum">     753 </span>            :     }
+<span class="lineNum">     754 </span>            : 
+<span class="lineNum">     755 </span><span class="lineCov">       1997 :   return;</span>
+<span class="lineNum">     756 </span>            : }
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : /* Shrink-wrap BI_CALL so that it is only called when one of the NCONDS
+<span class="lineNum">     759 </span>            :    conditions in CONDS is false.  */
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span>            : static void
+<span class="lineNum">     762 </span><span class="lineCov">       1998 : shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec &lt;gimple *&gt; conds,</span>
+<span class="lineNum">     763 </span>            :                                           unsigned int nconds)
+<span class="lineNum">     764 </span>            : {
+<span class="lineNum">     765 </span><span class="lineCov">       1998 :   gimple_stmt_iterator bi_call_bsi;</span>
+<span class="lineNum">     766 </span><span class="lineCov">       1998 :   basic_block bi_call_bb, join_tgt_bb, guard_bb;</span>
+<span class="lineNum">     767 </span><span class="lineCov">       1998 :   edge join_tgt_in_edge_from_call, join_tgt_in_edge_fall_thru;</span>
+<span class="lineNum">     768 </span><span class="lineCov">       1998 :   edge bi_call_in_edge0, guard_bb_in_edge;</span>
+<span class="lineNum">     769 </span><span class="lineCov">       1998 :   unsigned tn_cond_stmts;</span>
+<span class="lineNum">     770 </span><span class="lineCov">       1998 :   unsigned ci;</span>
+<span class="lineNum">     771 </span><span class="lineCov">       1998 :   gimple *cond_expr = NULL;</span>
+<span class="lineNum">     772 </span><span class="lineCov">       1998 :   gimple *cond_expr_start;</span>
+<span class="lineNum">     773 </span>            : 
+<span class="lineNum">     774 </span>            :   /* The cfg we want to create looks like this:
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span>            :            [guard n-1]         &lt;- guard_bb (old block)
+<span class="lineNum">     777 </span>            :              |    \
+<span class="lineNum">     778 </span>            :              | [guard n-2]                   }
+<span class="lineNum">     779 </span>            :              |    / \                        }
+<span class="lineNum">     780 </span>            :              |   /  ...                      } new blocks
+<span class="lineNum">     781 </span>            :              |  /  [guard 0]                 }
+<span class="lineNum">     782 </span>            :              | /    /   |                    }
+<span class="lineNum">     783 </span>            :             [ call ]    |     &lt;- bi_call_bb  }
+<span class="lineNum">     784 </span>            :              | \        |
+<span class="lineNum">     785 </span>            :              |  \       |
+<span class="lineNum">     786 </span>            :              |   [ join ]     &lt;- join_tgt_bb (old iff call must end bb)
+<span class="lineNum">     787 </span>            :              |
+<span class="lineNum">     788 </span>            :          possible EH edges (only if [join] is old)
+<span class="lineNum">     789 </span>            : 
+<span class="lineNum">     790 </span>            :      When [join] is new, the immediate dominators for these blocks are:
+<span class="lineNum">     791 </span>            : 
+<span class="lineNum">     792 </span>            :      1. [guard n-1]: unchanged
+<span class="lineNum">     793 </span>            :      2. [call]: [guard n-1]
+<span class="lineNum">     794 </span>            :      3. [guard m]: [guard m+1] for 0 &lt;= m &lt;= n-2
+<span class="lineNum">     795 </span>            :      4. [join]: [guard n-1]
+<span class="lineNum">     796 </span>            : 
+<span class="lineNum">     797 </span>            :      We punt for the more complex case case of [join] being old and
+<span class="lineNum">     798 </span>            :      simply free the dominance info.  We also punt on postdominators,
+<span class="lineNum">     799 </span>            :      which aren't expected to be available at this point anyway.  */
+<span class="lineNum">     800 </span><span class="lineCov">       1998 :   bi_call_bb = gimple_bb (bi_call);</span>
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span>            :   /* Now find the join target bb -- split bi_call_bb if needed.  */
+<span class="lineNum">     803 </span><span class="lineCov">       1998 :   if (stmt_ends_bb_p (bi_call))</span>
+<span class="lineNum">     804 </span>            :     {
+<span class="lineNum">     805 </span>            :       /* We checked that there was a fallthrough edge in
+<span class="lineNum">     806 </span>            :          can_guard_call_p.  */
+<span class="lineNum">     807 </span><span class="lineNoCov">          0 :       join_tgt_in_edge_from_call = find_fallthru_edge (bi_call_bb-&gt;succs);</span>
+<span class="lineNum">     808 </span><span class="lineNoCov">          0 :       gcc_assert (join_tgt_in_edge_from_call);</span>
+<span class="lineNum">     809 </span>            :       /* We don't want to handle PHIs.  */
+<span class="lineNum">     810 </span><span class="lineNoCov">          0 :       if (EDGE_COUNT (join_tgt_in_edge_from_call-&gt;dest-&gt;preds) &gt; 1)</span>
+<span class="lineNum">     811 </span><span class="lineNoCov">          0 :         join_tgt_bb = split_edge (join_tgt_in_edge_from_call);</span>
+<span class="lineNum">     812 </span>            :       else
+<span class="lineNum">     813 </span>            :         {
+<span class="lineNum">     814 </span><span class="lineNoCov">          0 :           join_tgt_bb = join_tgt_in_edge_from_call-&gt;dest;</span>
+<span class="lineNum">     815 </span>            :           /* We may have degenerate PHIs in the destination.  Propagate
+<span class="lineNum">     816 </span>            :              those out.  */
+<span class="lineNum">     817 </span><span class="lineNoCov">          0 :           for (gphi_iterator i = gsi_start_phis (join_tgt_bb); !gsi_end_p (i);)</span>
+<span class="lineNum">     818 </span>            :             {
+<span class="lineNum">     819 </span><span class="lineNoCov">          0 :               gphi *phi = i.phi ();</span>
+<span class="lineNum">     820 </span><span class="lineNoCov">          0 :               replace_uses_by (gimple_phi_result (phi),</span>
+<span class="lineNum">     821 </span>            :                                gimple_phi_arg_def (phi, 0));
+<span class="lineNum">     822 </span><span class="lineNoCov">          0 :               remove_phi_node (&amp;i, true);</span>
+<span class="lineNum">     823 </span>            :             }
+<span class="lineNum">     824 </span>            :         }
+<span class="lineNum">     825 </span>            :     }
+<span class="lineNum">     826 </span>            :   else
+<span class="lineNum">     827 </span>            :     {
+<span class="lineNum">     828 </span><span class="lineCov">       1998 :       join_tgt_in_edge_from_call = split_block (bi_call_bb, bi_call);</span>
+<span class="lineNum">     829 </span><span class="lineCov">       1998 :       join_tgt_bb = join_tgt_in_edge_from_call-&gt;dest;</span>
+<span class="lineNum">     830 </span>            :     }
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span><span class="lineCov">       1998 :   bi_call_bsi = gsi_for_stmt (bi_call);</span>
+<span class="lineNum">     833 </span>            : 
+<span class="lineNum">     834 </span>            :   /* Now it is time to insert the first conditional expression
+<span class="lineNum">     835 </span>            :      into bi_call_bb and split this bb so that bi_call is
+<span class="lineNum">     836 </span>            :      shrink-wrapped.  */
+<span class="lineNum">     837 </span><span class="lineCov">       1998 :   tn_cond_stmts = conds.length ();</span>
+<span class="lineNum">     838 </span><span class="lineCov">       1998 :   cond_expr = NULL;</span>
+<span class="lineNum">     839 </span><span class="lineCov">       1998 :   cond_expr_start = conds[0];</span>
+<span class="lineNum">     840 </span><span class="lineCov">       7990 :   for (ci = 0; ci &lt; tn_cond_stmts; ci++)</span>
+<span class="lineNum">     841 </span>            :     {
+<span class="lineNum">     842 </span><span class="lineCov">       6095 :       gimple *c = conds[ci];</span>
+<span class="lineNum">     843 </span><span class="lineCov">       6095 :       gcc_assert (c || ci != 0);</span>
+<span class="lineNum">     844 </span><span class="lineCov">       6095 :       if (!c)</span>
+<span class="lineNum">     845 </span>            :         break;
+<span class="lineNum">     846 </span><span class="lineCov">       5992 :       gsi_insert_before (&amp;bi_call_bsi, c, GSI_SAME_STMT);</span>
+<span class="lineNum">     847 </span><span class="lineCov">       5992 :       cond_expr = c;</span>
+<span class="lineNum">     848 </span>            :     }
+<span class="lineNum">     849 </span><span class="lineCov">       1998 :   ci++;</span>
+<span class="lineNum">     850 </span><span class="lineCov">       1998 :   gcc_assert (cond_expr &amp;&amp; gimple_code (cond_expr) == GIMPLE_COND);</span>
+<span class="lineNum">     851 </span>            : 
+<span class="lineNum">     852 </span><span class="lineCov">       1998 :   typedef std::pair&lt;edge, edge&gt; edge_pair;</span>
+<span class="lineNum">     853 </span><span class="lineCov">       3996 :   auto_vec&lt;edge_pair, 8&gt; edges;</span>
+<span class="lineNum">     854 </span>            : 
+<span class="lineNum">     855 </span><span class="lineCov">       1998 :   bi_call_in_edge0 = split_block (bi_call_bb, cond_expr);</span>
+<span class="lineNum">     856 </span><span class="lineCov">       1998 :   bi_call_in_edge0-&gt;flags &amp;= ~EDGE_FALLTHRU;</span>
+<span class="lineNum">     857 </span><span class="lineCov">       1998 :   bi_call_in_edge0-&gt;flags |= EDGE_FALSE_VALUE;</span>
+<span class="lineNum">     858 </span><span class="lineCov">       1998 :   guard_bb = bi_call_bb;</span>
+<span class="lineNum">     859 </span><span class="lineCov">       1998 :   bi_call_bb = bi_call_in_edge0-&gt;dest;</span>
+<span class="lineNum">     860 </span><span class="lineCov">       1998 :   join_tgt_in_edge_fall_thru = make_edge (guard_bb, join_tgt_bb,</span>
+<span class="lineNum">     861 </span>            :                                           EDGE_TRUE_VALUE);
+<span class="lineNum">     862 </span>            : 
+<span class="lineNum">     863 </span><span class="lineCov">       1998 :   edges.reserve (nconds);</span>
+<span class="lineNum">     864 </span><span class="lineCov">       3996 :   edges.quick_push (edge_pair (bi_call_in_edge0, join_tgt_in_edge_fall_thru));</span>
+<span class="lineNum">     865 </span>            : 
+<span class="lineNum">     866 </span>            :   /* Code generation for the rest of the conditions  */
+<span class="lineNum">     867 </span><span class="lineCov">       2101 :   for (unsigned int i = 1; i &lt; nconds; ++i)</span>
+<span class="lineNum">     868 </span>            :     {
+<span class="lineNum">     869 </span><span class="lineCov">        103 :       unsigned ci0;</span>
+<span class="lineNum">     870 </span><span class="lineCov">        103 :       edge bi_call_in_edge;</span>
+<span class="lineNum">     871 </span><span class="lineCov">        103 :       gimple_stmt_iterator guard_bsi = gsi_for_stmt (cond_expr_start);</span>
+<span class="lineNum">     872 </span><span class="lineCov">        103 :       ci0 = ci;</span>
+<span class="lineNum">     873 </span><span class="lineCov">        103 :       cond_expr_start = conds[ci0];</span>
+<span class="lineNum">     874 </span><span class="lineCov">        405 :       for (; ci &lt; tn_cond_stmts; ci++)</span>
+<span class="lineNum">     875 </span>            :         {
+<span class="lineNum">     876 </span><span class="lineCov">        302 :           gimple *c = conds[ci];</span>
+<span class="lineNum">     877 </span><span class="lineCov">        302 :           gcc_assert (c || ci != ci0);</span>
+<span class="lineNum">     878 </span><span class="lineCov">        302 :           if (!c)</span>
+<span class="lineNum">     879 </span>            :             break;
+<span class="lineNum">     880 </span><span class="lineCov">        302 :           gsi_insert_before (&amp;guard_bsi, c, GSI_SAME_STMT);</span>
+<span class="lineNum">     881 </span><span class="lineCov">        302 :           cond_expr = c;</span>
+<span class="lineNum">     882 </span>            :         }
+<span class="lineNum">     883 </span><span class="lineCov">        103 :       ci++;</span>
+<span class="lineNum">     884 </span><span class="lineCov">        103 :       gcc_assert (cond_expr &amp;&amp; gimple_code (cond_expr) == GIMPLE_COND);</span>
+<span class="lineNum">     885 </span><span class="lineCov">        103 :       guard_bb_in_edge = split_block (guard_bb, cond_expr);</span>
+<span class="lineNum">     886 </span><span class="lineCov">        103 :       guard_bb_in_edge-&gt;flags &amp;= ~EDGE_FALLTHRU;</span>
+<span class="lineNum">     887 </span><span class="lineCov">        103 :       guard_bb_in_edge-&gt;flags |= EDGE_TRUE_VALUE;</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span><span class="lineCov">        103 :       bi_call_in_edge = make_edge (guard_bb, bi_call_bb, EDGE_FALSE_VALUE);</span>
+<span class="lineNum">     890 </span><span class="lineCov">        206 :       edges.quick_push (edge_pair (bi_call_in_edge, guard_bb_in_edge));</span>
+<span class="lineNum">     891 </span>            :     }
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span>            :   /* Now update the probability and profile information, processing the
+<span class="lineNum">     894 </span>            :      guards in order of execution.
+<span class="lineNum">     895 </span>            : 
+<span class="lineNum">     896 </span>            :      There are two approaches we could take here.  On the one hand we
+<span class="lineNum">     897 </span>            :      could assign a probability of X to the call block and distribute
+<span class="lineNum">     898 </span>            :      that probability among its incoming edges.  On the other hand we
+<span class="lineNum">     899 </span>            :      could assign a probability of X to each individual call edge.
+<span class="lineNum">     900 </span>            : 
+<span class="lineNum">     901 </span>            :      The choice only affects calls that have more than one condition.
+<span class="lineNum">     902 </span>            :      In those cases, the second approach would give the call block
+<span class="lineNum">     903 </span>            :      a greater probability than the first.  However, the difference
+<span class="lineNum">     904 </span>            :      is only small, and our chosen X is a pure guess anyway.
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span>            :      Here we take the second approach because it's slightly simpler
+<span class="lineNum">     907 </span>            :      and because it's easy to see that it doesn't lose profile counts.  */
+<span class="lineNum">     908 </span><span class="lineCov">       1998 :   bi_call_bb-&gt;count = profile_count::zero ();</span>
+<span class="lineNum">     909 </span><span class="lineCov">       4099 :   while (!edges.is_empty ())</span>
+<span class="lineNum">     910 </span>            :     {
+<span class="lineNum">     911 </span><span class="lineCov">       2101 :       edge_pair e = edges.pop ();</span>
+<span class="lineNum">     912 </span><span class="lineCov">       2101 :       edge call_edge = e.first;</span>
+<span class="lineNum">     913 </span><span class="lineCov">       2101 :       edge nocall_edge = e.second;</span>
+<span class="lineNum">     914 </span><span class="lineCov">       2101 :       basic_block src_bb = call_edge-&gt;src;</span>
+<span class="lineNum">     915 </span><span class="lineCov">       2101 :       gcc_assert (src_bb == nocall_edge-&gt;src);</span>
+<span class="lineNum">     916 </span>            : 
+<span class="lineNum">     917 </span><span class="lineCov">       2101 :       call_edge-&gt;probability = profile_probability::very_unlikely ();</span>
+<span class="lineNum">     918 </span><span class="lineCov">       8404 :       nocall_edge-&gt;probability = profile_probability::always ()</span>
+<span class="lineNum">     919 </span><span class="lineCov">       2101 :                                  - call_edge-&gt;probability;</span>
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span><span class="lineCov">       2101 :       bi_call_bb-&gt;count += call_edge-&gt;count ();</span>
+<span class="lineNum">     922 </span>            : 
+<span class="lineNum">     923 </span><span class="lineCov">       2101 :       if (nocall_edge-&gt;dest != join_tgt_bb)</span>
+<span class="lineNum">     924 </span><span class="lineCov">        103 :         nocall_edge-&gt;dest-&gt;count = src_bb-&gt;count - bi_call_bb-&gt;count;</span>
+<span class="lineNum">     925 </span>            :     }
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span><span class="lineCov">       1998 :   if (dom_info_available_p (CDI_DOMINATORS))</span>
+<span class="lineNum">     928 </span>            :     {
+<span class="lineNum">     929 </span>            :       /* The split_blocks leave [guard 0] as the immediate dominator
+<span class="lineNum">     930 </span>            :          of [call] and [call] as the immediate dominator of [join].
+<span class="lineNum">     931 </span>            :          Fix them up.  */
+<span class="lineNum">     932 </span><span class="lineCov">       1998 :       set_immediate_dominator (CDI_DOMINATORS, bi_call_bb, guard_bb);</span>
+<span class="lineNum">     933 </span><span class="lineCov">       1998 :       set_immediate_dominator (CDI_DOMINATORS, join_tgt_bb, guard_bb);</span>
+<span class="lineNum">     934 </span>            :     }
+<span class="lineNum">     935 </span>            : 
+<span class="lineNum">     936 </span><span class="lineCov">       1998 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     937 </span>            :     {
+<span class="lineNum">     938 </span><span class="lineCov">        137 :       location_t loc;</span>
+<span class="lineNum">     939 </span><span class="lineCov">        137 :       loc = gimple_location (bi_call);</span>
+<span class="lineNum">     940 </span><span class="lineCov">        137 :       fprintf (dump_file,</span>
+<span class="lineNum">     941 </span>            :                &quot;%s:%d: note: function call is shrink-wrapped&quot;
+<span class="lineNum">     942 </span>            :                &quot; into error conditions.\n&quot;,
+<span class="lineNum">     943 </span><span class="lineCov">        274 :                LOCATION_FILE (loc), LOCATION_LINE (loc));</span>
+<span class="lineNum">     944 </span>            :     }
+<span class="lineNum">     945 </span><span class="lineCov">       1998 : }</span>
+<span class="lineNum">     946 </span>            : 
+<span class="lineNum">     947 </span>            : /* Shrink-wrap BI_CALL so that it is only called when it might set errno
+<span class="lineNum">     948 </span>            :    (but is always called if it would set errno).  */
+<span class="lineNum">     949 </span>            : 
+<span class="lineNum">     950 </span>            : static void
+<span class="lineNum">     951 </span><span class="lineCov">        460 : shrink_wrap_one_built_in_call (gcall *bi_call)</span>
+<span class="lineNum">     952 </span>            : {
+<span class="lineNum">     953 </span><span class="lineCov">        460 :   unsigned nconds = 0;</span>
+<span class="lineNum">     954 </span><span class="lineCov">        460 :   auto_vec&lt;gimple *, 12&gt; conds;</span>
+<span class="lineNum">     955 </span><span class="lineCov">        460 :   gen_shrink_wrap_conditions (bi_call, conds, &amp;nconds);</span>
+<span class="lineNum">     956 </span><span class="lineCov">        460 :   gcc_assert (nconds != 0);</span>
+<span class="lineNum">     957 </span><span class="lineCov">        460 :   shrink_wrap_one_built_in_call_with_conds (bi_call, conds, nconds);</span>
+<span class="lineNum">     958 </span><span class="lineCov">        460 : }</span>
+<span class="lineNum">     959 </span>            : 
+<span class="lineNum">     960 </span>            : /* Return true if built-in function call CALL could be implemented using
+<span class="lineNum">     961 </span>            :    a combination of an internal function to compute the result and a
+<span class="lineNum">     962 </span>            :    separate call to set errno.  */
+<a name="963"><span class="lineNum">     963 </span>            : </a>
+<span class="lineNum">     964 </span>            : static bool
+<span class="lineNum">     965 </span><span class="lineCov">     211981 : can_use_internal_fn (gcall *call)</span>
+<span class="lineNum">     966 </span>            : {
+<span class="lineNum">     967 </span>            :   /* Only replace calls that set errno.  */
+<span class="lineNum">     968 </span><span class="lineCov">     423962 :   if (!gimple_vdef (call))</span>
+<span class="lineNum">     969 </span>            :     return false;
+<span class="lineNum">     970 </span>            : 
+<span class="lineNum">     971 </span>            :   /* See whether there is an internal function for this built-in.  */
+<span class="lineNum">     972 </span><span class="lineCov">     114892 :   if (replacement_internal_fn (call) == IFN_LAST)</span>
+<span class="lineNum">     973 </span>            :     return false;
+<span class="lineNum">     974 </span>            : 
+<span class="lineNum">     975 </span>            :   /* See whether we can catch all cases where errno would be set,
+<span class="lineNum">     976 </span>            :      while still avoiding the call in most cases.  */
+<span class="lineNum">     977 </span><span class="lineCov">       1538 :   if (!can_test_argument_range (call)</span>
+<span class="lineNum">     978 </span><span class="lineCov">       1538 :       &amp;&amp; !edom_only_function (call))</span>
+<span class="lineNum">     979 </span><span class="lineNoCov">          0 :     return false;</span>
+<span class="lineNum">     980 </span>            : 
+<span class="lineNum">     981 </span>            :   return true;
+<span class="lineNum">     982 </span>            : }
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span>            : /* Implement built-in function call CALL using an internal function.  */
+<span class="lineNum">     985 </span>            : 
+<span class="lineNum">     986 </span>            : static void
+<span class="lineNum">     987 </span><span class="lineCov">       1538 : use_internal_fn (gcall *call)</span>
+<span class="lineNum">     988 </span>            : {
+<span class="lineNum">     989 </span>            :   /* We'll be inserting another call with the same arguments after the
+<span class="lineNum">     990 </span>            :      lhs has been set, so prevent any possible coalescing failure from
+<span class="lineNum">     991 </span>            :      having both values live at once.  See PR 71020.  */
+<span class="lineNum">     992 </span><span class="lineCov">       1538 :   replace_abnormal_ssa_names (call);</span>
+<span class="lineNum">     993 </span>            : 
+<span class="lineNum">     994 </span><span class="lineCov">       1538 :   unsigned nconds = 0;</span>
+<span class="lineNum">     995 </span><span class="lineCov">       1538 :   auto_vec&lt;gimple *, 12&gt; conds;</span>
+<span class="lineNum">     996 </span><span class="lineCov">       1538 :   if (can_test_argument_range (call))</span>
+<span class="lineNum">     997 </span>            :     {
+<span class="lineNum">     998 </span><span class="lineCov">       1537 :       gen_shrink_wrap_conditions (call, conds, &amp;nconds);</span>
+<span class="lineNum">     999 </span><span class="lineCov">       1537 :       gcc_assert (nconds != 0);</span>
+<span class="lineNum">    1000 </span>            :     }
+<span class="lineNum">    1001 </span>            :   else
+<span class="lineNum">    1002 </span><span class="lineCov">          1 :     gcc_assert (edom_only_function (call));</span>
+<span class="lineNum">    1003 </span>            : 
+<span class="lineNum">    1004 </span><span class="lineCov">       1538 :   internal_fn ifn = replacement_internal_fn (call);</span>
+<span class="lineNum">    1005 </span><span class="lineCov">       1538 :   gcc_assert (ifn != IFN_LAST);</span>
+<span class="lineNum">    1006 </span>            : 
+<span class="lineNum">    1007 </span>            :   /* Construct the new call, with the same arguments as the original one.  */
+<span class="lineNum">    1008 </span><span class="lineCov">       3076 :   auto_vec &lt;tree, 16&gt; args;</span>
+<span class="lineNum">    1009 </span><span class="lineCov">       1538 :   unsigned int nargs = gimple_call_num_args (call);</span>
+<span class="lineNum">    1010 </span><span class="lineCov">       3076 :   for (unsigned int i = 0; i &lt; nargs; ++i)</span>
+<span class="lineNum">    1011 </span><span class="lineCov">       1538 :     args.safe_push (gimple_call_arg (call, i));</span>
+<span class="lineNum">    1012 </span><span class="lineCov">       1538 :   gcall *new_call = gimple_build_call_internal_vec (ifn, args);</span>
+<span class="lineNum">    1013 </span><span class="lineCov">       3076 :   gimple_set_location (new_call, gimple_location (call));</span>
+<span class="lineNum">    1014 </span><span class="lineCov">       1538 :   gimple_call_set_nothrow (new_call, gimple_call_nothrow_p (call));</span>
+<span class="lineNum">    1015 </span>            : 
+<span class="lineNum">    1016 </span>            :   /* Transfer the LHS to the new call.  */
+<span class="lineNum">    1017 </span><span class="lineCov">       1538 :   tree lhs = gimple_call_lhs (call);</span>
+<span class="lineNum">    1018 </span><span class="lineCov">       1538 :   gimple_call_set_lhs (new_call, lhs);</span>
+<span class="lineNum">    1019 </span><span class="lineCov">       1538 :   gimple_call_set_lhs (call, NULL_TREE);</span>
+<span class="lineNum">    1020 </span><span class="lineCov">       1538 :   SSA_NAME_DEF_STMT (lhs) = new_call;</span>
+<span class="lineNum">    1021 </span>            : 
+<span class="lineNum">    1022 </span>            :   /* Insert the new call.  */
+<span class="lineNum">    1023 </span><span class="lineCov">       1538 :   gimple_stmt_iterator gsi = gsi_for_stmt (call);</span>
+<span class="lineNum">    1024 </span><span class="lineCov">       1538 :   gsi_insert_before (&amp;gsi, new_call, GSI_SAME_STMT);</span>
+<span class="lineNum">    1025 </span>            : 
+<span class="lineNum">    1026 </span><span class="lineCov">       1538 :   if (nconds == 0)</span>
+<span class="lineNum">    1027 </span>            :     {
+<span class="lineNum">    1028 </span>            :       /* Skip the call if LHS == LHS.  If we reach here, EDOM is the only
+<span class="lineNum">    1029 </span>            :          valid errno value and it is used iff the result is NaN.  */
+<span class="lineNum">    1030 </span><span class="lineCov">          1 :       conds.quick_push (gimple_build_cond (EQ_EXPR, lhs, lhs,</span>
+<span class="lineNum">    1031 </span>            :                                            NULL_TREE, NULL_TREE));
+<span class="lineNum">    1032 </span><span class="lineCov">          1 :       nconds++;</span>
+<span class="lineNum">    1033 </span>            : 
+<span class="lineNum">    1034 </span>            :       /* Try replacing the original call with a direct assignment to
+<span class="lineNum">    1035 </span>            :          errno, via an internal function.  */
+<span class="lineNum">    1036 </span><span class="lineCov">          1 :       if (set_edom_supported_p () &amp;&amp; !stmt_ends_bb_p (call))</span>
+<span class="lineNum">    1037 </span>            :         {
+<span class="lineNum">    1038 </span><span class="lineNoCov">          0 :           gimple_stmt_iterator gsi = gsi_for_stmt (call);</span>
+<span class="lineNum">    1039 </span><span class="lineNoCov">          0 :           gcall *new_call = gimple_build_call_internal (IFN_SET_EDOM, 0);</span>
+<span class="lineNum">    1040 </span><span class="lineNoCov">          0 :           gimple_set_vuse (new_call, gimple_vuse (call));</span>
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :           gimple_set_vdef (new_call, gimple_vdef (call));</span>
+<span class="lineNum">    1042 </span><span class="lineNoCov">          0 :           SSA_NAME_DEF_STMT (gimple_vdef (new_call)) = new_call;</span>
+<span class="lineNum">    1043 </span><span class="lineNoCov">          0 :           gimple_set_location (new_call, gimple_location (call));</span>
+<span class="lineNum">    1044 </span><span class="lineNoCov">          0 :           gsi_replace (&amp;gsi, new_call, false);</span>
+<span class="lineNum">    1045 </span><span class="lineNoCov">          0 :           call = new_call;</span>
+<span class="lineNum">    1046 </span>            :         }
+<span class="lineNum">    1047 </span>            :     }
+<span class="lineNum">    1048 </span>            : 
+<span class="lineNum">    1049 </span><span class="lineCov">       1538 :   shrink_wrap_one_built_in_call_with_conds (call, conds, nconds);</span>
+<span class="lineNum">    1050 </span><span class="lineCov">       1538 : }</span>
+<span class="lineNum">    1051 </span>            : 
+<span class="lineNum">    1052 </span>            : /* The top level function for conditional dead code shrink
+<span class="lineNum">    1053 </span>            :    wrapping transformation.  */
+<span class="lineNum">    1054 </span>            : 
+<span class="lineNum">    1055 </span>            : static void
+<span class="lineNum">    1056 </span><span class="lineCov">        887 : shrink_wrap_conditional_dead_built_in_calls (vec&lt;gcall *&gt; calls)</span>
+<span class="lineNum">    1057 </span>            : {
+<span class="lineNum">    1058 </span><span class="lineCov">        887 :   unsigned i = 0;</span>
+<span class="lineNum">    1059 </span>            : 
+<span class="lineNum">    1060 </span><span class="lineCov">       1774 :   unsigned n = calls.length ();</span>
+<span class="lineNum">    1061 </span><span class="lineCov">       2885 :   for (; i &lt; n ; i++)</span>
+<span class="lineNum">    1062 </span>            :     {
+<span class="lineNum">    1063 </span><span class="lineCov">       1998 :       gcall *bi_call = calls[i];</span>
+<span class="lineNum">    1064 </span><span class="lineCov">       3996 :       if (gimple_call_lhs (bi_call))</span>
+<span class="lineNum">    1065 </span><span class="lineCov">       1538 :         use_internal_fn (bi_call);</span>
+<span class="lineNum">    1066 </span>            :       else
+<span class="lineNum">    1067 </span><span class="lineCov">        460 :         shrink_wrap_one_built_in_call (bi_call);</span>
+<span class="lineNum">    1068 </span>            :     }
+<span class="lineNum">    1069 </span><span class="lineCov">        887 : }</span>
+<span class="lineNum">    1070 </span>            : 
+<span class="lineNum">    1071 </span>            : namespace {
+<span class="lineNum">    1072 </span>            : 
+<span class="lineNum">    1073 </span>            : const pass_data pass_data_call_cdce =
+<span class="lineNum">    1074 </span>            : {
+<span class="lineNum">    1075 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">    1076 </span>            :   &quot;cdce&quot;, /* name */
+<span class="lineNum">    1077 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1078 </span>            :   TV_TREE_CALL_CDCE, /* tv_id */
+<span class="lineNum">    1079 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">    1080 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1081 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1082 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1083 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">    1084 </span>            : };
+<span class="lineNum">    1085 </span>            : 
+<span class="lineNum">    1086 </span>            : class pass_call_cdce : public gimple_opt_pass
+<span class="lineNum">    1087 </span>            : {
+<span class="lineNum">    1088 </span>            : public:
+<span class="lineNum">    1089 </span>            :   pass_call_cdce (gcc::context *ctxt)
+<span class="lineNum">    1090 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_call_cdce, ctxt)</span>
+<span class="lineNum">    1091 </span>            :   {}
+<a name="1092"><span class="lineNum">    1092 </span>            : </a>
+<span class="lineNum">    1093 </span>            :   /* opt_pass methods: */
+<span class="lineNum">    1094 </span><span class="lineCov">     620946 :   virtual bool gate (function *)</span>
+<span class="lineNum">    1095 </span>            :     {
+<span class="lineNum">    1096 </span>            :       /* The limit constants used in the implementation
+<span class="lineNum">    1097 </span>            :          assume IEEE floating point format.  Other formats
+<span class="lineNum">    1098 </span>            :          can be supported in the future if needed.  */
+<span class="lineNum">    1099 </span><span class="lineCov">     620946 :       return flag_tree_builtin_call_dce != 0;</span>
+<span class="lineNum">    1100 </span>            :     }
+<span class="lineNum">    1101 </span>            : 
+<span class="lineNum">    1102 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">    1103 </span>            : 
+<span class="lineNum">    1104 </span>            : }; // class pass_call_cdce
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span>            : unsigned int
+<span class="lineNum">    1107 </span><span class="lineCov">     620934 : pass_call_cdce::execute (function *fun)</span>
+<span class="lineNum">    1108 </span>            : {
+<span class="lineNum">    1109 </span><span class="lineCov">     620934 :   basic_block bb;</span>
+<span class="lineNum">    1110 </span><span class="lineCov">     620934 :   gimple_stmt_iterator i;</span>
+<span class="lineNum">    1111 </span><span class="lineCov">    1241868 :   auto_vec&lt;gcall *&gt; cond_dead_built_in_calls;</span>
+<span class="lineNum">    1112 </span><span class="lineCov">    6265710 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">    1113 </span>            :     {
+<span class="lineNum">    1114 </span>            :       /* Skip blocks that are being optimized for size, since our
+<span class="lineNum">    1115 </span>            :          transformation always increases code size.  */
+<span class="lineNum">    1116 </span><span class="lineCov">    5644776 :       if (optimize_bb_for_size_p (bb))</span>
+<span class="lineNum">    1117 </span>            :         continue;
+<span class="lineNum">    1118 </span>            : 
+<span class="lineNum">    1119 </span>            :       /* Collect dead call candidates.  */
+<span class="lineNum">    1120 </span><span class="lineCov">   51140549 :       for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&amp;i))</span>
+<span class="lineNum">    1121 </span>            :         {
+<span class="lineNum">    1122 </span><span class="lineCov">   84115102 :           gcall *stmt = dyn_cast &lt;gcall *&gt; (gsi_stmt (i));</span>
+<span class="lineNum">    1123 </span><span class="lineCov">   42057551 :           if (stmt</span>
+<span class="lineNum">    1124 </span><span class="lineCov">    2466598 :               &amp;&amp; gimple_call_builtin_p (stmt, BUILT_IN_NORMAL)</span>
+<span class="lineNum">    1125 </span><span class="lineCov">     578565 :               &amp;&amp; (gimple_call_lhs (stmt)</span>
+<span class="lineNum">    1126 </span><span class="lineCov">     366584 :                   ? can_use_internal_fn (stmt)</span>
+<span class="lineNum">    1127 </span><span class="lineCov">     154603 :                   : can_test_argument_range (stmt))</span>
+<span class="lineNum">    1128 </span><span class="lineCov">   42426133 :               &amp;&amp; can_guard_call_p (stmt))</span>
+<span class="lineNum">    1129 </span>            :             {
+<span class="lineNum">    1130 </span><span class="lineCov">       1998 :               if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1131 </span>            :                 {
+<span class="lineNum">    1132 </span><span class="lineCov">        137 :                   fprintf (dump_file, &quot;Found conditional dead call: &quot;);</span>
+<span class="lineNum">    1133 </span><span class="lineCov">        137 :                   print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">    1134 </span><span class="lineCov">        137 :                   fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1135 </span>            :                 }
+<span class="lineNum">    1136 </span><span class="lineCov">       1998 :               if (!cond_dead_built_in_calls.exists ())</span>
+<span class="lineNum">    1137 </span><span class="lineCov">        887 :                 cond_dead_built_in_calls.create (64);</span>
+<span class="lineNum">    1138 </span><span class="lineCov">       1998 :               cond_dead_built_in_calls.safe_push (stmt);</span>
+<span class="lineNum">    1139 </span>            :             }
+<span class="lineNum">    1140 </span>            :         }
+<span class="lineNum">    1141 </span>            :     }
+<span class="lineNum">    1142 </span>            : 
+<span class="lineNum">    1143 </span><span class="lineCov">     620934 :   if (!cond_dead_built_in_calls.exists ())</span>
+<span class="lineNum">    1144 </span>            :     return 0;
+<span class="lineNum">    1145 </span>            : 
+<span class="lineNum">    1146 </span><span class="lineCov">        887 :   shrink_wrap_conditional_dead_built_in_calls (cond_dead_built_in_calls);</span>
+<span class="lineNum">    1147 </span><span class="lineCov">        887 :   free_dominance_info (CDI_POST_DOMINATORS);</span>
+<span class="lineNum">    1148 </span>            :   /* As we introduced new control-flow we need to insert PHI-nodes
+<span class="lineNum">    1149 </span>            :      for the call-clobbers of the remaining call.  */
+<span class="lineNum">    1150 </span><span class="lineCov">        887 :   mark_virtual_operands_for_renaming (fun);</span>
+<span class="lineNum">    1151 </span><span class="lineCov">        887 :   return TODO_update_ssa;</span>
+<span class="lineNum">    1152 </span>            : }
+<span class="lineNum">    1153 </span>            : 
+<span class="lineNum">    1154 </span>            : } // anon namespace
+<a name="1155"><span class="lineNum">    1155 </span>            : </a>
+<span class="lineNum">    1156 </span>            : gimple_opt_pass *
+<span class="lineNum">    1157 </span><span class="lineCov">     170312 : make_pass_call_cdce (gcc::context *ctxt)</span>
+<span class="lineNum">    1158 </span>            : {
+<span class="lineNum">    1159 </span><span class="lineCov">     170312 :   return new pass_call_cdce (ctxt);</span>
+<span class="lineNum">    1160 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

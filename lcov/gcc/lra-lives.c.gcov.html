@@ -1,0 +1,1545 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/lra-lives.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - lra-lives.c<span style="font-size: 80%;"> (source / <a href="lra-lives.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">627</td>
+            <td class="headerCovTableEntry">679</td>
+            <td class="headerCovTableEntryHi">92.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">27</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntryLo">73.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Build live ranges for pseudos.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2010-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Vladimir Makarov &lt;vmakarov@redhat.com&gt;.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.    */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : /* This file contains code to build pseudo live-ranges (analogous
+<span class="lineNum">      23 </span>            :    structures used in IRA, so read comments about the live-ranges
+<span class="lineNum">      24 </span>            :    there) and other info necessary for other passes to assign
+<span class="lineNum">      25 </span>            :    hard-registers to pseudos, coalesce the spilled pseudos, and assign
+<span class="lineNum">      26 </span>            :    stack memory slots to spilled pseudos.  */
+<span class="lineNum">      27 </span>            : 
+<span class="lineNum">      28 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;ira.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;sparseset.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;lra-int.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            : /* Program points are enumerated by numbers from range
+<span class="lineNum">      48 </span>            :    0..LRA_LIVE_MAX_POINT-1.  There are approximately two times more
+<span class="lineNum">      49 </span>            :    program points than insns.  Program points are places in the
+<span class="lineNum">      50 </span>            :    program where liveness info can be changed.  In most general case
+<span class="lineNum">      51 </span>            :    (there are more complicated cases too) some program points
+<span class="lineNum">      52 </span>            :    correspond to places where input operand dies and other ones
+<span class="lineNum">      53 </span>            :    correspond to places where output operands are born.  */
+<span class="lineNum">      54 </span>            : int lra_live_max_point;
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : /* Accumulated execution frequency of all references for each hard
+<span class="lineNum">      57 </span>            :    register.  */
+<span class="lineNum">      58 </span>            : int lra_hard_reg_usage[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            : /* A global flag whose true value says to build live ranges for all
+<span class="lineNum">      61 </span>            :    pseudos, otherwise the live ranges only for pseudos got memory is
+<span class="lineNum">      62 </span>            :    build.  True value means also building copies and setting up hard
+<span class="lineNum">      63 </span>            :    register preferences.  The complete info is necessary only for the
+<span class="lineNum">      64 </span>            :    assignment pass.  The complete info is not needed for the
+<span class="lineNum">      65 </span>            :    coalescing and spill passes.  */
+<span class="lineNum">      66 </span>            : static bool complete_info_p;
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : /* Pseudos live at current point in the RTL scan.  */
+<span class="lineNum">      69 </span>            : static sparseset pseudos_live;
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            : /* Pseudos probably living through calls and setjumps.  As setjump is
+<span class="lineNum">      72 </span>            :    a call too, if a bit in PSEUDOS_LIVE_THROUGH_SETJUMPS is set up
+<span class="lineNum">      73 </span>            :    then the corresponding bit in PSEUDOS_LIVE_THROUGH_CALLS is set up
+<span class="lineNum">      74 </span>            :    too.  These data are necessary for cases when only one subreg of a
+<span class="lineNum">      75 </span>            :    multi-reg pseudo is set up after a call.  So we decide it is
+<span class="lineNum">      76 </span>            :    probably live when traversing bb backward.  We are sure about
+<span class="lineNum">      77 </span>            :    living when we see its usage or definition of the pseudo.  */
+<span class="lineNum">      78 </span>            : static sparseset pseudos_live_through_calls;
+<span class="lineNum">      79 </span>            : static sparseset pseudos_live_through_setjumps;
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : /* Set of hard regs (except eliminable ones) currently live.  */
+<span class="lineNum">      82 </span>            : static HARD_REG_SET hard_regs_live;
+<span class="lineNum">      83 </span>            : 
+<span class="lineNum">      84 </span>            : /* Set of pseudos and hard registers start living/dying in the current
+<span class="lineNum">      85 </span>            :    insn.  These sets are used to update REG_DEAD and REG_UNUSED notes
+<span class="lineNum">      86 </span>            :    in the insn.  */
+<span class="lineNum">      87 </span>            : static sparseset start_living, start_dying;
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : /* Set of pseudos and hard regs dead and unused in the current
+<span class="lineNum">      90 </span>            :    insn.  */
+<span class="lineNum">      91 </span>            : static sparseset unused_set, dead_set;
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : /* Bitmap used for holding intermediate bitmap operation results.  */
+<span class="lineNum">      94 </span>            : static bitmap_head temp_bitmap;
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            : /* Pool for pseudo live ranges.  */
+<span class="lineNum">      97 </span>            : static object_allocator&lt;lra_live_range&gt; lra_live_range_pool (&quot;live ranges&quot;);
+<span class="lineNum">      98 </span>            : 
+<a name="99"><span class="lineNum">      99 </span>            : /* Free live range list LR.  */</a>
+<span class="lineNum">     100 </span>            : static void
+<span class="lineNum">     101 </span><span class="lineNoCov">          0 : free_live_range_list (lra_live_range_t lr)</span>
+<span class="lineNum">     102 </span>            : {
+<span class="lineNum">     103 </span><span class="lineCov">  316359993 :   lra_live_range_t next;</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span><span class="lineCov">  316359993 :   while (lr != NULL)</span>
+<span class="lineNum">     106 </span>            :     {
+<span class="lineNum">     107 </span><span class="lineCov">   65775943 :       next = lr-&gt;next;</span>
+<span class="lineNum">     108 </span><span class="lineCov">   65775943 :       lra_live_range_pool.remove (lr);</span>
+<span class="lineNum">     109 </span><span class="lineCov">   65775943 :       lr = next;</span>
+<span class="lineNum">     110 </span>            :     }
+<span class="lineNum">     111 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     112 </span>            : 
+<a name="113"><span class="lineNum">     113 </span>            : /* Create and return pseudo live range with given attributes.  */</a>
+<span class="lineNum">     114 </span>            : static lra_live_range_t
+<span class="lineNum">     115 </span><span class="lineNoCov">          0 : create_live_range (int regno, int start, int finish, lra_live_range_t next)</span>
+<span class="lineNum">     116 </span>            : {
+<span class="lineNum">     117 </span><span class="lineNoCov">          0 :   lra_live_range_t p = lra_live_range_pool.allocate ();</span>
+<span class="lineNum">     118 </span><span class="lineCov">   71118575 :   p-&gt;regno = regno;</span>
+<span class="lineNum">     119 </span><span class="lineCov">   71118575 :   p-&gt;start = start;</span>
+<span class="lineNum">     120 </span><span class="lineCov">   71118575 :   p-&gt;finish = finish;</span>
+<span class="lineNum">     121 </span><span class="lineCov">   71118575 :   p-&gt;next = next;</span>
+<span class="lineNum">     122 </span><span class="lineCov">   71118575 :   return p;</span>
+<span class="lineNum">     123 </span>            : }
+<span class="lineNum">     124 </span>            : 
+<a name="125"><span class="lineNum">     125 </span>            : /* Copy live range R and return the result.  */</a>
+<span class="lineNum">     126 </span>            : static lra_live_range_t
+<span class="lineNum">     127 </span><span class="lineNoCov">          0 : copy_live_range (lra_live_range_t r)</span>
+<span class="lineNum">     128 </span>            : {
+<span class="lineNum">     129 </span><span class="lineNoCov">          0 :   return new (lra_live_range_pool) lra_live_range (*r);</span>
+<span class="lineNum">     130 </span>            : }
+<span class="lineNum">     131 </span>            : 
+<a name="132"><span class="lineNum">     132 </span>            : /* Copy live range list given by its head R and return the result.  */</a>
+<span class="lineNum">     133 </span>            : lra_live_range_t
+<span class="lineNum">     134 </span><span class="lineCov">     743473 : lra_copy_live_range_list (lra_live_range_t r)</span>
+<span class="lineNum">     135 </span>            : {
+<span class="lineNum">     136 </span><span class="lineCov">     743473 :   lra_live_range_t p, first, *chain;</span>
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span><span class="lineCov">     743473 :   first = NULL;</span>
+<span class="lineNum">     139 </span><span class="lineCov">    1705788 :   for (chain = &amp;first; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">     140 </span>            :     {
+<span class="lineNum">     141 </span><span class="lineCov">     962315 :       p = copy_live_range (r);</span>
+<span class="lineNum">     142 </span><span class="lineCov">     962315 :       *chain = p;</span>
+<span class="lineNum">     143 </span><span class="lineCov">     962315 :       chain = &amp;p-&gt;next;</span>
+<span class="lineNum">     144 </span>            :     }
+<span class="lineNum">     145 </span><span class="lineCov">     743473 :   return first;</span>
+<span class="lineNum">     146 </span>            : }
+<span class="lineNum">     147 </span>            : 
+<span class="lineNum">     148 </span>            : /* Merge *non-intersected* ranges R1 and R2 and returns the result.
+<span class="lineNum">     149 </span>            :    The function maintains the order of ranges and tries to minimize
+<span class="lineNum">     150 </span>            :    size of the result range list.  Ranges R1 and R2 may not be used
+<a name="151"><span class="lineNum">     151 </span>            :    after the call.  */</a>
+<span class="lineNum">     152 </span>            : lra_live_range_t
+<span class="lineNum">     153 </span><span class="lineCov">     743473 : lra_merge_live_ranges (lra_live_range_t r1, lra_live_range_t r2)</span>
+<span class="lineNum">     154 </span>            : {
+<span class="lineNum">     155 </span><span class="lineCov">     743473 :   lra_live_range_t first, last;</span>
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span><span class="lineCov">     743473 :   if (r1 == NULL)</span>
+<span class="lineNum">     158 </span>            :     return r2;
+<span class="lineNum">     159 </span><span class="lineCov">     325544 :   if (r2 == NULL)</span>
+<span class="lineNum">     160 </span>            :     return r1;
+<span class="lineNum">     161 </span><span class="lineCov">    4426604 :   for (first = last = NULL; r1 != NULL &amp;&amp; r2 != NULL;)</span>
+<span class="lineNum">     162 </span>            :     {
+<span class="lineNum">     163 </span><span class="lineCov">    4101060 :       if (r1-&gt;start &lt; r2-&gt;start)</span>
+<span class="lineNum">     164 </span><span class="lineCov">     133012 :         std::swap (r1, r2);</span>
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span><span class="lineCov">    4101060 :       if (r1-&gt;start == r2-&gt;finish + 1)</span>
+<span class="lineNum">     167 </span>            :         {
+<span class="lineNum">     168 </span>            :           /* Joint ranges: merge r1 and r2 into r1.  */
+<span class="lineNum">     169 </span><span class="lineCov">     157962 :           r1-&gt;start = r2-&gt;start;</span>
+<span class="lineNum">     170 </span><span class="lineCov">     157962 :           lra_live_range_t temp = r2;</span>
+<span class="lineNum">     171 </span><span class="lineCov">     157962 :           r2 = r2-&gt;next;</span>
+<span class="lineNum">     172 </span><span class="lineCov">     157962 :           lra_live_range_pool.remove (temp);</span>
+<span class="lineNum">     173 </span>            :         }
+<span class="lineNum">     174 </span>            :       else
+<span class="lineNum">     175 </span>            :         {
+<span class="lineNum">     176 </span><span class="lineCov">    3943098 :           gcc_assert (r2-&gt;finish + 1 &lt; r1-&gt;start);</span>
+<span class="lineNum">     177 </span>            :           /* Add r1 to the result.  */
+<span class="lineNum">     178 </span><span class="lineCov">    3943098 :           if (first == NULL)</span>
+<span class="lineNum">     179 </span>            :             first = last = r1;
+<span class="lineNum">     180 </span>            :           else
+<span class="lineNum">     181 </span>            :             {
+<span class="lineNum">     182 </span><span class="lineCov">    3683016 :               last-&gt;next = r1;</span>
+<span class="lineNum">     183 </span><span class="lineCov">    3683016 :               last = r1;</span>
+<span class="lineNum">     184 </span>            :             }
+<span class="lineNum">     185 </span><span class="lineCov">    3943098 :           r1 = r1-&gt;next;</span>
+<span class="lineNum">     186 </span>            :         }
+<span class="lineNum">     187 </span>            :     }
+<span class="lineNum">     188 </span><span class="lineCov">     325544 :   if (r1 != NULL)</span>
+<span class="lineNum">     189 </span>            :     {
+<span class="lineNum">     190 </span><span class="lineCov">     125102 :       if (first == NULL)</span>
+<span class="lineNum">     191 </span>            :         first = r1;
+<span class="lineNum">     192 </span>            :       else
+<span class="lineNum">     193 </span><span class="lineCov">      59640 :         last-&gt;next = r1;</span>
+<span class="lineNum">     194 </span>            :     }
+<span class="lineNum">     195 </span>            :   else
+<span class="lineNum">     196 </span>            :     {
+<span class="lineNum">     197 </span><span class="lineCov">     200442 :       lra_assert (r2 != NULL);</span>
+<span class="lineNum">     198 </span><span class="lineCov">     200442 :       if (first == NULL)</span>
+<span class="lineNum">     199 </span>            :         first = r2;
+<span class="lineNum">     200 </span>            :       else
+<span class="lineNum">     201 </span><span class="lineCov">     200442 :         last-&gt;next = r2;</span>
+<span class="lineNum">     202 </span>            :     }
+<span class="lineNum">     203 </span>            :   return first;
+<span class="lineNum">     204 </span>            : }
+<span class="lineNum">     205 </span>            : 
+<a name="206"><span class="lineNum">     206 </span>            : /* Return TRUE if live ranges R1 and R2 intersect.  */</a>
+<span class="lineNum">     207 </span>            : bool
+<span class="lineNum">     208 </span><span class="lineCov">   34704695 : lra_intersected_live_ranges_p (lra_live_range_t r1, lra_live_range_t r2)</span>
+<span class="lineNum">     209 </span>            : {
+<span class="lineNum">     210 </span>            :   /* Remember the live ranges are always kept ordered.  */
+<span class="lineNum">     211 </span><span class="lineCov">   43201010 :   while (r1 != NULL &amp;&amp; r2 != NULL)</span>
+<span class="lineNum">     212 </span>            :     {
+<span class="lineNum">     213 </span><span class="lineCov">   42874561 :       if (r1-&gt;start &gt; r2-&gt;finish)</span>
+<span class="lineNum">     214 </span><span class="lineCov">    7964696 :         r1 = r1-&gt;next;</span>
+<span class="lineNum">     215 </span><span class="lineCov">   34909865 :       else if (r2-&gt;start &gt; r1-&gt;finish)</span>
+<span class="lineNum">     216 </span><span class="lineCov">     531619 :         r2 = r2-&gt;next;</span>
+<span class="lineNum">     217 </span>            :       else
+<span class="lineNum">     218 </span>            :         return true;
+<span class="lineNum">     219 </span>            :     }
+<span class="lineNum">     220 </span>            :   return false;
+<span class="lineNum">     221 </span>            : }
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            : /* The corresponding bitmaps of BB currently being processed.  */
+<span class="lineNum">     224 </span>            : static bitmap bb_killed_pseudos, bb_gen_pseudos;
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            : /* The function processing birth of hard register REGNO.  It updates
+<span class="lineNum">     227 </span>            :    living hard regs, START_LIVING, and conflict hard regs for living
+<span class="lineNum">     228 </span>            :    pseudos.  Conflict hard regs for the pic pseudo is not updated if
+<span class="lineNum">     229 </span>            :    REGNO is REAL_PIC_OFFSET_TABLE_REGNUM and CHECK_PIC_PSEUDO_P is
+<a name="230"><span class="lineNum">     230 </span>            :    true.  */</a>
+<span class="lineNum">     231 </span>            : static void
+<span class="lineNum">     232 </span><span class="lineCov">  181971596 : make_hard_regno_born (int regno, bool check_pic_pseudo_p ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     233 </span>            : {
+<span class="lineNum">     234 </span><span class="lineCov">  181971596 :   unsigned int i;</span>
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span><span class="lineCov">  181971596 :   lra_assert (regno &lt; FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     237 </span><span class="lineCov">  181971596 :   if (TEST_HARD_REG_BIT (hard_regs_live, regno))</span>
+<span class="lineNum">     238 </span>            :     return;
+<span class="lineNum">     239 </span><span class="lineCov">   96156470 :   SET_HARD_REG_BIT (hard_regs_live, regno);</span>
+<span class="lineNum">     240 </span><span class="lineCov">   96156470 :   sparseset_set_bit (start_living, regno);</span>
+<span class="lineNum">     241 </span><span class="lineCov"> 1891928536 :   EXECUTE_IF_SET_IN_SPARSESET (pseudos_live, i)</span>
+<span class="lineNum">     242 </span>            : #ifdef REAL_PIC_OFFSET_TABLE_REGNUM
+<span class="lineNum">     243 </span><span class="lineCov">  897886033 :     if (! check_pic_pseudo_p</span>
+<span class="lineNum">     244 </span><span class="lineCov">  181358100 :         || regno != REAL_PIC_OFFSET_TABLE_REGNUM</span>
+<span class="lineNum">     245 </span><span class="lineCov">    6904772 :         || pic_offset_table_rtx == NULL</span>
+<span class="lineNum">     246 </span><span class="lineCov">  911695577 :         || i != REGNO (pic_offset_table_rtx))</span>
+<span class="lineNum">     247 </span>            : #endif
+<span class="lineNum">     248 </span><span class="lineCov">  897299615 :       SET_HARD_REG_BIT (lra_reg_info[i].conflict_hard_regs, regno);</span>
+<span class="lineNum">     249 </span><span class="lineCov">   96156470 :   if (fixed_regs[regno] || TEST_HARD_REG_BIT (hard_regs_spilled_into, regno))</span>
+<span class="lineNum">     250 </span><span class="lineCov">   53741752 :     bitmap_set_bit (bb_gen_pseudos, regno);</span>
+<span class="lineNum">     251 </span>            : }
+<span class="lineNum">     252 </span>            : 
+<span class="lineNum">     253 </span>            : /* Process the death of hard register REGNO.  This updates
+<a name="254"><span class="lineNum">     254 </span>            :    hard_regs_live and START_DYING.  */</a>
+<span class="lineNum">     255 </span>            : static void
+<span class="lineNum">     256 </span><span class="lineCov">   54424466 : make_hard_regno_dead (int regno)</span>
+<span class="lineNum">     257 </span>            : {
+<span class="lineNum">     258 </span><span class="lineCov">   54424466 :   lra_assert (regno &lt; FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     259 </span><span class="lineCov">   54424466 :   if (! TEST_HARD_REG_BIT (hard_regs_live, regno))</span>
+<span class="lineNum">     260 </span>            :     return;
+<span class="lineNum">     261 </span><span class="lineCov">   54422568 :   sparseset_set_bit (start_dying, regno);</span>
+<span class="lineNum">     262 </span><span class="lineCov">   54422568 :   CLEAR_HARD_REG_BIT (hard_regs_live, regno);</span>
+<span class="lineNum">     263 </span><span class="lineCov">   54422568 :   if (fixed_regs[regno] || TEST_HARD_REG_BIT (hard_regs_spilled_into, regno))</span>
+<span class="lineNum">     264 </span>            :     {
+<span class="lineNum">     265 </span><span class="lineCov">   31729775 :       bitmap_clear_bit (bb_gen_pseudos, regno);</span>
+<span class="lineNum">     266 </span><span class="lineCov">   31729775 :       bitmap_set_bit (bb_killed_pseudos, regno);</span>
+<span class="lineNum">     267 </span>            :     }
+<span class="lineNum">     268 </span>            : }
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : /* Mark pseudo REGNO as living at program point POINT, update conflicting
+<span class="lineNum">     271 </span>            :    hard registers of the pseudo and START_LIVING, and start a new live
+<a name="272"><span class="lineNum">     272 </span>            :    range for the pseudo corresponding to REGNO if it is necessary.  */</a>
+<span class="lineNum">     273 </span>            : static void
+<span class="lineNum">     274 </span><span class="lineCov">  329494685 : mark_pseudo_live (int regno, int point)</span>
+<span class="lineNum">     275 </span>            : {
+<span class="lineNum">     276 </span><span class="lineCov">  329494685 :   lra_live_range_t p;</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineCov">  329494685 :   lra_assert (regno &gt;= FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     279 </span><span class="lineCov">  329494685 :   lra_assert (! sparseset_bit_p (pseudos_live, regno));</span>
+<span class="lineNum">     280 </span><span class="lineCov">  329494685 :   sparseset_set_bit (pseudos_live, regno);</span>
+<span class="lineNum">     281 </span><span class="lineCov">  329494685 :   IOR_HARD_REG_SET (lra_reg_info[regno].conflict_hard_regs, hard_regs_live);</span>
+<span class="lineNum">     282 </span>            : 
+<span class="lineNum">     283 </span><span class="lineCov">   34905784 :   if ((complete_info_p || lra_get_regno_hard_regno (regno) &lt; 0)</span>
+<span class="lineNum">     284 </span><span class="lineCov">  348372687 :       &amp;&amp; ((p = lra_reg_info[regno].live_ranges) == NULL</span>
+<span class="lineNum">     285 </span><span class="lineCov">  255239551 :           || (p-&gt;finish != point &amp;&amp; p-&gt;finish + 1 != point)))</span>
+<span class="lineNum">     286 </span><span class="lineCov">   71118575 :      lra_reg_info[regno].live_ranges</span>
+<span class="lineNum">     287 </span><span class="lineCov">   71118575 :        = create_live_range (regno, point, -1, p);</span>
+<span class="lineNum">     288 </span><span class="lineCov">  329494685 :   sparseset_set_bit (start_living, regno);</span>
+<span class="lineNum">     289 </span><span class="lineCov">  329494685 : }</span>
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            : /* Mark pseudo REGNO as not living at program point POINT and update
+<span class="lineNum">     292 </span>            :    START_DYING.
+<span class="lineNum">     293 </span>            :    This finishes the current live range for the pseudo corresponding
+<a name="294"><span class="lineNum">     294 </span>            :    to REGNO.  */</a>
+<span class="lineNum">     295 </span>            : static void
+<span class="lineNum">     296 </span><span class="lineCov">  329494685 : mark_pseudo_dead (int regno, int point)</span>
+<span class="lineNum">     297 </span>            : {
+<span class="lineNum">     298 </span><span class="lineCov">  329494685 :   lra_live_range_t p;</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineCov">  329494685 :   lra_assert (regno &gt;= FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     301 </span><span class="lineCov">  329494685 :   lra_assert (sparseset_bit_p (pseudos_live, regno));</span>
+<span class="lineNum">     302 </span><span class="lineCov">  329494685 :   sparseset_clear_bit (pseudos_live, regno);</span>
+<span class="lineNum">     303 </span><span class="lineCov">  329494685 :   sparseset_set_bit (start_dying, regno);</span>
+<span class="lineNum">     304 </span><span class="lineCov">  329494685 :   if (complete_info_p || lra_get_regno_hard_regno (regno) &lt; 0)</span>
+<span class="lineNum">     305 </span>            :     {
+<span class="lineNum">     306 </span><span class="lineCov">  313466903 :       p = lra_reg_info[regno].live_ranges;</span>
+<span class="lineNum">     307 </span><span class="lineCov">  313466903 :       lra_assert (p != NULL);</span>
+<span class="lineNum">     308 </span><span class="lineCov">  313466903 :       p-&gt;finish = point;</span>
+<span class="lineNum">     309 </span>            :     }
+<span class="lineNum">     310 </span><span class="lineCov">  329494685 : }</span>
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            : /* Mark register REGNO (pseudo or hard register) in MODE as live at
+<span class="lineNum">     313 </span>            :    program point POINT.  Update BB_GEN_PSEUDOS.
+<span class="lineNum">     314 </span>            :    Return TRUE if the liveness tracking sets were modified, or FALSE
+<a name="315"><span class="lineNum">     315 </span>            :    if nothing changed.  */</a>
+<span class="lineNum">     316 </span>            : static bool
+<span class="lineNum">     317 </span><span class="lineCov">  265520913 : mark_regno_live (int regno, machine_mode mode, int point)</span>
+<span class="lineNum">     318 </span>            : {
+<span class="lineNum">     319 </span><span class="lineCov">  265520913 :   int last;</span>
+<span class="lineNum">     320 </span><span class="lineCov">  265520913 :   bool changed = false;</span>
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span><span class="lineCov">  265520913 :   if (regno &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     323 </span>            :     {
+<span class="lineNum">     324 </span><span class="lineCov">  240739284 :       for (last = end_hard_regno (mode, regno); regno &lt; last; regno++)</span>
+<span class="lineNum">     325 </span><span class="lineCov">   80591324 :         make_hard_regno_born (regno, false);</span>
+<span class="lineNum">     326 </span>            :     }
+<span class="lineNum">     327 </span>            :   else
+<span class="lineNum">     328 </span>            :     {
+<span class="lineNum">     329 </span><span class="lineCov">  185446933 :       if (! sparseset_bit_p (pseudos_live, regno))</span>
+<span class="lineNum">     330 </span>            :         {
+<span class="lineNum">     331 </span><span class="lineCov">   67032631 :           mark_pseudo_live (regno, point);</span>
+<span class="lineNum">     332 </span><span class="lineCov">   67032631 :           changed = true;</span>
+<span class="lineNum">     333 </span>            :         }
+<span class="lineNum">     334 </span><span class="lineCov">  185446933 :       bitmap_set_bit (bb_gen_pseudos, regno);</span>
+<span class="lineNum">     335 </span>            :     }
+<span class="lineNum">     336 </span><span class="lineCov">  265520913 :   return changed;</span>
+<span class="lineNum">     337 </span>            : }
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span>            : /* Mark register REGNO in MODE as dead at program point POINT.  Update
+<span class="lineNum">     341 </span>            :    BB_GEN_PSEUDOS and BB_KILLED_PSEUDOS.  Return TRUE if the liveness
+<a name="342"><span class="lineNum">     342 </span>            :    tracking sets were modified, or FALSE if nothing changed.  */</a>
+<span class="lineNum">     343 </span>            : static bool
+<span class="lineNum">     344 </span><span class="lineCov">   94372822 : mark_regno_dead (int regno, machine_mode mode, int point)</span>
+<span class="lineNum">     345 </span>            : {
+<span class="lineNum">     346 </span><span class="lineCov">   94372822 :   int last;</span>
+<span class="lineNum">     347 </span><span class="lineCov">   94372822 :   bool changed = false;</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span><span class="lineCov">   94372822 :   if (regno &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     350 </span>            :     {
+<span class="lineNum">     351 </span><span class="lineCov">   64458886 :       for (last = end_hard_regno (mode, regno); regno &lt; last; regno++)</span>
+<span class="lineNum">     352 </span><span class="lineCov">   21731036 :         make_hard_regno_dead (regno);</span>
+<span class="lineNum">     353 </span>            :     }
+<span class="lineNum">     354 </span>            :   else
+<span class="lineNum">     355 </span>            :     {
+<span class="lineNum">     356 </span><span class="lineCov">   73008897 :       if (sparseset_bit_p (pseudos_live, regno))</span>
+<span class="lineNum">     357 </span>            :         {
+<span class="lineNum">     358 </span><span class="lineCov">   73008897 :           mark_pseudo_dead (regno, point);</span>
+<span class="lineNum">     359 </span><span class="lineCov">   73008897 :           changed = true;</span>
+<span class="lineNum">     360 </span>            :         }
+<span class="lineNum">     361 </span><span class="lineCov">   73008897 :       bitmap_clear_bit (bb_gen_pseudos, regno);</span>
+<span class="lineNum">     362 </span><span class="lineCov">   73008897 :       bitmap_set_bit (bb_killed_pseudos, regno);</span>
+<span class="lineNum">     363 </span>            :     }
+<span class="lineNum">     364 </span><span class="lineCov">   94372822 :   return changed;</span>
+<span class="lineNum">     365 </span>            : }
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span>            : /* This page contains code for making global live analysis of pseudos.
+<span class="lineNum">     370 </span>            :    The code works only when pseudo live info is changed on a BB
+<span class="lineNum">     371 </span>            :    border.  That might be a consequence of some global transformations
+<span class="lineNum">     372 </span>            :    in LRA, e.g. PIC pseudo reuse or rematerialization.  */
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span>            : /* Structure describing local BB data used for pseudo
+<span class="lineNum">     375 </span>            :    live-analysis.  */
+<span class="lineNum">     376 </span>            : struct bb_data_pseudos
+<span class="lineNum">     377 </span>            : {
+<span class="lineNum">     378 </span>            :   /* Basic block about which the below data are.  */
+<span class="lineNum">     379 </span>            :   basic_block bb;
+<span class="lineNum">     380 </span>            :   bitmap_head killed_pseudos; /* pseudos killed in the BB.  */
+<span class="lineNum">     381 </span>            :   bitmap_head gen_pseudos; /* pseudos generated in the BB.  */
+<span class="lineNum">     382 </span>            : };
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : /* Array for all BB data.  Indexed by the corresponding BB index.  */
+<span class="lineNum">     385 </span>            : typedef struct bb_data_pseudos *bb_data_t;
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            : /* All basic block data are referred through the following array.  */
+<span class="lineNum">     388 </span>            : static bb_data_t bb_data;
+<span class="lineNum">     389 </span>            : 
+<a name="390"><span class="lineNum">     390 </span>            : /* Two small functions for access to the bb data.  */</a>
+<span class="lineNum">     391 </span>            : static inline bb_data_t
+<span class="lineNum">     392 </span><span class="lineNoCov">          0 : get_bb_data (basic_block bb)</span>
+<span class="lineNum">     393 </span>            : {
+<span class="lineNum">     394 </span><span class="lineCov">   74786851 :   return &amp;bb_data[(bb)-&gt;index];</span>
+<span class="lineNum">     395 </span>            : }
+<span class="lineNum">     396 </span>            : 
+<span class="lineNum">     397 </span>            : static inline bb_data_t
+<span class="lineNum">     398 </span>            : get_bb_data_by_index (int index)
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">    4659955 :   return &amp;bb_data[index];</span>
+<span class="lineNum">     401 </span>            : }
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            : /* Bitmap with all hard regs.  */
+<span class="lineNum">     404 </span>            : static bitmap_head all_hard_regs_bitmap;
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            : /* The transfer function used by the DF equation solver to propagate
+<span class="lineNum">     407 </span>            :    live info through block with BB_INDEX according to the following
+<span class="lineNum">     408 </span>            :    equation:
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span>            :      bb.livein = (bb.liveout - bb.kill) OR bb.gen
+<a name="411"><span class="lineNum">     411 </span>            : */</a>
+<span class="lineNum">     412 </span>            : static bool
+<span class="lineNum">     413 </span><span class="lineCov">    4659955 : live_trans_fun (int bb_index)</span>
+<span class="lineNum">     414 </span>            : {
+<span class="lineNum">     415 </span><span class="lineCov">    9319910 :   basic_block bb = get_bb_data_by_index (bb_index)-&gt;bb;</span>
+<span class="lineNum">     416 </span><span class="lineCov">    4659955 :   bitmap bb_liveout = df_get_live_out (bb);</span>
+<span class="lineNum">     417 </span><span class="lineCov">    4659955 :   bitmap bb_livein = df_get_live_in (bb);</span>
+<span class="lineNum">     418 </span><span class="lineCov">    9319910 :   bb_data_t bb_info = get_bb_data (bb);</span>
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span><span class="lineCov">    4659955 :   bitmap_and_compl (&amp;temp_bitmap, bb_liveout, &amp;all_hard_regs_bitmap);</span>
+<span class="lineNum">     421 </span><span class="lineCov">    9319910 :   return bitmap_ior_and_compl (bb_livein, &amp;bb_info-&gt;gen_pseudos,</span>
+<span class="lineNum">     422 </span><span class="lineCov">    4659955 :                                &amp;temp_bitmap, &amp;bb_info-&gt;killed_pseudos);</span>
+<span class="lineNum">     423 </span>            : }
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span>            : /* The confluence function used by the DF equation solver to set up
+<a name="426"><span class="lineNum">     426 </span>            :    live info for a block BB without predecessor.  */</a>
+<span class="lineNum">     427 </span>            : static void
+<span class="lineNum">     428 </span><span class="lineCov">     210108 : live_con_fun_0 (basic_block bb)</span>
+<span class="lineNum">     429 </span>            : {
+<span class="lineNum">     430 </span><span class="lineCov">     210108 :   bitmap_and_into (df_get_live_out (bb), &amp;all_hard_regs_bitmap);</span>
+<span class="lineNum">     431 </span><span class="lineCov">     210108 : }</span>
+<span class="lineNum">     432 </span>            : 
+<span class="lineNum">     433 </span>            : /* The confluence function used by the DF equation solver to propagate
+<span class="lineNum">     434 </span>            :    live info from successor to predecessor on edge E according to the
+<span class="lineNum">     435 </span>            :    following equation:
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            :       bb.liveout = 0 for entry block | OR (livein of successors)
+<a name="438"><span class="lineNum">     438 </span>            :  */</a>
+<span class="lineNum">     439 </span>            : static bool
+<span class="lineNum">     440 </span><span class="lineCov">    6825222 : live_con_fun_n (edge e)</span>
+<span class="lineNum">     441 </span>            : {
+<span class="lineNum">     442 </span><span class="lineCov">    6825222 :   basic_block bb = e-&gt;src;</span>
+<span class="lineNum">     443 </span><span class="lineCov">    6825222 :   basic_block dest = e-&gt;dest;</span>
+<span class="lineNum">     444 </span><span class="lineCov">    6825222 :   bitmap bb_liveout = df_get_live_out (bb);</span>
+<span class="lineNum">     445 </span><span class="lineCov">    6825222 :   bitmap dest_livein = df_get_live_in (dest);</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span><span class="lineCov">    6825222 :   return bitmap_ior_and_compl_into (bb_liveout,</span>
+<span class="lineNum">     448 </span><span class="lineCov">    6825222 :                                     dest_livein, &amp;all_hard_regs_bitmap);</span>
+<span class="lineNum">     449 </span>            : }
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : /* Indexes of all function blocks.  */
+<span class="lineNum">     452 </span>            : static bitmap_head all_blocks;
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span>            : /* Allocate and initialize data needed for global pseudo live
+<a name="455"><span class="lineNum">     455 </span>            :    analysis.  */</a>
+<span class="lineNum">     456 </span>            : static void
+<span class="lineNum">     457 </span><span class="lineCov">     832590 : initiate_live_solver (void)</span>
+<span class="lineNum">     458 </span>            : {
+<span class="lineNum">     459 </span><span class="lineCov">     832590 :   bitmap_initialize (&amp;all_hard_regs_bitmap, &amp;reg_obstack);</span>
+<span class="lineNum">     460 </span><span class="lineCov">     832590 :   bitmap_set_range (&amp;all_hard_regs_bitmap, 0, FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     461 </span><span class="lineCov">     832590 :   bb_data = XNEWVEC (struct bb_data_pseudos, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     462 </span><span class="lineCov">     832590 :   bitmap_initialize (&amp;all_blocks, &amp;reg_obstack);</span>
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span><span class="lineCov">     832590 :   basic_block bb;</span>
+<span class="lineNum">     465 </span><span class="lineCov">   10551139 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     466 </span>            :     {
+<span class="lineNum">     467 </span><span class="lineCov">   19437098 :       bb_data_t bb_info = get_bb_data (bb);</span>
+<span class="lineNum">     468 </span><span class="lineCov">    9718549 :       bb_info-&gt;bb = bb;</span>
+<span class="lineNum">     469 </span><span class="lineCov">    9718549 :       bitmap_initialize (&amp;bb_info-&gt;killed_pseudos, &amp;reg_obstack);</span>
+<span class="lineNum">     470 </span><span class="lineCov">    9718549 :       bitmap_initialize (&amp;bb_info-&gt;gen_pseudos, &amp;reg_obstack);</span>
+<span class="lineNum">     471 </span><span class="lineCov">    9718549 :       bitmap_set_bit (&amp;all_blocks, bb-&gt;index);</span>
+<span class="lineNum">     472 </span>            :     }
+<span class="lineNum">     473 </span><span class="lineCov">     832590 : }</span>
+<span class="lineNum">     474 </span>            : 
+<a name="475"><span class="lineNum">     475 </span>            : /* Free all data needed for global pseudo live analysis.  */</a>
+<span class="lineNum">     476 </span>            : static void
+<span class="lineNum">     477 </span><span class="lineCov">     832590 : finish_live_solver (void)</span>
+<span class="lineNum">     478 </span>            : {
+<span class="lineNum">     479 </span><span class="lineCov">     832590 :   basic_block bb;</span>
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span><span class="lineCov">     832590 :   bitmap_clear (&amp;all_blocks);</span>
+<span class="lineNum">     482 </span><span class="lineCov">   10551139 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     483 </span>            :     {
+<span class="lineNum">     484 </span><span class="lineCov">   19437098 :       bb_data_t bb_info = get_bb_data (bb);</span>
+<span class="lineNum">     485 </span><span class="lineCov">    9718549 :       bitmap_clear (&amp;bb_info-&gt;killed_pseudos);</span>
+<span class="lineNum">     486 </span><span class="lineCov">    9718549 :       bitmap_clear (&amp;bb_info-&gt;gen_pseudos);</span>
+<span class="lineNum">     487 </span>            :     }
+<span class="lineNum">     488 </span><span class="lineCov">     832590 :   free (bb_data);</span>
+<span class="lineNum">     489 </span><span class="lineCov">     832590 :   bitmap_clear (&amp;all_hard_regs_bitmap);</span>
+<span class="lineNum">     490 </span><span class="lineCov">     832590 : }</span>
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : 
+<span class="lineNum">     494 </span>            : /* Insn currently scanned.  */
+<span class="lineNum">     495 </span>            : static rtx_insn *curr_insn;
+<span class="lineNum">     496 </span>            : /* The insn data.  */
+<span class="lineNum">     497 </span>            : static lra_insn_recog_data_t curr_id;
+<span class="lineNum">     498 </span>            : /* The insn static data.  */
+<span class="lineNum">     499 </span>            : static struct lra_static_insn_data *curr_static_id;
+<span class="lineNum">     500 </span>            : 
+<span class="lineNum">     501 </span>            : /* Vec containing execution frequencies of program points.  */
+<span class="lineNum">     502 </span>            : static vec&lt;int&gt; point_freq_vec;
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span>            : /* The start of the above vector elements.  */
+<span class="lineNum">     505 </span>            : int *lra_point_freq;
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span>            : /* Increment the current program point POINT to the next point which has
+<a name="508"><span class="lineNum">     508 </span>            :    execution frequency FREQ.  */</a>
+<span class="lineNum">     509 </span>            : static void
+<span class="lineNum">     510 </span><span class="lineNoCov">          0 : next_program_point (int &amp;point, int freq)</span>
+<span class="lineNum">     511 </span>            : {
+<span class="lineNum">     512 </span><span class="lineNoCov">          0 :   point_freq_vec.safe_push (freq);</span>
+<span class="lineNum">     513 </span><span class="lineCov">  153823564 :   lra_point_freq = point_freq_vec.address ();</span>
+<span class="lineNum">     514 </span><span class="lineCov">  153823564 :   point++;</span>
+<span class="lineNum">     515 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     516 </span>            : 
+<a name="517"><span class="lineNum">     517 </span>            : /* Update the preference of HARD_REGNO for pseudo REGNO by PROFIT.  */</a>
+<span class="lineNum">     518 </span>            : void
+<span class="lineNum">     519 </span><span class="lineCov">    8353185 : lra_setup_reload_pseudo_preferenced_hard_reg (int regno,</span>
+<span class="lineNum">     520 </span>            :                                               int hard_regno, int profit)
+<span class="lineNum">     521 </span>            : {
+<span class="lineNum">     522 </span><span class="lineCov">    8353185 :   lra_assert (regno &gt;= lra_constraint_new_regno_start);</span>
+<span class="lineNum">     523 </span><span class="lineCov">    8353185 :   if (lra_reg_info[regno].preferred_hard_regno1 == hard_regno)</span>
+<span class="lineNum">     524 </span><span class="lineCov">    1295691 :     lra_reg_info[regno].preferred_hard_regno_profit1 += profit;</span>
+<span class="lineNum">     525 </span><span class="lineCov">    7057494 :   else if (lra_reg_info[regno].preferred_hard_regno2 == hard_regno)</span>
+<span class="lineNum">     526 </span><span class="lineCov">      69202 :     lra_reg_info[regno].preferred_hard_regno_profit2 += profit;</span>
+<span class="lineNum">     527 </span><span class="lineCov">    6988292 :   else if (lra_reg_info[regno].preferred_hard_regno1 &lt; 0)</span>
+<span class="lineNum">     528 </span>            :     {
+<span class="lineNum">     529 </span><span class="lineCov">    6360308 :       lra_reg_info[regno].preferred_hard_regno1 = hard_regno;</span>
+<span class="lineNum">     530 </span><span class="lineCov">    6360308 :       lra_reg_info[regno].preferred_hard_regno_profit1 = profit;</span>
+<span class="lineNum">     531 </span>            :     }
+<span class="lineNum">     532 </span><span class="lineCov">     627984 :   else if (lra_reg_info[regno].preferred_hard_regno2 &lt; 0</span>
+<span class="lineNum">     533 </span><span class="lineCov">      44762 :            || profit &gt; lra_reg_info[regno].preferred_hard_regno_profit2)</span>
+<span class="lineNum">     534 </span>            :     {
+<span class="lineNum">     535 </span><span class="lineCov">     591659 :       lra_reg_info[regno].preferred_hard_regno2 = hard_regno;</span>
+<span class="lineNum">     536 </span><span class="lineCov">     591659 :       lra_reg_info[regno].preferred_hard_regno_profit2 = profit;</span>
+<span class="lineNum">     537 </span>            :     }
+<span class="lineNum">     538 </span>            :   else
+<span class="lineNum">     539 </span>            :     return;
+<span class="lineNum">     540 </span>            :   /* Keep the 1st hard regno as more profitable.  */
+<span class="lineNum">     541 </span><span class="lineCov">    8316860 :   if (lra_reg_info[regno].preferred_hard_regno1 &gt;= 0</span>
+<span class="lineNum">     542 </span><span class="lineCov">    8316860 :       &amp;&amp; lra_reg_info[regno].preferred_hard_regno2 &gt;= 0</span>
+<span class="lineNum">     543 </span><span class="lineCov">    1468778 :       &amp;&amp; (lra_reg_info[regno].preferred_hard_regno_profit2</span>
+<span class="lineNum">     544 </span><span class="lineCov">     734389 :           &gt; lra_reg_info[regno].preferred_hard_regno_profit1))</span>
+<span class="lineNum">     545 </span>            :     {
+<span class="lineNum">     546 </span><span class="lineCov">     199179 :       std::swap (lra_reg_info[regno].preferred_hard_regno1,</span>
+<span class="lineNum">     547 </span><span class="lineCov">      66393 :                  lra_reg_info[regno].preferred_hard_regno2);</span>
+<span class="lineNum">     548 </span><span class="lineCov">     132786 :       std::swap (lra_reg_info[regno].preferred_hard_regno_profit1,</span>
+<span class="lineNum">     549 </span><span class="lineCov">      66393 :                  lra_reg_info[regno].preferred_hard_regno_profit2);</span>
+<span class="lineNum">     550 </span>            :     }
+<span class="lineNum">     551 </span><span class="lineCov">    8316860 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">     552 </span>            :     {
+<span class="lineNum">     553 </span><span class="lineCov">        610 :       if ((hard_regno = lra_reg_info[regno].preferred_hard_regno1) &gt;= 0)</span>
+<span class="lineNum">     554 </span><span class="lineCov">        610 :         fprintf (lra_dump_file,</span>
+<span class="lineNum">     555 </span>            :                  &quot; Hard reg %d is preferable by r%d with profit %d\n&quot;,
+<span class="lineNum">     556 </span>            :                  hard_regno, regno,
+<span class="lineNum">     557 </span>            :                  lra_reg_info[regno].preferred_hard_regno_profit1);
+<span class="lineNum">     558 </span><span class="lineCov">        610 :       if ((hard_regno = lra_reg_info[regno].preferred_hard_regno2) &gt;= 0)</span>
+<span class="lineNum">     559 </span><span class="lineCov">         35 :         fprintf (lra_dump_file,</span>
+<span class="lineNum">     560 </span>            :                  &quot; Hard reg %d is preferable by r%d with profit %d\n&quot;,
+<span class="lineNum">     561 </span>            :                  hard_regno, regno,
+<span class="lineNum">     562 </span>            :                  lra_reg_info[regno].preferred_hard_regno_profit2);
+<span class="lineNum">     563 </span>            :     }
+<span class="lineNum">     564 </span>            : }
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span>            : /* Check that REGNO living through calls and setjumps, set up conflict
+<span class="lineNum">     567 </span>            :    regs using LAST_CALL_USED_REG_SET, and clear corresponding bits in
+<a name="568"><span class="lineNum">     568 </span>            :    PSEUDOS_LIVE_THROUGH_CALLS and PSEUDOS_LIVE_THROUGH_SETJUMPS.  */</a>
+<span class="lineNum">     569 </span>            : static inline void
+<span class="lineNum">     570 </span><span class="lineCov">  293451315 : check_pseudos_live_through_calls (int regno,</span>
+<span class="lineNum">     571 </span>            :                                   HARD_REG_SET last_call_used_reg_set)
+<span class="lineNum">     572 </span>            : {
+<span class="lineNum">     573 </span><span class="lineCov">  293451315 :   int hr;</span>
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span><span class="lineCov">  293451315 :   if (! sparseset_bit_p (pseudos_live_through_calls, regno))</span>
+<span class="lineNum">     576 </span>            :     return;
+<span class="lineNum">     577 </span><span class="lineCov">   35584370 :   sparseset_clear_bit (pseudos_live_through_calls, regno);</span>
+<span class="lineNum">     578 </span><span class="lineCov">   35584370 :   IOR_HARD_REG_SET (lra_reg_info[regno].conflict_hard_regs,</span>
+<span class="lineNum">     579 </span>            :                     last_call_used_reg_set);
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span><span class="lineCov"> 2775580860 :   for (hr = 0; hr &lt; FIRST_PSEUDO_REGISTER; hr++)</span>
+<span class="lineNum">     582 </span><span class="lineCov"> 2739996490 :     if (targetm.hard_regno_call_part_clobbered (hr,</span>
+<span class="lineNum">     583 </span><span class="lineCov"> 2739996490 :                                                 PSEUDO_REGNO_MODE (regno)))</span>
+<span class="lineNum">     584 </span><span class="lineCov">     201088 :       add_to_hard_reg_set (&amp;lra_reg_info[regno].conflict_hard_regs,</span>
+<span class="lineNum">     585 </span><span class="lineCov">     100544 :                            PSEUDO_REGNO_MODE (regno), hr);</span>
+<span class="lineNum">     586 </span><span class="lineCov">   35584370 :   lra_reg_info[regno].call_p = true;</span>
+<span class="lineNum">     587 </span><span class="lineCov">   35584370 :   if (! sparseset_bit_p (pseudos_live_through_setjumps, regno))</span>
+<span class="lineNum">     588 </span>            :     return;
+<span class="lineNum">     589 </span><span class="lineCov">       5104 :   sparseset_clear_bit (pseudos_live_through_setjumps, regno);</span>
+<span class="lineNum">     590 </span>            :   /* Don't allocate pseudos that cross setjmps or any call, if this
+<span class="lineNum">     591 </span>            :      function receives a nonlocal goto.  */
+<span class="lineNum">     592 </span><span class="lineCov">       5104 :   SET_HARD_REG_SET (lra_reg_info[regno].conflict_hard_regs);</span>
+<span class="lineNum">     593 </span>            : }
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span>            : /* Return true if insn REG is an early clobber operand in alternative
+<span class="lineNum">     596 </span>            :    NALT.  Negative NALT means that we don't know the current insn
+<span class="lineNum">     597 </span>            :    alternative.  So assume the worst.  */
+<span class="lineNum">     598 </span>            : static inline bool
+<span class="lineNum">     599 </span>            : reg_early_clobber_p (const struct lra_insn_reg *reg, int n_alt)
+<span class="lineNum">     600 </span>            : {
+<span class="lineNum">     601 </span><span class="lineCov">  255530018 :   return (reg-&gt;early_clobber</span>
+<span class="lineNum">     602 </span><span class="lineCov">   39470002 :           &amp;&amp; (n_alt == LRA_UNKNOWN_ALT</span>
+<span class="lineNum">     603 </span><span class="lineCov">   38703488 :               || (n_alt != LRA_NON_CLOBBERED_ALT</span>
+<span class="lineNum">     604 </span><span class="lineCov">   38703488 :                   &amp;&amp; TEST_BIT (reg-&gt;early_clobber_alts, n_alt))));</span>
+<span class="lineNum">     605 </span>            : }
+<span class="lineNum">     606 </span>            : 
+<span class="lineNum">     607 </span>            : /* Process insns of the basic block BB to update pseudo live ranges,
+<span class="lineNum">     608 </span>            :    pseudo hard register conflicts, and insn notes.  We do it on
+<span class="lineNum">     609 </span>            :    backward scan of BB insns.  CURR_POINT is the program point where
+<span class="lineNum">     610 </span>            :    BB ends.  The function updates this counter and returns in
+<span class="lineNum">     611 </span>            :    CURR_POINT the program point where BB starts.  The function also
+<span class="lineNum">     612 </span>            :    does local live info updates and can delete the dead insns if
+<span class="lineNum">     613 </span>            :    DEAD_INSN_P.  It returns true if pseudo live info was
+<a name="614"><span class="lineNum">     614 </span>            :    changed at the BB start.  */</a>
+<span class="lineNum">     615 </span>            : static bool
+<span class="lineNum">     616 </span><span class="lineCov">   25344899 : process_bb_lives (basic_block bb, int &amp;curr_point, bool dead_insn_p)</span>
+<span class="lineNum">     617 </span>            : {
+<span class="lineNum">     618 </span><span class="lineCov">   25344899 :   int i, regno, freq;</span>
+<span class="lineNum">     619 </span><span class="lineCov">   25344899 :   unsigned int j;</span>
+<span class="lineNum">     620 </span><span class="lineCov">   25344899 :   bitmap_iterator bi;</span>
+<span class="lineNum">     621 </span><span class="lineCov">   25344899 :   bitmap reg_live_out;</span>
+<span class="lineNum">     622 </span><span class="lineCov">   25344899 :   unsigned int px;</span>
+<span class="lineNum">     623 </span><span class="lineCov">   25344899 :   rtx_insn *next;</span>
+<span class="lineNum">     624 </span><span class="lineCov">   25344899 :   rtx link, *link_loc;</span>
+<span class="lineNum">     625 </span><span class="lineCov">   25344899 :   bool need_curr_point_incr;</span>
+<span class="lineNum">     626 </span><span class="lineCov">   25344899 :   HARD_REG_SET last_call_used_reg_set;</span>
+<span class="lineNum">     627 </span>            :   
+<span class="lineNum">     628 </span><span class="lineCov">   25344899 :   reg_live_out = df_get_live_out (bb);</span>
+<span class="lineNum">     629 </span><span class="lineCov">   25344899 :   sparseset_clear (pseudos_live);</span>
+<span class="lineNum">     630 </span><span class="lineCov">   25344899 :   sparseset_clear (pseudos_live_through_calls);</span>
+<span class="lineNum">     631 </span><span class="lineCov">   25344899 :   sparseset_clear (pseudos_live_through_setjumps);</span>
+<span class="lineNum">     632 </span><span class="lineCov">   25344899 :   CLEAR_HARD_REG_SET (last_call_used_reg_set);</span>
+<span class="lineNum">     633 </span><span class="lineCov">   25344899 :   REG_SET_TO_HARD_REG_SET (hard_regs_live, reg_live_out);</span>
+<span class="lineNum">     634 </span><span class="lineCov">   25344899 :   AND_COMPL_HARD_REG_SET (hard_regs_live, eliminable_regset);</span>
+<span class="lineNum">     635 </span><span class="lineCov">  287806953 :   EXECUTE_IF_SET_IN_BITMAP (reg_live_out, FIRST_PSEUDO_REGISTER, j, bi)</span>
+<span class="lineNum">     636 </span><span class="lineCov">  262462054 :     mark_pseudo_live (j, curr_point);</span>
+<span class="lineNum">     637 </span>            : 
+<span class="lineNum">     638 </span><span class="lineCov">   50689798 :   bb_gen_pseudos = &amp;get_bb_data (bb)-&gt;gen_pseudos;</span>
+<span class="lineNum">     639 </span><span class="lineCov">   50689798 :   bb_killed_pseudos = &amp;get_bb_data (bb)-&gt;killed_pseudos;</span>
+<span class="lineNum">     640 </span><span class="lineCov">   25344899 :   bitmap_clear (bb_gen_pseudos);</span>
+<span class="lineNum">     641 </span><span class="lineCov">   25344899 :   bitmap_clear (bb_killed_pseudos);</span>
+<span class="lineNum">     642 </span><span class="lineCov">   25344899 :   freq = REG_FREQ_FROM_BB (bb);</span>
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span><span class="lineCov">   25344899 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">     645 </span><span class="lineCov">       2284 :     fprintf (lra_dump_file, &quot;  BB %d\n&quot;, bb-&gt;index);</span>
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span>            :   /* Scan the code of this basic block, noting which pseudos and hard
+<span class="lineNum">     648 </span>            :      regs are born or die.
+<span class="lineNum">     649 </span>            : 
+<span class="lineNum">     650 </span>            :      Note that this loop treats uninitialized values as live until the
+<span class="lineNum">     651 </span>            :      beginning of the block.  For example, if an instruction uses
+<span class="lineNum">     652 </span>            :      (reg:DI foo), and only (subreg:SI (reg:DI foo) 0) is ever set,
+<span class="lineNum">     653 </span>            :      FOO will remain live until the beginning of the block.  Likewise
+<span class="lineNum">     654 </span>            :      if FOO is not set at all.  This is unnecessarily pessimistic, but
+<span class="lineNum">     655 </span>            :      it probably doesn't matter much in practice.  */
+<span class="lineNum">     656 </span><span class="lineCov">  691194888 :   FOR_BB_INSNS_REVERSE_SAFE (bb, curr_insn, next)</span>
+<span class="lineNum">     657 </span>            :     {
+<span class="lineNum">     658 </span><span class="lineCov">  320252545 :       bool call_p;</span>
+<span class="lineNum">     659 </span><span class="lineCov">  320252545 :       int n_alt, dst_regno, src_regno;</span>
+<span class="lineNum">     660 </span><span class="lineCov">  320252545 :       rtx set;</span>
+<span class="lineNum">     661 </span><span class="lineCov">  320252545 :       struct lra_insn_reg *reg, *hr;</span>
+<span class="lineNum">     662 </span>            : 
+<span class="lineNum">     663 </span><span class="lineCov">  320252545 :       if (!NONDEBUG_INSN_P (curr_insn))</span>
+<span class="lineNum">     664 </span>            :         continue;
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span><span class="lineCov">  170642568 :       curr_id = lra_get_insn_recog_data (curr_insn);</span>
+<span class="lineNum">     667 </span><span class="lineCov">  170642568 :       curr_static_id = curr_id-&gt;insn_static_data;</span>
+<span class="lineNum">     668 </span><span class="lineCov">  170642568 :       n_alt = curr_id-&gt;used_insn_alternative;</span>
+<span class="lineNum">     669 </span><span class="lineCov">  170642568 :       if (lra_dump_file != NULL)</span>
+<span class="lineNum">     670 </span><span class="lineCov">      21078 :         fprintf (lra_dump_file, &quot;   Insn %u: point = %d, n_alt = %d\n&quot;,</span>
+<span class="lineNum">     671 </span><span class="lineCov">      10539 :                  INSN_UID (curr_insn), curr_point, n_alt);</span>
+<span class="lineNum">     672 </span>            : 
+<span class="lineNum">     673 </span><span class="lineCov">  170642568 :       set = single_set (curr_insn);</span>
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span><span class="lineCov">   75281078 :       if (dead_insn_p &amp;&amp; set != NULL_RTX</span>
+<span class="lineNum">     676 </span><span class="lineCov">   71428315 :           &amp;&amp; REG_P (SET_DEST (set)) &amp;&amp; REGNO (SET_DEST (set)) &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     677 </span><span class="lineCov">   34924965 :           &amp;&amp; find_reg_note (curr_insn, REG_EH_REGION, NULL_RTX) == NULL_RTX</span>
+<span class="lineNum">     678 </span><span class="lineCov">   69614164 :           &amp;&amp; ! may_trap_p (PATTERN (curr_insn))</span>
+<span class="lineNum">     679 </span>            :           /* Don't do premature remove of pic offset pseudo as we can
+<span class="lineNum">     680 </span>            :              start to use it after some reload generation.  */
+<span class="lineNum">     681 </span><span class="lineCov">  201534960 :           &amp;&amp; (pic_offset_table_rtx == NULL_RTX</span>
+<span class="lineNum">     682 </span><span class="lineCov">    5035683 :               || pic_offset_table_rtx != SET_DEST (set)))</span>
+<span class="lineNum">     683 </span>            :         {
+<span class="lineNum">     684 </span><span class="lineCov">   30844740 :           bool remove_p = true;</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span><span class="lineCov">   31104072 :           for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     687 </span><span class="lineCov">   31088218 :             if (reg-&gt;type != OP_IN &amp;&amp; sparseset_bit_p (pseudos_live, reg-&gt;regno))</span>
+<span class="lineNum">     688 </span>            :               {
+<span class="lineNum">     689 </span>            :                 remove_p = false;
+<span class="lineNum">     690 </span>            :                 break;
+<span class="lineNum">     691 </span>            :               }
+<span class="lineNum">     692 </span><span class="lineCov">   31376506 :           for (reg = curr_static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     693 </span><span class="lineCov">    6005837 :             if (reg-&gt;type != OP_IN &amp;&amp; !reg-&gt;clobber_high)</span>
+<span class="lineNum">     694 </span>            :               {
+<span class="lineNum">     695 </span>            :                 remove_p = false;
+<span class="lineNum">     696 </span>            :                 break;
+<span class="lineNum">     697 </span>            :               }
+<span class="lineNum">     698 </span>            : 
+<span class="lineNum">     699 </span><span class="lineCov">   30844740 :           if (remove_p &amp;&amp; ! volatile_refs_p (PATTERN (curr_insn)))</span>
+<span class="lineNum">     700 </span>            :             {
+<span class="lineNum">     701 </span><span class="lineCov">      14400 :               dst_regno = REGNO (SET_DEST (set));</span>
+<span class="lineNum">     702 </span><span class="lineCov">      14400 :               if (lra_dump_file != NULL)</span>
+<span class="lineNum">     703 </span><span class="lineNoCov">          0 :                 fprintf (lra_dump_file, &quot;   Deleting dead insn %u\n&quot;,</span>
+<span class="lineNum">     704 </span><span class="lineNoCov">          0 :                          INSN_UID (curr_insn));</span>
+<span class="lineNum">     705 </span><span class="lineCov">      14400 :               lra_set_insn_deleted (curr_insn);</span>
+<span class="lineNum">     706 </span><span class="lineCov">      14400 :               if (lra_reg_info[dst_regno].nrefs == 0)</span>
+<span class="lineNum">     707 </span>            :                 {
+<span class="lineNum">     708 </span>            :                   /* There might be some debug insns with the pseudo.  */
+<span class="lineNum">     709 </span><span class="lineCov">       1036 :                   unsigned int uid;</span>
+<span class="lineNum">     710 </span><span class="lineCov">       1036 :                   rtx_insn *insn;</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineCov">       1036 :                   bitmap_copy (&amp;temp_bitmap, &amp;lra_reg_info[dst_regno].insn_bitmap);</span>
+<span class="lineNum">     713 </span><span class="lineCov">       1096 :                   EXECUTE_IF_SET_IN_BITMAP (&amp;temp_bitmap, 0, uid, bi)</span>
+<span class="lineNum">     714 </span>            :                     {
+<span class="lineNum">     715 </span><span class="lineCov">         60 :                       insn = lra_insn_recog_data[uid]-&gt;insn;</span>
+<span class="lineNum">     716 </span><span class="lineCov">         60 :                       lra_substitute_pseudo_within_insn (insn, dst_regno,</span>
+<span class="lineNum">     717 </span>            :                                                          SET_SRC (set), true);
+<span class="lineNum">     718 </span><span class="lineCov">         60 :                       lra_update_insn_regno_info (insn);</span>
+<span class="lineNum">     719 </span>            :                     }
+<span class="lineNum">     720 </span>            :                 }
+<span class="lineNum">     721 </span><span class="lineCov">      14400 :               continue;</span>
+<span class="lineNum">     722 </span>            :             }
+<span class="lineNum">     723 </span>            :         }
+<span class="lineNum">     724 </span>            : 
+<span class="lineNum">     725 </span>            :       /* Update max ref width and hard reg usage.  */
+<span class="lineNum">     726 </span><span class="lineCov">  436149081 :       for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     727 </span>            :         {
+<span class="lineNum">     728 </span><span class="lineCov">  265520913 :           int i, regno = reg-&gt;regno;</span>
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span><span class="lineCov">  265520913 :           if (partial_subreg_p (lra_reg_info[regno].biggest_mode,</span>
+<span class="lineNum">     731 </span><span class="lineCov">  265520913 :                                 reg-&gt;biggest_mode))</span>
+<span class="lineNum">     732 </span><span class="lineCov">    7179523 :             lra_reg_info[regno].biggest_mode = reg-&gt;biggest_mode;</span>
+<span class="lineNum">     733 </span><span class="lineCov">  265520913 :           if (regno &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     734 </span>            :             {
+<span class="lineNum">     735 </span><span class="lineCov">   80073980 :               lra_hard_reg_usage[regno] += freq;</span>
+<span class="lineNum">     736 </span>            :               /* A hard register explicitly can be used in small mode,
+<span class="lineNum">     737 </span>            :                  but implicitly it can be used in natural mode as a
+<span class="lineNum">     738 </span>            :                  part of multi-register group.  Process this case
+<span class="lineNum">     739 </span>            :                  here.  */
+<span class="lineNum">     740 </span><span class="lineCov">   80591324 :               for (i = 1; i &lt; hard_regno_nregs (regno, reg-&gt;biggest_mode); i++)</span>
+<span class="lineNum">     741 </span><span class="lineCov">     517344 :                 if (partial_subreg_p (lra_reg_info[regno + i].biggest_mode,</span>
+<span class="lineNum">     742 </span><span class="lineCov">     517344 :                                       GET_MODE (regno_reg_rtx[regno + i])))</span>
+<span class="lineNum">     743 </span><span class="lineCov">      88241 :                   lra_reg_info[regno + i].biggest_mode</span>
+<span class="lineNum">     744 </span><span class="lineCov">      88241 :                     = GET_MODE (regno_reg_rtx[regno + i]);</span>
+<span class="lineNum">     745 </span>            :             }
+<span class="lineNum">     746 </span>            :         }
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span><span class="lineCov">  170628168 :       call_p = CALL_P (curr_insn);</span>
+<span class="lineNum">     749 </span><span class="lineCov">  161576244 :       src_regno = (set != NULL_RTX &amp;&amp; REG_P (SET_SRC (set))</span>
+<span class="lineNum">     750 </span><span class="lineCov">  287577722 :                    ? REGNO (SET_SRC (set)) : -1);</span>
+<span class="lineNum">     751 </span><span class="lineCov">  161576244 :       dst_regno = (set != NULL_RTX &amp;&amp; REG_P (SET_DEST (set))</span>
+<span class="lineNum">     752 </span><span class="lineCov">  404179826 :                    ? REGNO (SET_DEST (set)) : -1);</span>
+<span class="lineNum">     753 </span><span class="lineCov">  170628168 :       if (complete_info_p</span>
+<span class="lineNum">     754 </span><span class="lineCov">  153653307 :           &amp;&amp; src_regno &gt;= 0 &amp;&amp; dst_regno &gt;= 0</span>
+<span class="lineNum">     755 </span>            :           /* Check that source regno does not conflict with
+<span class="lineNum">     756 </span>            :              destination regno to exclude most impossible
+<span class="lineNum">     757 </span>            :              preferences.  */
+<span class="lineNum">     758 </span><span class="lineCov">  208343209 :           &amp;&amp; (((src_regno &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     759 </span><span class="lineCov">   32187232 :                 &amp;&amp; (! sparseset_bit_p (pseudos_live, src_regno)</span>
+<span class="lineNum">     760 </span><span class="lineCov">    8703723 :                     || (dst_regno &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     761 </span><span class="lineCov">    6465310 :                         &amp;&amp; lra_reg_val_equal_p (src_regno,</span>
+<span class="lineNum">     762 </span>            :                                                 lra_reg_info[dst_regno].val,
+<span class="lineNum">     763 </span><span class="lineCov">    6465310 :                                                 lra_reg_info[dst_regno].offset))))</span>
+<span class="lineNum">     764 </span><span class="lineCov">   10347720 :                || (src_regno &lt; FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     765 </span><span class="lineCov">    5527809 :                    &amp;&amp; ! TEST_HARD_REG_BIT (hard_regs_live, src_regno)))</span>
+<span class="lineNum">     766 </span>            :               /* It might be 'inheritance pseudo &lt;- reload pseudo'.  */
+<span class="lineNum">     767 </span><span class="lineCov">    5007820 :               || (src_regno &gt;= lra_constraint_new_regno_start</span>
+<span class="lineNum">     768 </span><span class="lineCov">     185022 :                   &amp;&amp; dst_regno &gt;= lra_constraint_new_regno_start</span>
+<span class="lineNum">     769 </span>            :                   /* Remember to skip special cases where src/dest regnos are
+<span class="lineNum">     770 </span>            :                      the same, e.g. insn SET pattern has matching constraints
+<span class="lineNum">     771 </span>            :                      like =r,0.  */
+<span class="lineNum">     772 </span><span class="lineCov">     104980 :                   &amp;&amp; src_regno != dst_regno)))</span>
+<span class="lineNum">     773 </span>            :         {
+<span class="lineNum">     774 </span><span class="lineCov">   32812201 :           int hard_regno = -1, regno = -1;</span>
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span><span class="lineCov">   32812201 :           if (dst_regno &gt;= lra_constraint_new_regno_start</span>
+<span class="lineNum">     777 </span><span class="lineCov">    8372729 :               &amp;&amp; src_regno &gt;= lra_constraint_new_regno_start)</span>
+<span class="lineNum">     778 </span>            :             {
+<span class="lineNum">     779 </span>            :               /* It might be still an original (non-reload) insn with
+<span class="lineNum">     780 </span>            :                  one unused output and a constraint requiring to use
+<span class="lineNum">     781 </span>            :                  the same reg for input/output operands. In this case
+<span class="lineNum">     782 </span>            :                  dst_regno and src_regno have the same value, we don't
+<span class="lineNum">     783 </span>            :                  need a misleading copy for this case.  */
+<span class="lineNum">     784 </span><span class="lineCov">    3123015 :               if (dst_regno != src_regno)</span>
+<span class="lineNum">     785 </span><span class="lineCov">    3123015 :                 lra_create_copy (dst_regno, src_regno, freq);</span>
+<span class="lineNum">     786 </span>            :             }
+<span class="lineNum">     787 </span><span class="lineCov">   29689186 :           else if (dst_regno &gt;= lra_constraint_new_regno_start)</span>
+<span class="lineNum">     788 </span>            :             {
+<span class="lineNum">     789 </span><span class="lineCov">    5249714 :               if ((hard_regno = src_regno) &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     790 </span><span class="lineCov">    5157587 :                 hard_regno = reg_renumber[src_regno];</span>
+<span class="lineNum">     791 </span>            :               regno = dst_regno;
+<span class="lineNum">     792 </span>            :             }
+<span class="lineNum">     793 </span><span class="lineCov">   24439472 :           else if (src_regno &gt;= lra_constraint_new_regno_start)</span>
+<span class="lineNum">     794 </span>            :             {
+<span class="lineNum">     795 </span><span class="lineCov">    7342173 :               if ((hard_regno = dst_regno) &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     796 </span><span class="lineCov">    5705839 :                 hard_regno = reg_renumber[dst_regno];</span>
+<span class="lineNum">     797 </span>            :               regno = src_regno;
+<span class="lineNum">     798 </span>            :             }
+<span class="lineNum">     799 </span><span class="lineCov">   32812201 :           if (regno &gt;= 0 &amp;&amp; hard_regno &gt;= 0)</span>
+<span class="lineNum">     800 </span><span class="lineCov">    6301173 :             lra_setup_reload_pseudo_preferenced_hard_reg</span>
+<span class="lineNum">     801 </span><span class="lineCov">    6301173 :               (regno, hard_regno, freq);</span>
+<span class="lineNum">     802 </span>            :         }
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span><span class="lineCov">  170628168 :       sparseset_clear (start_living);</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span>            :       /* Try to avoid unnecessary program point increments, this saves
+<span class="lineNum">     807 </span>            :          a lot of time in remove_some_program_points_and_update_live_ranges.
+<span class="lineNum">     808 </span>            :          We only need an increment if something becomes live or dies at this
+<span class="lineNum">     809 </span>            :          program point.  */
+<span class="lineNum">     810 </span><span class="lineCov">  170628168 :       need_curr_point_incr = false;</span>
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span>            :       /* Mark each defined value as live.  We need to do this for
+<span class="lineNum">     813 </span>            :          unused values because they still conflict with quantities
+<span class="lineNum">     814 </span>            :          that are live at the time of the definition.  */
+<span class="lineNum">     815 </span><span class="lineCov">  436149081 :       for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     816 </span>            :         {
+<span class="lineNum">     817 </span><span class="lineCov">  265520913 :           if (reg-&gt;type != OP_IN)</span>
+<span class="lineNum">     818 </span>            :             {
+<span class="lineNum">     819 </span><span class="lineCov">  115384596 :               need_curr_point_incr</span>
+<span class="lineNum">     820 </span><span class="lineCov">  115384596 :                 |= mark_regno_live (reg-&gt;regno, reg-&gt;biggest_mode,</span>
+<span class="lineNum">     821 </span>            :                                     curr_point);
+<span class="lineNum">     822 </span><span class="lineCov">  115384596 :               check_pseudos_live_through_calls (reg-&gt;regno,</span>
+<span class="lineNum">     823 </span>            :                                                 last_call_used_reg_set);
+<span class="lineNum">     824 </span>            :             }
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span><span class="lineCov">  265520913 :           if (reg-&gt;regno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     827 </span><span class="lineCov">  230206736 :             for (hr = curr_static_id-&gt;hard_regs; hr != NULL; hr = hr-&gt;next)</span>
+<span class="lineNum">     828 </span><span class="lineCov">   44759803 :               if (hr-&gt;clobber_high</span>
+<span class="lineNum">     829 </span><span class="lineCov">   44759803 :                   &amp;&amp; maybe_gt (GET_MODE_SIZE (PSEUDO_REGNO_MODE (reg-&gt;regno)),</span>
+<span class="lineNum">     830 </span>            :                                GET_MODE_SIZE (hr-&gt;biggest_mode)))
+<span class="lineNum">     831 </span><span class="lineNoCov">          0 :                 SET_HARD_REG_BIT (lra_reg_info[reg-&gt;regno].conflict_hard_regs,</span>
+<span class="lineNum">     832 </span>            :                                   hr-&gt;regno);
+<span class="lineNum">     833 </span>            :         }
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span><span class="lineCov">  216419037 :       for (reg = curr_static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     836 </span><span class="lineCov">   45790869 :         if (reg-&gt;type != OP_IN)</span>
+<span class="lineNum">     837 </span><span class="lineCov">   32957988 :           make_hard_regno_born (reg-&gt;regno, false);</span>
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span><span class="lineCov">  170628168 :       if (curr_id-&gt;arg_hard_regs != NULL)</span>
+<span class="lineNum">     840 </span><span class="lineCov">   24400897 :         for (i = 0; (regno = curr_id-&gt;arg_hard_regs[i]) &gt;= 0; i++)</span>
+<span class="lineNum">     841 </span><span class="lineCov">   16522959 :           if (regno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     842 </span>            :             /* It is a clobber.  */
+<span class="lineNum">     843 </span><span class="lineCov">     279060 :             make_hard_regno_born (regno - FIRST_PSEUDO_REGISTER, false);</span>
+<span class="lineNum">     844 </span>            : 
+<span class="lineNum">     845 </span><span class="lineCov">  170628168 :       sparseset_copy (unused_set, start_living);</span>
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span><span class="lineCov">  170628168 :       sparseset_clear (start_dying);</span>
+<span class="lineNum">     848 </span>            : 
+<span class="lineNum">     849 </span>            :       /* See which defined values die here.  */
+<span class="lineNum">     850 </span><span class="lineCov">  436149081 :       for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     851 </span><span class="lineCov">  265520913 :         if (reg-&gt;type == OP_OUT</span>
+<span class="lineNum">     852 </span><span class="lineCov">  265532715 :             &amp;&amp; ! reg_early_clobber_p (reg, n_alt) &amp;&amp; ! reg-&gt;subreg_p)</span>
+<span class="lineNum">     853 </span><span class="lineCov">   94210027 :           need_curr_point_incr</span>
+<span class="lineNum">     854 </span><span class="lineCov">   94210027 :             |= mark_regno_dead (reg-&gt;regno, reg-&gt;biggest_mode,</span>
+<span class="lineNum">     855 </span>            :                                 curr_point);
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span><span class="lineCov">  216419037 :       for (reg = curr_static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     858 </span><span class="lineCov">   45790869 :         if (reg-&gt;type == OP_OUT</span>
+<span class="lineNum">     859 </span><span class="lineCov">   45790869 :             &amp;&amp; ! reg_early_clobber_p (reg, n_alt) &amp;&amp; ! reg-&gt;subreg_p)</span>
+<span class="lineNum">     860 </span><span class="lineCov">   12872291 :           make_hard_regno_dead (reg-&gt;regno);</span>
+<span class="lineNum">     861 </span>            : 
+<span class="lineNum">     862 </span><span class="lineCov">  170628168 :       if (curr_id-&gt;arg_hard_regs != NULL)</span>
+<span class="lineNum">     863 </span><span class="lineCov">   24400897 :         for (i = 0; (regno = curr_id-&gt;arg_hard_regs[i]) &gt;= 0; i++)</span>
+<span class="lineNum">     864 </span><span class="lineCov">   16522959 :           if (regno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     865 </span>            :             /* It is a clobber.  */
+<span class="lineNum">     866 </span><span class="lineCov">     279060 :             make_hard_regno_dead (regno - FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     867 </span>            : 
+<span class="lineNum">     868 </span><span class="lineCov">  170628168 :       if (call_p)</span>
+<span class="lineNum">     869 </span>            :         {
+<span class="lineNum">     870 </span><span class="lineCov">   10641172 :           if (! flag_ipa_ra)</span>
+<span class="lineNum">     871 </span><span class="lineCov">    1099461 :             COPY_HARD_REG_SET(last_call_used_reg_set, call_used_reg_set);</span>
+<span class="lineNum">     872 </span>            :           else
+<span class="lineNum">     873 </span>            :             {
+<span class="lineNum">     874 </span><span class="lineCov">    9541711 :               HARD_REG_SET this_call_used_reg_set;</span>
+<span class="lineNum">     875 </span><span class="lineCov">   19083422 :               get_call_reg_set_usage (curr_insn, &amp;this_call_used_reg_set,</span>
+<span class="lineNum">     876 </span><span class="lineCov">    9541711 :                                       call_used_reg_set);</span>
+<span class="lineNum">     877 </span>            : 
+<span class="lineNum">     878 </span><span class="lineCov">    9541711 :               bool flush = (! hard_reg_set_empty_p (last_call_used_reg_set)</span>
+<span class="lineNum">     879 </span><span class="lineCov">    2950109 :                             &amp;&amp; ! hard_reg_set_equal_p (last_call_used_reg_set,</span>
+<span class="lineNum">     880 </span><span class="lineCov">    9541711 :                                                        this_call_used_reg_set));</span>
+<span class="lineNum">     881 </span>            : 
+<span class="lineNum">     882 </span><span class="lineCov">   80110904 :               EXECUTE_IF_SET_IN_SPARSESET (pseudos_live, j)</span>
+<span class="lineNum">     883 </span>            :                 {
+<span class="lineNum">     884 </span><span class="lineCov">   70485600 :                   IOR_HARD_REG_SET (lra_reg_info[j].actual_call_used_reg_set,</span>
+<span class="lineNum">     885 </span>            :                                     this_call_used_reg_set);
+<span class="lineNum">     886 </span><span class="lineCov">   70485600 :                   if (flush)</span>
+<span class="lineNum">     887 </span><span class="lineCov">      83593 :                     check_pseudos_live_through_calls</span>
+<span class="lineNum">     888 </span><span class="lineCov">      83593 :                       (j, last_call_used_reg_set);</span>
+<span class="lineNum">     889 </span>            :                 }
+<span class="lineNum">     890 </span><span class="lineCov">    9541711 :               COPY_HARD_REG_SET(last_call_used_reg_set, this_call_used_reg_set);</span>
+<span class="lineNum">     891 </span>            :             }
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span><span class="lineCov">   10641172 :           sparseset_ior (pseudos_live_through_calls,</span>
+<span class="lineNum">     894 </span>            :                          pseudos_live_through_calls, pseudos_live);
+<span class="lineNum">     895 </span><span class="lineCov">   10641172 :           if (cfun-&gt;has_nonlocal_label</span>
+<span class="lineNum">     896 </span><span class="lineCov">   10635107 :               || find_reg_note (curr_insn, REG_SETJMP,</span>
+<span class="lineNum">     897 </span><span class="lineCov">   10641172 :                                 NULL_RTX) != NULL_RTX)</span>
+<span class="lineNum">     898 </span><span class="lineCov">       8061 :             sparseset_ior (pseudos_live_through_setjumps,</span>
+<span class="lineNum">     899 </span>            :                            pseudos_live_through_setjumps, pseudos_live);
+<span class="lineNum">     900 </span>            :         }
+<span class="lineNum">     901 </span>            : 
+<span class="lineNum">     902 </span>            :       /* Increment the current program point if we must.  */
+<span class="lineNum">     903 </span><span class="lineCov">  170628168 :       if (need_curr_point_incr)</span>
+<span class="lineNum">     904 </span><span class="lineCov">  146428968 :         next_program_point (curr_point, freq);</span>
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span><span class="lineCov">  170628168 :       sparseset_clear (start_living);</span>
+<span class="lineNum">     907 </span>            : 
+<span class="lineNum">     908 </span><span class="lineCov">  170628168 :       need_curr_point_incr = false;</span>
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span>            :       /* Mark each used value as live.  */
+<span class="lineNum">     911 </span><span class="lineCov">  436149081 :       for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     912 </span><span class="lineCov">  265520913 :         if (reg-&gt;type == OP_IN)</span>
+<span class="lineNum">     913 </span>            :           {
+<span class="lineNum">     914 </span><span class="lineCov">  150136317 :             need_curr_point_incr</span>
+<span class="lineNum">     915 </span><span class="lineCov">  150136317 :               |= mark_regno_live (reg-&gt;regno, reg-&gt;biggest_mode,</span>
+<span class="lineNum">     916 </span>            :                                   curr_point);
+<span class="lineNum">     917 </span><span class="lineCov">  150136317 :             check_pseudos_live_through_calls (reg-&gt;regno,</span>
+<span class="lineNum">     918 </span>            :                                               last_call_used_reg_set);
+<span class="lineNum">     919 </span>            :           }
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span><span class="lineCov">  216419037 :       for (reg = curr_static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     922 </span><span class="lineCov">   45790869 :         if (reg-&gt;type == OP_IN)</span>
+<span class="lineNum">     923 </span><span class="lineCov">   12832881 :           make_hard_regno_born (reg-&gt;regno, false);</span>
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span><span class="lineCov">  170628168 :       if (curr_id-&gt;arg_hard_regs != NULL)</span>
+<span class="lineNum">     926 </span>            :         /* Make argument hard registers live.  Don't create conflict
+<span class="lineNum">     927 </span>            :            of used REAL_PIC_OFFSET_TABLE_REGNUM and the pic pseudo.  */
+<span class="lineNum">     928 </span><span class="lineCov">   24400897 :         for (i = 0; (regno = curr_id-&gt;arg_hard_regs[i]) &gt;= 0; i++)</span>
+<span class="lineNum">     929 </span><span class="lineCov">   16522959 :           if (regno &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     930 </span><span class="lineCov">   16243899 :             make_hard_regno_born (regno, true);</span>
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span><span class="lineCov">  170628168 :       sparseset_and_compl (dead_set, start_living, start_dying);</span>
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span>            :       /* Mark early clobber outputs dead.  */
+<span class="lineNum">     935 </span><span class="lineCov">  436149081 :       for (reg = curr_id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     936 </span><span class="lineCov">  265520913 :         if (reg-&gt;type == OP_OUT</span>
+<span class="lineNum">     937 </span><span class="lineCov">  265683708 :             &amp;&amp; reg_early_clobber_p (reg, n_alt) &amp;&amp; ! reg-&gt;subreg_p)</span>
+<span class="lineNum">     938 </span><span class="lineCov">     162795 :           need_curr_point_incr</span>
+<span class="lineNum">     939 </span><span class="lineCov">     162795 :             |= mark_regno_dead (reg-&gt;regno, reg-&gt;biggest_mode,</span>
+<span class="lineNum">     940 </span>            :                                 curr_point);
+<span class="lineNum">     941 </span>            : 
+<span class="lineNum">     942 </span><span class="lineCov">  216419037 :       for (reg = curr_static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     943 </span><span class="lineCov">   45790869 :         if (reg-&gt;type == OP_OUT</span>
+<span class="lineNum">     944 </span><span class="lineCov">   65351273 :             &amp;&amp; reg_early_clobber_p (reg, n_alt) &amp;&amp; ! reg-&gt;subreg_p)</span>
+<span class="lineNum">     945 </span>            :           {
+<span class="lineNum">     946 </span><span class="lineCov">   19560404 :             struct lra_insn_reg *reg2;</span>
+<span class="lineNum">     947 </span>            :             
+<span class="lineNum">     948 </span>            :             /* We can have early clobbered non-operand hard reg and
+<span class="lineNum">     949 </span>            :                the same hard reg as an insn input.  Don't make hard
+<span class="lineNum">     950 </span>            :                reg dead before the insns.  */
+<span class="lineNum">     951 </span><span class="lineCov">   52467349 :             for (reg2 = curr_id-&gt;regs; reg2 != NULL; reg2 = reg2-&gt;next)</span>
+<span class="lineNum">     952 </span><span class="lineCov">   32925270 :               if (reg2-&gt;type != OP_OUT &amp;&amp; reg2-&gt;regno == reg-&gt;regno)</span>
+<span class="lineNum">     953 </span>            :                 break;
+<span class="lineNum">     954 </span><span class="lineCov">   19560404 :             if (reg2 == NULL)</span>
+<span class="lineNum">     955 </span><span class="lineCov">   19542079 :               make_hard_regno_dead (reg-&gt;regno);</span>
+<span class="lineNum">     956 </span>            :           }
+<span class="lineNum">     957 </span>            : 
+<span class="lineNum">     958 </span><span class="lineCov">  170628168 :       if (need_curr_point_incr)</span>
+<span class="lineNum">     959 </span><span class="lineCov">  121894036 :         next_program_point (curr_point, freq);</span>
+<span class="lineNum">     960 </span>            : 
+<span class="lineNum">     961 </span>            :       /* Update notes.  */
+<span class="lineNum">     962 </span><span class="lineCov">  348828599 :       for (link_loc = &amp;REG_NOTES (curr_insn); (link = *link_loc) != NULL_RTX;)</span>
+<span class="lineNum">     963 </span>            :         {
+<span class="lineNum">     964 </span><span class="lineCov">  178200431 :           if (REG_NOTE_KIND (link) != REG_DEAD</span>
+<span class="lineNum">     965 </span><span class="lineCov">   77238986 :               &amp;&amp; REG_NOTE_KIND (link) != REG_UNUSED)</span>
+<span class="lineNum">     966 </span>            :             ;
+<span class="lineNum">     967 </span><span class="lineCov">  123073818 :           else if (REG_P (XEXP (link, 0)))</span>
+<span class="lineNum">     968 </span>            :             {
+<span class="lineNum">     969 </span><span class="lineCov">  123073818 :               regno = REGNO (XEXP (link, 0));</span>
+<span class="lineNum">     970 </span><span class="lineCov">  123073818 :               if ((REG_NOTE_KIND (link) == REG_DEAD</span>
+<span class="lineNum">     971 </span><span class="lineCov">  100961445 :                    &amp;&amp; ! sparseset_bit_p (dead_set, regno))</span>
+<span class="lineNum">     972 </span><span class="lineCov">  222088834 :                   || (REG_NOTE_KIND (link) == REG_UNUSED</span>
+<span class="lineNum">     973 </span><span class="lineCov">   22112373 :                       &amp;&amp; ! sparseset_bit_p (unused_set, regno)))</span>
+<span class="lineNum">     974 </span>            :                 {
+<span class="lineNum">     975 </span><span class="lineCov">    2077660 :                   *link_loc = XEXP (link, 1);</span>
+<span class="lineNum">     976 </span><span class="lineCov">    2077660 :                   continue;</span>
+<span class="lineNum">     977 </span>            :                 }
+<span class="lineNum">     978 </span><span class="lineCov">  120996158 :               if (REG_NOTE_KIND (link) == REG_DEAD)</span>
+<span class="lineNum">     979 </span><span class="lineCov">   99015016 :                 sparseset_clear_bit (dead_set, regno);</span>
+<span class="lineNum">     980 </span><span class="lineCov">   21981142 :               else if (REG_NOTE_KIND (link) == REG_UNUSED)</span>
+<span class="lineNum">     981 </span><span class="lineCov">   21981142 :                 sparseset_clear_bit (unused_set, regno);</span>
+<span class="lineNum">     982 </span>            :             }
+<span class="lineNum">     983 </span><span class="lineCov">  176122771 :           link_loc = &amp;XEXP (link, 1);</span>
+<span class="lineNum">     984 </span>            :         }
+<span class="lineNum">     985 </span><span class="lineCov">  178456249 :       EXECUTE_IF_SET_IN_SPARSESET (dead_set, j)</span>
+<span class="lineNum">     986 </span><span class="lineCov">    7828081 :         add_reg_note (curr_insn, REG_DEAD, regno_reg_rtx[j]);</span>
+<span class="lineNum">     987 </span><span class="lineCov">  341567245 :       EXECUTE_IF_SET_IN_SPARSESET (unused_set, j)</span>
+<span class="lineNum">     988 </span><span class="lineCov">     310909 :         add_reg_note (curr_insn, REG_UNUSED, regno_reg_rtx[j]);</span>
+<span class="lineNum">     989 </span>            :     }
+<span class="lineNum">     990 </span>            : 
+<span class="lineNum">     991 </span><span class="lineCov">   25344899 :   if (bb_has_eh_pred (bb))</span>
+<span class="lineNum">     992 </span><span class="lineCov">     479240 :     for (j = 0; ; ++j)</span>
+<span class="lineNum">     993 </span>            :       {
+<span class="lineNum">     994 </span><span class="lineCov">    1437720 :         unsigned int regno = EH_RETURN_DATA_REGNO (j);</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span><span class="lineCov">     958480 :         if (regno == INVALID_REGNUM)</span>
+<span class="lineNum">     997 </span>            :           break;
+<span class="lineNum">     998 </span><span class="lineCov">     958480 :         make_hard_regno_born (regno, false);</span>
+<span class="lineNum">     999 </span><span class="lineCov">     958480 :       }</span>
+<span class="lineNum">    1000 </span>            : 
+<span class="lineNum">    1001 </span>            :   /* Pseudos can't go in stack regs at the start of a basic block that
+<span class="lineNum">    1002 </span>            :      is reached by an abnormal edge. Likewise for call clobbered regs,
+<span class="lineNum">    1003 </span>            :      because caller-save, fixup_abnormal_edges and possibly the table
+<span class="lineNum">    1004 </span>            :      driven EH machinery are not quite ready to handle such pseudos
+<span class="lineNum">    1005 </span>            :      live across such edges.  */
+<span class="lineNum">    1006 </span><span class="lineCov">   25344899 :   if (bb_has_abnormal_pred (bb))</span>
+<span class="lineNum">    1007 </span>            :     {
+<span class="lineNum">    1008 </span>            : #ifdef STACK_REGS
+<span class="lineNum">    1009 </span><span class="lineCov">    1257860 :       EXECUTE_IF_SET_IN_SPARSESET (pseudos_live, px)</span>
+<span class="lineNum">    1010 </span><span class="lineCov">     774119 :         lra_reg_info[px].no_stack_p = true;</span>
+<span class="lineNum">    1011 </span><span class="lineCov">    4353669 :       for (px = FIRST_STACK_REG; px &lt;= LAST_STACK_REG; px++)</span>
+<span class="lineNum">    1012 </span><span class="lineCov">    3869928 :         make_hard_regno_born (px, false);</span>
+<span class="lineNum">    1013 </span>            : #endif
+<span class="lineNum">    1014 </span>            :       /* No need to record conflicts for call clobbered regs if we
+<span class="lineNum">    1015 </span>            :          have nonlocal labels around, as we don't ever try to
+<span class="lineNum">    1016 </span>            :          allocate such regs in this case.  */
+<span class="lineNum">    1017 </span><span class="lineCov">     483741 :       if (!cfun-&gt;has_nonlocal_label</span>
+<span class="lineNum">    1018 </span><span class="lineCov">     483741 :           &amp;&amp; has_abnormal_call_or_eh_pred_edge_p (bb))</span>
+<span class="lineNum">    1019 </span><span class="lineCov">   37381032 :         for (px = 0; px &lt; FIRST_PSEUDO_REGISTER; px++)</span>
+<span class="lineNum">    1020 </span><span class="lineCov">   36901788 :           if (call_used_regs[px]</span>
+<span class="lineNum">    1021 </span>            : #ifdef REAL_PIC_OFFSET_TABLE_REGNUM
+<span class="lineNum">    1022 </span>            :               /* We should create a conflict of PIC pseudo with PIC
+<span class="lineNum">    1023 </span>            :                  hard reg as PIC hard reg can have a wrong value after
+<span class="lineNum">    1024 </span>            :                  jump described by the abnormal edge.  In this case we
+<span class="lineNum">    1025 </span>            :                  can not allocate PIC hard reg to PIC pseudo as PIC
+<span class="lineNum">    1026 </span>            :                  pseudo will also have a wrong value.  */
+<span class="lineNum">    1027 </span><span class="lineCov">   37257676 :               || (px == REAL_PIC_OFFSET_TABLE_REGNUM</span>
+<span class="lineNum">    1028 </span><span class="lineCov">     479244 :                   &amp;&amp; pic_offset_table_rtx != NULL_RTX</span>
+<span class="lineNum">    1029 </span><span class="lineCov">      67536 :                   &amp;&amp; REGNO (pic_offset_table_rtx) &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">    1030 </span>            : #endif
+<span class="lineNum">    1031 </span>            :               )
+<span class="lineNum">    1032 </span><span class="lineCov">   34238036 :             make_hard_regno_born (px, false);</span>
+<span class="lineNum">    1033 </span>            :     }
+<span class="lineNum">    1034 </span>            : 
+<span class="lineNum">    1035 </span><span class="lineCov">   25344899 :   bool live_change_p = false;</span>
+<span class="lineNum">    1036 </span>            :   /* Check if bb border live info was changed.  */
+<span class="lineNum">    1037 </span><span class="lineCov">   25344899 :   unsigned int live_pseudos_num = 0;</span>
+<span class="lineNum">    1038 </span><span class="lineCov">  281455374 :   EXECUTE_IF_SET_IN_BITMAP (df_get_live_in (bb),</span>
+<span class="lineNum">    1039 </span>            :                             FIRST_PSEUDO_REGISTER, j, bi)
+<span class="lineNum">    1040 </span>            :     {
+<span class="lineNum">    1041 </span><span class="lineCov">  256231390 :       live_pseudos_num++;</span>
+<span class="lineNum">    1042 </span><span class="lineCov">  256231390 :       if (! sparseset_bit_p (pseudos_live, j))</span>
+<span class="lineNum">    1043 </span>            :         {
+<span class="lineNum">    1044 </span><span class="lineCov">     120915 :           live_change_p = true;</span>
+<span class="lineNum">    1045 </span><span class="lineCov">     120915 :           if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1046 </span><span class="lineNoCov">          0 :             fprintf (lra_dump_file,</span>
+<span class="lineNum">    1047 </span>            :                      &quot;  r%d is removed as live at bb%d start\n&quot;, j, bb-&gt;index);
+<span class="lineNum">    1048 </span>            :           break;
+<span class="lineNum">    1049 </span>            :         }
+<span class="lineNum">    1050 </span>            :     }
+<span class="lineNum">    1051 </span><span class="lineCov">   25344899 :   if (! live_change_p</span>
+<span class="lineNum">    1052 </span><span class="lineCov">   25344899 :       &amp;&amp; sparseset_cardinality (pseudos_live) != live_pseudos_num)</span>
+<span class="lineNum">    1053 </span>            :     {
+<span class="lineNum">    1054 </span><span class="lineCov">     114915 :       live_change_p = true;</span>
+<span class="lineNum">    1055 </span><span class="lineCov">     114915 :       if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1056 </span><span class="lineNoCov">          0 :         EXECUTE_IF_SET_IN_SPARSESET (pseudos_live, j)</span>
+<span class="lineNum">    1057 </span><span class="lineNoCov">          0 :           if (! bitmap_bit_p (df_get_live_in (bb), j))</span>
+<span class="lineNum">    1058 </span><span class="lineNoCov">          0 :             fprintf (lra_dump_file,</span>
+<span class="lineNum">    1059 </span>            :                      &quot;  r%d is added to live at bb%d start\n&quot;, j, bb-&gt;index);
+<span class="lineNum">    1060 </span>            :     }
+<span class="lineNum">    1061 </span>            :   /* See if we'll need an increment at the end of this basic block.
+<span class="lineNum">    1062 </span>            :      An increment is needed if the PSEUDOS_LIVE set is not empty,
+<span class="lineNum">    1063 </span>            :      to make sure the finish points are set up correctly.  */
+<span class="lineNum">    1064 </span><span class="lineCov">   25344899 :   need_curr_point_incr = (sparseset_cardinality (pseudos_live) &gt; 0);</span>
+<span class="lineNum">    1065 </span>            : 
+<span class="lineNum">    1066 </span><span class="lineCov">  281830687 :   EXECUTE_IF_SET_IN_SPARSESET (pseudos_live, i)</span>
+<span class="lineNum">    1067 </span><span class="lineCov">  256485788 :     mark_pseudo_dead (i, curr_point);</span>
+<span class="lineNum">    1068 </span>            : 
+<span class="lineNum">    1069 </span><span class="lineCov">   57581458 :   EXECUTE_IF_SET_IN_BITMAP (df_get_live_in (bb), FIRST_PSEUDO_REGISTER, j, bi)</span>
+<span class="lineNum">    1070 </span>            :     {
+<span class="lineNum">    1071 </span><span class="lineCov">   96959822 :       if (sparseset_cardinality (pseudos_live_through_calls) == 0)</span>
+<span class="lineNum">    1072 </span>            :         break;
+<span class="lineNum">    1073 </span><span class="lineCov">   32236559 :       if (sparseset_bit_p (pseudos_live_through_calls, j))</span>
+<span class="lineNum">    1074 </span><span class="lineCov">   27846809 :         check_pseudos_live_through_calls (j, last_call_used_reg_set);</span>
+<span class="lineNum">    1075 </span>            :     }
+<span class="lineNum">    1076 </span>            : 
+<span class="lineNum">    1077 </span><span class="lineCov"> 1976902122 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; ++i)</span>
+<span class="lineNum">    1078 </span>            :     {
+<span class="lineNum">    1079 </span><span class="lineCov"> 1951557223 :       if (!TEST_HARD_REG_BIT (hard_regs_live, i))</span>
+<span class="lineNum">    1080 </span>            :         continue;
+<span class="lineNum">    1081 </span>            : 
+<span class="lineNum">    1082 </span><span class="lineCov">   75362274 :       if (!TEST_HARD_REG_BIT (hard_regs_spilled_into, i))</span>
+<span class="lineNum">    1083 </span>            :         continue;
+<span class="lineNum">    1084 </span>            : 
+<span class="lineNum">    1085 </span><span class="lineNoCov">          0 :       if (bitmap_bit_p (df_get_live_in (bb), i))</span>
+<span class="lineNum">    1086 </span>            :         continue;
+<span class="lineNum">    1087 </span>            : 
+<span class="lineNum">    1088 </span><span class="lineNoCov">          0 :       live_change_p = true;</span>
+<span class="lineNum">    1089 </span><span class="lineNoCov">          0 :       if (lra_dump_file)</span>
+<span class="lineNum">    1090 </span><span class="lineNoCov">          0 :         fprintf (lra_dump_file,</span>
+<span class="lineNum">    1091 </span>            :                  &quot;  hard reg r%d is added to live at bb%d start\n&quot;, i,
+<span class="lineNum">    1092 </span>            :                  bb-&gt;index);
+<span class="lineNum">    1093 </span><span class="lineNoCov">          0 :       bitmap_set_bit (df_get_live_in (bb), i);</span>
+<span class="lineNum">    1094 </span>            :     }
+<span class="lineNum">    1095 </span>            : 
+<span class="lineNum">    1096 </span><span class="lineCov">   25344899 :   if (need_curr_point_incr)</span>
+<span class="lineNum">    1097 </span><span class="lineCov">   39324124 :     next_program_point (curr_point, freq);</span>
+<span class="lineNum">    1098 </span>            : 
+<span class="lineNum">    1099 </span><span class="lineCov">   25344899 :   return live_change_p;</span>
+<span class="lineNum">    1100 </span>            : }
+<span class="lineNum">    1101 </span>            : 
+<span class="lineNum">    1102 </span>            : /* Compress pseudo live ranges by removing program points where
+<span class="lineNum">    1103 </span>            :    nothing happens.  Complexity of many algorithms in LRA is linear
+<span class="lineNum">    1104 </span>            :    function of program points number.  To speed up the code we try to
+<a name="1105"><span class="lineNum">    1105 </span>            :    minimize the number of the program points here.  */</a>
+<span class="lineNum">    1106 </span>            : static void
+<span class="lineNum">    1107 </span><span class="lineCov">    1434602 : remove_some_program_points_and_update_live_ranges (void)</span>
+<span class="lineNum">    1108 </span>            : {
+<span class="lineNum">    1109 </span><span class="lineCov">    1434602 :   unsigned i;</span>
+<span class="lineNum">    1110 </span><span class="lineCov">    1434602 :   int n, max_regno;</span>
+<span class="lineNum">    1111 </span><span class="lineCov">    1434602 :   int *map;</span>
+<span class="lineNum">    1112 </span><span class="lineCov">    1434602 :   lra_live_range_t r, prev_r, next_r;</span>
+<span class="lineNum">    1113 </span><span class="lineCov">    1434602 :   sbitmap_iterator sbi;</span>
+<span class="lineNum">    1114 </span><span class="lineCov">    1434602 :   bool born_p, dead_p, prev_born_p, prev_dead_p;</span>
+<span class="lineNum">    1115 </span>            : 
+<span class="lineNum">    1116 </span><span class="lineCov">    1434602 :   auto_sbitmap born (lra_live_max_point);</span>
+<span class="lineNum">    1117 </span><span class="lineCov">    1434602 :   auto_sbitmap dead (lra_live_max_point);</span>
+<span class="lineNum">    1118 </span><span class="lineCov">    2869204 :   bitmap_clear (born);</span>
+<span class="lineNum">    1119 </span><span class="lineCov">    2869204 :   bitmap_clear (dead);</span>
+<span class="lineNum">    1120 </span><span class="lineCov">    1434602 :   max_regno = max_reg_num ();</span>
+<span class="lineNum">    1121 </span><span class="lineCov">  130039407 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; (unsigned) max_regno; i++)</span>
+<span class="lineNum">    1122 </span>            :     {
+<span class="lineNum">    1123 </span><span class="lineCov">  199723380 :       for (r = lra_reg_info[i].live_ranges; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">    1124 </span>            :         {
+<span class="lineNum">    1125 </span><span class="lineCov">   71118575 :           lra_assert (r-&gt;start &lt;= r-&gt;finish);</span>
+<span class="lineNum">    1126 </span><span class="lineCov">  142237150 :           bitmap_set_bit (born, r-&gt;start);</span>
+<span class="lineNum">    1127 </span><span class="lineCov">  142237150 :           bitmap_set_bit (dead, r-&gt;finish);</span>
+<span class="lineNum">    1128 </span>            :         }
+<span class="lineNum">    1129 </span>            :     }
+<span class="lineNum">    1130 </span><span class="lineCov">    1434602 :   auto_sbitmap born_or_dead (lra_live_max_point);</span>
+<span class="lineNum">    1131 </span><span class="lineCov">    5738408 :   bitmap_ior (born_or_dead, born, dead);</span>
+<span class="lineNum">    1132 </span><span class="lineCov">    1434602 :   map = XCNEWVEC (int, lra_live_max_point);</span>
+<span class="lineNum">    1133 </span><span class="lineCov">    1434602 :   n = -1;</span>
+<span class="lineNum">    1134 </span><span class="lineCov">    1434602 :   prev_born_p = prev_dead_p = false;</span>
+<span class="lineNum">    1135 </span><span class="lineCov">  127473993 :   EXECUTE_IF_SET_IN_BITMAP (born_or_dead, 0, i, sbi)</span>
+<span class="lineNum">    1136 </span>            :     {
+<span class="lineNum">    1137 </span><span class="lineCov">  246340374 :       born_p = bitmap_bit_p (born, i);</span>
+<span class="lineNum">    1138 </span><span class="lineCov">  246340374 :       dead_p = bitmap_bit_p (dead, i);</span>
+<span class="lineNum">    1139 </span><span class="lineCov">  123170187 :       if ((prev_born_p &amp;&amp; ! prev_dead_p &amp;&amp; born_p &amp;&amp; ! dead_p)</span>
+<span class="lineNum">    1140 </span><span class="lineCov">  113206153 :           || (prev_dead_p &amp;&amp; ! prev_born_p &amp;&amp; dead_p &amp;&amp; ! born_p))</span>
+<span class="lineNum">    1141 </span>            :         {
+<span class="lineNum">    1142 </span><span class="lineCov">   28728265 :           map[i] = n;</span>
+<span class="lineNum">    1143 </span><span class="lineCov">   55348700 :           lra_point_freq[n] = MAX (lra_point_freq[n], lra_point_freq[i]);</span>
+<span class="lineNum">    1144 </span>            :         }
+<span class="lineNum">    1145 </span>            :       else
+<span class="lineNum">    1146 </span>            :         {
+<span class="lineNum">    1147 </span><span class="lineCov">   94441922 :           map[i] = ++n;</span>
+<span class="lineNum">    1148 </span><span class="lineCov">   94441922 :           lra_point_freq[n] = lra_point_freq[i];</span>
+<span class="lineNum">    1149 </span>            :         }
+<span class="lineNum">    1150 </span><span class="lineCov">  123170187 :       prev_born_p = born_p;</span>
+<span class="lineNum">    1151 </span><span class="lineCov">  123170187 :       prev_dead_p = dead_p;</span>
+<span class="lineNum">    1152 </span>            :     }
+<span class="lineNum">    1153 </span><span class="lineCov">    1434602 :   n++;</span>
+<span class="lineNum">    1154 </span><span class="lineCov">    1434602 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1155 </span><span class="lineCov">        152 :     fprintf (lra_dump_file, &quot;Compressing live ranges: from %d to %d - %d%%\n&quot;,</span>
+<span class="lineNum">    1156 </span>            :              lra_live_max_point, n,
+<span class="lineNum">    1157 </span><span class="lineCov">        152 :              lra_live_max_point ? 100 * n / lra_live_max_point : 100);</span>
+<span class="lineNum">    1158 </span><span class="lineCov">    1434602 :   if (n &lt; lra_live_max_point)</span>
+<span class="lineNum">    1159 </span>            :     {
+<span class="lineNum">    1160 </span><span class="lineCov">    1178112 :       lra_live_max_point = n;</span>
+<span class="lineNum">    1161 </span><span class="lineCov">  126580791 :       for (i = FIRST_PSEUDO_REGISTER; i &lt; (unsigned) max_regno; i++)</span>
+<span class="lineNum">    1162 </span>            :         {
+<span class="lineNum">    1163 </span><span class="lineCov">  125402679 :           for (prev_r = NULL, r = lra_reg_info[i].live_ranges;</span>
+<span class="lineNum">    1164 </span><span class="lineCov">  195778486 :                r != NULL;</span>
+<span class="lineNum">    1165 </span>            :                r = next_r)
+<span class="lineNum">    1166 </span>            :             {
+<span class="lineNum">    1167 </span><span class="lineCov">   70375807 :               next_r = r-&gt;next;</span>
+<span class="lineNum">    1168 </span><span class="lineCov">   70375807 :               r-&gt;start = map[r-&gt;start];</span>
+<span class="lineNum">    1169 </span><span class="lineCov">   70375807 :               r-&gt;finish = map[r-&gt;finish];</span>
+<span class="lineNum">    1170 </span><span class="lineCov">   70375807 :               if (prev_r == NULL || prev_r-&gt;start &gt; r-&gt;finish + 1)</span>
+<span class="lineNum">    1171 </span>            :                 {
+<span class="lineNum">    1172 </span>            :                   prev_r = r;
+<span class="lineNum">    1173 </span>            :                   continue;
+<span class="lineNum">    1174 </span>            :                 }
+<span class="lineNum">    1175 </span><span class="lineCov">    1621254 :               prev_r-&gt;start = r-&gt;start;</span>
+<span class="lineNum">    1176 </span><span class="lineCov">    1621254 :               prev_r-&gt;next = next_r;</span>
+<span class="lineNum">    1177 </span><span class="lineCov">    1621254 :               lra_live_range_pool.remove (r);</span>
+<span class="lineNum">    1178 </span>            :             }
+<span class="lineNum">    1179 </span>            :         }
+<span class="lineNum">    1180 </span>            :     }
+<span class="lineNum">    1181 </span><span class="lineCov">    1434602 :   free (map);</span>
+<span class="lineNum">    1182 </span><span class="lineCov">    1434602 : }</span>
+<span class="lineNum">    1183 </span>            : 
+<a name="1184"><span class="lineNum">    1184 </span>            : /* Print live ranges R to file F.  */</a>
+<span class="lineNum">    1185 </span>            : void
+<span class="lineNum">    1186 </span><span class="lineCov">       8288 : lra_print_live_range_list (FILE *f, lra_live_range_t r)</span>
+<span class="lineNum">    1187 </span>            : {
+<span class="lineNum">    1188 </span><span class="lineCov">      17820 :   for (; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">    1189 </span><span class="lineCov">       9532 :     fprintf (f, &quot; [%d..%d]&quot;, r-&gt;start, r-&gt;finish);</span>
+<span class="lineNum">    1190 </span><span class="lineCov">       8288 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1191 </span><span class="lineCov">       8288 : }</span>
+<a name="1192"><span class="lineNum">    1192 </span>            : </a>
+<span class="lineNum">    1193 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1194 </span><span class="lineNoCov">          0 : debug (lra_live_range &amp;ref)</span>
+<span class="lineNum">    1195 </span>            : {
+<span class="lineNum">    1196 </span><span class="lineNoCov">          0 :   lra_print_live_range_list (stderr, &amp;ref);</span>
+<span class="lineNum">    1197 </span><span class="lineNoCov">          0 : }</span>
+<a name="1198"><span class="lineNum">    1198 </span>            : </a>
+<span class="lineNum">    1199 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1200 </span><span class="lineNoCov">          0 : debug (lra_live_range *ptr)</span>
+<span class="lineNum">    1201 </span>            : {
+<span class="lineNum">    1202 </span><span class="lineNoCov">          0 :   if (ptr)</span>
+<span class="lineNum">    1203 </span><span class="lineNoCov">          0 :     debug (*ptr);</span>
+<span class="lineNum">    1204 </span>            :   else
+<span class="lineNum">    1205 </span><span class="lineNoCov">          0 :     fprintf (stderr, &quot;&lt;nil&gt;\n&quot;);</span>
+<span class="lineNum">    1206 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1207 </span>            : 
+<a name="1208"><span class="lineNum">    1208 </span>            : /* Print live ranges R to stderr.  */</a>
+<span class="lineNum">    1209 </span>            : void
+<span class="lineNum">    1210 </span><span class="lineNoCov">          0 : lra_debug_live_range_list (lra_live_range_t r)</span>
+<span class="lineNum">    1211 </span>            : {
+<span class="lineNum">    1212 </span><span class="lineNoCov">          0 :   lra_print_live_range_list (stderr, r);</span>
+<span class="lineNum">    1213 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1214 </span>            : 
+<a name="1215"><span class="lineNum">    1215 </span>            : /* Print live ranges of pseudo REGNO to file F.  */</a>
+<span class="lineNum">    1216 </span>            : static void
+<span class="lineNum">    1217 </span><span class="lineCov">      22448 : print_pseudo_live_ranges (FILE *f, int regno)</span>
+<span class="lineNum">    1218 </span>            : {
+<span class="lineNum">    1219 </span><span class="lineCov">      22448 :   if (lra_reg_info[regno].live_ranges == NULL)</span>
+<span class="lineNum">    1220 </span>            :     return;
+<span class="lineNum">    1221 </span><span class="lineCov">       8288 :   fprintf (f, &quot; r%d:&quot;, regno);</span>
+<span class="lineNum">    1222 </span><span class="lineCov">       8288 :   lra_print_live_range_list (f, lra_reg_info[regno].live_ranges);</span>
+<span class="lineNum">    1223 </span>            : }
+<span class="lineNum">    1224 </span>            : 
+<a name="1225"><span class="lineNum">    1225 </span>            : /* Print live ranges of pseudo REGNO to stderr.  */</a>
+<span class="lineNum">    1226 </span>            : void
+<span class="lineNum">    1227 </span><span class="lineNoCov">          0 : lra_debug_pseudo_live_ranges (int regno)</span>
+<span class="lineNum">    1228 </span>            : {
+<span class="lineNum">    1229 </span><span class="lineNoCov">          0 :   print_pseudo_live_ranges (stderr, regno);</span>
+<span class="lineNum">    1230 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1231 </span>            : 
+<a name="1232"><span class="lineNum">    1232 </span>            : /* Print live ranges of all pseudos to file F.  */</a>
+<span class="lineNum">    1233 </span>            : static void
+<span class="lineNum">    1234 </span><span class="lineCov">        304 : print_live_ranges (FILE *f)</span>
+<span class="lineNum">    1235 </span>            : {
+<span class="lineNum">    1236 </span><span class="lineCov">        304 :   int i, max_regno;</span>
+<span class="lineNum">    1237 </span>            : 
+<span class="lineNum">    1238 </span><span class="lineCov">        304 :   max_regno = max_reg_num ();</span>
+<span class="lineNum">    1239 </span><span class="lineCov">      22752 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; max_regno; i++)</span>
+<span class="lineNum">    1240 </span><span class="lineCov">      22448 :     print_pseudo_live_ranges (f, i);</span>
+<span class="lineNum">    1241 </span><span class="lineCov">        304 : }</span>
+<span class="lineNum">    1242 </span>            : 
+<a name="1243"><span class="lineNum">    1243 </span>            : /* Print live ranges of all pseudos to stderr.  */</a>
+<span class="lineNum">    1244 </span>            : void
+<span class="lineNum">    1245 </span><span class="lineNoCov">          0 : lra_debug_live_ranges (void)</span>
+<span class="lineNum">    1246 </span>            : {
+<span class="lineNum">    1247 </span><span class="lineNoCov">          0 :   print_live_ranges (stderr);</span>
+<span class="lineNum">    1248 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1249 </span>            : 
+<a name="1250"><span class="lineNum">    1250 </span>            : /* Compress pseudo live ranges.  */</a>
+<span class="lineNum">    1251 </span>            : static void
+<span class="lineNum">    1252 </span><span class="lineCov">    1434602 : compress_live_ranges (void)</span>
+<span class="lineNum">    1253 </span>            : {
+<span class="lineNum">    1254 </span><span class="lineCov">    1434602 :   remove_some_program_points_and_update_live_ranges ();</span>
+<span class="lineNum">    1255 </span><span class="lineCov">    1434602 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1256 </span>            :     {
+<span class="lineNum">    1257 </span><span class="lineCov">        152 :       fprintf (lra_dump_file, &quot;Ranges after the compression:\n&quot;);</span>
+<span class="lineNum">    1258 </span><span class="lineCov">        152 :       print_live_ranges (lra_dump_file);</span>
+<span class="lineNum">    1259 </span>            :     }
+<span class="lineNum">    1260 </span><span class="lineCov">    1434602 : }</span>
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span>            : 
+<span class="lineNum">    1263 </span>            : 
+<span class="lineNum">    1264 </span>            : /* The number of the current live range pass.  */
+<span class="lineNum">    1265 </span>            : int lra_live_range_iter;
+<span class="lineNum">    1266 </span>            : 
+<span class="lineNum">    1267 </span>            : /* The function creates live ranges only for memory pseudos (or for
+<span class="lineNum">    1268 </span>            :    all ones if ALL_P), set up CONFLICT_HARD_REGS for the pseudos.  It
+<span class="lineNum">    1269 </span>            :    also does dead insn elimination if DEAD_INSN_P and global live
+<span class="lineNum">    1270 </span>            :    analysis only for pseudos and only if the pseudo live info was
+<span class="lineNum">    1271 </span>            :    changed on a BB border.  Return TRUE if the live info was
+<a name="1272"><span class="lineNum">    1272 </span>            :    changed.  */</a>
+<span class="lineNum">    1273 </span>            : static bool
+<span class="lineNum">    1274 </span><span class="lineCov">    1619677 : lra_create_live_ranges_1 (bool all_p, bool dead_insn_p)</span>
+<span class="lineNum">    1275 </span>            : {
+<span class="lineNum">    1276 </span><span class="lineCov">    1619677 :   basic_block bb;</span>
+<span class="lineNum">    1277 </span><span class="lineCov">    1619677 :   int i, hard_regno, max_regno = max_reg_num ();</span>
+<span class="lineNum">    1278 </span><span class="lineCov">    1619677 :   int curr_point;</span>
+<span class="lineNum">    1279 </span><span class="lineCov">    1619677 :   bool bb_live_change_p, have_referenced_pseudos = false;</span>
+<span class="lineNum">    1280 </span>            : 
+<span class="lineNum">    1281 </span><span class="lineCov">    1619677 :   timevar_push (TV_LRA_CREATE_LIVE_RANGES);</span>
+<span class="lineNum">    1282 </span>            : 
+<span class="lineNum">    1283 </span><span class="lineCov">    1619677 :   complete_info_p = all_p;</span>
+<span class="lineNum">    1284 </span><span class="lineCov">    1619677 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1285 </span><span class="lineCov">        164 :     fprintf (lra_dump_file,</span>
+<span class="lineNum">    1286 </span>            :              &quot;\n********** Pseudo live ranges #%d: **********\n\n&quot;,
+<span class="lineNum">    1287 </span>            :              ++lra_live_range_iter);
+<span class="lineNum">    1288 </span><span class="lineCov">    1619677 :   memset (lra_hard_reg_usage, 0, sizeof (lra_hard_reg_usage));</span>
+<span class="lineNum">    1289 </span><span class="lineCov">  257304798 :   for (i = 0; i &lt; max_regno; i++)</span>
+<span class="lineNum">    1290 </span>            :     {
+<span class="lineNum">    1291 </span><span class="lineCov">  255685121 :       lra_reg_info[i].live_ranges = NULL;</span>
+<span class="lineNum">    1292 </span><span class="lineCov">  255685121 :       CLEAR_HARD_REG_SET (lra_reg_info[i].conflict_hard_regs);</span>
+<span class="lineNum">    1293 </span><span class="lineCov">  255685121 :       lra_reg_info[i].preferred_hard_regno1 = -1;</span>
+<span class="lineNum">    1294 </span><span class="lineCov">  255685121 :       lra_reg_info[i].preferred_hard_regno2 = -1;</span>
+<span class="lineNum">    1295 </span><span class="lineCov">  255685121 :       lra_reg_info[i].preferred_hard_regno_profit1 = 0;</span>
+<span class="lineNum">    1296 </span><span class="lineCov">  255685121 :       lra_reg_info[i].preferred_hard_regno_profit2 = 0;</span>
+<span class="lineNum">    1297 </span>            : #ifdef STACK_REGS
+<span class="lineNum">    1298 </span><span class="lineCov">  255685121 :       lra_reg_info[i].no_stack_p = false;</span>
+<span class="lineNum">    1299 </span>            : #endif
+<span class="lineNum">    1300 </span>            :       /* The biggest mode is already set but its value might be to
+<span class="lineNum">    1301 </span>            :          conservative because of recent transformation.  Here in this
+<span class="lineNum">    1302 </span>            :          file we recalculate it again as it costs practically
+<span class="lineNum">    1303 </span>            :          nothing.  */
+<span class="lineNum">    1304 </span><span class="lineCov">  255685121 :       if (i &gt;= FIRST_PSEUDO_REGISTER &amp;&amp; regno_reg_rtx[i] != NULL_RTX)</span>
+<span class="lineNum">    1305 </span><span class="lineCov">  129255733 :         lra_reg_info[i].biggest_mode = GET_MODE (regno_reg_rtx[i]);</span>
+<span class="lineNum">    1306 </span>            :       else
+<span class="lineNum">    1307 </span><span class="lineCov">  126429388 :         lra_reg_info[i].biggest_mode = VOIDmode;</span>
+<span class="lineNum">    1308 </span><span class="lineCov">  255685121 :       lra_reg_info[i].call_p = false;</span>
+<span class="lineNum">    1309 </span><span class="lineCov">  255685121 :       if (i &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">    1310 </span><span class="lineCov">  130969992 :           &amp;&amp; lra_reg_info[i].nrefs != 0)</span>
+<span class="lineNum">    1311 </span>            :         {
+<span class="lineNum">    1312 </span><span class="lineCov">   64089055 :           if ((hard_regno = reg_renumber[i]) &gt;= 0)</span>
+<span class="lineNum">    1313 </span><span class="lineCov">   50825498 :             lra_hard_reg_usage[hard_regno] += lra_reg_info[i].freq;</span>
+<span class="lineNum">    1314 </span>            :           have_referenced_pseudos = true;
+<span class="lineNum">    1315 </span>            :         }
+<span class="lineNum">    1316 </span>            :     }
+<span class="lineNum">    1317 </span><span class="lineCov">    1619677 :   lra_free_copies ();</span>
+<span class="lineNum">    1318 </span>            : 
+<span class="lineNum">    1319 </span>            :   /* Under some circumstances, we can have functions without pseudo
+<span class="lineNum">    1320 </span>            :      registers.  For such functions, lra_live_max_point will be 0,
+<span class="lineNum">    1321 </span>            :      see e.g. PR55604, and there's nothing more to do for us here.  */
+<span class="lineNum">    1322 </span><span class="lineCov">    1619677 :   if (! have_referenced_pseudos)</span>
+<span class="lineNum">    1323 </span>            :     {
+<span class="lineNum">    1324 </span><span class="lineCov">     185075 :       timevar_pop (TV_LRA_CREATE_LIVE_RANGES);</span>
+<span class="lineNum">    1325 </span><span class="lineCov">     185075 :       return false;</span>
+<span class="lineNum">    1326 </span>            :     }
+<span class="lineNum">    1327 </span>            : 
+<span class="lineNum">    1328 </span><span class="lineCov">    1434602 :   pseudos_live = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1329 </span><span class="lineCov">    1434602 :   pseudos_live_through_calls = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1330 </span><span class="lineCov">    1434602 :   pseudos_live_through_setjumps = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1331 </span><span class="lineCov">    1434602 :   start_living = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1332 </span><span class="lineCov">    1434602 :   start_dying = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1333 </span><span class="lineCov">    1434602 :   dead_set = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1334 </span><span class="lineCov">    1434602 :   unused_set = sparseset_alloc (max_regno);</span>
+<span class="lineNum">    1335 </span><span class="lineCov">    1434602 :   curr_point = 0;</span>
+<span class="lineNum">    1336 </span><span class="lineCov">    1434602 :   unsigned new_length = get_max_uid () * 2;</span>
+<span class="lineNum">    1337 </span><span class="lineCov">    1434602 :   point_freq_vec.truncate (0);</span>
+<span class="lineNum">    1338 </span><span class="lineCov">    1434602 :   point_freq_vec.reserve_exact (new_length);</span>
+<span class="lineNum">    1339 </span><span class="lineCov">    1434602 :   lra_point_freq = point_freq_vec.address ();</span>
+<span class="lineNum">    1340 </span><span class="lineCov">    1434602 :   auto_vec&lt;int, 20&gt; post_order_rev_cfg;</span>
+<span class="lineNum">    1341 </span><span class="lineCov">    1434602 :   inverted_post_order_compute (&amp;post_order_rev_cfg);</span>
+<span class="lineNum">    1342 </span><span class="lineCov">    2869204 :   lra_assert (post_order_rev_cfg.length () == (unsigned) n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">    1343 </span><span class="lineCov">    1434602 :   bb_live_change_p = false;</span>
+<span class="lineNum">    1344 </span><span class="lineCov">   29648705 :   for (i = post_order_rev_cfg.length () - 1; i &gt;= 0; --i)</span>
+<span class="lineNum">    1345 </span>            :     {
+<span class="lineNum">    1346 </span><span class="lineCov">   28214103 :       bb = BASIC_BLOCK_FOR_FN (cfun, post_order_rev_cfg[i]);</span>
+<span class="lineNum">    1347 </span><span class="lineCov">   28214103 :       if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun) || bb</span>
+<span class="lineNum">    1348 </span><span class="lineCov">   26779501 :           == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1349 </span>            :         continue;
+<span class="lineNum">    1350 </span><span class="lineCov">   25344899 :       if (process_bb_lives (bb, curr_point, dead_insn_p))</span>
+<span class="lineNum">    1351 </span><span class="lineCov">     235830 :         bb_live_change_p = true;</span>
+<span class="lineNum">    1352 </span>            :     }
+<span class="lineNum">    1353 </span><span class="lineCov">    1434602 :   if (bb_live_change_p)</span>
+<span class="lineNum">    1354 </span>            :     {
+<span class="lineNum">    1355 </span>            :       /* We need to clear pseudo live info as some pseudos can
+<span class="lineNum">    1356 </span>            :          disappear, e.g. pseudos with used equivalences.  */
+<span class="lineNum">    1357 </span><span class="lineCov">    3512559 :       FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1358 </span>            :         {
+<span class="lineNum">    1359 </span><span class="lineCov">    3444190 :           bitmap_clear_range (df_get_live_in (bb), FIRST_PSEUDO_REGISTER,</span>
+<span class="lineNum">    1360 </span><span class="lineCov">    3444190 :                               max_regno - FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">    1361 </span><span class="lineCov">    3444190 :           bitmap_clear_range (df_get_live_out (bb), FIRST_PSEUDO_REGISTER,</span>
+<span class="lineNum">    1362 </span>            :                               max_regno - FIRST_PSEUDO_REGISTER);
+<span class="lineNum">    1363 </span>            :         }
+<span class="lineNum">    1364 </span>            :       /* As we did not change CFG since LRA start we can use
+<span class="lineNum">    1365 </span>            :          DF-infrastructure solver to solve live data flow problem.  */
+<span class="lineNum">    1366 </span><span class="lineCov">    5332782 :       for (int i = 0; i &lt; FIRST_PSEUDO_REGISTER; ++i)</span>
+<span class="lineNum">    1367 </span>            :         {
+<span class="lineNum">    1368 </span><span class="lineCov">    5264413 :           if (TEST_HARD_REG_BIT (hard_regs_spilled_into, i))</span>
+<span class="lineNum">    1369 </span><span class="lineNoCov">          0 :             bitmap_clear_bit (&amp;all_hard_regs_bitmap, i);</span>
+<span class="lineNum">    1370 </span>            :         }
+<span class="lineNum">    1371 </span><span class="lineCov">      68369 :       df_simple_dataflow</span>
+<span class="lineNum">    1372 </span><span class="lineCov">      68369 :         (DF_BACKWARD, NULL, live_con_fun_0, live_con_fun_n,</span>
+<span class="lineNum">    1373 </span>            :          live_trans_fun, &amp;all_blocks,
+<span class="lineNum">    1374 </span>            :          df_get_postorder (DF_BACKWARD), df_get_n_blocks (DF_BACKWARD));
+<span class="lineNum">    1375 </span><span class="lineCov">      68369 :       if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1376 </span>            :         {
+<span class="lineNum">    1377 </span><span class="lineNoCov">          0 :           fprintf (lra_dump_file,</span>
+<span class="lineNum">    1378 </span>            :                    &quot;Global pseudo live data have been updated:\n&quot;);
+<span class="lineNum">    1379 </span><span class="lineNoCov">          0 :           basic_block bb;</span>
+<span class="lineNum">    1380 </span><span class="lineNoCov">          0 :           FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1381 </span>            :             {
+<span class="lineNum">    1382 </span><span class="lineNoCov">          0 :               bb_data_t bb_info = get_bb_data (bb);</span>
+<span class="lineNum">    1383 </span><span class="lineNoCov">          0 :               bitmap bb_livein = df_get_live_in (bb);</span>
+<span class="lineNum">    1384 </span><span class="lineNoCov">          0 :               bitmap bb_liveout = df_get_live_out (bb);</span>
+<span class="lineNum">    1385 </span>            : 
+<span class="lineNum">    1386 </span><span class="lineNoCov">          0 :               fprintf (lra_dump_file, &quot;\nBB %d:\n&quot;, bb-&gt;index);</span>
+<span class="lineNum">    1387 </span><span class="lineNoCov">          0 :               lra_dump_bitmap_with_title (&quot;  gen:&quot;,</span>
+<span class="lineNum">    1388 </span>            :                                           &amp;bb_info-&gt;gen_pseudos, bb-&gt;index);
+<span class="lineNum">    1389 </span><span class="lineNoCov">          0 :               lra_dump_bitmap_with_title (&quot;  killed:&quot;,</span>
+<span class="lineNum">    1390 </span>            :                                           &amp;bb_info-&gt;killed_pseudos, bb-&gt;index);
+<span class="lineNum">    1391 </span><span class="lineNoCov">          0 :               lra_dump_bitmap_with_title (&quot;  livein:&quot;, bb_livein, bb-&gt;index);</span>
+<span class="lineNum">    1392 </span><span class="lineNoCov">          0 :               lra_dump_bitmap_with_title (&quot;  liveout:&quot;, bb_liveout, bb-&gt;index);</span>
+<span class="lineNum">    1393 </span>            :             }
+<span class="lineNum">    1394 </span>            :         }
+<span class="lineNum">    1395 </span>            :     }
+<span class="lineNum">    1396 </span><span class="lineCov">    1434602 :   lra_live_max_point = curr_point;</span>
+<span class="lineNum">    1397 </span><span class="lineCov">    1434602 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1398 </span><span class="lineCov">        152 :     print_live_ranges (lra_dump_file);</span>
+<span class="lineNum">    1399 </span>            :   /* Clean up.  */
+<span class="lineNum">    1400 </span><span class="lineCov">    1434602 :   sparseset_free (unused_set);</span>
+<span class="lineNum">    1401 </span><span class="lineCov">    1434602 :   sparseset_free (dead_set);</span>
+<span class="lineNum">    1402 </span><span class="lineCov">    1434602 :   sparseset_free (start_dying);</span>
+<span class="lineNum">    1403 </span><span class="lineCov">    1434602 :   sparseset_free (start_living);</span>
+<span class="lineNum">    1404 </span><span class="lineCov">    1434602 :   sparseset_free (pseudos_live_through_calls);</span>
+<span class="lineNum">    1405 </span><span class="lineCov">    1434602 :   sparseset_free (pseudos_live_through_setjumps);</span>
+<span class="lineNum">    1406 </span><span class="lineCov">    1434602 :   sparseset_free (pseudos_live);</span>
+<span class="lineNum">    1407 </span><span class="lineCov">    1434602 :   compress_live_ranges ();</span>
+<span class="lineNum">    1408 </span><span class="lineCov">    1434602 :   timevar_pop (TV_LRA_CREATE_LIVE_RANGES);</span>
+<span class="lineNum">    1409 </span><span class="lineCov">    1434602 :   return bb_live_change_p;</span>
+<span class="lineNum">    1410 </span>            : }
+<span class="lineNum">    1411 </span>            : 
+<span class="lineNum">    1412 </span>            : /* The main entry function creates live-ranges and other live info
+<span class="lineNum">    1413 </span>            :    necessary for the assignment sub-pass.  It uses
+<span class="lineNum">    1414 </span>            :    lra_creates_live_ranges_1 -- so read comments for the
+<a name="1415"><span class="lineNum">    1415 </span>            :    function.  */</a>
+<span class="lineNum">    1416 </span>            : void
+<span class="lineNum">    1417 </span><span class="lineCov">    1551308 : lra_create_live_ranges (bool all_p, bool dead_insn_p)</span>
+<span class="lineNum">    1418 </span>            : {
+<span class="lineNum">    1419 </span><span class="lineCov">    1551308 :   if (! lra_create_live_ranges_1 (all_p, dead_insn_p))</span>
+<span class="lineNum">    1420 </span>            :     return;
+<span class="lineNum">    1421 </span><span class="lineCov">      68369 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">    1422 </span><span class="lineNoCov">          0 :     fprintf (lra_dump_file, &quot;Live info was changed -- recalculate it\n&quot;);</span>
+<span class="lineNum">    1423 </span>            :   /* Live info was changed on a bb border.  It means that some info,
+<span class="lineNum">    1424 </span>            :      e.g. about conflict regs, calls crossed, and live ranges may be
+<span class="lineNum">    1425 </span>            :      wrong.  We need this info for allocation.  So recalculate it
+<span class="lineNum">    1426 </span>            :      again but without removing dead insns which can change live info
+<span class="lineNum">    1427 </span>            :      again.  Repetitive live range calculations are expensive therefore
+<span class="lineNum">    1428 </span>            :      we stop here as we already have correct info although some
+<span class="lineNum">    1429 </span>            :      improvement in rare cases could be possible on this sub-pass if
+<span class="lineNum">    1430 </span>            :      we do dead insn elimination again (still the improvement may
+<span class="lineNum">    1431 </span>            :      happen later).  */
+<span class="lineNum">    1432 </span><span class="lineCov">      68369 :   lra_clear_live_ranges ();</span>
+<span class="lineNum">    1433 </span><span class="lineCov">      68369 :   bool res = lra_create_live_ranges_1 (all_p, false);</span>
+<span class="lineNum">    1434 </span><span class="lineCov">      68369 :   lra_assert (! res);</span>
+<span class="lineNum">    1435 </span>            : }
+<span class="lineNum">    1436 </span>            : 
+<a name="1437"><span class="lineNum">    1437 </span>            : /* Finish all live ranges.  */</a>
+<span class="lineNum">    1438 </span>            : void
+<span class="lineNum">    1439 </span><span class="lineCov">    1611067 : lra_clear_live_ranges (void)</span>
+<span class="lineNum">    1440 </span>            : {
+<span class="lineNum">    1441 </span><span class="lineCov">    1611067 :   int i;</span>
+<span class="lineNum">    1442 </span>            : 
+<span class="lineNum">    1443 </span><span class="lineCov">  252195117 :   for (i = 0; i &lt; max_reg_num (); i++)</span>
+<span class="lineNum">    1444 </span><span class="lineCov">  501168100 :     free_live_range_list (lra_reg_info[i].live_ranges);</span>
+<span class="lineNum">    1445 </span><span class="lineCov">    1611067 :   point_freq_vec.release ();</span>
+<span class="lineNum">    1446 </span><span class="lineCov">    1611067 : }</span>
+<span class="lineNum">    1447 </span>            : 
+<a name="1448"><span class="lineNum">    1448 </span>            : /* Initialize live ranges data once per function.  */</a>
+<span class="lineNum">    1449 </span>            : void
+<span class="lineNum">    1450 </span><span class="lineCov">     832590 : lra_live_ranges_init (void)</span>
+<span class="lineNum">    1451 </span>            : {
+<span class="lineNum">    1452 </span><span class="lineCov">     832590 :   bitmap_initialize (&amp;temp_bitmap, &amp;reg_obstack);</span>
+<span class="lineNum">    1453 </span><span class="lineCov">     832590 :   initiate_live_solver ();</span>
+<span class="lineNum">    1454 </span><span class="lineCov">     832590 : }</span>
+<span class="lineNum">    1455 </span>            : 
+<a name="1456"><span class="lineNum">    1456 </span>            : /* Finish live ranges data once per function.  */</a>
+<span class="lineNum">    1457 </span>            : void
+<span class="lineNum">    1458 </span><span class="lineCov">     832590 : lra_live_ranges_finish (void)</span>
+<span class="lineNum">    1459 </span>            : {
+<span class="lineNum">    1460 </span><span class="lineCov">     832590 :   finish_live_solver ();</span>
+<span class="lineNum">    1461 </span><span class="lineCov">     832590 :   bitmap_clear (&amp;temp_bitmap);</span>
+<span class="lineNum">    1462 </span><span class="lineCov">     832590 :   lra_live_range_pool.release ();</span>
+<span class="lineNum">    1463 </span><span class="lineCov">     832590 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

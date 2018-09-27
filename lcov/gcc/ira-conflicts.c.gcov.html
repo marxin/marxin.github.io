@@ -1,0 +1,906 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ira-conflicts.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ira-conflicts.c<span style="font-size: 80%;"> (source / <a href="ira-conflicts.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">390</td>
+            <td class="headerCovTableEntry">409</td>
+            <td class="headerCovTableEntryHi">95.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntryHi">93.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* IRA conflict builder.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2006-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Vladimir Makarov &lt;vmakarov@redhat.com&gt;.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;ira.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;ira-int.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;sparseset.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;addresses.h&quot;
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : /* This file contains code responsible for allocno conflict creation,
+<span class="lineNum">      39 </span>            :    allocno copy creation and allocno info accumulation on upper level
+<span class="lineNum">      40 </span>            :    regions.  */
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* ira_allocnos_num array of arrays of bits, recording whether two
+<span class="lineNum">      43 </span>            :    allocno's conflict (can't go in the same hardware register).
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :    Some arrays will be used as conflict bit vector of the
+<span class="lineNum">      46 </span>            :    corresponding allocnos see function build_object_conflicts.  */
+<span class="lineNum">      47 </span>            : static IRA_INT_TYPE **conflicts;
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : /* Macro to test a conflict of C1 and C2 in `conflicts'.  */
+<span class="lineNum">      50 </span>            : #define OBJECTS_CONFLICT_P(C1, C2)                                      \
+<span class="lineNum">      51 </span>            :   (OBJECT_MIN (C1) &lt;= OBJECT_CONFLICT_ID (C2)                                \
+<span class="lineNum">      52 </span>            :    &amp;&amp; OBJECT_CONFLICT_ID (C2) &lt;= OBJECT_MAX (C1)                     \
+<span class="lineNum">      53 </span>            :    &amp;&amp; TEST_MINMAX_SET_BIT (conflicts[OBJECT_CONFLICT_ID (C1)],          \
+<span class="lineNum">      54 </span>            :                            OBJECT_CONFLICT_ID (C2),                     \
+<span class="lineNum">      55 </span>            :                            OBJECT_MIN (C1), OBJECT_MAX (C1)))
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            : /* Record a conflict between objects OBJ1 and OBJ2.  If necessary,
+<span class="lineNum">      59 </span>            :    canonicalize the conflict by recording it for lower-order subobjects
+<a name="60"><span class="lineNum">      60 </span>            :    of the corresponding allocnos.  */</a>
+<span class="lineNum">      61 </span>            : static void
+<span class="lineNum">      62 </span><span class="lineCov">  137738834 : record_object_conflict (ira_object_t obj1, ira_object_t obj2)</span>
+<span class="lineNum">      63 </span>            : {
+<span class="lineNum">      64 </span><span class="lineCov">  137738834 :   ira_allocno_t a1 = OBJECT_ALLOCNO (obj1);</span>
+<span class="lineNum">      65 </span><span class="lineCov">  137738834 :   ira_allocno_t a2 = OBJECT_ALLOCNO (obj2);</span>
+<span class="lineNum">      66 </span><span class="lineCov">  137738834 :   int w1 = OBJECT_SUBWORD (obj1);</span>
+<span class="lineNum">      67 </span><span class="lineCov">  137738834 :   int w2 = OBJECT_SUBWORD (obj2);</span>
+<span class="lineNum">      68 </span><span class="lineCov">  137738834 :   int id1, id2;</span>
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            :   /* Canonicalize the conflict.  If two identically-numbered words
+<span class="lineNum">      71 </span>            :      conflict, always record this as a conflict between words 0.  That
+<span class="lineNum">      72 </span>            :      is the only information we need, and it is easier to test for if
+<span class="lineNum">      73 </span>            :      it is collected in each allocno's lowest-order object.  */
+<span class="lineNum">      74 </span><span class="lineCov">  137738834 :   if (w1 == w2 &amp;&amp; w1 &gt; 0)</span>
+<span class="lineNum">      75 </span>            :     {
+<span class="lineNum">      76 </span><span class="lineCov">     689815 :       obj1 = ALLOCNO_OBJECT (a1, 0);</span>
+<span class="lineNum">      77 </span><span class="lineCov">     689815 :       obj2 = ALLOCNO_OBJECT (a2, 0);</span>
+<span class="lineNum">      78 </span>            :     }
+<span class="lineNum">      79 </span><span class="lineCov">  137738834 :   id1 = OBJECT_CONFLICT_ID (obj1);</span>
+<span class="lineNum">      80 </span><span class="lineCov">  137738834 :   id2 = OBJECT_CONFLICT_ID (obj2);</span>
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span><span class="lineCov">  137738834 :   SET_MINMAX_SET_BIT (conflicts[id1], id2, OBJECT_MIN (obj1),</span>
+<span class="lineNum">      83 </span>            :                       OBJECT_MAX (obj1));
+<span class="lineNum">      84 </span><span class="lineCov">  137738834 :   SET_MINMAX_SET_BIT (conflicts[id2], id1, OBJECT_MIN (obj2),</span>
+<span class="lineNum">      85 </span>            :                       OBJECT_MAX (obj2));
+<span class="lineNum">      86 </span><span class="lineCov">  137738834 : }</span>
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span>            : /* Build allocno conflict table by processing allocno live ranges.
+<span class="lineNum">      89 </span>            :    Return true if the table was built.  The table is not built if it
+<span class="lineNum">      90 </span>            :    is too big.  */
+<span class="lineNum">      91 </span>            : static bool
+<span class="lineNum">      92 </span><span class="lineCov">     622498 : build_conflict_bit_table (void)</span>
+<span class="lineNum">      93 </span>            : {
+<span class="lineNum">      94 </span><span class="lineCov">     622498 :   int i;</span>
+<span class="lineNum">      95 </span><span class="lineCov">     622498 :   unsigned int j;</span>
+<span class="lineNum">      96 </span><span class="lineCov">     622498 :   enum reg_class aclass;</span>
+<span class="lineNum">      97 </span><span class="lineCov">     622498 :   int object_set_words, allocated_words_num, conflict_bit_vec_words_num;</span>
+<span class="lineNum">      98 </span><span class="lineCov">     622498 :   live_range_t r;</span>
+<span class="lineNum">      99 </span><span class="lineCov">     622498 :   ira_allocno_t allocno;</span>
+<span class="lineNum">     100 </span><span class="lineCov">     622498 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     101 </span><span class="lineCov">     622498 :   sparseset objects_live;</span>
+<span class="lineNum">     102 </span><span class="lineCov">     622498 :   ira_object_t obj;</span>
+<span class="lineNum">     103 </span><span class="lineCov">     622498 :   ira_allocno_object_iterator aoi;</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span><span class="lineCov">     622498 :   allocated_words_num = 0;</span>
+<span class="lineNum">     106 </span><span class="lineCov">   14290038 :   FOR_EACH_ALLOCNO (allocno, ai)</span>
+<span class="lineNum">     107 </span><span class="lineCov">   27591612 :     FOR_EACH_ALLOCNO_OBJECT (allocno, obj, aoi)</span>
+<span class="lineNum">     108 </span>            :       {
+<span class="lineNum">     109 </span><span class="lineCov">   13924072 :         if (OBJECT_MAX (obj) &lt; OBJECT_MIN (obj))</span>
+<span class="lineNum">     110 </span>            :           continue;
+<span class="lineNum">     111 </span><span class="lineCov">   13347789 :         conflict_bit_vec_words_num</span>
+<span class="lineNum">     112 </span><span class="lineCov">   13347789 :           = ((OBJECT_MAX (obj) - OBJECT_MIN (obj) + IRA_INT_BITS)</span>
+<span class="lineNum">     113 </span>            :              / IRA_INT_BITS);
+<span class="lineNum">     114 </span><span class="lineCov">   13347789 :         allocated_words_num += conflict_bit_vec_words_num;</span>
+<span class="lineNum">     115 </span><span class="lineCov">   26695578 :         if ((uint64_t) allocated_words_num * sizeof (IRA_INT_TYPE)</span>
+<span class="lineNum">     116 </span><span class="lineCov">   13347789 :             &gt; (uint64_t) IRA_MAX_CONFLICT_TABLE_SIZE * 1024 * 1024)</span>
+<span class="lineNum">     117 </span>            :           {
+<span class="lineNum">     118 </span><span class="lineCov">          7 :             if (internal_flag_ira_verbose &gt; 0 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     119 </span><span class="lineNoCov">          0 :               fprintf</span>
+<span class="lineNum">     120 </span><span class="lineNoCov">          0 :                 (ira_dump_file,</span>
+<span class="lineNum">     121 </span>            :                  &quot;+++Conflict table will be too big(&gt;%dMB) -- don't use it\n&quot;,
+<span class="lineNum">     122 </span>            :                  IRA_MAX_CONFLICT_TABLE_SIZE);
+<span class="lineNum">     123 </span><span class="lineCov">          7 :             return false;</span>
+<span class="lineNum">     124 </span>            :           }
+<span class="lineNum">     125 </span>            :       }
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span><span class="lineCov">     622491 :   conflicts = (IRA_INT_TYPE **) ira_allocate (sizeof (IRA_INT_TYPE *)</span>
+<span class="lineNum">     128 </span>            :                                               * ira_objects_num);
+<span class="lineNum">     129 </span><span class="lineCov">     622491 :   allocated_words_num = 0;</span>
+<span class="lineNum">     130 </span><span class="lineCov">   14290031 :   FOR_EACH_ALLOCNO (allocno, ai)</span>
+<span class="lineNum">     131 </span><span class="lineCov">   27591605 :     FOR_EACH_ALLOCNO_OBJECT (allocno, obj, aoi)</span>
+<span class="lineNum">     132 </span>            :       {
+<span class="lineNum">     133 </span><span class="lineCov">   13924065 :         int id = OBJECT_CONFLICT_ID (obj);</span>
+<span class="lineNum">     134 </span><span class="lineCov">   13924065 :         if (OBJECT_MAX (obj) &lt; OBJECT_MIN (obj))</span>
+<span class="lineNum">     135 </span>            :           {
+<span class="lineNum">     136 </span><span class="lineCov">     576283 :             conflicts[id] = NULL;</span>
+<span class="lineNum">     137 </span><span class="lineCov">     576283 :             continue;</span>
+<span class="lineNum">     138 </span>            :           }
+<span class="lineNum">     139 </span><span class="lineCov">   13347782 :         conflict_bit_vec_words_num</span>
+<span class="lineNum">     140 </span><span class="lineCov">   13347782 :           = ((OBJECT_MAX (obj) - OBJECT_MIN (obj) + IRA_INT_BITS)</span>
+<span class="lineNum">     141 </span>            :              / IRA_INT_BITS);
+<span class="lineNum">     142 </span><span class="lineCov">   13347782 :         allocated_words_num += conflict_bit_vec_words_num;</span>
+<span class="lineNum">     143 </span><span class="lineCov">   26695564 :         conflicts[id]</span>
+<span class="lineNum">     144 </span><span class="lineCov">   13347782 :           = (IRA_INT_TYPE *) ira_allocate (sizeof (IRA_INT_TYPE)</span>
+<span class="lineNum">     145 </span>            :                                            * conflict_bit_vec_words_num);
+<span class="lineNum">     146 </span><span class="lineCov">   13347782 :         memset (conflicts[id], 0,</span>
+<span class="lineNum">     147 </span>            :                 sizeof (IRA_INT_TYPE) * conflict_bit_vec_words_num);
+<span class="lineNum">     148 </span>            :       }
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">     622491 :   object_set_words = (ira_objects_num + IRA_INT_BITS - 1) / IRA_INT_BITS;</span>
+<span class="lineNum">     151 </span><span class="lineCov">     622491 :   if (internal_flag_ira_verbose &gt; 0 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     152 </span><span class="lineCov">         39 :     fprintf</span>
+<span class="lineNum">     153 </span><span class="lineCov">         78 :       (ira_dump_file,</span>
+<span class="lineNum">     154 </span>            :        &quot;+++Allocating %ld bytes for conflict table (uncompressed size %ld)\n&quot;,
+<span class="lineNum">     155 </span><span class="lineCov">         39 :        (long) allocated_words_num * sizeof (IRA_INT_TYPE),</span>
+<span class="lineNum">     156 </span><span class="lineCov">         39 :        (long) object_set_words * ira_objects_num * sizeof (IRA_INT_TYPE));</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span><span class="lineCov">     622491 :   objects_live = sparseset_alloc (ira_objects_num);</span>
+<span class="lineNum">     159 </span><span class="lineCov">   15326623 :   for (i = 0; i &lt; ira_max_point; i++)</span>
+<span class="lineNum">     160 </span>            :     {
+<span class="lineNum">     161 </span><span class="lineCov">   28725939 :       for (r = ira_start_point_ranges[i]; r != NULL; r = r-&gt;start_next)</span>
+<span class="lineNum">     162 </span>            :         {
+<span class="lineNum">     163 </span><span class="lineCov">   14021807 :           ira_object_t obj = r-&gt;object;</span>
+<span class="lineNum">     164 </span><span class="lineCov">   14021807 :           ira_allocno_t allocno = OBJECT_ALLOCNO (obj);</span>
+<span class="lineNum">     165 </span><span class="lineCov">   14021807 :           int id = OBJECT_CONFLICT_ID (obj);</span>
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span><span class="lineCov">   14021807 :           gcc_assert (id &lt; ira_objects_num);</span>
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineCov">   14021807 :           aclass = ALLOCNO_CLASS (allocno);</span>
+<span class="lineNum">     170 </span><span class="lineCov">  326449824 :           EXECUTE_IF_SET_IN_SPARSESET (objects_live, j)</span>
+<span class="lineNum">     171 </span>            :             {
+<span class="lineNum">     172 </span><span class="lineCov">  174416029 :               ira_object_t live_obj = ira_object_id_map[j];</span>
+<span class="lineNum">     173 </span><span class="lineCov">  174416029 :               ira_allocno_t live_a = OBJECT_ALLOCNO (live_obj);</span>
+<span class="lineNum">     174 </span><span class="lineCov">  174416029 :               enum reg_class live_aclass = ALLOCNO_CLASS (live_a);</span>
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span><span class="lineCov">  174416029 :               if (ira_reg_classes_intersect_p[aclass][live_aclass]</span>
+<span class="lineNum">     177 </span>            :                   /* Don't set up conflict for the allocno with itself.  */
+<span class="lineNum">     178 </span><span class="lineCov">  138011988 :                   &amp;&amp; live_a != allocno)</span>
+<span class="lineNum">     179 </span>            :                 {
+<span class="lineNum">     180 </span><span class="lineCov">  137738834 :                   record_object_conflict (obj, live_obj);</span>
+<span class="lineNum">     181 </span>            :                 }
+<span class="lineNum">     182 </span>            :             }
+<span class="lineNum">     183 </span><span class="lineCov">   14021807 :           sparseset_set_bit (objects_live, id);</span>
+<span class="lineNum">     184 </span>            :         }
+<span class="lineNum">     185 </span>            : 
+<span class="lineNum">     186 </span><span class="lineCov">   28725939 :       for (r = ira_finish_point_ranges[i]; r != NULL; r = r-&gt;finish_next)</span>
+<span class="lineNum">     187 </span><span class="lineCov">   14021807 :         sparseset_clear_bit (objects_live, OBJECT_CONFLICT_ID (r-&gt;object));</span>
+<span class="lineNum">     188 </span>            :     }
+<span class="lineNum">     189 </span><span class="lineCov">     622491 :   sparseset_free (objects_live);</span>
+<span class="lineNum">     190 </span><span class="lineCov">     622491 :   return true;</span>
+<span class="lineNum">     191 </span>            : }
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span>            : /* Return true iff allocnos A1 and A2 cannot be allocated to the same
+<span class="lineNum">     194 </span>            :    register due to conflicts.  */
+<a name="195"><span class="lineNum">     195 </span>            : </a>
+<span class="lineNum">     196 </span>            : static bool
+<span class="lineNum">     197 </span><span class="lineCov">    3845112 : allocnos_conflict_for_copy_p (ira_allocno_t a1, ira_allocno_t a2)</span>
+<span class="lineNum">     198 </span>            : {
+<span class="lineNum">     199 </span>            :   /* Due to the fact that we canonicalize conflicts (see
+<span class="lineNum">     200 </span>            :      record_object_conflict), we only need to test for conflicts of
+<span class="lineNum">     201 </span>            :      the lowest order words.  */
+<span class="lineNum">     202 </span><span class="lineCov">    3845112 :   ira_object_t obj1 = ALLOCNO_OBJECT (a1, 0);</span>
+<span class="lineNum">     203 </span><span class="lineCov">    3845112 :   ira_object_t obj2 = ALLOCNO_OBJECT (a2, 0);</span>
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span><span class="lineCov">    3845112 :   return OBJECTS_CONFLICT_P (obj1, obj2);</span>
+<span class="lineNum">     206 </span>            : }
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            : /* Check that X is REG or SUBREG of REG.  */
+<span class="lineNum">     209 </span>            : #define REG_SUBREG_P(x)                                                 \
+<span class="lineNum">     210 </span>            :    (REG_P (x) || (GET_CODE (x) == SUBREG &amp;&amp; REG_P (SUBREG_REG (x))))
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span>            : /* Return X if X is a REG, otherwise it should be SUBREG of REG and
+<span class="lineNum">     213 </span>            :    the function returns the reg in this case.  *OFFSET will be set to
+<a name="214"><span class="lineNum">     214 </span>            :    0 in the first case or the regno offset in the first case.  */</a>
+<span class="lineNum">     215 </span>            : static rtx
+<span class="lineNum">     216 </span><span class="lineCov">   12595172 : go_through_subreg (rtx x, int *offset)</span>
+<span class="lineNum">     217 </span>            : {
+<span class="lineNum">     218 </span><span class="lineCov">   12595172 :   rtx reg;</span>
+<span class="lineNum">     219 </span>            : 
+<span class="lineNum">     220 </span><span class="lineCov">   12595172 :   *offset = 0;</span>
+<span class="lineNum">     221 </span><span class="lineCov">   12595172 :   if (REG_P (x))</span>
+<span class="lineNum">     222 </span>            :     return x;
+<span class="lineNum">     223 </span><span class="lineCov">     313805 :   ira_assert (GET_CODE (x) == SUBREG);</span>
+<span class="lineNum">     224 </span><span class="lineCov">     313805 :   reg = SUBREG_REG (x);</span>
+<span class="lineNum">     225 </span><span class="lineCov">     313805 :   ira_assert (REG_P (reg));</span>
+<span class="lineNum">     226 </span><span class="lineCov">     627610 :   if (REGNO (reg) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     227 </span><span class="lineNoCov">          0 :     *offset = subreg_regno_offset (REGNO (reg), GET_MODE (reg),</span>
+<span class="lineNum">     228 </span><span class="lineNoCov">          0 :                                    SUBREG_BYTE (x), GET_MODE (x));</span>
+<span class="lineNum">     229 </span><span class="lineCov">     627610 :   else if (!can_div_trunc_p (SUBREG_BYTE (x),</span>
+<span class="lineNum">     230 </span><span class="lineCov">     313805 :                              REGMODE_NATURAL_SIZE (GET_MODE (x)), offset))</span>
+<span class="lineNum">     231 </span>            :     /* Checked by validate_subreg.  We must know at compile time which
+<span class="lineNum">     232 </span>            :        inner hard registers are being accessed.  */
+<span class="lineNum">     233 </span>            :     gcc_unreachable ();
+<span class="lineNum">     234 </span>            :   return reg;
+<span class="lineNum">     235 </span>            : }
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span>            : /* Process registers REG1 and REG2 in move INSN with execution
+<span class="lineNum">     238 </span>            :    frequency FREQ.  The function also processes the registers in a
+<span class="lineNum">     239 </span>            :    potential move insn (INSN == NULL in this case) with frequency
+<span class="lineNum">     240 </span>            :    FREQ.  The function can modify hard register costs of the
+<span class="lineNum">     241 </span>            :    corresponding allocnos or create a copy involving the corresponding
+<span class="lineNum">     242 </span>            :    allocnos.  The function does nothing if the both registers are hard
+<span class="lineNum">     243 </span>            :    registers.  When nothing is changed, the function returns
+<span class="lineNum">     244 </span>            :    FALSE.  */
+<span class="lineNum">     245 </span>            : static bool
+<span class="lineNum">     246 </span><span class="lineCov">    6297586 : process_regs_for_copy (rtx reg1, rtx reg2, bool constraint_p,</span>
+<span class="lineNum">     247 </span>            :                        rtx_insn *insn, int freq)
+<span class="lineNum">     248 </span>            : {
+<span class="lineNum">     249 </span><span class="lineCov">    6297586 :   int allocno_preferenced_hard_regno, cost, index, offset1, offset2;</span>
+<span class="lineNum">     250 </span><span class="lineCov">    6297586 :   bool only_regs_p;</span>
+<span class="lineNum">     251 </span><span class="lineCov">    6297586 :   ira_allocno_t a;</span>
+<span class="lineNum">     252 </span><span class="lineCov">    6297586 :   reg_class_t rclass, aclass;</span>
+<span class="lineNum">     253 </span><span class="lineCov">    6297586 :   machine_mode mode;</span>
+<span class="lineNum">     254 </span><span class="lineCov">    6297586 :   ira_copy_t cp;</span>
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">    6297586 :   gcc_assert (REG_SUBREG_P (reg1) &amp;&amp; REG_SUBREG_P (reg2));</span>
+<span class="lineNum">     257 </span><span class="lineCov">    6297586 :   only_regs_p = REG_P (reg1) &amp;&amp; REG_P (reg2);</span>
+<span class="lineNum">     258 </span><span class="lineCov">    6297586 :   reg1 = go_through_subreg (reg1, &amp;offset1);</span>
+<span class="lineNum">     259 </span><span class="lineCov">    6297586 :   reg2 = go_through_subreg (reg2, &amp;offset2);</span>
+<span class="lineNum">     260 </span>            :   /* Set up hard regno preferenced by allocno.  If allocno gets the
+<span class="lineNum">     261 </span>            :      hard regno the copy (or potential move) insn will be removed.  */
+<span class="lineNum">     262 </span><span class="lineCov">   12595172 :   if (HARD_REGISTER_P (reg1))</span>
+<span class="lineNum">     263 </span>            :     {
+<span class="lineNum">     264 </span><span class="lineCov">    3544322 :       if (HARD_REGISTER_P (reg2))</span>
+<span class="lineNum">     265 </span>            :         return false;
+<span class="lineNum">     266 </span><span class="lineCov">    1772022 :       allocno_preferenced_hard_regno = REGNO (reg1) + offset1 - offset2;</span>
+<span class="lineNum">     267 </span><span class="lineCov">    3544044 :       a = ira_curr_regno_allocno_map[REGNO (reg2)];</span>
+<span class="lineNum">     268 </span>            :     }
+<span class="lineNum">     269 </span><span class="lineCov">    9050850 :   else if (HARD_REGISTER_P (reg2))</span>
+<span class="lineNum">     270 </span>            :     {
+<span class="lineNum">     271 </span><span class="lineCov">    1726392 :       allocno_preferenced_hard_regno = REGNO (reg2) + offset2 - offset1;</span>
+<span class="lineNum">     272 </span><span class="lineCov">    3452784 :       a = ira_curr_regno_allocno_map[REGNO (reg1)];</span>
+<span class="lineNum">     273 </span>            :     }
+<span class="lineNum">     274 </span>            :   else
+<span class="lineNum">     275 </span>            :     {
+<span class="lineNum">     276 </span><span class="lineCov">    2799033 :       ira_allocno_t a1 = ira_curr_regno_allocno_map[REGNO (reg1)];</span>
+<span class="lineNum">     277 </span><span class="lineCov">    2799033 :       ira_allocno_t a2 = ira_curr_regno_allocno_map[REGNO (reg2)];</span>
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span><span class="lineCov">    2799033 :       if (!allocnos_conflict_for_copy_p (a1, a2) &amp;&amp; offset1 == offset2)</span>
+<span class="lineNum">     280 </span>            :         {
+<span class="lineNum">     281 </span><span class="lineCov">    2514960 :           cp = ira_add_allocno_copy (a1, a2, freq, constraint_p, insn,</span>
+<span class="lineNum">     282 </span>            :                                      ira_curr_loop_tree_node);
+<span class="lineNum">     283 </span><span class="lineCov">    2514960 :           bitmap_set_bit (ira_curr_loop_tree_node-&gt;local_copies, cp-&gt;num);</span>
+<span class="lineNum">     284 </span><span class="lineCov">    2514960 :           return true;</span>
+<span class="lineNum">     285 </span>            :         }
+<span class="lineNum">     286 </span>            :       else
+<span class="lineNum">     287 </span>            :         return false;
+<span class="lineNum">     288 </span>            :     }
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span><span class="lineCov">    3498414 :   if (! IN_RANGE (allocno_preferenced_hard_regno,</span>
+<span class="lineNum">     291 </span>            :                   0, FIRST_PSEUDO_REGISTER - 1))
+<span class="lineNum">     292 </span>            :     /* Can not be tied.  */
+<span class="lineNum">     293 </span>            :     return false;
+<span class="lineNum">     294 </span><span class="lineCov">    3498414 :   rclass = REGNO_REG_CLASS (allocno_preferenced_hard_regno);</span>
+<span class="lineNum">     295 </span><span class="lineCov">    3498414 :   mode = ALLOCNO_MODE (a);</span>
+<span class="lineNum">     296 </span><span class="lineCov">    3498414 :   aclass = ALLOCNO_CLASS (a);</span>
+<span class="lineNum">     297 </span><span class="lineCov">    3498414 :   if (only_regs_p &amp;&amp; insn != NULL_RTX</span>
+<span class="lineNum">     298 </span><span class="lineCov">    3437616 :       &amp;&amp; reg_class_size[rclass] &lt;= ira_reg_class_max_nregs [rclass][mode])</span>
+<span class="lineNum">     299 </span>            :     /* It is already taken into account in ira-costs.c.  */
+<span class="lineNum">     300 </span>            :     return false;
+<span class="lineNum">     301 </span><span class="lineCov">     142890 :   index = ira_class_hard_reg_index[aclass][allocno_preferenced_hard_regno];</span>
+<span class="lineNum">     302 </span><span class="lineCov">     142890 :   if (index &lt; 0)</span>
+<span class="lineNum">     303 </span>            :     /* Can not be tied.  It is not in the allocno class.  */
+<span class="lineNum">     304 </span>            :     return false;
+<span class="lineNum">     305 </span><span class="lineCov">     124333 :   ira_init_register_move_cost_if_necessary (mode);</span>
+<span class="lineNum">     306 </span><span class="lineCov">     248666 :   if (HARD_REGISTER_P (reg1))</span>
+<span class="lineNum">     307 </span><span class="lineCov">      49312 :     cost = ira_register_move_cost[mode][aclass][rclass] * freq;</span>
+<span class="lineNum">     308 </span>            :   else
+<span class="lineNum">     309 </span><span class="lineCov">      75021 :     cost = ira_register_move_cost[mode][rclass][aclass] * freq;</span>
+<span class="lineNum">     310 </span><span class="lineCov">     159739 :   do</span>
+<span class="lineNum">     311 </span>            :     {
+<span class="lineNum">     312 </span><span class="lineCov">     159739 :       ira_allocate_and_set_costs</span>
+<span class="lineNum">     313 </span><span class="lineCov">     159739 :         (&amp;ALLOCNO_HARD_REG_COSTS (a), aclass,</span>
+<span class="lineNum">     314 </span>            :          ALLOCNO_CLASS_COST (a));
+<span class="lineNum">     315 </span><span class="lineCov">     159739 :       ira_allocate_and_set_costs</span>
+<span class="lineNum">     316 </span><span class="lineCov">     159739 :         (&amp;ALLOCNO_CONFLICT_HARD_REG_COSTS (a), aclass, 0);</span>
+<span class="lineNum">     317 </span><span class="lineCov">     159739 :       ALLOCNO_HARD_REG_COSTS (a)[index] -= cost;</span>
+<span class="lineNum">     318 </span><span class="lineCov">     159739 :       ALLOCNO_CONFLICT_HARD_REG_COSTS (a)[index] -= cost;</span>
+<span class="lineNum">     319 </span><span class="lineCov">     159739 :       if (ALLOCNO_HARD_REG_COSTS (a)[index] &lt; ALLOCNO_CLASS_COST (a))</span>
+<span class="lineNum">     320 </span><span class="lineCov">     124595 :         ALLOCNO_CLASS_COST (a) = ALLOCNO_HARD_REG_COSTS (a)[index];</span>
+<span class="lineNum">     321 </span><span class="lineCov">     159739 :       ira_add_allocno_pref (a, allocno_preferenced_hard_regno, freq);</span>
+<span class="lineNum">     322 </span><span class="lineCov">     159739 :       a = ira_parent_or_cap_allocno (a);</span>
+<span class="lineNum">     323 </span>            :     }
+<span class="lineNum">     324 </span><span class="lineCov">     159739 :   while (a != NULL);</span>
+<span class="lineNum">     325 </span>            :   return true;
+<span class="lineNum">     326 </span>            : }
+<span class="lineNum">     327 </span>            : 
+<span class="lineNum">     328 </span>            : /* Process all of the output registers of the current insn which are
+<span class="lineNum">     329 </span>            :    not bound (BOUND_P) and the input register REG (its operand number
+<span class="lineNum">     330 </span>            :    OP_NUM) which dies in the insn as if there were a move insn between
+<a name="331"><span class="lineNum">     331 </span>            :    them with frequency FREQ.  */</a>
+<span class="lineNum">     332 </span>            : static void
+<span class="lineNum">     333 </span><span class="lineCov">    6102652 : process_reg_shuffles (rtx reg, int op_num, int freq, bool *bound_p)</span>
+<span class="lineNum">     334 </span>            : {
+<span class="lineNum">     335 </span><span class="lineCov">    6102652 :   int i;</span>
+<span class="lineNum">     336 </span><span class="lineCov">    6102652 :   rtx another_reg;</span>
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span><span class="lineCov">    6102652 :   gcc_assert (REG_SUBREG_P (reg));</span>
+<span class="lineNum">     339 </span><span class="lineCov">   21713098 :   for (i = 0; i &lt; recog_data.n_operands; i++)</span>
+<span class="lineNum">     340 </span>            :     {
+<span class="lineNum">     341 </span><span class="lineCov">   15610446 :       another_reg = recog_data.operand[i];</span>
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span><span class="lineCov">   15610446 :       if (!REG_SUBREG_P (another_reg) || op_num == i</span>
+<span class="lineNum">     344 </span><span class="lineCov">    5064840 :           || recog_data.operand_type[i] != OP_OUT</span>
+<span class="lineNum">     345 </span><span class="lineCov">    2683770 :           || bound_p[i])</span>
+<span class="lineNum">     346 </span>            :         continue;
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span><span class="lineCov">    1289635 :       process_regs_for_copy (reg, another_reg, false, NULL, freq);</span>
+<span class="lineNum">     349 </span>            :     }
+<span class="lineNum">     350 </span><span class="lineCov">    6102652 : }</span>
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            : /* Process INSN and create allocno copies if necessary.  For example,
+<span class="lineNum">     353 </span>            :    it might be because INSN is a pseudo-register move or INSN is two
+<a name="354"><span class="lineNum">     354 </span>            :    operand insn.  */</a>
+<span class="lineNum">     355 </span>            : static void
+<span class="lineNum">     356 </span><span class="lineCov">   33235449 : add_insn_allocno_copies (rtx_insn *insn)</span>
+<span class="lineNum">     357 </span>            : {
+<span class="lineNum">     358 </span><span class="lineCov">   33235449 :   rtx set, operand, dup;</span>
+<span class="lineNum">     359 </span><span class="lineCov">   33235449 :   bool bound_p[MAX_RECOG_OPERANDS];</span>
+<span class="lineNum">     360 </span><span class="lineCov">   33235449 :   int i, n, freq;</span>
+<span class="lineNum">     361 </span><span class="lineCov">   33235449 :   HARD_REG_SET alts;</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span><span class="lineCov">   33235449 :   freq = REG_FREQ_FROM_BB (BLOCK_FOR_INSN (insn));</span>
+<span class="lineNum">     364 </span><span class="lineCov">   28167236 :   if (freq == 0)</span>
+<span class="lineNum">     365 </span><span class="lineNoCov">          0 :     freq = 1;</span>
+<span class="lineNum">     366 </span><span class="lineCov">   33235449 :   if ((set = single_set (insn)) != NULL_RTX</span>
+<span class="lineNum">     367 </span><span class="lineCov">   30620530 :       &amp;&amp; REG_SUBREG_P (SET_DEST (set)) &amp;&amp; REG_SUBREG_P (SET_SRC (set))</span>
+<span class="lineNum">     368 </span><span class="lineCov">    5087543 :       &amp;&amp; ! side_effects_p (set)</span>
+<span class="lineNum">     369 </span><span class="lineCov">   38322992 :       &amp;&amp; find_reg_note (insn, REG_DEAD,</span>
+<span class="lineNum">     370 </span><span class="lineCov">    5087543 :                         REG_P (SET_SRC (set))</span>
+<span class="lineNum">     371 </span>            :                         ? SET_SRC (set)
+<span class="lineNum">     372 </span>            :                         : SUBREG_REG (SET_SRC (set))) != NULL_RTX)
+<span class="lineNum">     373 </span>            :     {
+<span class="lineNum">     374 </span><span class="lineCov">    3861775 :       process_regs_for_copy (SET_SRC (set), SET_DEST (set),</span>
+<span class="lineNum">     375 </span>            :                              false, insn, freq);
+<span class="lineNum">     376 </span><span class="lineCov">   22244030 :       return;</span>
+<span class="lineNum">     377 </span>            :     }
+<span class="lineNum">     378 </span>            :   /* Fast check of possibility of constraint or shuffle copies.  If
+<span class="lineNum">     379 </span>            :      there are no dead registers, there will be no such copies.  */
+<span class="lineNum">     380 </span><span class="lineCov">   29373674 :   if (! find_reg_note (insn, REG_DEAD, NULL_RTX))</span>
+<span class="lineNum">     381 </span>            :     return;
+<span class="lineNum">     382 </span><span class="lineCov">   10991419 :   ira_setup_alts (insn, alts);</span>
+<span class="lineNum">     383 </span><span class="lineCov">   36439230 :   for (i = 0; i &lt; recog_data.n_operands; i++)</span>
+<span class="lineNum">     384 </span><span class="lineCov">   25447811 :     bound_p[i] = false;</span>
+<span class="lineNum">     385 </span><span class="lineCov">   36439230 :   for (i = 0; i &lt; recog_data.n_operands; i++)</span>
+<span class="lineNum">     386 </span>            :     {
+<span class="lineNum">     387 </span><span class="lineCov">   25447811 :       operand = recog_data.operand[i];</span>
+<span class="lineNum">     388 </span><span class="lineCov">   25447811 :       if (! REG_SUBREG_P (operand))</span>
+<span class="lineNum">     389 </span>            :         continue;
+<span class="lineNum">     390 </span><span class="lineCov">   10784246 :       if ((n = ira_get_dup_out_num (i, alts)) &gt;= 0)</span>
+<span class="lineNum">     391 </span>            :         {
+<span class="lineNum">     392 </span><span class="lineCov">    1444434 :           bound_p[n] = true;</span>
+<span class="lineNum">     393 </span><span class="lineCov">    1444434 :           dup = recog_data.operand[n];</span>
+<span class="lineNum">     394 </span><span class="lineCov">     106682 :           if (REG_SUBREG_P (dup)</span>
+<span class="lineNum">     395 </span><span class="lineCov">    2810081 :               &amp;&amp; find_reg_note (insn, REG_DEAD,</span>
+<span class="lineNum">     396 </span><span class="lineCov">    1365647 :                                 REG_P (operand)</span>
+<span class="lineNum">     397 </span>            :                                 ? operand
+<span class="lineNum">     398 </span>            :                                 : SUBREG_REG (operand)) != NULL_RTX)
+<span class="lineNum">     399 </span><span class="lineCov">    1146176 :             process_regs_for_copy (operand, dup, true, NULL,</span>
+<span class="lineNum">     400 </span>            :                                    freq);
+<span class="lineNum">     401 </span>            :         }
+<span class="lineNum">     402 </span>            :     }
+<span class="lineNum">     403 </span><span class="lineCov">   36439230 :   for (i = 0; i &lt; recog_data.n_operands; i++)</span>
+<span class="lineNum">     404 </span>            :     {
+<span class="lineNum">     405 </span><span class="lineCov">   25447811 :       operand = recog_data.operand[i];</span>
+<span class="lineNum">     406 </span><span class="lineCov">   15046971 :       if (REG_SUBREG_P (operand)</span>
+<span class="lineNum">     407 </span><span class="lineCov">   25831217 :           &amp;&amp; find_reg_note (insn, REG_DEAD,</span>
+<span class="lineNum">     408 </span>            :                             REG_P (operand)
+<span class="lineNum">     409 </span>            :                             ? operand : SUBREG_REG (operand)) != NULL_RTX)
+<span class="lineNum">     410 </span>            :         /* If an operand dies, prefer its hard register for the output
+<span class="lineNum">     411 </span>            :            operands by decreasing the hard register cost or creating
+<span class="lineNum">     412 </span>            :            the corresponding allocno copies.  The cost will not
+<span class="lineNum">     413 </span>            :            correspond to a real move insn cost, so make the frequency
+<span class="lineNum">     414 </span>            :            smaller.  */
+<span class="lineNum">     415 </span><span class="lineCov">    6102652 :         process_reg_shuffles (operand, i, freq &lt; 8 ? 1 : freq / 8, bound_p);</span>
+<span class="lineNum">     416 </span>            :     }
+<span class="lineNum">     417 </span>            : }
+<span class="lineNum">     418 </span>            : 
+<a name="419"><span class="lineNum">     419 </span>            : /* Add copies originated from BB given by LOOP_TREE_NODE.  */</a>
+<span class="lineNum">     420 </span>            : static void
+<span class="lineNum">     421 </span><span class="lineCov">    6799343 : add_copies (ira_loop_tree_node_t loop_tree_node)</span>
+<span class="lineNum">     422 </span>            : {
+<span class="lineNum">     423 </span><span class="lineCov">    6799343 :   basic_block bb;</span>
+<span class="lineNum">     424 </span><span class="lineCov">    6799343 :   rtx_insn *insn;</span>
+<span class="lineNum">     425 </span>            : 
+<span class="lineNum">     426 </span><span class="lineCov">    6799343 :   bb = loop_tree_node-&gt;bb;</span>
+<span class="lineNum">     427 </span><span class="lineCov">    6799343 :   if (bb == NULL)</span>
+<span class="lineNum">     428 </span>            :     return;
+<span class="lineNum">     429 </span><span class="lineCov">  148568042 :   FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     430 </span><span class="lineCov">   71241069 :     if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     431 </span><span class="lineCov">   33235449 :       add_insn_allocno_copies (insn);</span>
+<span class="lineNum">     432 </span>            : }
+<span class="lineNum">     433 </span>            : 
+<span class="lineNum">     434 </span>            : /* Propagate copies the corresponding allocnos on upper loop tree
+<span class="lineNum">     435 </span>            :    level.  */
+<span class="lineNum">     436 </span>            : static void
+<span class="lineNum">     437 </span><span class="lineCov">     596734 : propagate_copies (void)</span>
+<span class="lineNum">     438 </span>            : {
+<span class="lineNum">     439 </span><span class="lineCov">     596734 :   ira_copy_t cp;</span>
+<span class="lineNum">     440 </span><span class="lineCov">     596734 :   ira_copy_iterator ci;</span>
+<span class="lineNum">     441 </span><span class="lineCov">     596734 :   ira_allocno_t a1, a2, parent_a1, parent_a2;</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">    4030270 :   FOR_EACH_COPY (cp, ci)</span>
+<span class="lineNum">     444 </span>            :     {
+<span class="lineNum">     445 </span><span class="lineCov">    3433536 :       a1 = cp-&gt;first;</span>
+<span class="lineNum">     446 </span><span class="lineCov">    3433536 :       a2 = cp-&gt;second;</span>
+<span class="lineNum">     447 </span><span class="lineCov">    3433536 :       if (ALLOCNO_LOOP_TREE_NODE (a1) == ira_loop_tree_root)</span>
+<span class="lineNum">     448 </span>            :         continue;
+<span class="lineNum">     449 </span><span class="lineCov">    1046079 :       ira_assert ((ALLOCNO_LOOP_TREE_NODE (a2) != ira_loop_tree_root));</span>
+<span class="lineNum">     450 </span><span class="lineCov">    1046079 :       parent_a1 = ira_parent_or_cap_allocno (a1);</span>
+<span class="lineNum">     451 </span><span class="lineCov">    1046079 :       parent_a2 = ira_parent_or_cap_allocno (a2);</span>
+<span class="lineNum">     452 </span><span class="lineCov">    1046079 :       ira_assert (parent_a1 != NULL &amp;&amp; parent_a2 != NULL);</span>
+<span class="lineNum">     453 </span><span class="lineCov">    1046079 :       if (! allocnos_conflict_for_copy_p (parent_a1, parent_a2))</span>
+<span class="lineNum">     454 </span><span class="lineCov">    2092148 :         ira_add_allocno_copy (parent_a1, parent_a2, cp-&gt;freq,</span>
+<span class="lineNum">     455 </span><span class="lineCov">    1046074 :                               cp-&gt;constraint_p, cp-&gt;insn, cp-&gt;loop_tree_node);</span>
+<span class="lineNum">     456 </span>            :     }
+<span class="lineNum">     457 </span><span class="lineCov">     596734 : }</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span>            : /* Array used to collect all conflict allocnos for given allocno.  */
+<span class="lineNum">     460 </span>            : static ira_object_t *collected_conflict_objects;
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span>            : /* Build conflict vectors or bit conflict vectors (whatever is more
+<span class="lineNum">     463 </span>            :    profitable) for object OBJ from the conflict table.  */
+<span class="lineNum">     464 </span>            : static void
+<span class="lineNum">     465 </span><span class="lineCov">   13924065 : build_object_conflicts (ira_object_t obj)</span>
+<span class="lineNum">     466 </span>            : {
+<span class="lineNum">     467 </span><span class="lineCov">   13924065 :   int i, px, parent_num;</span>
+<span class="lineNum">     468 </span><span class="lineCov">   13924065 :   ira_allocno_t parent_a, another_parent_a;</span>
+<span class="lineNum">     469 </span><span class="lineCov">   13924065 :   ira_object_t parent_obj;</span>
+<span class="lineNum">     470 </span><span class="lineCov">   13924065 :   ira_allocno_t a = OBJECT_ALLOCNO (obj);</span>
+<span class="lineNum">     471 </span><span class="lineCov">   13924065 :   IRA_INT_TYPE *object_conflicts;</span>
+<span class="lineNum">     472 </span><span class="lineCov">   13924065 :   minmax_set_iterator asi;</span>
+<span class="lineNum">     473 </span><span class="lineCov">   13924065 :   int parent_min, parent_max ATTRIBUTE_UNUSED;</span>
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span><span class="lineCov">   13924065 :   object_conflicts = conflicts[OBJECT_CONFLICT_ID (obj)];</span>
+<span class="lineNum">     476 </span><span class="lineCov">   13924065 :   px = 0;</span>
+<span class="lineNum">     477 </span><span class="lineCov">  426685846 :   FOR_EACH_BIT_IN_MINMAX_SET (object_conflicts,</span>
+<span class="lineNum">     478 </span>            :                               OBJECT_MIN (obj), OBJECT_MAX (obj), i, asi)
+<span class="lineNum">     479 </span>            :     {
+<span class="lineNum">     480 </span><span class="lineCov">  398837716 :       ira_object_t another_obj = ira_object_id_map[i];</span>
+<span class="lineNum">     481 </span><span class="lineCov">  398837716 :       ira_allocno_t another_a = OBJECT_ALLOCNO (obj);</span>
+<span class="lineNum">     482 </span>            : 
+<span class="lineNum">     483 </span><span class="lineCov">  398837716 :       ira_assert (ira_reg_classes_intersect_p</span>
+<span class="lineNum">     484 </span>            :                   [ALLOCNO_CLASS (a)][ALLOCNO_CLASS (another_a)]);
+<span class="lineNum">     485 </span><span class="lineCov">  398837716 :       collected_conflict_objects[px++] = another_obj;</span>
+<span class="lineNum">     486 </span>            :     }
+<span class="lineNum">     487 </span><span class="lineCov">   13924065 :   if (ira_conflict_vector_profitable_p (obj, px))</span>
+<span class="lineNum">     488 </span>            :     {
+<span class="lineNum">     489 </span><span class="lineCov">    3527826 :       ira_object_t *vec;</span>
+<span class="lineNum">     490 </span><span class="lineCov">    3527826 :       ira_allocate_conflict_vec (obj, px);</span>
+<span class="lineNum">     491 </span><span class="lineCov">    3527826 :       vec = OBJECT_CONFLICT_VEC (obj);</span>
+<span class="lineNum">     492 </span><span class="lineCov">    3527826 :       memcpy (vec, collected_conflict_objects, sizeof (ira_object_t) * px);</span>
+<span class="lineNum">     493 </span><span class="lineCov">    3527826 :       vec[px] = NULL;</span>
+<span class="lineNum">     494 </span><span class="lineCov">    3527826 :       OBJECT_NUM_CONFLICTS (obj) = px;</span>
+<span class="lineNum">     495 </span>            :     }
+<span class="lineNum">     496 </span>            :   else
+<span class="lineNum">     497 </span>            :     {
+<span class="lineNum">     498 </span><span class="lineCov">   10396239 :       int conflict_bit_vec_words_num;</span>
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span><span class="lineCov">   10396239 :       OBJECT_CONFLICT_ARRAY (obj) = object_conflicts;</span>
+<span class="lineNum">     501 </span><span class="lineCov">   10396239 :       if (OBJECT_MAX (obj) &lt; OBJECT_MIN (obj))</span>
+<span class="lineNum">     502 </span>            :         conflict_bit_vec_words_num = 0;
+<span class="lineNum">     503 </span>            :       else
+<span class="lineNum">     504 </span><span class="lineCov">    9819956 :         conflict_bit_vec_words_num</span>
+<span class="lineNum">     505 </span><span class="lineCov">    9819956 :           = ((OBJECT_MAX (obj) - OBJECT_MIN (obj) + IRA_INT_BITS)</span>
+<span class="lineNum">     506 </span>            :              / IRA_INT_BITS);
+<span class="lineNum">     507 </span><span class="lineCov">   10396239 :       OBJECT_CONFLICT_ARRAY_SIZE (obj)</span>
+<span class="lineNum">     508 </span><span class="lineCov">   10396239 :         = conflict_bit_vec_words_num * sizeof (IRA_INT_TYPE);</span>
+<span class="lineNum">     509 </span>            :     }
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span><span class="lineCov">   13924065 :   parent_a = ira_parent_or_cap_allocno (a);</span>
+<span class="lineNum">     512 </span><span class="lineCov">   13924065 :   if (parent_a == NULL)</span>
+<span class="lineNum">     513 </span><span class="lineCov">    9687787 :     return;</span>
+<span class="lineNum">     514 </span><span class="lineCov">    4236278 :   ira_assert (ALLOCNO_CLASS (a) == ALLOCNO_CLASS (parent_a));</span>
+<span class="lineNum">     515 </span><span class="lineCov">    4236278 :   ira_assert (ALLOCNO_NUM_OBJECTS (a) == ALLOCNO_NUM_OBJECTS (parent_a));</span>
+<span class="lineNum">     516 </span><span class="lineCov">    4236278 :   parent_obj = ALLOCNO_OBJECT (parent_a, OBJECT_SUBWORD (obj));</span>
+<span class="lineNum">     517 </span><span class="lineCov">    4236278 :   parent_num = OBJECT_CONFLICT_ID (parent_obj);</span>
+<span class="lineNum">     518 </span><span class="lineCov">    4236278 :   parent_min = OBJECT_MIN (parent_obj);</span>
+<span class="lineNum">     519 </span><span class="lineCov">    4236278 :   parent_max = OBJECT_MAX (parent_obj);</span>
+<span class="lineNum">     520 </span><span class="lineCov">  259364742 :   FOR_EACH_BIT_IN_MINMAX_SET (object_conflicts,</span>
+<span class="lineNum">     521 </span>            :                               OBJECT_MIN (obj), OBJECT_MAX (obj), i, asi)
+<span class="lineNum">     522 </span>            :     {
+<span class="lineNum">     523 </span><span class="lineCov">  250892186 :       ira_object_t another_obj = ira_object_id_map[i];</span>
+<span class="lineNum">     524 </span><span class="lineCov">  250892186 :       ira_allocno_t another_a = OBJECT_ALLOCNO (another_obj);</span>
+<span class="lineNum">     525 </span><span class="lineCov">  250892186 :       int another_word = OBJECT_SUBWORD (another_obj);</span>
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span><span class="lineCov">  250892186 :       ira_assert (ira_reg_classes_intersect_p</span>
+<span class="lineNum">     528 </span>            :                   [ALLOCNO_CLASS (a)][ALLOCNO_CLASS (another_a)]);
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span><span class="lineCov">  250892186 :       another_parent_a = ira_parent_or_cap_allocno (another_a);</span>
+<span class="lineNum">     531 </span><span class="lineCov">  250892186 :       if (another_parent_a == NULL)</span>
+<span class="lineNum">     532 </span>            :         continue;
+<span class="lineNum">     533 </span><span class="lineCov">  250892186 :       ira_assert (ALLOCNO_NUM (another_parent_a) &gt;= 0);</span>
+<span class="lineNum">     534 </span><span class="lineCov">  250892186 :       ira_assert (ALLOCNO_CLASS (another_a)</span>
+<span class="lineNum">     535 </span>            :                   == ALLOCNO_CLASS (another_parent_a));
+<span class="lineNum">     536 </span><span class="lineCov">  250892186 :       ira_assert (ALLOCNO_NUM_OBJECTS (another_a)</span>
+<span class="lineNum">     537 </span>            :                   == ALLOCNO_NUM_OBJECTS (another_parent_a));
+<span class="lineNum">     538 </span><span class="lineCov">  250892186 :       SET_MINMAX_SET_BIT (conflicts[parent_num],</span>
+<span class="lineNum">     539 </span>            :                           OBJECT_CONFLICT_ID (ALLOCNO_OBJECT (another_parent_a,
+<span class="lineNum">     540 </span>            :                                                               another_word)),
+<span class="lineNum">     541 </span>            :                           parent_min, parent_max);
+<span class="lineNum">     542 </span>            :     }
+<span class="lineNum">     543 </span>            : }
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span>            : /* Build conflict vectors or bit conflict vectors (whatever is more
+<a name="546"><span class="lineNum">     546 </span>            :    profitable) of all allocnos from the conflict table.  */</a>
+<span class="lineNum">     547 </span>            : static void
+<span class="lineNum">     548 </span><span class="lineCov">     622491 : build_conflicts (void)</span>
+<span class="lineNum">     549 </span>            : {
+<span class="lineNum">     550 </span><span class="lineCov">     622491 :   int i;</span>
+<span class="lineNum">     551 </span><span class="lineCov">     622491 :   ira_allocno_t a, cap;</span>
+<span class="lineNum">     552 </span>            : 
+<span class="lineNum">     553 </span><span class="lineCov">     622491 :   collected_conflict_objects</span>
+<span class="lineNum">     554 </span><span class="lineCov">     622491 :     = (ira_object_t *) ira_allocate (sizeof (ira_object_t)</span>
+<span class="lineNum">     555 </span>            :                                           * ira_objects_num);
+<span class="lineNum">     556 </span><span class="lineCov">   27559222 :   for (i = max_reg_num () - 1; i &gt;= FIRST_PSEUDO_REGISTER; i--)</span>
+<span class="lineNum">     557 </span><span class="lineCov">   26936731 :     for (a = ira_regno_allocno_map[i];</span>
+<span class="lineNum">     558 </span><span class="lineCov">   38305383 :          a != NULL;</span>
+<span class="lineNum">     559 </span><span class="lineCov">   11368652 :          a = ALLOCNO_NEXT_REGNO_ALLOCNO (a))</span>
+<span class="lineNum">     560 </span>            :       {
+<span class="lineNum">     561 </span><span class="lineCov">   11368652 :         int j, nregs = ALLOCNO_NUM_OBJECTS (a);</span>
+<span class="lineNum">     562 </span><span class="lineCov">   22971515 :         for (j = 0; j &lt; nregs; j++)</span>
+<span class="lineNum">     563 </span>            :           {
+<span class="lineNum">     564 </span><span class="lineCov">   11602863 :             ira_object_t obj = ALLOCNO_OBJECT (a, j);</span>
+<span class="lineNum">     565 </span><span class="lineCov">   11602863 :             build_object_conflicts (obj);</span>
+<span class="lineNum">     566 </span><span class="lineCov">   13924065 :             for (cap = ALLOCNO_CAP (a); cap != NULL; cap = ALLOCNO_CAP (cap))</span>
+<span class="lineNum">     567 </span>            :               {
+<span class="lineNum">     568 </span><span class="lineCov">    2321202 :                 ira_object_t cap_obj = ALLOCNO_OBJECT (cap, j);</span>
+<span class="lineNum">     569 </span><span class="lineCov">    2321202 :                 gcc_assert (ALLOCNO_NUM_OBJECTS (cap) == ALLOCNO_NUM_OBJECTS (a));</span>
+<span class="lineNum">     570 </span><span class="lineCov">    2321202 :                 build_object_conflicts (cap_obj);</span>
+<span class="lineNum">     571 </span>            :               }
+<span class="lineNum">     572 </span>            :           }
+<span class="lineNum">     573 </span>            :       }
+<span class="lineNum">     574 </span><span class="lineCov">     622491 :   ira_free (collected_conflict_objects);</span>
+<span class="lineNum">     575 </span><span class="lineCov">     622491 : }</span>
+<span class="lineNum">     576 </span>            : 
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span>            : 
+<a name="579"><span class="lineNum">     579 </span>            : /* Print hard reg set SET with TITLE to FILE.  */</a>
+<span class="lineNum">     580 </span>            : static void
+<span class="lineNum">     581 </span><span class="lineCov">        836 : print_hard_reg_set (FILE *file, const char *title, HARD_REG_SET set)</span>
+<span class="lineNum">     582 </span>            : {
+<span class="lineNum">     583 </span><span class="lineCov">        836 :   int i, start;</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">        836 :   fputs (title, file);</span>
+<span class="lineNum">     586 </span><span class="lineCov">      65208 :   for (start = -1, i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     587 </span>            :     {
+<span class="lineNum">     588 </span><span class="lineCov">      64372 :       if (TEST_HARD_REG_BIT (set, i))</span>
+<span class="lineNum">     589 </span>            :         {
+<span class="lineNum">     590 </span><span class="lineCov">        694 :           if (i == 0 || ! TEST_HARD_REG_BIT (set, i - 1))</span>
+<span class="lineNum">     591 </span><span class="lineCov">        398 :             start = i;</span>
+<span class="lineNum">     592 </span>            :         }
+<span class="lineNum">     593 </span><span class="lineCov">      64372 :       if (start &gt;= 0</span>
+<span class="lineNum">     594 </span><span class="lineCov">       1092 :           &amp;&amp; (i == FIRST_PSEUDO_REGISTER - 1 || ! TEST_HARD_REG_BIT (set, i)))</span>
+<span class="lineNum">     595 </span>            :         {
+<span class="lineNum">     596 </span><span class="lineCov">        398 :           if (start == i - 1)</span>
+<span class="lineNum">     597 </span><span class="lineCov">        126 :             fprintf (file, &quot; %d&quot;, start);</span>
+<span class="lineNum">     598 </span><span class="lineCov">        272 :           else if (start == i - 2)</span>
+<span class="lineNum">     599 </span><span class="lineCov">        256 :             fprintf (file, &quot; %d %d&quot;, start, start + 1);</span>
+<span class="lineNum">     600 </span>            :           else
+<span class="lineNum">     601 </span><span class="lineCov">         16 :             fprintf (file, &quot; %d-%d&quot;, start, i - 1);</span>
+<span class="lineNum">     602 </span>            :           start = -1;
+<span class="lineNum">     603 </span>            :         }
+<span class="lineNum">     604 </span>            :     }
+<span class="lineNum">     605 </span><span class="lineCov">        836 :   putc ('\n', file);</span>
+<span class="lineNum">     606 </span><span class="lineCov">        836 : }</span>
+<a name="607"><span class="lineNum">     607 </span>            : </a>
+<span class="lineNum">     608 </span>            : static void
+<span class="lineNum">     609 </span><span class="lineCov">        447 : print_allocno_conflicts (FILE * file, bool reg_p, ira_allocno_t a)</span>
+<span class="lineNum">     610 </span>            : {
+<span class="lineNum">     611 </span><span class="lineCov">        447 :   HARD_REG_SET conflicting_hard_regs;</span>
+<span class="lineNum">     612 </span><span class="lineCov">        447 :   basic_block bb;</span>
+<span class="lineNum">     613 </span><span class="lineCov">        447 :   int n, i;</span>
+<span class="lineNum">     614 </span>            : 
+<span class="lineNum">     615 </span><span class="lineCov">        447 :   if (reg_p)</span>
+<span class="lineNum">     616 </span><span class="lineNoCov">          0 :     fprintf (file, &quot;;; r%d&quot;, ALLOCNO_REGNO (a));</span>
+<span class="lineNum">     617 </span>            :   else
+<span class="lineNum">     618 </span>            :     {
+<span class="lineNum">     619 </span><span class="lineCov">        447 :       fprintf (file, &quot;;; a%d(r%d,&quot;, ALLOCNO_NUM (a), ALLOCNO_REGNO (a));</span>
+<span class="lineNum">     620 </span><span class="lineCov">        447 :       if ((bb = ALLOCNO_LOOP_TREE_NODE (a)-&gt;bb) != NULL)</span>
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;b%d&quot;, bb-&gt;index);</span>
+<span class="lineNum">     622 </span>            :       else
+<span class="lineNum">     623 </span><span class="lineCov">        447 :         fprintf (file, &quot;l%d&quot;, ALLOCNO_LOOP_TREE_NODE (a)-&gt;loop_num);</span>
+<span class="lineNum">     624 </span><span class="lineCov">        447 :       putc (')', file);</span>
+<span class="lineNum">     625 </span>            :     }
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span><span class="lineCov">        447 :   fputs (&quot; conflicts:&quot;, file);</span>
+<span class="lineNum">     628 </span><span class="lineCov">        447 :   n = ALLOCNO_NUM_OBJECTS (a);</span>
+<span class="lineNum">     629 </span><span class="lineCov">        894 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     630 </span>            :     {
+<span class="lineNum">     631 </span><span class="lineCov">        447 :       ira_object_t obj = ALLOCNO_OBJECT (a, i);</span>
+<span class="lineNum">     632 </span><span class="lineCov">        447 :       ira_object_t conflict_obj;</span>
+<span class="lineNum">     633 </span><span class="lineCov">        447 :       ira_object_conflict_iterator oci;</span>
+<span class="lineNum">     634 </span>            : 
+<span class="lineNum">     635 </span><span class="lineCov">        447 :       if (OBJECT_CONFLICT_ARRAY (obj) == NULL)</span>
+<span class="lineNum">     636 </span><span class="lineCov">         29 :         continue;</span>
+<span class="lineNum">     637 </span><span class="lineCov">        418 :       if (n &gt; 1)</span>
+<span class="lineNum">     638 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;\n;;   subobject %d:&quot;, i);</span>
+<span class="lineNum">     639 </span><span class="lineCov">       3864 :       FOR_EACH_OBJECT_CONFLICT (obj, conflict_obj, oci)</span>
+<span class="lineNum">     640 </span>            :         {
+<span class="lineNum">     641 </span><span class="lineCov">       3446 :           ira_allocno_t conflict_a = OBJECT_ALLOCNO (conflict_obj);</span>
+<span class="lineNum">     642 </span><span class="lineCov">       3446 :           if (reg_p)</span>
+<span class="lineNum">     643 </span><span class="lineNoCov">          0 :             fprintf (file, &quot; r%d,&quot;, ALLOCNO_REGNO (conflict_a));</span>
+<span class="lineNum">     644 </span>            :           else
+<span class="lineNum">     645 </span>            :             {
+<span class="lineNum">     646 </span><span class="lineCov">       3446 :               fprintf (file, &quot; a%d(r%d&quot;, ALLOCNO_NUM (conflict_a),</span>
+<span class="lineNum">     647 </span>            :                        ALLOCNO_REGNO (conflict_a));
+<span class="lineNum">     648 </span><span class="lineCov">       3446 :               if (ALLOCNO_NUM_OBJECTS (conflict_a) &gt; 1)</span>
+<span class="lineNum">     649 </span><span class="lineNoCov">          0 :                 fprintf (file, &quot;,w%d&quot;, OBJECT_SUBWORD (conflict_obj));</span>
+<span class="lineNum">     650 </span><span class="lineCov">       3446 :               if ((bb = ALLOCNO_LOOP_TREE_NODE (conflict_a)-&gt;bb) != NULL)</span>
+<span class="lineNum">     651 </span><span class="lineNoCov">          0 :                 fprintf (file, &quot;,b%d&quot;, bb-&gt;index);</span>
+<span class="lineNum">     652 </span>            :               else
+<span class="lineNum">     653 </span><span class="lineCov">       3446 :                 fprintf (file, &quot;,l%d&quot;,</span>
+<span class="lineNum">     654 </span>            :                          ALLOCNO_LOOP_TREE_NODE (conflict_a)-&gt;loop_num);
+<span class="lineNum">     655 </span><span class="lineCov">       3446 :               putc (')', file);</span>
+<span class="lineNum">     656 </span>            :             }
+<span class="lineNum">     657 </span>            :         }
+<span class="lineNum">     658 </span><span class="lineCov">        418 :       COPY_HARD_REG_SET (conflicting_hard_regs, OBJECT_TOTAL_CONFLICT_HARD_REGS (obj));</span>
+<span class="lineNum">     659 </span><span class="lineCov">        418 :       AND_COMPL_HARD_REG_SET (conflicting_hard_regs, ira_no_alloc_regs);</span>
+<span class="lineNum">     660 </span><span class="lineCov">        418 :       AND_HARD_REG_SET (conflicting_hard_regs,</span>
+<span class="lineNum">     661 </span>            :                         reg_class_contents[ALLOCNO_CLASS (a)]);
+<span class="lineNum">     662 </span><span class="lineCov">        418 :       print_hard_reg_set (file, &quot;\n;;     total conflict hard regs:&quot;,</span>
+<span class="lineNum">     663 </span>            :                           conflicting_hard_regs);
+<span class="lineNum">     664 </span>            : 
+<span class="lineNum">     665 </span><span class="lineCov">        418 :       COPY_HARD_REG_SET (conflicting_hard_regs, OBJECT_CONFLICT_HARD_REGS (obj));</span>
+<span class="lineNum">     666 </span><span class="lineCov">        418 :       AND_COMPL_HARD_REG_SET (conflicting_hard_regs, ira_no_alloc_regs);</span>
+<span class="lineNum">     667 </span><span class="lineCov">        418 :       AND_HARD_REG_SET (conflicting_hard_regs,</span>
+<span class="lineNum">     668 </span>            :                         reg_class_contents[ALLOCNO_CLASS (a)]);
+<span class="lineNum">     669 </span><span class="lineCov">        418 :       print_hard_reg_set (file, &quot;;;     conflict hard regs:&quot;,</span>
+<span class="lineNum">     670 </span>            :                           conflicting_hard_regs);
+<span class="lineNum">     671 </span><span class="lineCov">        418 :       putc ('\n', file);</span>
+<span class="lineNum">     672 </span>            :     }
+<span class="lineNum">     673 </span>            : 
+<span class="lineNum">     674 </span><span class="lineCov">        447 : }</span>
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span>            : /* Print information about allocno or only regno (if REG_P) conflicts
+<span class="lineNum">     677 </span>            :    to FILE.  */
+<span class="lineNum">     678 </span>            : static void
+<span class="lineNum">     679 </span><span class="lineCov">         39 : print_conflicts (FILE *file, bool reg_p)</span>
+<span class="lineNum">     680 </span>            : {
+<span class="lineNum">     681 </span><span class="lineCov">         39 :   ira_allocno_t a;</span>
+<span class="lineNum">     682 </span><span class="lineCov">         39 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span><span class="lineCov">        486 :   FOR_EACH_ALLOCNO (a, ai)</span>
+<span class="lineNum">     685 </span><span class="lineCov">        447 :     print_allocno_conflicts (file, reg_p, a);</span>
+<span class="lineNum">     686 </span><span class="lineCov">         39 : }</span>
+<span class="lineNum">     687 </span>            : 
+<span class="lineNum">     688 </span>            : /* Print information about allocno or only regno (if REG_P) conflicts
+<a name="689"><span class="lineNum">     689 </span>            :    to stderr.  */</a>
+<span class="lineNum">     690 </span>            : void
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 : ira_debug_conflicts (bool reg_p)</span>
+<span class="lineNum">     692 </span>            : {
+<span class="lineNum">     693 </span><span class="lineNoCov">          0 :   print_conflicts (stderr, reg_p);</span>
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span>            : 
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span>            : /* Entry function which builds allocno conflicts and allocno copies
+<span class="lineNum">     699 </span>            :    and accumulate some allocno info on upper level regions.  */
+<span class="lineNum">     700 </span>            : void
+<span class="lineNum">     701 </span><span class="lineCov">     832590 : ira_build_conflicts (void)</span>
+<span class="lineNum">     702 </span>            : {
+<span class="lineNum">     703 </span><span class="lineCov">     832590 :   enum reg_class base;</span>
+<span class="lineNum">     704 </span><span class="lineCov">     832590 :   ira_allocno_t a;</span>
+<span class="lineNum">     705 </span><span class="lineCov">     832590 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     706 </span><span class="lineCov">     832590 :   HARD_REG_SET temp_hard_reg_set;</span>
+<span class="lineNum">     707 </span>            : 
+<span class="lineNum">     708 </span><span class="lineCov">     832590 :   if (ira_conflicts_p)</span>
+<span class="lineNum">     709 </span>            :     {
+<span class="lineNum">     710 </span><span class="lineCov">     622498 :       ira_conflicts_p = build_conflict_bit_table ();</span>
+<span class="lineNum">     711 </span><span class="lineCov">     622498 :       if (ira_conflicts_p)</span>
+<span class="lineNum">     712 </span>            :         {
+<span class="lineNum">     713 </span><span class="lineCov">     622491 :           ira_object_t obj;</span>
+<span class="lineNum">     714 </span><span class="lineCov">     622491 :           ira_object_iterator oi;</span>
+<span class="lineNum">     715 </span>            : 
+<span class="lineNum">     716 </span><span class="lineCov">     622491 :           build_conflicts ();</span>
+<span class="lineNum">     717 </span><span class="lineCov">     622491 :           ira_traverse_loop_tree (true, ira_loop_tree_root, add_copies, NULL);</span>
+<span class="lineNum">     718 </span>            :           /* We need finished conflict table for the subsequent call.  */
+<span class="lineNum">     719 </span><span class="lineCov">    1244982 :           if (flag_ira_region == IRA_REGION_ALL</span>
+<span class="lineNum">     720 </span><span class="lineCov">     622491 :               || flag_ira_region == IRA_REGION_MIXED)</span>
+<span class="lineNum">     721 </span><span class="lineCov">     596734 :             propagate_copies ();</span>
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span>            :           /* Now we can free memory for the conflict table (see function
+<span class="lineNum">     724 </span>            :              build_object_conflicts for details).  */
+<span class="lineNum">     725 </span><span class="lineCov">   14546556 :           FOR_EACH_OBJECT (obj, oi)</span>
+<span class="lineNum">     726 </span>            :             {
+<span class="lineNum">     727 </span><span class="lineCov">   13924065 :               if (OBJECT_CONFLICT_ARRAY (obj) != conflicts[OBJECT_CONFLICT_ID (obj)])</span>
+<span class="lineNum">     728 </span><span class="lineCov">    3527826 :                 ira_free (conflicts[OBJECT_CONFLICT_ID (obj)]);</span>
+<span class="lineNum">     729 </span>            :             }
+<span class="lineNum">     730 </span><span class="lineCov">     622491 :           ira_free (conflicts);</span>
+<span class="lineNum">     731 </span>            :         }
+<span class="lineNum">     732 </span>            :     }
+<span class="lineNum">     733 </span><span class="lineCov">     832590 :   base = base_reg_class (VOIDmode, ADDR_SPACE_GENERIC, ADDRESS, SCRATCH);</span>
+<span class="lineNum">     734 </span><span class="lineCov">     832590 :   if (! targetm.class_likely_spilled_p (base))</span>
+<span class="lineNum">     735 </span>            :     CLEAR_HARD_REG_SET (temp_hard_reg_set);
+<span class="lineNum">     736 </span>            :   else
+<span class="lineNum">     737 </span>            :     {
+<span class="lineNum">     738 </span><span class="lineNoCov">          0 :       COPY_HARD_REG_SET (temp_hard_reg_set, reg_class_contents[base]);</span>
+<span class="lineNum">     739 </span><span class="lineNoCov">          0 :       AND_COMPL_HARD_REG_SET (temp_hard_reg_set, ira_no_alloc_regs);</span>
+<span class="lineNum">     740 </span><span class="lineNoCov">          0 :       AND_HARD_REG_SET (temp_hard_reg_set, call_used_reg_set);</span>
+<span class="lineNum">     741 </span>            :     }
+<span class="lineNum">     742 </span><span class="lineCov">   20099618 :   FOR_EACH_ALLOCNO (a, ai)</span>
+<span class="lineNum">     743 </span>            :     {
+<span class="lineNum">     744 </span><span class="lineCov">   19267028 :       int i, n = ALLOCNO_NUM_OBJECTS (a);</span>
+<span class="lineNum">     745 </span>            : 
+<span class="lineNum">     746 </span><span class="lineCov">   39081632 :       for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     747 </span>            :         {
+<span class="lineNum">     748 </span><span class="lineCov">   19814604 :           ira_object_t obj = ALLOCNO_OBJECT (a, i);</span>
+<span class="lineNum">     749 </span><span class="lineCov">   19814604 :           machine_mode obj_mode = obj-&gt;allocno-&gt;mode;</span>
+<span class="lineNum">     750 </span><span class="lineCov">   19814604 :           rtx allocno_reg = regno_reg_rtx [ALLOCNO_REGNO (a)];</span>
+<span class="lineNum">     751 </span>            : 
+<span class="lineNum">     752 </span><span class="lineCov">    6670660 :           if ((! flag_caller_saves &amp;&amp; ALLOCNO_CALLS_CROSSED_NUM (a) != 0)</span>
+<span class="lineNum">     753 </span>            :               /* For debugging purposes don't put user defined variables in
+<span class="lineNum">     754 </span>            :                  callee-clobbered registers.  However, do allow parameters
+<span class="lineNum">     755 </span>            :                  in callee-clobbered registers to improve debugging.  This
+<span class="lineNum">     756 </span>            :                  is a bit of a fragile hack.  */
+<span class="lineNum">     757 </span><span class="lineCov">   26270945 :               || (optimize == 0</span>
+<span class="lineNum">     758 </span><span class="lineCov">    5752970 :                   &amp;&amp; REG_USERVAR_P (allocno_reg)</span>
+<span class="lineNum">     759 </span><span class="lineCov">       1019 :                   &amp;&amp; ! reg_is_parm_p (allocno_reg)))</span>
+<span class="lineNum">     760 </span>            :             {
+<span class="lineNum">     761 </span><span class="lineCov">     215309 :               IOR_HARD_REG_SET (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     762 </span>            :                                 call_used_reg_set);
+<span class="lineNum">     763 </span><span class="lineCov">     215309 :               IOR_HARD_REG_SET (OBJECT_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     764 </span>            :                                 call_used_reg_set);
+<span class="lineNum">     765 </span>            :             }
+<span class="lineNum">     766 </span><span class="lineCov">   19599295 :           else if (ALLOCNO_CALLS_CROSSED_NUM (a) != 0)</span>
+<span class="lineNum">     767 </span>            :             {
+<span class="lineNum">     768 </span><span class="lineCov">    2356330 :               IOR_HARD_REG_SET (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     769 </span>            :                                 no_caller_save_reg_set);
+<span class="lineNum">     770 </span><span class="lineCov">    2356330 :               IOR_HARD_REG_SET (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     771 </span>            :                                 temp_hard_reg_set);
+<span class="lineNum">     772 </span><span class="lineCov">    2356330 :               IOR_HARD_REG_SET (OBJECT_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     773 </span>            :                                 no_caller_save_reg_set);
+<span class="lineNum">     774 </span><span class="lineCov">    2356330 :               IOR_HARD_REG_SET (OBJECT_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     775 </span>            :                                 temp_hard_reg_set);
+<span class="lineNum">     776 </span>            :             }
+<span class="lineNum">     777 </span>            : 
+<span class="lineNum">     778 </span>            :           /* Now we deal with paradoxical subreg cases where certain registers
+<span class="lineNum">     779 </span>            :              cannot be accessed in the widest mode.  */
+<span class="lineNum">     780 </span><span class="lineCov">   19814604 :           machine_mode outer_mode = ALLOCNO_WMODE (a);</span>
+<span class="lineNum">     781 </span><span class="lineCov">   19814604 :           machine_mode inner_mode = ALLOCNO_MODE (a);</span>
+<span class="lineNum">     782 </span><span class="lineCov">   39629208 :           if (paradoxical_subreg_p (outer_mode, inner_mode))</span>
+<span class="lineNum">     783 </span>            :             {
+<span class="lineNum">     784 </span><span class="lineCov">      32382 :               enum reg_class aclass = ALLOCNO_CLASS (a);</span>
+<span class="lineNum">     785 </span><span class="lineCov">     389593 :               for (int j = ira_class_hard_regs_num[aclass] - 1; j &gt;= 0; --j)</span>
+<span class="lineNum">     786 </span>            :                 {
+<span class="lineNum">     787 </span><span class="lineCov">     357211 :                    int inner_regno = ira_class_hard_regs[aclass][j];</span>
+<span class="lineNum">     788 </span><span class="lineCov">     357211 :                    int outer_regno = simplify_subreg_regno (inner_regno,</span>
+<span class="lineNum">     789 </span><span class="lineCov">     357211 :                                                             inner_mode, 0,</span>
+<span class="lineNum">     790 </span>            :                                                             outer_mode);
+<span class="lineNum">     791 </span><span class="lineCov">     357211 :                    if (outer_regno &lt; 0</span>
+<span class="lineNum">     792 </span><span class="lineCov">     357211 :                        || !in_hard_reg_set_p (reg_class_contents[aclass],</span>
+<span class="lineNum">     793 </span>            :                                               outer_mode, outer_regno))
+<span class="lineNum">     794 </span>            :                      {
+<span class="lineNum">     795 </span><span class="lineCov">       5458 :                        SET_HARD_REG_BIT (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     796 </span>            :                                          inner_regno);
+<span class="lineNum">     797 </span><span class="lineCov">       5458 :                        SET_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     798 </span>            :                                          inner_regno);
+<span class="lineNum">     799 </span>            :                      }
+<span class="lineNum">     800 </span>            :                 }
+<span class="lineNum">     801 </span>            :             }
+<span class="lineNum">     802 </span>            : 
+<span class="lineNum">     803 </span><span class="lineCov">   19814604 :           if (ALLOCNO_CALLS_CROSSED_NUM (a) != 0)</span>
+<span class="lineNum">     804 </span>            :             {
+<span class="lineNum">     805 </span>            :               int regno;
+<span class="lineNum">     806 </span>            : 
+<span class="lineNum">     807 </span>            :               /* Allocnos bigger than the saved part of call saved
+<span class="lineNum">     808 </span>            :                  regs must conflict with them.  */
+<span class="lineNum">     809 </span><span class="lineCov">  200510622 :               for (regno = 0; regno &lt; FIRST_PSEUDO_REGISTER; regno++)</span>
+<span class="lineNum">     810 </span><span class="lineCov">  197939973 :                 if (!TEST_HARD_REG_BIT (call_used_reg_set, regno)</span>
+<span class="lineNum">     811 </span><span class="lineCov">  197939973 :                     &amp;&amp; targetm.hard_regno_call_part_clobbered (regno,</span>
+<span class="lineNum">     812 </span>            :                                                                obj_mode))
+<span class="lineNum">     813 </span>            :                   {
+<span class="lineNum">     814 </span><span class="lineNoCov">          0 :                     SET_HARD_REG_BIT (OBJECT_CONFLICT_HARD_REGS (obj), regno);</span>
+<span class="lineNum">     815 </span><span class="lineNoCov">          0 :                     SET_HARD_REG_BIT (OBJECT_TOTAL_CONFLICT_HARD_REGS (obj),</span>
+<span class="lineNum">     816 </span>            :                                       regno);
+<span class="lineNum">     817 </span>            :                   }
+<span class="lineNum">     818 </span>            :             }
+<span class="lineNum">     819 </span>            :         }
+<span class="lineNum">     820 </span>            :     }
+<span class="lineNum">     821 </span><span class="lineCov">     832590 :   if (optimize &amp;&amp; ira_conflicts_p</span>
+<span class="lineNum">     822 </span><span class="lineCov">     622491 :       &amp;&amp; internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     823 </span><span class="lineCov">         39 :     print_conflicts (ira_dump_file, false);</span>
+<span class="lineNum">     824 </span><span class="lineCov">     832590 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

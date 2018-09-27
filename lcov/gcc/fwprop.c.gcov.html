@@ -1,0 +1,1689 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/fwprop.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - fwprop.c<span style="font-size: 80%;"> (source / <a href="fwprop.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">588</td>
+            <td class="headerCovTableEntry">630</td>
+            <td class="headerCovTableEntryHi">93.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">34</td>
+            <td class="headerCovTableEntry">36</td>
+            <td class="headerCovTableEntryHi">94.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* RTL-based forward propagation pass for GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2005-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Paolo Bonzini and Steven Bosscher.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : #include &quot;sparseset.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;cfgcleanup.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;domwalk.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;rtl-iter.h&quot;
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : /* This pass does simple forward propagation and simplification when an
+<span class="lineNum">      45 </span>            :    operand of an insn can only come from a single def.  This pass uses
+<span class="lineNum">      46 </span>            :    df.c, so it is global.  However, we only do limited analysis of
+<span class="lineNum">      47 </span>            :    available expressions.
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :    1) The pass tries to propagate the source of the def into the use,
+<span class="lineNum">      50 </span>            :    and checks if the result is independent of the substituted value.
+<span class="lineNum">      51 </span>            :    For example, the high word of a (zero_extend:DI (reg:SI M)) is always
+<span class="lineNum">      52 </span>            :    zero, independent of the source register.
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :    In particular, we propagate constants into the use site.  Sometimes
+<span class="lineNum">      55 </span>            :    RTL expansion did not put the constant in the same insn on purpose,
+<span class="lineNum">      56 </span>            :    to satisfy a predicate, and the result will fail to be recognized;
+<span class="lineNum">      57 </span>            :    but this happens rarely and in this case we can still create a
+<span class="lineNum">      58 </span>            :    REG_EQUAL note.  For multi-word operations, this
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :       (set (subreg:SI (reg:DI 120) 0) (const_int 0))
+<span class="lineNum">      61 </span>            :       (set (subreg:SI (reg:DI 120) 4) (const_int -1))
+<span class="lineNum">      62 </span>            :       (set (subreg:SI (reg:DI 122) 0)
+<span class="lineNum">      63 </span>            :          (ior:SI (subreg:SI (reg:DI 119) 0) (subreg:SI (reg:DI 120) 0)))
+<span class="lineNum">      64 </span>            :       (set (subreg:SI (reg:DI 122) 4)
+<span class="lineNum">      65 </span>            :          (ior:SI (subreg:SI (reg:DI 119) 4) (subreg:SI (reg:DI 120) 4)))
+<span class="lineNum">      66 </span>            : 
+<span class="lineNum">      67 </span>            :    can be simplified to the much simpler
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :       (set (subreg:SI (reg:DI 122) 0) (subreg:SI (reg:DI 119)))
+<span class="lineNum">      70 </span>            :       (set (subreg:SI (reg:DI 122) 4) (const_int -1))
+<span class="lineNum">      71 </span>            : 
+<span class="lineNum">      72 </span>            :    This particular propagation is also effective at putting together
+<span class="lineNum">      73 </span>            :    complex addressing modes.  We are more aggressive inside MEMs, in
+<span class="lineNum">      74 </span>            :    that all definitions are propagated if the use is in a MEM; if the
+<span class="lineNum">      75 </span>            :    result is a valid memory address we check address_cost to decide
+<span class="lineNum">      76 </span>            :    whether the substitution is worthwhile.
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            :    2) The pass propagates register copies.  This is not as effective as
+<span class="lineNum">      79 </span>            :    the copy propagation done by CSE's canon_reg, which works by walking
+<span class="lineNum">      80 </span>            :    the instruction chain, it can help the other transformations.
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            :    We should consider removing this optimization, and instead reorder the
+<span class="lineNum">      83 </span>            :    RTL passes, because GCSE does this transformation too.  With some luck,
+<span class="lineNum">      84 </span>            :    the CSE pass at the end of rest_of_handle_gcse could also go away.
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :    3) The pass looks for paradoxical subregs that are actually unnecessary.
+<span class="lineNum">      87 </span>            :    Things like this:
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            :      (set (reg:QI 120) (subreg:QI (reg:SI 118) 0))
+<span class="lineNum">      90 </span>            :      (set (reg:QI 121) (subreg:QI (reg:SI 119) 0))
+<span class="lineNum">      91 </span>            :      (set (reg:SI 122) (plus:SI (subreg:SI (reg:QI 120) 0)
+<span class="lineNum">      92 </span>            :                                 (subreg:SI (reg:QI 121) 0)))
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            :    are very common on machines that can only do word-sized operations.
+<span class="lineNum">      95 </span>            :    For each use of a paradoxical subreg (subreg:WIDER (reg:NARROW N) 0),
+<span class="lineNum">      96 </span>            :    if it has a single def and it is (subreg:NARROW (reg:WIDE M) 0),
+<span class="lineNum">      97 </span>            :    we can replace the paradoxical subreg with simply (reg:WIDE M).  The
+<span class="lineNum">      98 </span>            :    above will simplify this to
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            :      (set (reg:QI 120) (subreg:QI (reg:SI 118) 0))
+<span class="lineNum">     101 </span>            :      (set (reg:QI 121) (subreg:QI (reg:SI 119) 0))
+<span class="lineNum">     102 </span>            :      (set (reg:SI 122) (plus:SI (reg:SI 118) (reg:SI 119)))
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span>            :    where the first two insns are now dead.
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span>            :    We used to use reaching definitions to find which uses have a
+<span class="lineNum">     107 </span>            :    single reaching definition (sounds obvious...), but this is too
+<span class="lineNum">     108 </span>            :    complex a problem in nasty testcases like PR33928.  Now we use the
+<span class="lineNum">     109 </span>            :    multiple definitions problem in df-problems.c.  The similarity
+<span class="lineNum">     110 </span>            :    between that problem and SSA form creation is taken further, in
+<span class="lineNum">     111 </span>            :    that fwprop does a dominator walk to create its chains; however,
+<span class="lineNum">     112 </span>            :    instead of creating a PHI function where multiple definitions meet
+<span class="lineNum">     113 </span>            :    I just punt and record only singleton use-def chains, which is
+<span class="lineNum">     114 </span>            :    all that is needed by fwprop.  */
+<span class="lineNum">     115 </span>            : 
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : static int num_changes;
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            : static vec&lt;df_ref&gt; use_def_ref;
+<span class="lineNum">     120 </span>            : static vec&lt;df_ref&gt; reg_defs;
+<span class="lineNum">     121 </span>            : static vec&lt;df_ref&gt; reg_defs_stack;
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span>            : /* The maximum number of propagations that are still allowed.  If we do
+<span class="lineNum">     124 </span>            :    more propagations than originally we had uses, we must have ended up
+<span class="lineNum">     125 </span>            :    in a propagation loop, as in PR79405.  Until the algorithm fwprop
+<span class="lineNum">     126 </span>            :    uses can obviously not get into such loops we need a workaround like
+<span class="lineNum">     127 </span>            :    this.  */
+<span class="lineNum">     128 </span>            : static int propagations_left;
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            : /* The MD bitmaps are trimmed to include only live registers to cut
+<span class="lineNum">     131 </span>            :    memory usage on testcases like insn-recog.c.  Track live registers
+<span class="lineNum">     132 </span>            :    in the basic block and do not perform forward propagation if the
+<span class="lineNum">     133 </span>            :    destination is a dead pseudo occurring in a note.  */
+<span class="lineNum">     134 </span>            : static bitmap local_md;
+<span class="lineNum">     135 </span>            : static bitmap local_lr;
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span>            : /* Return the only def in USE's use-def chain, or NULL if there is
+<span class="lineNum">     138 </span>            :    more than one def in the chain.  */
+<a name="139"><span class="lineNum">     139 </span>            : </a>
+<span class="lineNum">     140 </span>            : static inline df_ref
+<span class="lineNum">     141 </span><span class="lineNoCov">          0 : get_def_for_use (df_ref use)</span>
+<span class="lineNum">     142 </span>            : {
+<span class="lineNum">     143 </span><span class="lineNoCov">          0 :   return use_def_ref[DF_REF_ID (use)];</span>
+<span class="lineNum">     144 </span>            : }
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span>            : /* Update the reg_defs vector with non-partial definitions in DEF_REC.
+<span class="lineNum">     148 </span>            :    TOP_FLAG says which artificials uses should be used, when DEF_REC
+<span class="lineNum">     149 </span>            :    is an artificial def vector.  LOCAL_MD is modified as after a
+<span class="lineNum">     150 </span>            :    df_md_simulate_* function; we do more or less the same processing
+<span class="lineNum">     151 </span>            :    done there, so we do not use those functions.  */
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            : #define DF_MD_GEN_FLAGS \
+<span class="lineNum">     154 </span>            :         (DF_REF_PARTIAL | DF_REF_CONDITIONAL | DF_REF_MAY_CLOBBER)
+<a name="155"><span class="lineNum">     155 </span>            : </a>
+<span class="lineNum">     156 </span>            : static void
+<span class="lineNum">     157 </span><span class="lineCov">  151755485 : process_defs (df_ref def, int top_flag)</span>
+<span class="lineNum">     158 </span>            : {
+<span class="lineNum">     159 </span><span class="lineCov">  645226872 :   for (; def; def = DF_REF_NEXT_LOC (def))</span>
+<span class="lineNum">     160 </span>            :     {
+<span class="lineNum">     161 </span><span class="lineCov">  493471387 :       df_ref curr_def = reg_defs[DF_REF_REGNO (def)];</span>
+<span class="lineNum">     162 </span><span class="lineCov">  493471387 :       unsigned int dregno;</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">  493471387 :       if ((DF_REF_FLAGS (def) &amp; DF_REF_AT_TOP) != top_flag)</span>
+<span class="lineNum">     165 </span><span class="lineCov">   22957726 :         continue;</span>
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span><span class="lineCov">  470513661 :       dregno = DF_REF_REGNO (def);</span>
+<span class="lineNum">     168 </span><span class="lineCov">  470513661 :       if (curr_def)</span>
+<span class="lineNum">     169 </span><span class="lineCov">   53716436 :         reg_defs_stack.safe_push (curr_def);</span>
+<span class="lineNum">     170 </span>            :       else
+<span class="lineNum">     171 </span>            :         {
+<span class="lineNum">     172 </span>            :           /* Do not store anything if &quot;transitioning&quot; from NULL to NULL.  But
+<span class="lineNum">     173 </span>            :              otherwise, push a special entry on the stack to tell the
+<span class="lineNum">     174 </span>            :              leave_block callback that the entry in reg_defs was NULL.  */
+<span class="lineNum">     175 </span><span class="lineCov">  416797225 :           if (DF_REF_FLAGS (def) &amp; DF_MD_GEN_FLAGS)</span>
+<span class="lineNum">     176 </span>            :             ;
+<span class="lineNum">     177 </span>            :           else
+<span class="lineNum">     178 </span><span class="lineCov">   61417619 :             reg_defs_stack.safe_push (def);</span>
+<span class="lineNum">     179 </span>            :         }
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span><span class="lineCov">  470513661 :       if (DF_REF_FLAGS (def) &amp; DF_MD_GEN_FLAGS)</span>
+<span class="lineNum">     182 </span>            :         {
+<span class="lineNum">     183 </span><span class="lineCov">  383381798 :           bitmap_set_bit (local_md, dregno);</span>
+<span class="lineNum">     184 </span><span class="lineCov">  383381798 :           reg_defs[dregno] = NULL;</span>
+<span class="lineNum">     185 </span>            :         }
+<span class="lineNum">     186 </span>            :       else
+<span class="lineNum">     187 </span>            :         {
+<span class="lineNum">     188 </span><span class="lineCov">   87131863 :           bitmap_clear_bit (local_md, dregno);</span>
+<span class="lineNum">     189 </span><span class="lineCov">   87131863 :           reg_defs[dregno] = def;</span>
+<span class="lineNum">     190 </span>            :         }
+<span class="lineNum">     191 </span>            :     }
+<span class="lineNum">     192 </span><span class="lineCov">  151755485 : }</span>
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span>            : /* Fill the use_def_ref vector with values for the uses in USE_REC,
+<span class="lineNum">     196 </span>            :    taking reaching definitions info from LOCAL_MD and REG_DEFS.
+<span class="lineNum">     197 </span>            :    TOP_FLAG says which artificials uses should be used, when USE_REC
+<span class="lineNum">     198 </span>            :    is an artificial use vector.  */
+<a name="199"><span class="lineNum">     199 </span>            : </a>
+<span class="lineNum">     200 </span>            : static void
+<span class="lineNum">     201 </span><span class="lineCov">  277187826 : process_uses (df_ref use, int top_flag)</span>
+<span class="lineNum">     202 </span>            : {
+<span class="lineNum">     203 </span><span class="lineCov">  474649276 :   for (; use; use = DF_REF_NEXT_LOC (use))</span>
+<span class="lineNum">     204 </span><span class="lineCov">  197461450 :     if ((DF_REF_FLAGS (use) &amp; DF_REF_AT_TOP) == top_flag)</span>
+<span class="lineNum">     205 </span>            :       {
+<span class="lineNum">     206 </span><span class="lineCov">  149794938 :         unsigned int uregno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     207 </span><span class="lineCov">  149794938 :         if (reg_defs[uregno]</span>
+<span class="lineNum">     208 </span><span class="lineCov">  147030805 :             &amp;&amp; !bitmap_bit_p (local_md, uregno)</span>
+<span class="lineNum">     209 </span><span class="lineCov">  289440339 :             &amp;&amp; bitmap_bit_p (local_lr, uregno))</span>
+<span class="lineNum">     210 </span><span class="lineCov">  139408469 :           use_def_ref[DF_REF_ID (use)] = reg_defs[uregno];</span>
+<span class="lineNum">     211 </span>            :       }
+<span class="lineNum">     212 </span><span class="lineCov">  277187826 : }</span>
+<span class="lineNum">     213 </span>            : 
+<span class="lineNum">     214 </span><span class="lineCov">    1244944 : class single_def_use_dom_walker : public dom_walker</span>
+<span class="lineNum">     215 </span>            : {
+<span class="lineNum">     216 </span>            : public:
+<span class="lineNum">     217 </span>            :   single_def_use_dom_walker (cdi_direction direction)
+<span class="lineNum">     218 </span><span class="lineCov">    2489888 :     : dom_walker (direction) {}</span>
+<span class="lineNum">     219 </span>            :   virtual edge before_dom_children (basic_block);
+<span class="lineNum">     220 </span>            :   virtual void after_dom_children (basic_block);
+<span class="lineNum">     221 </span>            : };
+<a name="222"><span class="lineNum">     222 </span>            : </a>
+<span class="lineNum">     223 </span>            : edge
+<span class="lineNum">     224 </span><span class="lineCov">   13161572 : single_def_use_dom_walker::before_dom_children (basic_block bb)</span>
+<span class="lineNum">     225 </span>            : {
+<span class="lineNum">     226 </span><span class="lineCov">   13161572 :   int bb_index = bb-&gt;index;</span>
+<span class="lineNum">     227 </span><span class="lineCov">   13161572 :   struct df_md_bb_info *md_bb_info = df_md_get_bb_info (bb_index);</span>
+<span class="lineNum">     228 </span><span class="lineCov">   13161572 :   struct df_lr_bb_info *lr_bb_info = df_lr_get_bb_info (bb_index);</span>
+<span class="lineNum">     229 </span><span class="lineCov">   13161572 :   rtx_insn *insn;</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">   13161572 :   bitmap_copy (local_md, &amp;md_bb_info-&gt;in);</span>
+<span class="lineNum">     232 </span><span class="lineCov">   13161572 :   bitmap_copy (local_lr, &amp;lr_bb_info-&gt;in);</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            :   /* Push a marker for the leave_block callback.  */
+<span class="lineNum">     235 </span><span class="lineCov">   13161572 :   reg_defs_stack.safe_push (NULL);</span>
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span><span class="lineCov">   26323144 :   process_uses (df_get_artificial_uses (bb_index), DF_REF_AT_TOP);</span>
+<span class="lineNum">     238 </span><span class="lineCov">   26323144 :   process_defs (df_get_artificial_defs (bb_index), DF_REF_AT_TOP);</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span>            :   /* We don't call df_simulate_initialize_forwards, as it may overestimate
+<span class="lineNum">     241 </span>            :      the live registers if there are unused artificial defs.  We prefer
+<span class="lineNum">     242 </span>            :      liveness to be underestimated.  */
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span><span class="lineCov">  301416706 :   FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     245 </span><span class="lineCov">  144127567 :     if (INSN_P (insn))</span>
+<span class="lineNum">     246 </span>            :       {
+<span class="lineNum">     247 </span><span class="lineCov">  125432341 :         unsigned int uid = INSN_UID (insn);</span>
+<span class="lineNum">     248 </span><span class="lineCov">  125432341 :         process_uses (DF_INSN_UID_USES (uid), 0);</span>
+<span class="lineNum">     249 </span><span class="lineCov">  125432341 :         process_uses (DF_INSN_UID_EQ_USES (uid), 0);</span>
+<span class="lineNum">     250 </span><span class="lineCov">  125432341 :         process_defs (DF_INSN_UID_DEFS (uid), 0);</span>
+<span class="lineNum">     251 </span><span class="lineCov">  125432341 :         df_simulate_one_insn_forwards (bb, insn, local_lr);</span>
+<span class="lineNum">     252 </span>            :       }
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span><span class="lineCov">   26323144 :   process_uses (df_get_artificial_uses (bb_index), 0);</span>
+<span class="lineNum">     255 </span><span class="lineCov">   26323144 :   process_defs (df_get_artificial_defs (bb_index), 0);</span>
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineCov">   13161572 :   return NULL;</span>
+<span class="lineNum">     258 </span>            : }
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : /* Pop the definitions created in this basic block when leaving its
+<span class="lineNum">     261 </span>            :    dominated parts.  */
+<a name="262"><span class="lineNum">     262 </span>            : </a>
+<span class="lineNum">     263 </span>            : void
+<span class="lineNum">     264 </span><span class="lineCov">   13161572 : single_def_use_dom_walker::after_dom_children (basic_block bb ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     265 </span>            : {
+<span class="lineNum">     266 </span><span class="lineCov">  128295627 :   df_ref saved_def;</span>
+<span class="lineNum">     267 </span><span class="lineCov">  128295627 :   while ((saved_def = reg_defs_stack.pop ()) != NULL)</span>
+<span class="lineNum">     268 </span>            :     {
+<span class="lineNum">     269 </span><span class="lineCov">  115134055 :       unsigned int dregno = DF_REF_REGNO (saved_def);</span>
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span>            :       /* See also process_defs.  */
+<span class="lineNum">     272 </span><span class="lineCov">  115134055 :       if (saved_def == reg_defs[dregno])</span>
+<span class="lineNum">     273 </span><span class="lineCov">  122835238 :         reg_defs[dregno] = NULL;</span>
+<span class="lineNum">     274 </span>            :       else
+<span class="lineNum">     275 </span><span class="lineCov">  107432872 :         reg_defs[dregno] = saved_def;</span>
+<span class="lineNum">     276 </span>            :     }
+<span class="lineNum">     277 </span><span class="lineCov">   13161572 : }</span>
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span>            : /* Build a vector holding the reaching definitions of uses reached by a
+<span class="lineNum">     281 </span>            :    single dominating definition.  */
+<a name="282"><span class="lineNum">     282 </span>            : </a>
+<span class="lineNum">     283 </span>            : static void
+<span class="lineNum">     284 </span><span class="lineCov">    1244944 : build_single_def_use_links (void)</span>
+<span class="lineNum">     285 </span>            : {
+<span class="lineNum">     286 </span>            :   /* We use the multiple definitions problem to compute our restricted
+<span class="lineNum">     287 </span>            :      use-def chains.  */
+<span class="lineNum">     288 </span><span class="lineCov">    1244944 :   df_set_flags (DF_EQ_NOTES);</span>
+<span class="lineNum">     289 </span><span class="lineCov">    1244944 :   df_md_add_problem ();</span>
+<span class="lineNum">     290 </span><span class="lineCov">    1244944 :   df_note_add_problem ();</span>
+<span class="lineNum">     291 </span><span class="lineCov">    1244944 :   df_analyze ();</span>
+<span class="lineNum">     292 </span><span class="lineCov">    1244944 :   df_maybe_reorganize_use_refs (DF_REF_ORDER_BY_INSN_WITH_NOTES);</span>
+<span class="lineNum">     293 </span>            : 
+<span class="lineNum">     294 </span><span class="lineCov">    1244944 :   use_def_ref.create (DF_USES_TABLE_SIZE ());</span>
+<span class="lineNum">     295 </span><span class="lineCov">    1244944 :   use_def_ref.safe_grow_cleared (DF_USES_TABLE_SIZE ());</span>
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span><span class="lineCov">    1244944 :   reg_defs.create (max_reg_num ());</span>
+<span class="lineNum">     298 </span><span class="lineCov">    1244944 :   reg_defs.safe_grow_cleared (max_reg_num ());</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineCov">    1244944 :   reg_defs_stack.create (n_basic_blocks_for_fn (cfun) * 10);</span>
+<span class="lineNum">     301 </span><span class="lineCov">    1244944 :   local_md = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     302 </span><span class="lineCov">    1244944 :   local_lr = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span>            :   /* Walk the dominator tree looking for single reaching definitions
+<span class="lineNum">     305 </span>            :      dominating the uses.  This is similar to how SSA form is built.  */
+<span class="lineNum">     306 </span><span class="lineCov">    1244944 :   single_def_use_dom_walker (CDI_DOMINATORS)</span>
+<span class="lineNum">     307 </span><span class="lineCov">    1244944 :     .walk (cfun-&gt;cfg-&gt;x_entry_block_ptr);</span>
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span><span class="lineCov">    1244944 :   BITMAP_FREE (local_lr);</span>
+<span class="lineNum">     310 </span><span class="lineCov">    1244944 :   BITMAP_FREE (local_md);</span>
+<span class="lineNum">     311 </span><span class="lineCov">    1244944 :   reg_defs.release ();</span>
+<span class="lineNum">     312 </span><span class="lineCov">    1244944 :   reg_defs_stack.release ();</span>
+<span class="lineNum">     313 </span><span class="lineCov">    1244944 : }</span>
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span>            : /* Do not try to replace constant addresses or addresses of local and
+<span class="lineNum">     317 </span>            :    argument slots.  These MEM expressions are made only once and inserted
+<span class="lineNum">     318 </span>            :    in many instructions, as well as being used to control symbol table
+<span class="lineNum">     319 </span>            :    output.  It is not safe to clobber them.
+<span class="lineNum">     320 </span>            : 
+<span class="lineNum">     321 </span>            :    There are some uncommon cases where the address is already in a register
+<span class="lineNum">     322 </span>            :    for some reason, but we cannot take advantage of that because we have
+<span class="lineNum">     323 </span>            :    no easy way to unshare the MEM.  In addition, looking up all stack
+<span class="lineNum">     324 </span>            :    addresses is costly.  */
+<a name="325"><span class="lineNum">     325 </span>            : </a>
+<span class="lineNum">     326 </span>            : static bool
+<span class="lineNum">     327 </span><span class="lineCov">    1340067 : can_simplify_addr (rtx addr)</span>
+<span class="lineNum">     328 </span>            : {
+<span class="lineNum">     329 </span><span class="lineCov">    1340067 :   rtx reg;</span>
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineCov">    1340067 :   if (CONSTANT_ADDRESS_P (addr))</span>
+<span class="lineNum">     332 </span>            :     return false;
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span><span class="lineCov">    1316815 :   if (GET_CODE (addr) == PLUS)</span>
+<span class="lineNum">     335 </span><span class="lineCov">     853878 :     reg = XEXP (addr, 0);</span>
+<span class="lineNum">     336 </span>            :   else
+<span class="lineNum">     337 </span>            :     reg = addr;
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span><span class="lineCov">    1316815 :   return (!REG_P (reg)</span>
+<span class="lineNum">     340 </span><span class="lineCov">    1316815 :           || (REGNO (reg) != FRAME_POINTER_REGNUM</span>
+<span class="lineNum">     341 </span><span class="lineCov">    2179896 :               &amp;&amp; REGNO (reg) != HARD_FRAME_POINTER_REGNUM</span>
+<span class="lineNum">     342 </span><span class="lineCov">    2179896 :               &amp;&amp; REGNO (reg) != ARG_POINTER_REGNUM));</span>
+<span class="lineNum">     343 </span>            : }
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span>            : /* Returns a canonical version of X for the address, from the point of view,
+<span class="lineNum">     346 </span>            :    that all multiplications are represented as MULT instead of the multiply
+<span class="lineNum">     347 </span>            :    by a power of 2 being represented as ASHIFT.
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span>            :    Every ASHIFT we find has been made by simplify_gen_binary and was not
+<span class="lineNum">     350 </span>            :    there before, so it is not shared.  So we can do this in place.  */
+<a name="351"><span class="lineNum">     351 </span>            : </a>
+<span class="lineNum">     352 </span>            : static void
+<span class="lineNum">     353 </span><span class="lineCov">    1529842 : canonicalize_address (rtx x)</span>
+<span class="lineNum">     354 </span>            : {
+<span class="lineNum">     355 </span><span class="lineCov">    3336460 :   for (;;)</span>
+<span class="lineNum">     356 </span><span class="lineCov">    3336460 :     switch (GET_CODE (x))</span>
+<span class="lineNum">     357 </span>            :       {
+<span class="lineNum">     358 </span><span class="lineCov">     170557 :       case ASHIFT:</span>
+<span class="lineNum">     359 </span><span class="lineCov">     170557 :         if (CONST_INT_P (XEXP (x, 1))</span>
+<span class="lineNum">     360 </span><span class="lineCov">     341102 :             &amp;&amp; INTVAL (XEXP (x, 1)) &lt; GET_MODE_UNIT_BITSIZE (GET_MODE (x))</span>
+<span class="lineNum">     361 </span><span class="lineCov">     341108 :             &amp;&amp; INTVAL (XEXP (x, 1)) &gt;= 0)</span>
+<span class="lineNum">     362 </span>            :           {
+<span class="lineNum">     363 </span><span class="lineCov">     170551 :             HOST_WIDE_INT shift = INTVAL (XEXP (x, 1));</span>
+<span class="lineNum">     364 </span><span class="lineCov">     170551 :             PUT_CODE (x, MULT);</span>
+<span class="lineNum">     365 </span><span class="lineCov">     341102 :             XEXP (x, 1) = gen_int_mode (HOST_WIDE_INT_1 &lt;&lt; shift,</span>
+<span class="lineNum">     366 </span>            :                                         GET_MODE (x));
+<span class="lineNum">     367 </span>            :           }
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">     170557 :         x = XEXP (x, 0);</span>
+<span class="lineNum">     370 </span><span class="lineCov">     170557 :         break;</span>
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span><span class="lineCov">    1282165 :       case PLUS:</span>
+<span class="lineNum">     373 </span><span class="lineCov">    2564330 :         if (GET_CODE (XEXP (x, 0)) == PLUS</span>
+<span class="lineNum">     374 </span><span class="lineCov">    1282165 :             || GET_CODE (XEXP (x, 0)) == ASHIFT</span>
+<span class="lineNum">     375 </span><span class="lineCov">     928342 :             || GET_CODE (XEXP (x, 0)) == CONST)</span>
+<span class="lineNum">     376 </span><span class="lineCov">     353823 :           canonicalize_address (XEXP (x, 0));</span>
+<span class="lineNum">     377 </span>            : 
+<span class="lineNum">     378 </span><span class="lineCov">    1282165 :         x = XEXP (x, 1);</span>
+<span class="lineNum">     379 </span><span class="lineCov">    1282165 :         break;</span>
+<span class="lineNum">     380 </span>            : 
+<span class="lineNum">     381 </span><span class="lineCov">     353896 :       case CONST:</span>
+<span class="lineNum">     382 </span><span class="lineCov">     353896 :         x = XEXP (x, 0);</span>
+<span class="lineNum">     383 </span><span class="lineCov">     353896 :         break;</span>
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span><span class="lineCov">    1529842 :       default:</span>
+<span class="lineNum">     386 </span><span class="lineCov">    1529842 :         return;</span>
+<span class="lineNum">     387 </span>            :       }
+<span class="lineNum">     388 </span>            : }
+<span class="lineNum">     389 </span>            : 
+<span class="lineNum">     390 </span>            : /* OLD is a memory address.  Return whether it is good to use NEW instead,
+<span class="lineNum">     391 </span>            :    for a memory access in the given MODE.  */
+<a name="392"><span class="lineNum">     392 </span>            : </a>
+<span class="lineNum">     393 </span>            : static bool
+<span class="lineNum">     394 </span><span class="lineCov">    1128563 : should_replace_address (rtx old_rtx, rtx new_rtx, machine_mode mode,</span>
+<span class="lineNum">     395 </span>            :                         addr_space_t as, bool speed)
+<span class="lineNum">     396 </span>            : {
+<span class="lineNum">     397 </span><span class="lineCov">    1128563 :   int gain;</span>
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span><span class="lineCov">    1128563 :   if (rtx_equal_p (old_rtx, new_rtx)</span>
+<span class="lineNum">     400 </span><span class="lineCov">    1128563 :       || !memory_address_addr_space_p (mode, new_rtx, as))</span>
+<span class="lineNum">     401 </span><span class="lineCov">     251613 :     return false;</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            :   /* Copy propagation is always ok.  */
+<span class="lineNum">     404 </span><span class="lineCov">     876950 :   if (REG_P (old_rtx) &amp;&amp; REG_P (new_rtx))</span>
+<span class="lineNum">     405 </span>            :     return true;
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span>            :   /* Prefer the new address if it is less expensive.  */
+<span class="lineNum">     408 </span><span class="lineCov">     876950 :   gain = (address_cost (old_rtx, mode, as, speed)</span>
+<span class="lineNum">     409 </span><span class="lineCov">     876950 :           - address_cost (new_rtx, mode, as, speed));</span>
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            :   /* If the addresses have equivalent cost, prefer the new address
+<span class="lineNum">     412 </span>            :      if it has the highest `set_src_cost'.  That has the potential of
+<span class="lineNum">     413 </span>            :      eliminating the most insns without additional costs, and it
+<span class="lineNum">     414 </span>            :      is the same that cse.c used to do.  */
+<span class="lineNum">     415 </span><span class="lineCov">     876950 :   if (gain == 0)</span>
+<span class="lineNum">     416 </span><span class="lineCov">     124399 :     gain = (set_src_cost (new_rtx, VOIDmode, speed)</span>
+<span class="lineNum">     417 </span><span class="lineCov">     124399 :             - set_src_cost (old_rtx, VOIDmode, speed));</span>
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span><span class="lineCov">     876950 :   return (gain &gt; 0);</span>
+<span class="lineNum">     420 </span>            : }
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span>            : 
+<span class="lineNum">     423 </span>            : /* Flags for the last parameter of propagate_rtx_1.  */
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span>            : enum {
+<span class="lineNum">     426 </span>            :   /* If PR_CAN_APPEAR is true, propagate_rtx_1 always returns true;
+<span class="lineNum">     427 </span>            :      if it is false, propagate_rtx_1 returns false if, for at least
+<span class="lineNum">     428 </span>            :      one occurrence OLD, it failed to collapse the result to a constant.
+<span class="lineNum">     429 </span>            :      For example, (mult:M (reg:M A) (minus:M (reg:M B) (reg:M A))) may
+<span class="lineNum">     430 </span>            :      collapse to zero if replacing (reg:M B) with (reg:M A).
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            :      PR_CAN_APPEAR is disregarded inside MEMs: in that case,
+<span class="lineNum">     433 </span>            :      propagate_rtx_1 just tries to make cheaper and valid memory
+<span class="lineNum">     434 </span>            :      addresses.  */
+<span class="lineNum">     435 </span>            :   PR_CAN_APPEAR = 1,
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            :   /* If PR_HANDLE_MEM is not set, propagate_rtx_1 won't attempt any replacement
+<span class="lineNum">     438 </span>            :      outside memory addresses.  This is needed because propagate_rtx_1 does
+<span class="lineNum">     439 </span>            :      not do any analysis on memory; thus it is very conservative and in general
+<span class="lineNum">     440 </span>            :      it will fail if non-read-only MEMs are found in the source expression.
+<span class="lineNum">     441 </span>            : 
+<span class="lineNum">     442 </span>            :      PR_HANDLE_MEM is set when the source of the propagation was not
+<span class="lineNum">     443 </span>            :      another MEM.  Then, it is safe not to treat non-read-only MEMs as
+<span class="lineNum">     444 </span>            :      ``opaque'' objects.  */
+<span class="lineNum">     445 </span>            :   PR_HANDLE_MEM = 2,
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :   /* Set when costs should be optimized for speed.  */
+<span class="lineNum">     448 </span>            :   PR_OPTIMIZE_FOR_SPEED = 4
+<span class="lineNum">     449 </span>            : };
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span>            : /* Replace all occurrences of OLD in *PX with NEW and try to simplify the
+<span class="lineNum">     453 </span>            :    resulting expression.  Replace *PX with a new RTL expression if an
+<span class="lineNum">     454 </span>            :    occurrence of OLD was found.
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span>            :    This is only a wrapper around simplify-rtx.c: do not add any pattern
+<span class="lineNum">     457 </span>            :    matching code here.  (The sole exception is the handling of LO_SUM, but
+<span class="lineNum">     458 </span>            :    that is because there is no simplify_gen_* function for LO_SUM).  */
+<a name="459"><span class="lineNum">     459 </span>            : </a>
+<span class="lineNum">     460 </span>            : static bool
+<span class="lineNum">     461 </span><span class="lineCov">   34936228 : propagate_rtx_1 (rtx *px, rtx old_rtx, rtx new_rtx, int flags)</span>
+<span class="lineNum">     462 </span>            : {
+<span class="lineNum">     463 </span><span class="lineCov">   34936228 :   rtx x = *px, tem = NULL_RTX, op0, op1, op2;</span>
+<span class="lineNum">     464 </span><span class="lineCov">   34936228 :   enum rtx_code code = GET_CODE (x);</span>
+<span class="lineNum">     465 </span><span class="lineCov">   34936228 :   machine_mode mode = GET_MODE (x);</span>
+<span class="lineNum">     466 </span><span class="lineCov">   34936228 :   machine_mode op_mode;</span>
+<span class="lineNum">     467 </span><span class="lineCov">   34936228 :   bool can_appear = (flags &amp; PR_CAN_APPEAR) != 0;</span>
+<span class="lineNum">     468 </span><span class="lineCov">   34936228 :   bool valid_ops = true;</span>
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span><span class="lineCov">   34936228 :   if (!(flags &amp; PR_HANDLE_MEM) &amp;&amp; MEM_P (x) &amp;&amp; !MEM_READONLY_P (x))</span>
+<span class="lineNum">     471 </span>            :     {
+<span class="lineNum">     472 </span>            :       /* If unsafe, change MEMs to CLOBBERs or SCRATCHes (to preserve whether
+<span class="lineNum">     473 </span>            :          they have side effects or not).  */
+<span class="lineNum">     474 </span><span class="lineCov">     768542 :       *px = (side_effects_p (x)</span>
+<span class="lineNum">     475 </span><span class="lineCov">     768542 :              ? gen_rtx_CLOBBER (GET_MODE (x), const0_rtx)</span>
+<span class="lineNum">     476 </span><span class="lineCov">     764704 :              : gen_rtx_SCRATCH (GET_MODE (x)));</span>
+<span class="lineNum">     477 </span><span class="lineCov">     768542 :       return false;</span>
+<span class="lineNum">     478 </span>            :     }
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            :   /* If X is OLD_RTX, return NEW_RTX.  But not if replacing only within an
+<span class="lineNum">     481 </span>            :      address, and we are *not* inside one.  */
+<span class="lineNum">     482 </span><span class="lineCov">   34167686 :   if (x == old_rtx)</span>
+<span class="lineNum">     483 </span>            :     {
+<span class="lineNum">     484 </span><span class="lineCov">   14334669 :       *px = new_rtx;</span>
+<span class="lineNum">     485 </span><span class="lineCov">   14334669 :       return can_appear;</span>
+<span class="lineNum">     486 </span>            :     }
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span>            :   /* If this is an expression, try recursive substitution.  */
+<span class="lineNum">     489 </span><span class="lineCov">   19833017 :   switch (GET_RTX_CLASS (code))</span>
+<span class="lineNum">     490 </span>            :     {
+<span class="lineNum">     491 </span><span class="lineCov">     805752 :     case RTX_UNARY:</span>
+<span class="lineNum">     492 </span><span class="lineCov">     805752 :       op0 = XEXP (x, 0);</span>
+<span class="lineNum">     493 </span><span class="lineCov">     805752 :       op_mode = GET_MODE (op0);</span>
+<span class="lineNum">     494 </span><span class="lineCov">     805752 :       valid_ops &amp;= propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     495 </span><span class="lineCov">     805752 :       if (op0 == XEXP (x, 0))</span>
+<span class="lineNum">     496 </span>            :         return true;
+<span class="lineNum">     497 </span><span class="lineCov">     643811 :       tem = simplify_gen_unary (code, mode, op0, op_mode);</span>
+<span class="lineNum">     498 </span><span class="lineCov">     643811 :       break;</span>
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span><span class="lineCov">    7362718 :     case RTX_BIN_ARITH:</span>
+<span class="lineNum">     501 </span><span class="lineCov">    7362718 :     case RTX_COMM_ARITH:</span>
+<span class="lineNum">     502 </span><span class="lineCov">    7362718 :       op0 = XEXP (x, 0);</span>
+<span class="lineNum">     503 </span><span class="lineCov">    7362718 :       op1 = XEXP (x, 1);</span>
+<span class="lineNum">     504 </span><span class="lineCov">    7362718 :       valid_ops &amp;= propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     505 </span><span class="lineCov">    7362718 :       valid_ops &amp;= propagate_rtx_1 (&amp;op1, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     506 </span><span class="lineCov">    7362718 :       if (op0 == XEXP (x, 0) &amp;&amp; op1 == XEXP (x, 1))</span>
+<span class="lineNum">     507 </span>            :         return true;
+<span class="lineNum">     508 </span><span class="lineCov">    7119301 :       tem = simplify_gen_binary (code, mode, op0, op1);</span>
+<span class="lineNum">     509 </span><span class="lineCov">    7119301 :       break;</span>
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span><span class="lineCov">     250704 :     case RTX_COMPARE:</span>
+<span class="lineNum">     512 </span><span class="lineCov">     250704 :     case RTX_COMM_COMPARE:</span>
+<span class="lineNum">     513 </span><span class="lineCov">     250704 :       op0 = XEXP (x, 0);</span>
+<span class="lineNum">     514 </span><span class="lineCov">     250704 :       op1 = XEXP (x, 1);</span>
+<span class="lineNum">     515 </span><span class="lineCov">     250704 :       op_mode = GET_MODE (op0) != VOIDmode ? GET_MODE (op0) : GET_MODE (op1);</span>
+<span class="lineNum">     516 </span><span class="lineCov">     250704 :       valid_ops &amp;= propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     517 </span><span class="lineCov">     250704 :       valid_ops &amp;= propagate_rtx_1 (&amp;op1, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     518 </span><span class="lineCov">     250704 :       if (op0 == XEXP (x, 0) &amp;&amp; op1 == XEXP (x, 1))</span>
+<span class="lineNum">     519 </span>            :         return true;
+<span class="lineNum">     520 </span><span class="lineCov">     110897 :       tem = simplify_gen_relational (code, mode, op_mode, op0, op1);</span>
+<span class="lineNum">     521 </span><span class="lineCov">     110897 :       break;</span>
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span><span class="lineCov">     273413 :     case RTX_TERNARY:</span>
+<span class="lineNum">     524 </span><span class="lineCov">     273413 :     case RTX_BITFIELD_OPS:</span>
+<span class="lineNum">     525 </span><span class="lineCov">     273413 :       op0 = XEXP (x, 0);</span>
+<span class="lineNum">     526 </span><span class="lineCov">     273413 :       op1 = XEXP (x, 1);</span>
+<span class="lineNum">     527 </span><span class="lineCov">     273413 :       op2 = XEXP (x, 2);</span>
+<span class="lineNum">     528 </span><span class="lineCov">     273413 :       op_mode = GET_MODE (op0);</span>
+<span class="lineNum">     529 </span><span class="lineCov">     273413 :       valid_ops &amp;= propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     530 </span><span class="lineCov">     273413 :       valid_ops &amp;= propagate_rtx_1 (&amp;op1, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     531 </span><span class="lineCov">     273413 :       valid_ops &amp;= propagate_rtx_1 (&amp;op2, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     532 </span><span class="lineCov">     273413 :       if (op0 == XEXP (x, 0) &amp;&amp; op1 == XEXP (x, 1) &amp;&amp; op2 == XEXP (x, 2))</span>
+<span class="lineNum">     533 </span>            :         return true;
+<span class="lineNum">     534 </span><span class="lineCov">     258441 :       if (op_mode == VOIDmode)</span>
+<span class="lineNum">     535 </span><span class="lineCov">     134166 :         op_mode = GET_MODE (op0);</span>
+<span class="lineNum">     536 </span><span class="lineCov">     258441 :       tem = simplify_gen_ternary (code, mode, op_mode, op0, op1, op2);</span>
+<span class="lineNum">     537 </span><span class="lineCov">     258441 :       break;</span>
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span><span class="lineCov">    1873343 :     case RTX_EXTRA:</span>
+<span class="lineNum">     540 </span>            :       /* The only case we try to handle is a SUBREG.  */
+<span class="lineNum">     541 </span><span class="lineCov">    1873343 :       if (code == SUBREG)</span>
+<span class="lineNum">     542 </span>            :         {
+<span class="lineNum">     543 </span><span class="lineCov">     950721 :           op0 = XEXP (x, 0);</span>
+<span class="lineNum">     544 </span><span class="lineCov">     950721 :           valid_ops &amp;= propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     545 </span><span class="lineCov">     950721 :           if (op0 == XEXP (x, 0))</span>
+<span class="lineNum">     546 </span>            :             return true;
+<span class="lineNum">     547 </span><span class="lineCov">     710484 :           tem = simplify_gen_subreg (mode, op0, GET_MODE (SUBREG_REG (x)),</span>
+<span class="lineNum">     548 </span><span class="lineCov">     710484 :                                      SUBREG_BYTE (x));</span>
+<span class="lineNum">     549 </span>            :         }
+<span class="lineNum">     550 </span>            :       break;
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span><span class="lineCov">    5827403 :     case RTX_OBJ:</span>
+<span class="lineNum">     553 </span><span class="lineCov">    5827403 :       if (code == MEM &amp;&amp; x != new_rtx)</span>
+<span class="lineNum">     554 </span>            :         {
+<span class="lineNum">     555 </span><span class="lineCov">    1340067 :           rtx new_op0;</span>
+<span class="lineNum">     556 </span><span class="lineCov">    1340067 :           op0 = XEXP (x, 0);</span>
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span>            :           /* There are some addresses that we cannot work on.  */
+<span class="lineNum">     559 </span><span class="lineCov">    1340067 :           if (!can_simplify_addr (op0))</span>
+<span class="lineNum">     560 </span><span class="lineCov">     650402 :             return true;</span>
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span><span class="lineCov">    1296485 :           op0 = new_op0 = targetm.delegitimize_address (op0);</span>
+<span class="lineNum">     563 </span><span class="lineCov">    1296485 :           valid_ops &amp;= propagate_rtx_1 (&amp;new_op0, old_rtx, new_rtx,</span>
+<span class="lineNum">     564 </span>            :                                         flags | PR_CAN_APPEAR);
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span>            :           /* Dismiss transformation that we do not want to carry on.  */
+<span class="lineNum">     567 </span><span class="lineCov">    1296485 :           if (!valid_ops</span>
+<span class="lineNum">     568 </span><span class="lineCov">    1296485 :               || new_op0 == op0</span>
+<span class="lineNum">     569 </span><span class="lineCov">    1176019 :               || !(GET_MODE (new_op0) == GET_MODE (op0)</span>
+<span class="lineNum">     570 </span>            :                    || GET_MODE (new_op0) == VOIDmode))
+<span class="lineNum">     571 </span>            :             return true;
+<span class="lineNum">     572 </span>            : 
+<span class="lineNum">     573 </span><span class="lineCov">    1176019 :           canonicalize_address (new_op0);</span>
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span>            :           /* Copy propagations are always ok.  Otherwise check the costs.  */
+<span class="lineNum">     576 </span><span class="lineCov">    1176019 :           if (!(REG_P (old_rtx) &amp;&amp; REG_P (new_rtx))</span>
+<span class="lineNum">     577 </span><span class="lineCov">    2304582 :               &amp;&amp; !should_replace_address (op0, new_op0, GET_MODE (x),</span>
+<span class="lineNum">     578 </span><span class="lineCov">    1128563 :                                           MEM_ADDR_SPACE (x),</span>
+<span class="lineNum">     579 </span><span class="lineCov">    1128563 :                                           flags &amp; PR_OPTIMIZE_FOR_SPEED))</span>
+<span class="lineNum">     580 </span>            :             return true;
+<span class="lineNum">     581 </span>            : 
+<span class="lineNum">     582 </span><span class="lineCov">     689665 :           tem = replace_equiv_address_nv (x, new_op0);</span>
+<span class="lineNum">     583 </span>            :         }
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">    4487336 :       else if (code == LO_SUM)</span>
+<span class="lineNum">     586 </span>            :         {
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :           op0 = XEXP (x, 0);</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :           op1 = XEXP (x, 1);</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            :           /* The only simplification we do attempts to remove references to op0
+<span class="lineNum">     591 </span>            :              or make it constant -- in both cases, op0's invalidity will not
+<span class="lineNum">     592 </span>            :              make the result invalid.  */
+<span class="lineNum">     593 </span><span class="lineNoCov">          0 :           propagate_rtx_1 (&amp;op0, old_rtx, new_rtx, flags | PR_CAN_APPEAR);</span>
+<span class="lineNum">     594 </span><span class="lineNoCov">          0 :           valid_ops &amp;= propagate_rtx_1 (&amp;op1, old_rtx, new_rtx, flags);</span>
+<span class="lineNum">     595 </span><span class="lineNoCov">          0 :           if (op0 == XEXP (x, 0) &amp;&amp; op1 == XEXP (x, 1))</span>
+<span class="lineNum">     596 </span>            :             return true;
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            :           /* (lo_sum (high x) x) -&gt; x  */
+<span class="lineNum">     599 </span><span class="lineNoCov">          0 :           if (GET_CODE (op0) == HIGH &amp;&amp; rtx_equal_p (XEXP (op0, 0), op1))</span>
+<span class="lineNum">     600 </span><span class="lineNoCov">          0 :             tem = op1;</span>
+<span class="lineNum">     601 </span>            :           else
+<span class="lineNum">     602 </span><span class="lineNoCov">          0 :             tem = gen_rtx_LO_SUM (mode, op0, op1);</span>
+<span class="lineNum">     603 </span>            : 
+<span class="lineNum">     604 </span>            :           /* OP1 is likely not a legitimate address, otherwise there would have
+<span class="lineNum">     605 </span>            :              been no LO_SUM.  We want it to disappear if it is invalid, return
+<span class="lineNum">     606 </span>            :              false in that case.  */
+<span class="lineNum">     607 </span><span class="lineNoCov">          0 :           return memory_address_p (mode, tem);</span>
+<span class="lineNum">     608 </span>            :         }
+<span class="lineNum">     609 </span>            : 
+<span class="lineNum">     610 </span><span class="lineCov">    4487336 :       else if (code == REG)</span>
+<span class="lineNum">     611 </span>            :         {
+<span class="lineNum">     612 </span><span class="lineCov">    4443482 :           if (rtx_equal_p (x, old_rtx))</span>
+<span class="lineNum">     613 </span>            :             {
+<span class="lineNum">     614 </span><span class="lineCov">     538574 :               *px = new_rtx;</span>
+<span class="lineNum">     615 </span><span class="lineCov">     538574 :               return can_appear;</span>
+<span class="lineNum">     616 </span>            :             }
+<span class="lineNum">     617 </span>            :         }
+<span class="lineNum">     618 </span>            :       break;
+<span class="lineNum">     619 </span>            : 
+<span class="lineNum">     620 </span>            :     default:
+<span class="lineNum">     621 </span>            :       break;
+<span class="lineNum">     622 </span>            :     }
+<span class="lineNum">     623 </span>            : 
+<span class="lineNum">     624 </span>            :   /* No change, no trouble.  */
+<span class="lineNum">     625 </span><span class="lineCov">    9532599 :   if (tem == NULL_RTX)</span>
+<span class="lineNum">     626 </span><span class="lineCov">    8314269 :     return true;</span>
+<span class="lineNum">     627 </span>            : 
+<span class="lineNum">     628 </span><span class="lineCov">    9529398 :   *px = tem;</span>
+<span class="lineNum">     629 </span>            : 
+<span class="lineNum">     630 </span>            :   /* Allow replacements that simplify operations on a vector or complex
+<span class="lineNum">     631 </span>            :      value to a component.  The most prominent case is
+<span class="lineNum">     632 </span>            :      (subreg ([vec_]concat ...)).   */
+<span class="lineNum">     633 </span><span class="lineCov">      39582 :   if (REG_P (tem) &amp;&amp; !HARD_REGISTER_P (tem)</span>
+<span class="lineNum">     634 </span><span class="lineCov">      18687 :       &amp;&amp; (VECTOR_MODE_P (GET_MODE (new_rtx))</span>
+<span class="lineNum">     635 </span><span class="lineCov">      17853 :           || COMPLEX_MODE_P (GET_MODE (new_rtx)))</span>
+<span class="lineNum">     636 </span><span class="lineCov">    9531900 :       &amp;&amp; GET_MODE (tem) == GET_MODE_INNER (GET_MODE (new_rtx)))</span>
+<span class="lineNum">     637 </span>            :     return true;
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span>            :   /* The replacement we made so far is valid, if all of the recursive
+<span class="lineNum">     640 </span>            :      replacements were valid, or we could simplify everything to
+<span class="lineNum">     641 </span>            :      a constant.  */
+<span class="lineNum">     642 </span><span class="lineCov">    9529342 :   return valid_ops || can_appear || CONSTANT_P (tem);</span>
+<span class="lineNum">     643 </span>            : }
+<span class="lineNum">     644 </span>            : 
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span>            : /* Return true if X constains a non-constant mem.  */
+<a name="647"><span class="lineNum">     647 </span>            : </a>
+<span class="lineNum">     648 </span>            : static bool
+<span class="lineNum">     649 </span><span class="lineCov">   15836187 : varying_mem_p (const_rtx x)</span>
+<span class="lineNum">     650 </span>            : {
+<span class="lineNum">     651 </span><span class="lineCov">   31672374 :   subrtx_iterator::array_type array;</span>
+<span class="lineNum">     652 </span><span class="lineCov">   43354350 :   FOR_EACH_SUBRTX (iter, array, x, NONCONST)</span>
+<span class="lineNum">     653 </span><span class="lineCov">   33982762 :     if (MEM_P (*iter) &amp;&amp; !MEM_READONLY_P (*iter))</span>
+<span class="lineNum">     654 </span><span class="lineCov">    6464599 :       return true;</span>
+<span class="lineNum">     655 </span><span class="lineCov">    9371588 :   return false;</span>
+<span class="lineNum">     656 </span>            : }
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span>            : 
+<span class="lineNum">     659 </span>            : /* Replace all occurrences of OLD in X with NEW and try to simplify the
+<span class="lineNum">     660 </span>            :    resulting expression (in mode MODE).  Return a new expression if it is
+<span class="lineNum">     661 </span>            :    a constant, otherwise X.
+<span class="lineNum">     662 </span>            : 
+<span class="lineNum">     663 </span>            :    Simplifications where occurrences of NEW collapse to a constant are always
+<span class="lineNum">     664 </span>            :    accepted.  All simplifications are accepted if NEW is a pseudo too.
+<span class="lineNum">     665 </span>            :    Otherwise, we accept simplifications that have a lower or equal cost.  */
+<a name="666"><span class="lineNum">     666 </span>            : </a>
+<span class="lineNum">     667 </span>            : static rtx
+<span class="lineNum">     668 </span><span class="lineCov">   18786980 : propagate_rtx (rtx x, machine_mode mode, rtx old_rtx, rtx new_rtx,</span>
+<span class="lineNum">     669 </span>            :                bool speed)
+<span class="lineNum">     670 </span>            : {
+<span class="lineNum">     671 </span><span class="lineCov">   18786980 :   rtx tem;</span>
+<span class="lineNum">     672 </span><span class="lineCov">   18786980 :   bool collapsed;</span>
+<span class="lineNum">     673 </span><span class="lineCov">   18786980 :   int flags;</span>
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span><span class="lineCov">   18786980 :   if (REG_P (new_rtx) &amp;&amp; REGNO (new_rtx) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     676 </span>            :     return NULL_RTX;
+<span class="lineNum">     677 </span>            : 
+<span class="lineNum">     678 </span><span class="lineCov">   15836187 :   flags = 0;</span>
+<span class="lineNum">     679 </span><span class="lineCov">   15836187 :   if (REG_P (new_rtx)</span>
+<span class="lineNum">     680 </span><span class="lineCov">   15252109 :       || CONSTANT_P (new_rtx)</span>
+<span class="lineNum">     681 </span><span class="lineCov">   29961002 :       || (GET_CODE (new_rtx) == SUBREG</span>
+<span class="lineNum">     682 </span><span class="lineCov">     388599 :           &amp;&amp; REG_P (SUBREG_REG (new_rtx))</span>
+<span class="lineNum">     683 </span><span class="lineCov">     775980 :           &amp;&amp; !paradoxical_subreg_p (mode, GET_MODE (SUBREG_REG (new_rtx)))))</span>
+<span class="lineNum">     684 </span>            :     flags |= PR_CAN_APPEAR;
+<span class="lineNum">     685 </span><span class="lineCov">   15836187 :   if (!varying_mem_p (new_rtx))</span>
+<span class="lineNum">     686 </span><span class="lineCov">    9371588 :     flags |= PR_HANDLE_MEM;</span>
+<span class="lineNum">     687 </span>            : 
+<span class="lineNum">     688 </span><span class="lineCov">   15836187 :   if (speed)</span>
+<span class="lineNum">     689 </span><span class="lineCov">   14251077 :     flags |= PR_OPTIMIZE_FOR_SPEED;</span>
+<span class="lineNum">     690 </span>            : 
+<span class="lineNum">     691 </span><span class="lineCov">   15836187 :   tem = x;</span>
+<span class="lineNum">     692 </span><span class="lineCov">   15836187 :   collapsed = propagate_rtx_1 (&amp;tem, old_rtx, copy_rtx (new_rtx), flags);</span>
+<span class="lineNum">     693 </span><span class="lineCov">   15836187 :   if (tem == x || !collapsed)</span>
+<span class="lineNum">     694 </span>            :     return NULL_RTX;
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span>            :   /* gen_lowpart_common will not be able to process VOIDmode entities other
+<span class="lineNum">     697 </span>            :      than CONST_INTs.  */
+<span class="lineNum">     698 </span><span class="lineCov">    2084373 :   if (GET_MODE (tem) == VOIDmode &amp;&amp; !CONST_INT_P (tem))</span>
+<span class="lineNum">     699 </span>            :     return NULL_RTX;
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span><span class="lineCov">    2083258 :   if (GET_MODE (tem) == VOIDmode)</span>
+<span class="lineNum">     702 </span><span class="lineCov">     173051 :     tem = rtl_hooks.gen_lowpart_no_emit (mode, tem);</span>
+<span class="lineNum">     703 </span>            :   else
+<span class="lineNum">     704 </span><span class="lineCov">    1910207 :     gcc_assert (GET_MODE (tem) == mode);</span>
+<span class="lineNum">     705 </span>            : 
+<span class="lineNum">     706 </span><span class="lineCov">    2083258 :   return tem;</span>
+<span class="lineNum">     707 </span>            : }
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span>            : 
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span>            : /* Return true if the register from reference REF is killed
+<span class="lineNum">     713 </span>            :    between FROM to (but not including) TO.  */
+<a name="714"><span class="lineNum">     714 </span>            : </a>
+<span class="lineNum">     715 </span>            : static bool
+<span class="lineNum">     716 </span><span class="lineCov">    5208843 : local_ref_killed_between_p (df_ref ref, rtx_insn *from, rtx_insn *to)</span>
+<span class="lineNum">     717 </span>            : {
+<span class="lineNum">     718 </span><span class="lineCov">    5208843 :   rtx_insn *insn;</span>
+<span class="lineNum">     719 </span>            : 
+<span class="lineNum">     720 </span><span class="lineCov">  236874471 :   for (insn = from; insn != to; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     721 </span>            :     {
+<span class="lineNum">     722 </span><span class="lineCov">  116411939 :       df_ref def;</span>
+<span class="lineNum">     723 </span><span class="lineCov">  116411939 :       if (!INSN_P (insn))</span>
+<span class="lineNum">     724 </span>            :         continue;
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span><span class="lineCov">  709712931 :       FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     727 </span><span class="lineCov">  480385596 :         if (DF_REF_REGNO (ref) == DF_REF_REGNO (def))</span>
+<span class="lineNum">     728 </span>            :           return true;
+<span class="lineNum">     729 </span>            :     }
+<span class="lineNum">     730 </span>            :   return false;
+<span class="lineNum">     731 </span>            : }
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span>            : 
+<span class="lineNum">     734 </span>            : /* Check if the given DEF is available in INSN.  This would require full
+<span class="lineNum">     735 </span>            :    computation of available expressions; we check only restricted conditions:
+<span class="lineNum">     736 </span>            :    - if DEF is the sole definition of its register, go ahead;
+<span class="lineNum">     737 </span>            :    - in the same basic block, we check for no definitions killing the
+<span class="lineNum">     738 </span>            :      definition of DEF_INSN;
+<span class="lineNum">     739 </span>            :    - if USE's basic block has DEF's basic block as the sole predecessor,
+<span class="lineNum">     740 </span>            :      we check if the definition is killed after DEF_INSN or before
+<a name="741"><span class="lineNum">     741 </span>            :      TARGET_INSN insn, in their respective basic blocks.  */</a>
+<span class="lineNum">     742 </span>            : static bool
+<span class="lineNum">     743 </span><span class="lineCov">   16856721 : use_killed_between (df_ref use, rtx_insn *def_insn, rtx_insn *target_insn)</span>
+<span class="lineNum">     744 </span>            : {
+<span class="lineNum">     745 </span><span class="lineCov">   16856721 :   basic_block def_bb = BLOCK_FOR_INSN (def_insn);</span>
+<span class="lineNum">     746 </span><span class="lineCov">   16856721 :   basic_block target_bb = BLOCK_FOR_INSN (target_insn);</span>
+<span class="lineNum">     747 </span><span class="lineCov">   16856721 :   int regno;</span>
+<span class="lineNum">     748 </span><span class="lineCov">   16856721 :   df_ref def;</span>
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span>            :   /* We used to have a def reaching a use that is _before_ the def,
+<span class="lineNum">     751 </span>            :      with the def not dominating the use even though the use and def
+<span class="lineNum">     752 </span>            :      are in the same basic block, when a register may be used
+<span class="lineNum">     753 </span>            :      uninitialized in a loop.  This should not happen anymore since
+<span class="lineNum">     754 </span>            :      we do not use reaching definitions, but still we test for such
+<span class="lineNum">     755 </span>            :      cases and assume that DEF is not available.  */
+<span class="lineNum">     756 </span><span class="lineCov">   16856721 :   if (def_bb == target_bb</span>
+<span class="lineNum">     757 </span><span class="lineCov">   24455716 :       ? DF_INSN_LUID (def_insn) &gt;= DF_INSN_LUID (target_insn)</span>
+<span class="lineNum">     758 </span><span class="lineCov">    7598995 :       : !dominated_by_p (CDI_DOMINATORS, target_bb, def_bb))</span>
+<span class="lineNum">     759 </span>            :     return true;
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span>            :   /* Check if the reg in USE has only one definition.  We already
+<span class="lineNum">     762 </span>            :      know that this definition reaches use, or we wouldn't be here.
+<span class="lineNum">     763 </span>            :      However, this is invalid for hard registers because if they are
+<span class="lineNum">     764 </span>            :      live at the beginning of the function it does not mean that we
+<span class="lineNum">     765 </span>            :      have an uninitialized access.  */
+<span class="lineNum">     766 </span><span class="lineCov">   16853941 :   regno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     767 </span><span class="lineCov">   16853941 :   def = DF_REG_DEF_CHAIN (regno);</span>
+<span class="lineNum">     768 </span><span class="lineCov">   16853941 :   if (def</span>
+<span class="lineNum">     769 </span><span class="lineCov">   16760254 :       &amp;&amp; DF_REF_NEXT_REG (def) == NULL</span>
+<span class="lineNum">     770 </span><span class="lineCov">   11050783 :       &amp;&amp; regno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     771 </span>            :     return false;
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span>            :   /* Check locally if we are in the same basic block.  */
+<span class="lineNum">     774 </span><span class="lineCov">    9820478 :   if (def_bb == target_bb)</span>
+<span class="lineNum">     775 </span><span class="lineCov">    5208843 :     return local_ref_killed_between_p (use, def_insn, target_insn);</span>
+<span class="lineNum">     776 </span>            : 
+<span class="lineNum">     777 </span>            :   /* Finally, if DEF_BB is the sole predecessor of TARGET_BB.  */
+<span class="lineNum">     778 </span><span class="lineCov">    4611635 :   if (single_pred_p (target_bb)</span>
+<span class="lineNum">     779 </span><span class="lineCov">    4611635 :       &amp;&amp; single_pred (target_bb) == def_bb)</span>
+<span class="lineNum">     780 </span>            :     {
+<span class="lineNum">     781 </span><span class="lineCov">    1752455 :       df_ref x;</span>
+<span class="lineNum">     782 </span>            : 
+<span class="lineNum">     783 </span>            :       /* See if USE is killed between DEF_INSN and the last insn in the
+<span class="lineNum">     784 </span>            :          basic block containing DEF_INSN.  */
+<span class="lineNum">     785 </span><span class="lineCov">    1752455 :       x = df_bb_regno_last_def_find (def_bb, regno);</span>
+<span class="lineNum">     786 </span><span class="lineCov">    1752455 :       if (x &amp;&amp; DF_INSN_LUID (DF_REF_INSN (x)) &gt;= DF_INSN_LUID (def_insn))</span>
+<span class="lineNum">     787 </span>            :         return true;
+<span class="lineNum">     788 </span>            : 
+<span class="lineNum">     789 </span>            :       /* See if USE is killed between TARGET_INSN and the first insn in the
+<span class="lineNum">     790 </span>            :          basic block containing TARGET_INSN.  */
+<span class="lineNum">     791 </span><span class="lineCov">    1534642 :       x = df_bb_regno_first_def_find (target_bb, regno);</span>
+<span class="lineNum">     792 </span><span class="lineCov">    1534642 :       if (x &amp;&amp; DF_INSN_LUID (DF_REF_INSN (x)) &lt; DF_INSN_LUID (target_insn))</span>
+<span class="lineNum">     793 </span><span class="lineCov">     107318 :         return true;</span>
+<span class="lineNum">     794 </span>            : 
+<span class="lineNum">     795 </span>            :       return false;
+<span class="lineNum">     796 </span>            :     }
+<span class="lineNum">     797 </span>            : 
+<span class="lineNum">     798 </span>            :   /* Otherwise assume the worst case.  */
+<span class="lineNum">     799 </span>            :   return true;
+<span class="lineNum">     800 </span>            : }
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span>            : 
+<span class="lineNum">     803 </span>            : /* Check if all uses in DEF_INSN can be used in TARGET_INSN.  This
+<span class="lineNum">     804 </span>            :    would require full computation of available expressions;
+<a name="805"><span class="lineNum">     805 </span>            :    we check only restricted conditions, see use_killed_between.  */</a>
+<span class="lineNum">     806 </span>            : static bool
+<span class="lineNum">     807 </span><span class="lineCov">   24292998 : all_uses_available_at (rtx_insn *def_insn, rtx_insn *target_insn)</span>
+<span class="lineNum">     808 </span>            : {
+<span class="lineNum">     809 </span><span class="lineCov">   24292998 :   df_ref use;</span>
+<span class="lineNum">     810 </span><span class="lineCov">   24292998 :   struct df_insn_info *insn_info = DF_INSN_INFO_GET (def_insn);</span>
+<span class="lineNum">     811 </span><span class="lineCov">   24292998 :   rtx def_set = single_set (def_insn);</span>
+<span class="lineNum">     812 </span><span class="lineCov">   24292998 :   rtx_insn *next;</span>
+<span class="lineNum">     813 </span>            : 
+<span class="lineNum">     814 </span><span class="lineCov">   24292998 :   gcc_assert (def_set);</span>
+<span class="lineNum">     815 </span>            : 
+<span class="lineNum">     816 </span>            :   /* If target_insn comes right after def_insn, which is very common
+<span class="lineNum">     817 </span>            :      for addresses, we can use a quicker test.  Ignore debug insns
+<span class="lineNum">     818 </span>            :      other than target insns for this.  */
+<span class="lineNum">     819 </span><span class="lineCov">   48585996 :   next = NEXT_INSN (def_insn);</span>
+<span class="lineNum">     820 </span><span class="lineCov">   45383783 :   while (next &amp;&amp; next != target_insn &amp;&amp; DEBUG_INSN_P (next))</span>
+<span class="lineNum">     821 </span><span class="lineCov">   42181570 :     next = NEXT_INSN (next);</span>
+<span class="lineNum">     822 </span><span class="lineCov">   24292998 :   if (next == target_insn &amp;&amp; REG_P (SET_DEST (def_set)))</span>
+<span class="lineNum">     823 </span>            :     {
+<span class="lineNum">     824 </span><span class="lineCov">    8767315 :       rtx def_reg = SET_DEST (def_set);</span>
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span>            :       /* If the insn uses the reg that it defines, the substitution is
+<span class="lineNum">     827 </span>            :          invalid.  */
+<span class="lineNum">     828 </span><span class="lineCov">   18636236 :       FOR_EACH_INSN_INFO_USE (use, insn_info)</span>
+<span class="lineNum">     829 </span><span class="lineCov">   10996077 :         if (rtx_equal_p (DF_REF_REG (use), def_reg))</span>
+<span class="lineNum">     830 </span>            :           return false;
+<span class="lineNum">     831 </span><span class="lineCov">    8049607 :       FOR_EACH_INSN_INFO_EQ_USE (use, insn_info)</span>
+<span class="lineNum">     832 </span><span class="lineCov">     409448 :         if (rtx_equal_p (DF_REF_REG (use), def_reg))</span>
+<span class="lineNum">     833 </span>            :           return false;
+<span class="lineNum">     834 </span>            :     }
+<span class="lineNum">     835 </span>            :   else
+<span class="lineNum">     836 </span>            :     {
+<span class="lineNum">     837 </span><span class="lineCov">   15525683 :       rtx def_reg = REG_P (SET_DEST (def_set)) ? SET_DEST (def_set) : NULL_RTX;</span>
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :       /* Look at all the uses of DEF_INSN, and see if they are not
+<span class="lineNum">     840 </span>            :          killed between DEF_INSN and TARGET_INSN.  */
+<span class="lineNum">     841 </span><span class="lineCov">   28014834 :       FOR_EACH_INSN_INFO_USE (use, insn_info)</span>
+<span class="lineNum">     842 </span>            :         {
+<span class="lineNum">     843 </span><span class="lineCov">   16990785 :           if (def_reg &amp;&amp; rtx_equal_p (DF_REF_REG (use), def_reg))</span>
+<span class="lineNum">     844 </span>            :             return false;
+<span class="lineNum">     845 </span><span class="lineCov">   16247454 :           if (use_killed_between (use, def_insn, target_insn))</span>
+<span class="lineNum">     846 </span>            :             return false;
+<span class="lineNum">     847 </span>            :         }
+<span class="lineNum">     848 </span><span class="lineCov">   11625403 :       FOR_EACH_INSN_INFO_EQ_USE (use, insn_info)</span>
+<span class="lineNum">     849 </span>            :         {
+<span class="lineNum">     850 </span><span class="lineCov">     609267 :           if (def_reg &amp;&amp; rtx_equal_p (DF_REF_REG (use), def_reg))</span>
+<span class="lineNum">     851 </span>            :             return false;
+<span class="lineNum">     852 </span><span class="lineCov">     609267 :           if (use_killed_between (use, def_insn, target_insn))</span>
+<span class="lineNum">     853 </span>            :             return false;
+<span class="lineNum">     854 </span>            :         }
+<span class="lineNum">     855 </span>            :     }
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span>            :   return true;
+<span class="lineNum">     858 </span>            : }
+<span class="lineNum">     859 </span>            : 
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span>            : static df_ref *active_defs;
+<span class="lineNum">     862 </span>            : static sparseset active_defs_check;
+<span class="lineNum">     863 </span>            : 
+<span class="lineNum">     864 </span>            : /* Fill the ACTIVE_DEFS array with the use-&gt;def link for the registers
+<span class="lineNum">     865 </span>            :    mentioned in USE_REC.  Register the valid entries in ACTIVE_DEFS_CHECK
+<span class="lineNum">     866 </span>            :    too, for checking purposes.  */
+<a name="867"><span class="lineNum">     867 </span>            : </a>
+<span class="lineNum">     868 </span>            : static void
+<span class="lineNum">     869 </span><span class="lineCov">    6306702 : register_active_defs (df_ref use)</span>
+<span class="lineNum">     870 </span>            : {
+<span class="lineNum">     871 </span><span class="lineCov">   11539390 :   for (; use; use = DF_REF_NEXT_LOC (use))</span>
+<span class="lineNum">     872 </span>            :     {
+<span class="lineNum">     873 </span><span class="lineCov">    5232688 :       df_ref def = get_def_for_use (use);</span>
+<span class="lineNum">     874 </span><span class="lineCov">    5232688 :       int regno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span><span class="lineCov">    5232688 :       if (flag_checking)</span>
+<span class="lineNum">     877 </span><span class="lineCov">    5232664 :         sparseset_set_bit (active_defs_check, regno);</span>
+<span class="lineNum">     878 </span><span class="lineCov">    5232688 :       active_defs[regno] = def;</span>
+<span class="lineNum">     879 </span>            :     }
+<span class="lineNum">     880 </span><span class="lineCov">    6306702 : }</span>
+<span class="lineNum">     881 </span>            : 
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span>            : /* Build the use-&gt;def links that we use to update the dataflow info
+<span class="lineNum">     884 </span>            :    for new uses.  Note that building the links is very cheap and if
+<span class="lineNum">     885 </span>            :    it were done earlier, they could be used to rule out invalid
+<span class="lineNum">     886 </span>            :    propagations (in addition to what is done in all_uses_available_at).
+<span class="lineNum">     887 </span>            :    I'm not doing this yet, though.  */
+<a name="888"><span class="lineNum">     888 </span>            : </a>
+<span class="lineNum">     889 </span>            : static void
+<span class="lineNum">     890 </span><span class="lineCov">    2102234 : update_df_init (rtx_insn *def_insn, rtx_insn *insn)</span>
+<span class="lineNum">     891 </span>            : {
+<span class="lineNum">     892 </span><span class="lineCov">    2102234 :   if (flag_checking)</span>
+<span class="lineNum">     893 </span><span class="lineCov">    2102224 :     sparseset_clear (active_defs_check);</span>
+<span class="lineNum">     894 </span><span class="lineCov">    2102234 :   register_active_defs (DF_INSN_USES (def_insn));</span>
+<span class="lineNum">     895 </span><span class="lineCov">    2102234 :   register_active_defs (DF_INSN_USES (insn));</span>
+<span class="lineNum">     896 </span><span class="lineCov">    2102234 :   register_active_defs (DF_INSN_EQ_USES (insn));</span>
+<span class="lineNum">     897 </span><span class="lineCov">    2102234 : }</span>
+<span class="lineNum">     898 </span>            : 
+<span class="lineNum">     899 </span>            : 
+<span class="lineNum">     900 </span>            : /* Update the USE_DEF_REF array for the given use, using the active definitions
+<span class="lineNum">     901 </span>            :    in the ACTIVE_DEFS array to match pseudos to their def. */
+<a name="902"><span class="lineNum">     902 </span>            : </a>
+<span class="lineNum">     903 </span>            : static inline void
+<span class="lineNum">     904 </span><span class="lineCov">    3043992 : update_uses (df_ref use)</span>
+<span class="lineNum">     905 </span>            : {
+<span class="lineNum">     906 </span><span class="lineCov">    6911924 :   for (; use; use = DF_REF_NEXT_LOC (use))</span>
+<span class="lineNum">     907 </span>            :     {
+<span class="lineNum">     908 </span><span class="lineCov">    3867932 :       int regno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span>            :       /* Set up the use-def chain.  */
+<span class="lineNum">     911 </span><span class="lineCov">    7735864 :       if (DF_REF_ID (use) &gt;= (int) use_def_ref.length ())</span>
+<span class="lineNum">     912 </span><span class="lineCov">    1458561 :         use_def_ref.safe_grow_cleared (DF_REF_ID (use) + 1);</span>
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span><span class="lineCov">    3867932 :       if (flag_checking)</span>
+<span class="lineNum">     915 </span><span class="lineCov">    3867918 :         gcc_assert (sparseset_bit_p (active_defs_check, regno));</span>
+<span class="lineNum">     916 </span><span class="lineCov">    3867932 :       use_def_ref[DF_REF_ID (use)] = active_defs[regno];</span>
+<span class="lineNum">     917 </span>            :     }
+<span class="lineNum">     918 </span><span class="lineCov">    3043992 : }</span>
+<span class="lineNum">     919 </span>            : 
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span>            : /* Update the USE_DEF_REF array for the uses in INSN.  Only update note
+<span class="lineNum">     922 </span>            :    uses if NOTES_ONLY is true.  */
+<a name="923"><span class="lineNum">     923 </span>            : </a>
+<span class="lineNum">     924 </span>            : static void
+<span class="lineNum">     925 </span><span class="lineCov">    1622263 : update_df (rtx_insn *insn, rtx note)</span>
+<span class="lineNum">     926 </span>            : {
+<span class="lineNum">     927 </span><span class="lineCov">    1622263 :   struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);</span>
+<span class="lineNum">     928 </span>            : 
+<span class="lineNum">     929 </span><span class="lineCov">    1622263 :   if (note)</span>
+<span class="lineNum">     930 </span>            :     {
+<span class="lineNum">     931 </span><span class="lineCov">     200534 :       df_uses_create (&amp;XEXP (note, 0), insn, DF_REF_IN_NOTE);</span>
+<span class="lineNum">     932 </span><span class="lineCov">     200534 :       df_notes_rescan (insn);</span>
+<span class="lineNum">     933 </span>            :     }
+<span class="lineNum">     934 </span>            :   else
+<span class="lineNum">     935 </span>            :     {
+<span class="lineNum">     936 </span><span class="lineCov">    2843458 :       df_uses_create (&amp;PATTERN (insn), insn, 0);</span>
+<span class="lineNum">     937 </span><span class="lineCov">    1421729 :       df_insn_rescan (insn);</span>
+<span class="lineNum">     938 </span><span class="lineCov">    1421729 :       update_uses (DF_INSN_INFO_USES (insn_info));</span>
+<span class="lineNum">     939 </span>            :     }
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span><span class="lineCov">    1622263 :   update_uses (DF_INSN_INFO_EQ_USES (insn_info));</span>
+<span class="lineNum">     942 </span><span class="lineCov">    1622263 : }</span>
+<span class="lineNum">     943 </span>            : 
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span>            : /* Try substituting NEW into LOC, which originated from forward propagation
+<span class="lineNum">     946 </span>            :    of USE's value from DEF_INSN.  SET_REG_EQUAL says whether we are
+<span class="lineNum">     947 </span>            :    substituting the whole SET_SRC, so we can set a REG_EQUAL note if the
+<span class="lineNum">     948 </span>            :    new insn is not recognized.  Return whether the substitution was
+<span class="lineNum">     949 </span>            :    performed.  */
+<a name="950"><span class="lineNum">     950 </span>            : </a>
+<span class="lineNum">     951 </span>            : static bool
+<span class="lineNum">     952 </span><span class="lineCov">    2047403 : try_fwprop_subst (df_ref use, rtx *loc, rtx new_rtx, rtx_insn *def_insn,</span>
+<span class="lineNum">     953 </span>            :                   bool set_reg_equal)
+<span class="lineNum">     954 </span>            : {
+<span class="lineNum">     955 </span><span class="lineCov">    2047403 :   rtx_insn *insn = DF_REF_INSN (use);</span>
+<span class="lineNum">     956 </span><span class="lineCov">    2047403 :   rtx set = single_set (insn);</span>
+<span class="lineNum">     957 </span><span class="lineCov">    2047403 :   rtx note = NULL_RTX;</span>
+<span class="lineNum">     958 </span><span class="lineCov">    4094806 :   bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));</span>
+<span class="lineNum">     959 </span><span class="lineCov">    2047403 :   int old_cost = 0;</span>
+<span class="lineNum">     960 </span><span class="lineCov">    2047403 :   bool ok;</span>
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span><span class="lineCov">    2047403 :   update_df_init (def_insn, insn);</span>
+<span class="lineNum">     963 </span>            : 
+<span class="lineNum">     964 </span>            :   /* forward_propagate_subreg may be operating on an instruction with
+<span class="lineNum">     965 </span>            :      multiple sets.  If so, assume the cost of the new instruction is
+<span class="lineNum">     966 </span>            :      not greater than the old one.  */
+<span class="lineNum">     967 </span><span class="lineCov">    2047403 :   if (set)</span>
+<span class="lineNum">     968 </span><span class="lineCov">    3687636 :     old_cost = set_src_cost (SET_SRC (set), GET_MODE (SET_DEST (set)), speed);</span>
+<span class="lineNum">     969 </span><span class="lineCov">    2047403 :   if (dump_file)</span>
+<span class="lineNum">     970 </span>            :     {
+<span class="lineNum">     971 </span><span class="lineCov">         78 :       fprintf (dump_file, &quot;\nIn insn %d, replacing\n &quot;, INSN_UID (insn));</span>
+<span class="lineNum">     972 </span><span class="lineCov">         78 :       print_inline_rtx (dump_file, *loc, 2);</span>
+<span class="lineNum">     973 </span><span class="lineCov">         78 :       fprintf (dump_file, &quot;\n with &quot;);</span>
+<span class="lineNum">     974 </span><span class="lineCov">         78 :       print_inline_rtx (dump_file, new_rtx, 2);</span>
+<span class="lineNum">     975 </span><span class="lineCov">         78 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     976 </span>            :     }
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span><span class="lineCov">    2047403 :   validate_unshare_change (insn, loc, new_rtx, true);</span>
+<span class="lineNum">     979 </span><span class="lineCov">    2047403 :   if (!verify_changes (0))</span>
+<span class="lineNum">     980 </span>            :     {
+<span class="lineNum">     981 </span><span class="lineCov">     339249 :       if (dump_file)</span>
+<span class="lineNum">     982 </span><span class="lineCov">          4 :         fprintf (dump_file, &quot;Changes to insn %d not recognized\n&quot;,</span>
+<span class="lineNum">     983 </span><span class="lineCov">          2 :                  INSN_UID (insn));</span>
+<span class="lineNum">     984 </span>            :       ok = false;
+<span class="lineNum">     985 </span>            :     }
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span><span class="lineCov">    1708154 :   else if (DF_REF_TYPE (use) == DF_REF_REG_USE</span>
+<span class="lineNum">     988 </span><span class="lineCov">    1062584 :            &amp;&amp; set</span>
+<span class="lineNum">     989 </span><span class="lineCov">    2568691 :            &amp;&amp; (set_src_cost (SET_SRC (set), GET_MODE (SET_DEST (set)), speed)</span>
+<span class="lineNum">     990 </span>            :                &gt; old_cost))
+<span class="lineNum">     991 </span>            :     {
+<span class="lineNum">     992 </span><span class="lineCov">     260002 :       if (dump_file)</span>
+<span class="lineNum">     993 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Changes to insn %d not profitable\n&quot;,</span>
+<span class="lineNum">     994 </span><span class="lineNoCov">          0 :                  INSN_UID (insn));</span>
+<span class="lineNum">     995 </span>            :       ok = false;
+<span class="lineNum">     996 </span>            :     }
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span>            :   else
+<span class="lineNum">     999 </span>            :     {
+<span class="lineNum">    1000 </span><span class="lineCov">    1448152 :       if (dump_file)</span>
+<span class="lineNum">    1001 </span><span class="lineCov">         76 :         fprintf (dump_file, &quot;Changed insn %d\n&quot;, INSN_UID (insn));</span>
+<span class="lineNum">    1002 </span><span class="lineCov">    1448152 :       ok = true;</span>
+<span class="lineNum">    1003 </span>            :     }
+<span class="lineNum">    1004 </span>            : 
+<span class="lineNum">    1005 </span><span class="lineCov">    1448152 :   if (ok)</span>
+<span class="lineNum">    1006 </span>            :     {
+<span class="lineNum">    1007 </span><span class="lineCov">    1448152 :       confirm_change_group ();</span>
+<span class="lineNum">    1008 </span><span class="lineCov">    1448152 :       num_changes++;</span>
+<span class="lineNum">    1009 </span>            :     }
+<span class="lineNum">    1010 </span>            :   else
+<span class="lineNum">    1011 </span>            :     {
+<span class="lineNum">    1012 </span><span class="lineCov">     599251 :       cancel_changes (0);</span>
+<span class="lineNum">    1013 </span>            : 
+<span class="lineNum">    1014 </span>            :       /* Can also record a simplified value in a REG_EQUAL note,
+<span class="lineNum">    1015 </span>            :          making a new one if one does not already exist.  */
+<span class="lineNum">    1016 </span><span class="lineCov">     599251 :       if (set_reg_equal)</span>
+<span class="lineNum">    1017 </span>            :         {
+<span class="lineNum">    1018 </span>            :           /* If there are any paradoxical SUBREGs, don't add REG_EQUAL note,
+<span class="lineNum">    1019 </span>            :              because the bits in there can be anything and so might not
+<span class="lineNum">    1020 </span>            :              match the REG_EQUAL note content.  See PR70574.  */
+<span class="lineNum">    1021 </span><span class="lineCov">     475978 :           subrtx_var_iterator::array_type array;</span>
+<span class="lineNum">    1022 </span><span class="lineCov">    1303393 :           FOR_EACH_SUBRTX_VAR (iter, array, *loc, NONCONST)</span>
+<span class="lineNum">    1023 </span>            :             {
+<span class="lineNum">    1024 </span><span class="lineCov">    1065432 :               rtx x = *iter;</span>
+<span class="lineNum">    1025 </span><span class="lineCov">    1065432 :               if (SUBREG_P (x) &amp;&amp; paradoxical_subreg_p (x))</span>
+<span class="lineNum">    1026 </span>            :                 {
+<span class="lineNum">    1027 </span>            :                   set_reg_equal = false;
+<span class="lineNum">    1028 </span>            :                   break;
+<span class="lineNum">    1029 </span>            :                 }
+<span class="lineNum">    1030 </span>            :             }
+<span class="lineNum">    1031 </span>            : 
+<span class="lineNum">    1032 </span><span class="lineCov">     237961 :           if (set_reg_equal)</span>
+<span class="lineNum">    1033 </span>            :             {
+<span class="lineNum">    1034 </span><span class="lineCov">     237961 :               if (dump_file)</span>
+<span class="lineNum">    1035 </span><span class="lineNoCov">          0 :                 fprintf (dump_file, &quot; Setting REG_EQUAL note\n&quot;);</span>
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span><span class="lineCov">     237961 :               note = set_unique_reg_note (insn, REG_EQUAL, copy_rtx (new_rtx));</span>
+<span class="lineNum">    1038 </span>            :             }
+<span class="lineNum">    1039 </span>            :         }
+<span class="lineNum">    1040 </span>            :     }
+<span class="lineNum">    1041 </span>            : 
+<span class="lineNum">    1042 </span><span class="lineCov">    2047403 :   if ((ok || note) &amp;&amp; !CONSTANT_P (new_rtx))</span>
+<span class="lineNum">    1043 </span><span class="lineCov">    1621582 :     update_df (insn, note);</span>
+<span class="lineNum">    1044 </span>            : 
+<span class="lineNum">    1045 </span><span class="lineCov">    2047403 :   return ok;</span>
+<span class="lineNum">    1046 </span>            : }
+<span class="lineNum">    1047 </span>            : 
+<span class="lineNum">    1048 </span>            : /* For the given single_set INSN, containing SRC known to be a
+<span class="lineNum">    1049 </span>            :    ZERO_EXTEND or SIGN_EXTEND of a register, return true if INSN
+<span class="lineNum">    1050 </span>            :    is redundant due to the register being set by a LOAD_EXTEND_OP
+<span class="lineNum">    1051 </span>            :    load from memory.  */
+<a name="1052"><span class="lineNum">    1052 </span>            : </a>
+<span class="lineNum">    1053 </span>            : static bool
+<span class="lineNum">    1054 </span><span class="lineCov">      13166 : free_load_extend (rtx src, rtx_insn *insn)</span>
+<span class="lineNum">    1055 </span>            : {
+<span class="lineNum">    1056 </span><span class="lineCov">      13166 :   rtx reg;</span>
+<span class="lineNum">    1057 </span><span class="lineCov">      13166 :   df_ref def, use;</span>
+<span class="lineNum">    1058 </span>            : 
+<span class="lineNum">    1059 </span><span class="lineCov">      13166 :   reg = XEXP (src, 0);</span>
+<span class="lineNum">    1060 </span><span class="lineCov">      26332 :   if (load_extend_op (GET_MODE (reg)) != GET_CODE (src))</span>
+<span class="lineNum">    1061 </span>            :     return false;
+<span class="lineNum">    1062 </span>            : 
+<span class="lineNum">    1063 </span><span class="lineNoCov">          0 :   FOR_EACH_INSN_USE (use, insn)</span>
+<span class="lineNum">    1064 </span><span class="lineNoCov">          0 :     if (!DF_REF_IS_ARTIFICIAL (use)</span>
+<span class="lineNum">    1065 </span><span class="lineNoCov">          0 :         &amp;&amp; DF_REF_TYPE (use) == DF_REF_REG_USE</span>
+<span class="lineNum">    1066 </span><span class="lineNoCov">          0 :         &amp;&amp; DF_REF_REG (use) == reg)</span>
+<span class="lineNum">    1067 </span>            :       break;
+<span class="lineNum">    1068 </span><span class="lineNoCov">          0 :   if (!use)</span>
+<span class="lineNum">    1069 </span>            :     return false;
+<span class="lineNum">    1070 </span>            : 
+<span class="lineNum">    1071 </span><span class="lineNoCov">          0 :   def = get_def_for_use (use);</span>
+<span class="lineNum">    1072 </span><span class="lineNoCov">          0 :   if (!def)</span>
+<span class="lineNum">    1073 </span>            :     return false;
+<span class="lineNum">    1074 </span>            : 
+<span class="lineNum">    1075 </span><span class="lineNoCov">          0 :   if (DF_REF_IS_ARTIFICIAL (def))</span>
+<span class="lineNum">    1076 </span>            :     return false;
+<span class="lineNum">    1077 </span>            : 
+<span class="lineNum">    1078 </span><span class="lineNoCov">          0 :   if (NONJUMP_INSN_P (DF_REF_INSN (def)))</span>
+<span class="lineNum">    1079 </span>            :     {
+<span class="lineNum">    1080 </span><span class="lineNoCov">          0 :       rtx patt = PATTERN (DF_REF_INSN (def));</span>
+<span class="lineNum">    1081 </span>            : 
+<span class="lineNum">    1082 </span><span class="lineNoCov">          0 :       if (GET_CODE (patt) == SET</span>
+<span class="lineNum">    1083 </span><span class="lineNoCov">          0 :           &amp;&amp; GET_CODE (SET_SRC (patt)) == MEM</span>
+<span class="lineNum">    1084 </span><span class="lineNoCov">          0 :           &amp;&amp; rtx_equal_p (SET_DEST (patt), reg))</span>
+<span class="lineNum">    1085 </span><span class="lineNoCov">          0 :         return true;</span>
+<span class="lineNum">    1086 </span>            :     }
+<span class="lineNum">    1087 </span>            :   return false;
+<span class="lineNum">    1088 </span>            : }
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span>            : /* If USE is a subreg, see if it can be replaced by a pseudo.  */
+<a name="1091"><span class="lineNum">    1091 </span>            : </a>
+<span class="lineNum">    1092 </span>            : static bool
+<span class="lineNum">    1093 </span><span class="lineCov">   28083071 : forward_propagate_subreg (df_ref use, rtx_insn *def_insn, rtx def_set)</span>
+<span class="lineNum">    1094 </span>            : {
+<span class="lineNum">    1095 </span><span class="lineCov">   28083071 :   rtx use_reg = DF_REF_REG (use);</span>
+<span class="lineNum">    1096 </span><span class="lineCov">   28083071 :   rtx_insn *use_insn;</span>
+<span class="lineNum">    1097 </span><span class="lineCov">   28083071 :   rtx src;</span>
+<span class="lineNum">    1098 </span><span class="lineCov">   56166142 :   scalar_int_mode int_use_mode, src_mode;</span>
+<span class="lineNum">    1099 </span>            : 
+<span class="lineNum">    1100 </span>            :   /* Only consider subregs... */
+<span class="lineNum">    1101 </span><span class="lineCov">   28083071 :   machine_mode use_mode = GET_MODE (use_reg);</span>
+<span class="lineNum">    1102 </span><span class="lineCov">   28083071 :   if (GET_CODE (use_reg) != SUBREG</span>
+<span class="lineNum">    1103 </span><span class="lineCov">     999798 :       || !REG_P (SET_DEST (def_set)))</span>
+<span class="lineNum">    1104 </span>            :     return false;
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span><span class="lineCov">    1978282 :   if (paradoxical_subreg_p (use_reg))</span>
+<span class="lineNum">    1107 </span>            :     {
+<span class="lineNum">    1108 </span>            :       /* If this is a paradoxical SUBREG, we have no idea what value the
+<span class="lineNum">    1109 </span>            :          extra bits would have.  However, if the operand is equivalent to
+<span class="lineNum">    1110 </span>            :          a SUBREG whose operand is the same as our mode, and all the modes
+<span class="lineNum">    1111 </span>            :          are within a word, we can just use the inner operand because
+<span class="lineNum">    1112 </span>            :          these SUBREGs just say how to treat the register.  */
+<span class="lineNum">    1113 </span><span class="lineCov">      12251 :       use_insn = DF_REF_INSN (use);</span>
+<span class="lineNum">    1114 </span><span class="lineCov">      12251 :       src = SET_SRC (def_set);</span>
+<span class="lineNum">    1115 </span><span class="lineCov">      12251 :       if (GET_CODE (src) == SUBREG</span>
+<span class="lineNum">    1116 </span><span class="lineCov">        266 :           &amp;&amp; REG_P (SUBREG_REG (src))</span>
+<span class="lineNum">    1117 </span><span class="lineCov">        500 :           &amp;&amp; REGNO (SUBREG_REG (src)) &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">    1118 </span><span class="lineCov">        250 :           &amp;&amp; GET_MODE (SUBREG_REG (src)) == use_mode</span>
+<span class="lineNum">    1119 </span><span class="lineNoCov">          0 :           &amp;&amp; subreg_lowpart_p (src)</span>
+<span class="lineNum">    1120 </span><span class="lineCov">      12251 :           &amp;&amp; all_uses_available_at (def_insn, use_insn))</span>
+<span class="lineNum">    1121 </span><span class="lineNoCov">          0 :         return try_fwprop_subst (use, DF_REF_LOC (use), SUBREG_REG (src),</span>
+<span class="lineNum">    1122 </span><span class="lineNoCov">          0 :                                  def_insn, false);</span>
+<span class="lineNum">    1123 </span>            :     }
+<span class="lineNum">    1124 </span>            : 
+<span class="lineNum">    1125 </span>            :   /* If this is a SUBREG of a ZERO_EXTEND or SIGN_EXTEND, and the SUBREG
+<span class="lineNum">    1126 </span>            :      is the low part of the reg being extended then just use the inner
+<span class="lineNum">    1127 </span>            :      operand.  Don't do this if the ZERO_EXTEND or SIGN_EXTEND insn will
+<span class="lineNum">    1128 </span>            :      be removed due to it matching a LOAD_EXTEND_OP load from memory,
+<span class="lineNum">    1129 </span>            :      or due to the operation being a no-op when applied to registers.
+<span class="lineNum">    1130 </span>            :      For example, if we have:
+<span class="lineNum">    1131 </span>            : 
+<span class="lineNum">    1132 </span>            :          A: (set (reg:DI X) (sign_extend:DI (reg:SI Y)))
+<span class="lineNum">    1133 </span>            :          B: (... (subreg:SI (reg:DI X)) ...)
+<span class="lineNum">    1134 </span>            : 
+<span class="lineNum">    1135 </span>            :      and mode_rep_extended says that Y is already sign-extended,
+<span class="lineNum">    1136 </span>            :      the backend will typically allow A to be combined with the
+<span class="lineNum">    1137 </span>            :      definition of Y or, failing that, allow A to be deleted after
+<span class="lineNum">    1138 </span>            :      reload through register tying.  Introducing more uses of Y
+<span class="lineNum">    1139 </span>            :      prevents both optimisations.  */
+<span class="lineNum">    1140 </span><span class="lineCov">     976890 :   else if (is_a &lt;scalar_int_mode&gt; (use_mode, &amp;int_use_mode)</span>
+<span class="lineNum">    1141 </span><span class="lineCov">     758439 :            &amp;&amp; subreg_lowpart_p (use_reg))</span>
+<span class="lineNum">    1142 </span>            :     {
+<span class="lineNum">    1143 </span><span class="lineCov">     662959 :       use_insn = DF_REF_INSN (use);</span>
+<span class="lineNum">    1144 </span><span class="lineCov">     662959 :       src = SET_SRC (def_set);</span>
+<span class="lineNum">    1145 </span><span class="lineCov">     662959 :       if ((GET_CODE (src) == ZERO_EXTEND</span>
+<span class="lineNum">    1146 </span><span class="lineCov">     662959 :            || GET_CODE (src) == SIGN_EXTEND)</span>
+<span class="lineNum">    1147 </span><span class="lineCov">      60247 :           &amp;&amp; is_a &lt;scalar_int_mode&gt; (GET_MODE (src), &amp;src_mode)</span>
+<span class="lineNum">    1148 </span><span class="lineCov">      60199 :           &amp;&amp; REG_P (XEXP (src, 0))</span>
+<span class="lineNum">    1149 </span><span class="lineCov">      29194 :           &amp;&amp; REGNO (XEXP (src, 0)) &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">    1150 </span><span class="lineCov">      14597 :           &amp;&amp; GET_MODE (XEXP (src, 0)) == use_mode</span>
+<span class="lineNum">    1151 </span><span class="lineCov">      13166 :           &amp;&amp; !free_load_extend (src, def_insn)</span>
+<span class="lineNum">    1152 </span><span class="lineCov">      13166 :           &amp;&amp; (targetm.mode_rep_extended (int_use_mode, src_mode)</span>
+<span class="lineNum">    1153 </span><span class="lineCov">      13166 :               != (int) GET_CODE (src))</span>
+<span class="lineNum">    1154 </span><span class="lineCov">     676125 :           &amp;&amp; all_uses_available_at (def_insn, use_insn))</span>
+<span class="lineNum">    1155 </span><span class="lineCov">      12649 :         return try_fwprop_subst (use, DF_REF_LOC (use), XEXP (src, 0),</span>
+<span class="lineNum">    1156 </span><span class="lineCov">      12649 :                                  def_insn, false);</span>
+<span class="lineNum">    1157 </span>            :     }
+<span class="lineNum">    1158 </span>            : 
+<span class="lineNum">    1159 </span>            :   return false;
+<span class="lineNum">    1160 </span>            : }
+<span class="lineNum">    1161 </span>            : 
+<span class="lineNum">    1162 </span>            : /* Try to replace USE with SRC (defined in DEF_INSN) in __asm.  */
+<a name="1163"><span class="lineNum">    1163 </span>            : </a>
+<span class="lineNum">    1164 </span>            : static bool
+<span class="lineNum">    1165 </span><span class="lineCov">      55770 : forward_propagate_asm (df_ref use, rtx_insn *def_insn, rtx def_set, rtx reg)</span>
+<span class="lineNum">    1166 </span>            : {
+<span class="lineNum">    1167 </span><span class="lineCov">      55770 :   rtx_insn *use_insn = DF_REF_INSN (use);</span>
+<span class="lineNum">    1168 </span><span class="lineCov">      55770 :   rtx src, use_pat, asm_operands, new_rtx, *loc;</span>
+<span class="lineNum">    1169 </span><span class="lineCov">      55770 :   int speed_p, i;</span>
+<span class="lineNum">    1170 </span><span class="lineCov">      55770 :   df_ref uses;</span>
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span><span class="lineCov">      55770 :   gcc_assert ((DF_REF_FLAGS (use) &amp; DF_REF_IN_NOTE) == 0);</span>
+<span class="lineNum">    1173 </span>            : 
+<span class="lineNum">    1174 </span><span class="lineCov">      55770 :   src = SET_SRC (def_set);</span>
+<span class="lineNum">    1175 </span><span class="lineCov">      55770 :   use_pat = PATTERN (use_insn);</span>
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span>            :   /* In __asm don't replace if src might need more registers than
+<span class="lineNum">    1178 </span>            :      reg, as that could increase register pressure on the __asm.  */
+<span class="lineNum">    1179 </span><span class="lineCov">      55770 :   uses = DF_INSN_USES (def_insn);</span>
+<span class="lineNum">    1180 </span><span class="lineCov">      55770 :   if (uses &amp;&amp; DF_REF_NEXT_LOC (uses))</span>
+<span class="lineNum">    1181 </span>            :     return false;
+<span class="lineNum">    1182 </span>            : 
+<span class="lineNum">    1183 </span><span class="lineCov">      54831 :   update_df_init (def_insn, use_insn);</span>
+<span class="lineNum">    1184 </span><span class="lineCov">     109662 :   speed_p = optimize_bb_for_speed_p (BLOCK_FOR_INSN (use_insn));</span>
+<span class="lineNum">    1185 </span><span class="lineCov">      54831 :   asm_operands = NULL_RTX;</span>
+<span class="lineNum">    1186 </span><span class="lineCov">      54831 :   switch (GET_CODE (use_pat))</span>
+<span class="lineNum">    1187 </span>            :     {
+<span class="lineNum">    1188 </span>            :     case ASM_OPERANDS:
+<span class="lineNum">    1189 </span>            :       asm_operands = use_pat;
+<span class="lineNum">    1190 </span>            :       break;
+<span class="lineNum">    1191 </span><span class="lineNoCov">          0 :     case SET:</span>
+<span class="lineNum">    1192 </span><span class="lineNoCov">          0 :       if (MEM_P (SET_DEST (use_pat)))</span>
+<span class="lineNum">    1193 </span>            :         {
+<span class="lineNum">    1194 </span><span class="lineNoCov">          0 :           loc = &amp;SET_DEST (use_pat);</span>
+<span class="lineNum">    1195 </span><span class="lineNoCov">          0 :           new_rtx = propagate_rtx (*loc, GET_MODE (*loc), reg, src, speed_p);</span>
+<span class="lineNum">    1196 </span><span class="lineNoCov">          0 :           if (new_rtx)</span>
+<span class="lineNum">    1197 </span><span class="lineNoCov">          0 :             validate_unshare_change (use_insn, loc, new_rtx, true);</span>
+<span class="lineNum">    1198 </span>            :         }
+<span class="lineNum">    1199 </span><span class="lineNoCov">          0 :       asm_operands = SET_SRC (use_pat);</span>
+<span class="lineNum">    1200 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1201 </span>            :     case PARALLEL:
+<span class="lineNum">    1202 </span><span class="lineCov">     354296 :       for (i = 0; i &lt; XVECLEN (use_pat, 0); i++)</span>
+<span class="lineNum">    1203 </span><span class="lineCov">     299465 :         if (GET_CODE (XVECEXP (use_pat, 0, i)) == SET)</span>
+<span class="lineNum">    1204 </span>            :           {
+<span class="lineNum">    1205 </span><span class="lineCov">     176711 :             if (MEM_P (SET_DEST (XVECEXP (use_pat, 0, i))))</span>
+<span class="lineNum">    1206 </span>            :               {
+<span class="lineNum">    1207 </span><span class="lineCov">       2707 :                 loc = &amp;SET_DEST (XVECEXP (use_pat, 0, i));</span>
+<span class="lineNum">    1208 </span><span class="lineCov">       2707 :                 new_rtx = propagate_rtx (*loc, GET_MODE (*loc), reg,</span>
+<span class="lineNum">    1209 </span>            :                                          src, speed_p);
+<span class="lineNum">    1210 </span><span class="lineCov">       2707 :                 if (new_rtx)</span>
+<span class="lineNum">    1211 </span><span class="lineCov">         77 :                   validate_unshare_change (use_insn, loc, new_rtx, true);</span>
+<span class="lineNum">    1212 </span>            :               }
+<span class="lineNum">    1213 </span><span class="lineCov">     176711 :             asm_operands = SET_SRC (XVECEXP (use_pat, 0, i));</span>
+<span class="lineNum">    1214 </span>            :           }
+<span class="lineNum">    1215 </span><span class="lineCov">     122754 :         else if (GET_CODE (XVECEXP (use_pat, 0, i)) == ASM_OPERANDS)</span>
+<span class="lineNum">    1216 </span><span class="lineCov">       5166 :           asm_operands = XVECEXP (use_pat, 0, i);</span>
+<span class="lineNum">    1217 </span>            :       break;
+<span class="lineNum">    1218 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1219 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">    1220 </span>            :     }
+<span class="lineNum">    1221 </span>            : 
+<span class="lineNum">    1222 </span><span class="lineCov">      54831 :   gcc_assert (asm_operands &amp;&amp; GET_CODE (asm_operands) == ASM_OPERANDS);</span>
+<span class="lineNum">    1223 </span><span class="lineCov">     136643 :   for (i = 0; i &lt; ASM_OPERANDS_INPUT_LENGTH (asm_operands); i++)</span>
+<span class="lineNum">    1224 </span>            :     {
+<span class="lineNum">    1225 </span><span class="lineCov">      81812 :       loc = &amp;ASM_OPERANDS_INPUT (asm_operands, i);</span>
+<span class="lineNum">    1226 </span><span class="lineCov">      81812 :       new_rtx = propagate_rtx (*loc, GET_MODE (*loc), reg, src, speed_p);</span>
+<span class="lineNum">    1227 </span><span class="lineCov">      81812 :       if (new_rtx)</span>
+<span class="lineNum">    1228 </span><span class="lineCov">      48427 :         validate_unshare_change (use_insn, loc, new_rtx, true);</span>
+<span class="lineNum">    1229 </span>            :     }
+<span class="lineNum">    1230 </span>            : 
+<span class="lineNum">    1231 </span><span class="lineCov">      54831 :   if (num_changes_pending () == 0 || !apply_change_group ())</span>
+<span class="lineNum">    1232 </span><span class="lineCov">      54150 :     return false;</span>
+<span class="lineNum">    1233 </span>            : 
+<span class="lineNum">    1234 </span><span class="lineCov">        681 :   update_df (use_insn, NULL);</span>
+<span class="lineNum">    1235 </span><span class="lineCov">        681 :   num_changes++;</span>
+<span class="lineNum">    1236 </span><span class="lineCov">        681 :   return true;</span>
+<span class="lineNum">    1237 </span>            : }
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span>            : /* Try to replace USE with SRC (defined in DEF_INSN) and simplify the
+<span class="lineNum">    1240 </span>            :    result.  */
+<a name="1241"><span class="lineNum">    1241 </span>            : </a>
+<span class="lineNum">    1242 </span>            : static bool
+<span class="lineNum">    1243 </span><span class="lineCov">   29519268 : forward_propagate_and_simplify (df_ref use, rtx_insn *def_insn, rtx def_set)</span>
+<span class="lineNum">    1244 </span>            : {
+<span class="lineNum">    1245 </span><span class="lineCov">   29519268 :   rtx_insn *use_insn = DF_REF_INSN (use);</span>
+<span class="lineNum">    1246 </span><span class="lineCov">   29519268 :   rtx use_set = single_set (use_insn);</span>
+<span class="lineNum">    1247 </span><span class="lineCov">   29519268 :   rtx src, reg, new_rtx, *loc;</span>
+<span class="lineNum">    1248 </span><span class="lineCov">   29519268 :   bool set_reg_equal;</span>
+<span class="lineNum">    1249 </span><span class="lineCov">   29519268 :   machine_mode mode;</span>
+<span class="lineNum">    1250 </span><span class="lineCov">   29519268 :   int asm_use = -1;</span>
+<span class="lineNum">    1251 </span>            : 
+<span class="lineNum">    1252 </span><span class="lineCov">   29519268 :   if (INSN_CODE (use_insn) &lt; 0)</span>
+<span class="lineNum">    1253 </span><span class="lineCov">    6682502 :     asm_use = asm_noperands (PATTERN (use_insn));</span>
+<span class="lineNum">    1254 </span>            : 
+<span class="lineNum">    1255 </span><span class="lineCov">   29519268 :   if (!use_set &amp;&amp; asm_use &lt; 0 &amp;&amp; !DEBUG_INSN_P (use_insn))</span>
+<span class="lineNum">    1256 </span>            :     return false;
+<span class="lineNum">    1257 </span>            : 
+<span class="lineNum">    1258 </span>            :   /* Do not propagate into PC, CC0, etc.  */
+<span class="lineNum">    1259 </span><span class="lineCov">   28976799 :   if (use_set &amp;&amp; GET_MODE (SET_DEST (use_set)) == VOIDmode)</span>
+<span class="lineNum">    1260 </span>            :     return false;
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span>            :   /* If def and use are subreg, check if they match.  */
+<span class="lineNum">    1263 </span><span class="lineCov">   26256399 :   reg = DF_REF_REG (use);</span>
+<span class="lineNum">    1264 </span><span class="lineCov">   26256399 :   if (GET_CODE (reg) == SUBREG &amp;&amp; GET_CODE (SET_DEST (def_set)) == SUBREG)</span>
+<span class="lineNum">    1265 </span>            :     {
+<span class="lineNum">    1266 </span><span class="lineCov">      10836 :       if (maybe_ne (SUBREG_BYTE (SET_DEST (def_set)), SUBREG_BYTE (reg)))</span>
+<span class="lineNum">    1267 </span>            :         return false;
+<span class="lineNum">    1268 </span>            :     }
+<span class="lineNum">    1269 </span>            :   /* Check if the def had a subreg, but the use has the whole reg.  */
+<span class="lineNum">    1270 </span><span class="lineCov">   26245563 :   else if (REG_P (reg) &amp;&amp; GET_CODE (SET_DEST (def_set)) == SUBREG)</span>
+<span class="lineNum">    1271 </span>            :     return false;
+<span class="lineNum">    1272 </span>            :   /* Check if the use has a subreg, but the def had the whole reg.  Unlike the
+<span class="lineNum">    1273 </span>            :      previous case, the optimization is possible and often useful indeed.  */
+<span class="lineNum">    1274 </span><span class="lineCov">   26228417 :   else if (GET_CODE (reg) == SUBREG &amp;&amp; REG_P (SET_DEST (def_set)))</span>
+<span class="lineNum">    1275 </span><span class="lineCov">    1025189 :     reg = SUBREG_REG (reg);</span>
+<span class="lineNum">    1276 </span>            : 
+<span class="lineNum">    1277 </span>            :   /* Make sure that we can treat REG as having the same mode as the
+<span class="lineNum">    1278 </span>            :      source of DEF_SET.  */
+<span class="lineNum">    1279 </span><span class="lineCov">   26239220 :   if (GET_MODE (SET_DEST (def_set)) != GET_MODE (reg))</span>
+<span class="lineNum">    1280 </span>            :     return false;
+<span class="lineNum">    1281 </span>            : 
+<span class="lineNum">    1282 </span>            :   /* Check if the substitution is valid (last, because it's the most
+<span class="lineNum">    1283 </span>            :      expensive check!).  */
+<span class="lineNum">    1284 </span><span class="lineCov">   25399376 :   src = SET_SRC (def_set);</span>
+<span class="lineNum">    1285 </span><span class="lineCov">   25399376 :   if (!CONSTANT_P (src) &amp;&amp; !all_uses_available_at (def_insn, use_insn))</span>
+<span class="lineNum">    1286 </span>            :     return false;
+<span class="lineNum">    1287 </span>            : 
+<span class="lineNum">    1288 </span>            :   /* Check if the def is loading something from the constant pool; in this
+<span class="lineNum">    1289 </span>            :      case we would undo optimization such as compress_float_constant.
+<span class="lineNum">    1290 </span>            :      Still, we can set a REG_EQUAL note.  */
+<span class="lineNum">    1291 </span><span class="lineCov">   19763190 :   if (MEM_P (src) &amp;&amp; MEM_READONLY_P (src))</span>
+<span class="lineNum">    1292 </span>            :     {
+<span class="lineNum">    1293 </span><span class="lineCov">    1004959 :       rtx x = avoid_constant_pool_reference (src);</span>
+<span class="lineNum">    1294 </span><span class="lineCov">    1004959 :       if (x != src &amp;&amp; use_set)</span>
+<span class="lineNum">    1295 </span>            :         {
+<span class="lineNum">    1296 </span><span class="lineCov">     688643 :           rtx note = find_reg_note (use_insn, REG_EQUAL, NULL_RTX);</span>
+<span class="lineNum">    1297 </span><span class="lineCov">     688643 :           rtx old_rtx = note ? XEXP (note, 0) : SET_SRC (use_set);</span>
+<span class="lineNum">    1298 </span><span class="lineCov">     688643 :           rtx new_rtx = simplify_replace_rtx (old_rtx, src, x);</span>
+<span class="lineNum">    1299 </span><span class="lineCov">     688643 :           if (old_rtx != new_rtx)</span>
+<span class="lineNum">    1300 </span><span class="lineCov">         14 :             set_unique_reg_note (use_insn, REG_EQUAL, copy_rtx (new_rtx));</span>
+<span class="lineNum">    1301 </span>            :         }
+<span class="lineNum">    1302 </span><span class="lineCov">    1004959 :       return false;</span>
+<span class="lineNum">    1303 </span>            :     }
+<span class="lineNum">    1304 </span>            : 
+<span class="lineNum">    1305 </span><span class="lineCov">   18758231 :   if (asm_use &gt;= 0)</span>
+<span class="lineNum">    1306 </span><span class="lineCov">      55770 :     return forward_propagate_asm (use, def_insn, def_set, reg);</span>
+<span class="lineNum">    1307 </span>            : 
+<span class="lineNum">    1308 </span>            :   /* Else try simplifying.  */
+<span class="lineNum">    1309 </span>            : 
+<span class="lineNum">    1310 </span><span class="lineCov">   18702461 :   if (DF_REF_TYPE (use) == DF_REF_REG_MEM_STORE)</span>
+<span class="lineNum">    1311 </span>            :     {
+<span class="lineNum">    1312 </span><span class="lineCov">     793147 :       loc = &amp;SET_DEST (use_set);</span>
+<span class="lineNum">    1313 </span><span class="lineCov">     793147 :       set_reg_equal = false;</span>
+<span class="lineNum">    1314 </span>            :     }
+<span class="lineNum">    1315 </span><span class="lineCov">   17909314 :   else if (!use_set)</span>
+<span class="lineNum">    1316 </span>            :     {
+<span class="lineNum">    1317 </span><span class="lineCov">    4439510 :       loc = &amp;INSN_VAR_LOCATION_LOC (use_insn);</span>
+<span class="lineNum">    1318 </span><span class="lineCov">    2219755 :       set_reg_equal = false;</span>
+<span class="lineNum">    1319 </span>            :     }
+<span class="lineNum">    1320 </span>            :   else
+<span class="lineNum">    1321 </span>            :     {
+<span class="lineNum">    1322 </span><span class="lineCov">   15689559 :       rtx note = find_reg_note (use_insn, REG_EQUAL, NULL_RTX);</span>
+<span class="lineNum">    1323 </span><span class="lineCov">   15689559 :       if (DF_REF_FLAGS (use) &amp; DF_REF_IN_NOTE)</span>
+<span class="lineNum">    1324 </span><span class="lineCov">     257303 :         loc = &amp;XEXP (note, 0);</span>
+<span class="lineNum">    1325 </span>            :       else
+<span class="lineNum">    1326 </span><span class="lineCov">   15432256 :         loc = &amp;SET_SRC (use_set);</span>
+<span class="lineNum">    1327 </span>            : 
+<span class="lineNum">    1328 </span>            :       /* Do not replace an existing REG_EQUAL note if the insn is not
+<span class="lineNum">    1329 </span>            :          recognized.  Either we're already replacing in the note, or we'll
+<span class="lineNum">    1330 </span>            :          separately try plugging the definition in the note and simplifying.
+<span class="lineNum">    1331 </span>            :          And only install a REQ_EQUAL note when the destination is a REG
+<span class="lineNum">    1332 </span>            :          that isn't mentioned in USE_SET, as the note would be invalid
+<span class="lineNum">    1333 </span>            :          otherwise.  We also don't want to install a note if we are merely
+<span class="lineNum">    1334 </span>            :          propagating a pseudo since verifying that this pseudo isn't dead
+<span class="lineNum">    1335 </span>            :          is a pain; moreover such a note won't help anything.
+<span class="lineNum">    1336 </span>            :          If the use is a paradoxical subreg, make sure we don't add a
+<span class="lineNum">    1337 </span>            :          REG_EQUAL note for it, because it is not equivalent, it is one
+<span class="lineNum">    1338 </span>            :          possible value for it, but we can't rely on it holding that value.
+<span class="lineNum">    1339 </span>            :          See PR70574.  */
+<span class="lineNum">    1340 </span><span class="lineCov">   15689559 :       set_reg_equal = (note == NULL_RTX</span>
+<span class="lineNum">    1341 </span><span class="lineCov">   14111195 :                        &amp;&amp; REG_P (SET_DEST (use_set))</span>
+<span class="lineNum">    1342 </span><span class="lineCov">   11354435 :                        &amp;&amp; !REG_P (src)</span>
+<span class="lineNum">    1343 </span><span class="lineCov">    9143114 :                        &amp;&amp; !(GET_CODE (src) == SUBREG</span>
+<span class="lineNum">    1344 </span><span class="lineCov">     319801 :                             &amp;&amp; REG_P (SUBREG_REG (src)))</span>
+<span class="lineNum">    1345 </span><span class="lineCov">    8823901 :                        &amp;&amp; !reg_mentioned_p (SET_DEST (use_set),</span>
+<span class="lineNum">    1346 </span><span class="lineCov">    8823901 :                                             SET_SRC (use_set))</span>
+<span class="lineNum">    1347 </span><span class="lineCov">   24330155 :                        &amp;&amp; !paradoxical_subreg_p (DF_REF_REG (use)));</span>
+<span class="lineNum">    1348 </span>            :     }
+<span class="lineNum">    1349 </span>            : 
+<span class="lineNum">    1350 </span><span class="lineCov">   18702461 :   if (GET_MODE (*loc) == VOIDmode)</span>
+<span class="lineNum">    1351 </span><span class="lineCov">     112190 :     mode = GET_MODE (SET_DEST (use_set));</span>
+<span class="lineNum">    1352 </span>            :   else
+<span class="lineNum">    1353 </span><span class="lineCov">   18590271 :     mode = GET_MODE (*loc);</span>
+<span class="lineNum">    1354 </span>            : 
+<span class="lineNum">    1355 </span><span class="lineCov">   18702461 :   new_rtx = propagate_rtx (*loc, mode, reg, src,</span>
+<span class="lineNum">    1356 </span><span class="lineCov">   37404922 :                            optimize_bb_for_speed_p (BLOCK_FOR_INSN (use_insn)));</span>
+<span class="lineNum">    1357 </span>            : 
+<span class="lineNum">    1358 </span><span class="lineCov">   18702461 :   if (!new_rtx)</span>
+<span class="lineNum">    1359 </span>            :     return false;
+<span class="lineNum">    1360 </span>            : 
+<span class="lineNum">    1361 </span><span class="lineCov">    2034754 :   return try_fwprop_subst (use, loc, new_rtx, def_insn, set_reg_equal);</span>
+<span class="lineNum">    1362 </span>            : }
+<span class="lineNum">    1363 </span>            : 
+<span class="lineNum">    1364 </span>            : 
+<span class="lineNum">    1365 </span>            : /* Given a use USE of an insn, if it has a single reaching
+<span class="lineNum">    1366 </span>            :    definition, try to forward propagate it into that insn.
+<span class="lineNum">    1367 </span>            :    Return true if cfg cleanup will be needed.  */
+<a name="1368"><span class="lineNum">    1368 </span>            : </a>
+<span class="lineNum">    1369 </span>            : static bool
+<span class="lineNum">    1370 </span><span class="lineCov">   81102212 : forward_propagate_into (df_ref use)</span>
+<span class="lineNum">    1371 </span>            : {
+<span class="lineNum">    1372 </span><span class="lineCov">   81102212 :   df_ref def;</span>
+<span class="lineNum">    1373 </span><span class="lineCov">   81102212 :   rtx_insn *def_insn, *use_insn;</span>
+<span class="lineNum">    1374 </span><span class="lineCov">   81102212 :   rtx def_set;</span>
+<span class="lineNum">    1375 </span><span class="lineCov">   81102212 :   rtx parent;</span>
+<span class="lineNum">    1376 </span>            : 
+<span class="lineNum">    1377 </span><span class="lineCov">   81102212 :   if (DF_REF_FLAGS (use) &amp; DF_REF_READ_WRITE)</span>
+<span class="lineNum">    1378 </span>            :     return false;
+<span class="lineNum">    1379 </span><span class="lineCov">   80918060 :   if (DF_REF_IS_ARTIFICIAL (use))</span>
+<span class="lineNum">    1380 </span>            :     return false;
+<span class="lineNum">    1381 </span>            : 
+<span class="lineNum">    1382 </span>            :   /* Only consider uses that have a single definition.  */
+<span class="lineNum">    1383 </span><span class="lineCov">   54265156 :   def = get_def_for_use (use);</span>
+<span class="lineNum">    1384 </span><span class="lineCov">   54265156 :   if (!def)</span>
+<span class="lineNum">    1385 </span>            :     return false;
+<span class="lineNum">    1386 </span><span class="lineCov">   49564574 :   if (DF_REF_FLAGS (def) &amp; DF_REF_READ_WRITE)</span>
+<span class="lineNum">    1387 </span>            :     return false;
+<span class="lineNum">    1388 </span><span class="lineCov">   46764042 :   if (DF_REF_IS_ARTIFICIAL (def))</span>
+<span class="lineNum">    1389 </span>            :     return false;
+<span class="lineNum">    1390 </span>            : 
+<span class="lineNum">    1391 </span>            :   /* Do not propagate loop invariant definitions inside the loop.  */
+<span class="lineNum">    1392 </span><span class="lineCov">  107871513 :   if (DF_REF_BB (def)-&gt;loop_father != DF_REF_BB (use)-&gt;loop_father)</span>
+<span class="lineNum">    1393 </span>            :     return false;
+<span class="lineNum">    1394 </span>            : 
+<span class="lineNum">    1395 </span>            :   /* Check if the use is still present in the insn!  */
+<span class="lineNum">    1396 </span><span class="lineCov">   34672167 :   use_insn = DF_REF_INSN (use);</span>
+<span class="lineNum">    1397 </span><span class="lineCov">   34672167 :   if (DF_REF_FLAGS (use) &amp; DF_REF_IN_NOTE)</span>
+<span class="lineNum">    1398 </span><span class="lineCov">     398381 :     parent = find_reg_note (use_insn, REG_EQUAL, NULL_RTX);</span>
+<span class="lineNum">    1399 </span>            :   else
+<span class="lineNum">    1400 </span><span class="lineCov">   68547572 :     parent = PATTERN (use_insn);</span>
+<span class="lineNum">    1401 </span>            : 
+<span class="lineNum">    1402 </span><span class="lineCov">   34672167 :   if (!reg_mentioned_p (DF_REF_REG (use), parent))</span>
+<span class="lineNum">    1403 </span>            :     return false;
+<span class="lineNum">    1404 </span>            : 
+<span class="lineNum">    1405 </span><span class="lineCov">   29963635 :   def_insn = DF_REF_INSN (def);</span>
+<span class="lineNum">    1406 </span><span class="lineCov">   29963635 :   if (multiple_sets (def_insn))</span>
+<span class="lineNum">    1407 </span>            :     return false;
+<span class="lineNum">    1408 </span><span class="lineCov">   29713546 :   def_set = single_set (def_insn);</span>
+<span class="lineNum">    1409 </span><span class="lineCov">   29713546 :   if (!def_set)</span>
+<span class="lineNum">    1410 </span>            :     return false;
+<span class="lineNum">    1411 </span>            : 
+<span class="lineNum">    1412 </span>            :   /* Only try one kind of propagation.  If two are possible, we'll
+<span class="lineNum">    1413 </span>            :      do it on the following iterations.  */
+<span class="lineNum">    1414 </span><span class="lineCov">   29519268 :   if (forward_propagate_and_simplify (use, def_insn, def_set)</span>
+<span class="lineNum">    1415 </span><span class="lineCov">   29519268 :       || forward_propagate_subreg (use, def_insn, def_set))</span>
+<span class="lineNum">    1416 </span>            :     {
+<span class="lineNum">    1417 </span><span class="lineCov">    1448833 :       propagations_left--;</span>
+<span class="lineNum">    1418 </span>            : 
+<span class="lineNum">    1419 </span><span class="lineCov">    1448833 :       if (cfun-&gt;can_throw_non_call_exceptions</span>
+<span class="lineNum">    1420 </span><span class="lineCov">     381577 :           &amp;&amp; find_reg_note (use_insn, REG_EH_REGION, NULL_RTX)</span>
+<span class="lineNum">    1421 </span><span class="lineCov">    1455768 :           &amp;&amp; purge_dead_edges (DF_REF_BB (use)))</span>
+<span class="lineNum">    1422 </span><span class="lineCov">          2 :         return true;</span>
+<span class="lineNum">    1423 </span>            :     }
+<span class="lineNum">    1424 </span>            :   return false;
+<span class="lineNum">    1425 </span>            : }
+<span class="lineNum">    1426 </span>            : 
+<a name="1427"><span class="lineNum">    1427 </span>            : </a>
+<span class="lineNum">    1428 </span>            : static void
+<span class="lineNum">    1429 </span><span class="lineCov">    1244944 : fwprop_init (void)</span>
+<span class="lineNum">    1430 </span>            : {
+<span class="lineNum">    1431 </span><span class="lineCov">    1244944 :   num_changes = 0;</span>
+<span class="lineNum">    1432 </span><span class="lineCov">    1244944 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">    1433 </span>            : 
+<span class="lineNum">    1434 </span>            :   /* We do not always want to propagate into loops, so we have to find
+<span class="lineNum">    1435 </span>            :      loops and be careful about them.  Avoid CFG modifications so that
+<span class="lineNum">    1436 </span>            :      we don't have to update dominance information afterwards for
+<span class="lineNum">    1437 </span>            :      build_single_def_use_links.  */
+<span class="lineNum">    1438 </span><span class="lineCov">    1244944 :   loop_optimizer_init (AVOID_CFG_MODIFICATIONS);</span>
+<span class="lineNum">    1439 </span>            : 
+<span class="lineNum">    1440 </span><span class="lineCov">    1244944 :   build_single_def_use_links ();</span>
+<span class="lineNum">    1441 </span><span class="lineCov">    1244944 :   df_set_flags (DF_DEFER_INSN_RESCAN);</span>
+<span class="lineNum">    1442 </span>            : 
+<span class="lineNum">    1443 </span><span class="lineCov">    1244944 :   active_defs = XNEWVEC (df_ref, max_reg_num ());</span>
+<span class="lineNum">    1444 </span><span class="lineCov">    1244944 :   if (flag_checking)</span>
+<span class="lineNum">    1445 </span><span class="lineCov">    1244926 :     active_defs_check = sparseset_alloc (max_reg_num ());</span>
+<span class="lineNum">    1446 </span>            : 
+<span class="lineNum">    1447 </span><span class="lineCov">    1244944 :   propagations_left = DF_USES_TABLE_SIZE ();</span>
+<span class="lineNum">    1448 </span><span class="lineCov">    1244944 : }</span>
+<a name="1449"><span class="lineNum">    1449 </span>            : </a>
+<span class="lineNum">    1450 </span>            : static void
+<span class="lineNum">    1451 </span><span class="lineCov">    1244944 : fwprop_done (void)</span>
+<span class="lineNum">    1452 </span>            : {
+<span class="lineNum">    1453 </span><span class="lineCov">    1244944 :   loop_optimizer_finalize ();</span>
+<span class="lineNum">    1454 </span>            : 
+<span class="lineNum">    1455 </span><span class="lineCov">    1244944 :   use_def_ref.release ();</span>
+<span class="lineNum">    1456 </span><span class="lineCov">    1244944 :   free (active_defs);</span>
+<span class="lineNum">    1457 </span><span class="lineCov">    1244944 :   if (flag_checking)</span>
+<span class="lineNum">    1458 </span><span class="lineCov">    1244926 :     sparseset_free (active_defs_check);</span>
+<span class="lineNum">    1459 </span>            : 
+<span class="lineNum">    1460 </span><span class="lineCov">    1244944 :   free_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">    1461 </span><span class="lineCov">    1244944 :   cleanup_cfg (0);</span>
+<span class="lineNum">    1462 </span><span class="lineCov">    1244944 :   delete_trivially_dead_insns (get_insns (), max_reg_num ());</span>
+<span class="lineNum">    1463 </span>            : 
+<span class="lineNum">    1464 </span><span class="lineCov">    1244944 :   if (dump_file)</span>
+<span class="lineNum">    1465 </span><span class="lineCov">         62 :     fprintf (dump_file,</span>
+<span class="lineNum">    1466 </span>            :              &quot;\nNumber of successful forward propagations: %d\n\n&quot;,
+<span class="lineNum">    1467 </span>            :              num_changes);
+<span class="lineNum">    1468 </span><span class="lineCov">    1244944 : }</span>
+<span class="lineNum">    1469 </span>            : 
+<span class="lineNum">    1470 </span>            : 
+<span class="lineNum">    1471 </span>            : /* Main entry point.  */
+<a name="1472"><span class="lineNum">    1472 </span>            : </a>
+<span class="lineNum">    1473 </span>            : static bool
+<span class="lineNum">    1474 </span><span class="lineNoCov">          0 : gate_fwprop (void)</span>
+<span class="lineNum">    1475 </span>            : {
+<span class="lineNum">    1476 </span><span class="lineCov">    1244998 :   return optimize &gt; 0 &amp;&amp; flag_forward_propagate;</span>
+<span class="lineNum">    1477 </span>            : }
+<a name="1478"><span class="lineNum">    1478 </span>            : </a>
+<span class="lineNum">    1479 </span>            : static unsigned int
+<span class="lineNum">    1480 </span><span class="lineCov">     622472 : fwprop (void)</span>
+<span class="lineNum">    1481 </span>            : {
+<span class="lineNum">    1482 </span><span class="lineCov">     622472 :   unsigned i;</span>
+<span class="lineNum">    1483 </span>            : 
+<span class="lineNum">    1484 </span><span class="lineCov">     622472 :   fwprop_init ();</span>
+<span class="lineNum">    1485 </span>            : 
+<span class="lineNum">    1486 </span>            :   /* Go through all the uses.  df_uses_create will create new ones at the
+<span class="lineNum">    1487 </span>            :      end, and we'll go through them as well.
+<span class="lineNum">    1488 </span>            : 
+<span class="lineNum">    1489 </span>            :      Do not forward propagate addresses into loops until after unrolling.
+<span class="lineNum">    1490 </span>            :      CSE did so because it was able to fix its own mess, but we are not.  */
+<span class="lineNum">    1491 </span>            : 
+<span class="lineNum">    1492 </span><span class="lineCov">   81561150 :   for (i = 0; i &lt; DF_USES_TABLE_SIZE (); i++)</span>
+<span class="lineNum">    1493 </span>            :     {
+<span class="lineNum">    1494 </span><span class="lineCov">   80938678 :       if (!propagations_left)</span>
+<span class="lineNum">    1495 </span>            :         break;
+<span class="lineNum">    1496 </span>            : 
+<span class="lineNum">    1497 </span><span class="lineCov">   80938678 :       df_ref use = DF_USES_GET (i);</span>
+<span class="lineNum">    1498 </span><span class="lineCov">   80938678 :       if (use)</span>
+<span class="lineNum">    1499 </span><span class="lineCov">   80938678 :         if (DF_REF_TYPE (use) == DF_REF_REG_USE</span>
+<span class="lineNum">    1500 </span><span class="lineCov">   10940006 :             || DF_REF_BB (use)-&gt;loop_father == NULL</span>
+<span class="lineNum">    1501 </span>            :             /* The outer most loop is not really a loop.  */
+<span class="lineNum">    1502 </span><span class="lineCov">  105293775 :             || loop_outer (DF_REF_BB (use)-&gt;loop_father) == NULL)</span>
+<span class="lineNum">    1503 </span><span class="lineCov">   78463593 :           forward_propagate_into (use);</span>
+<span class="lineNum">    1504 </span>            :     }
+<span class="lineNum">    1505 </span>            : 
+<span class="lineNum">    1506 </span><span class="lineCov">     622472 :   fwprop_done ();</span>
+<span class="lineNum">    1507 </span><span class="lineCov">     622472 :   return 0;</span>
+<span class="lineNum">    1508 </span>            : }
+<span class="lineNum">    1509 </span>            : 
+<span class="lineNum">    1510 </span>            : namespace {
+<span class="lineNum">    1511 </span>            : 
+<span class="lineNum">    1512 </span>            : const pass_data pass_data_rtl_fwprop =
+<span class="lineNum">    1513 </span>            : {
+<span class="lineNum">    1514 </span>            :   RTL_PASS, /* type */
+<span class="lineNum">    1515 </span>            :   &quot;fwprop1&quot;, /* name */
+<span class="lineNum">    1516 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1517 </span>            :   TV_FWPROP, /* tv_id */
+<span class="lineNum">    1518 </span>            :   0, /* properties_required */
+<span class="lineNum">    1519 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1520 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1521 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1522 </span>            :   TODO_df_finish, /* todo_flags_finish */
+<span class="lineNum">    1523 </span>            : };
+<span class="lineNum">    1524 </span>            : 
+<span class="lineNum">    1525 </span>            : class pass_rtl_fwprop : public rtl_opt_pass
+<span class="lineNum">    1526 </span>            : {
+<span class="lineNum">    1527 </span>            : public:
+<span class="lineNum">    1528 </span>            :   pass_rtl_fwprop (gcc::context *ctxt)
+<span class="lineNum">    1529 </span><span class="lineCov">     340624 :     : rtl_opt_pass (pass_data_rtl_fwprop, ctxt)</span>
+<span class="lineNum">    1530 </span>            :   {}
+<a name="1531"><span class="lineNum">    1531 </span>            : </a>
+<a name="1532"><span class="lineNum">    1532 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1533 </span><span class="lineCov">     832594 :   virtual bool gate (function *) { return gate_fwprop (); }</span>
+<span class="lineNum">    1534 </span><span class="lineCov">     622472 :   virtual unsigned int execute (function *) { return fwprop (); }</span>
+<span class="lineNum">    1535 </span>            : 
+<span class="lineNum">    1536 </span>            : }; // class pass_rtl_fwprop
+<span class="lineNum">    1537 </span>            : 
+<span class="lineNum">    1538 </span>            : } // anon namespace
+<a name="1539"><span class="lineNum">    1539 </span>            : </a>
+<span class="lineNum">    1540 </span>            : rtl_opt_pass *
+<span class="lineNum">    1541 </span><span class="lineCov">     170312 : make_pass_rtl_fwprop (gcc::context *ctxt)</span>
+<span class="lineNum">    1542 </span>            : {
+<span class="lineNum">    1543 </span><span class="lineCov">     170312 :   return new pass_rtl_fwprop (ctxt);</span>
+<span class="lineNum">    1544 </span>            : }
+<a name="1545"><span class="lineNum">    1545 </span>            : </a>
+<span class="lineNum">    1546 </span>            : static unsigned int
+<span class="lineNum">    1547 </span><span class="lineCov">     622472 : fwprop_addr (void)</span>
+<span class="lineNum">    1548 </span>            : {
+<span class="lineNum">    1549 </span><span class="lineCov">     622472 :   unsigned i;</span>
+<span class="lineNum">    1550 </span>            : 
+<span class="lineNum">    1551 </span><span class="lineCov">     622472 :   fwprop_init ();</span>
+<span class="lineNum">    1552 </span>            : 
+<span class="lineNum">    1553 </span>            :   /* Go through all the uses.  df_uses_create will create new ones at the
+<span class="lineNum">    1554 </span>            :      end, and we'll go through them as well.  */
+<span class="lineNum">    1555 </span><span class="lineCov">   75709918 :   for (i = 0; i &lt; DF_USES_TABLE_SIZE (); i++)</span>
+<span class="lineNum">    1556 </span>            :     {
+<span class="lineNum">    1557 </span><span class="lineCov">   75087446 :       if (!propagations_left)</span>
+<span class="lineNum">    1558 </span>            :         break;
+<span class="lineNum">    1559 </span>            : 
+<span class="lineNum">    1560 </span><span class="lineCov">   75087446 :       df_ref use = DF_USES_GET (i);</span>
+<span class="lineNum">    1561 </span><span class="lineCov">   75087446 :       if (use)</span>
+<span class="lineNum">    1562 </span><span class="lineCov">   75087446 :         if (DF_REF_TYPE (use) != DF_REF_REG_USE</span>
+<span class="lineNum">    1563 </span><span class="lineCov">   10275015 :             &amp;&amp; DF_REF_BB (use)-&gt;loop_father != NULL</span>
+<span class="lineNum">    1564 </span>            :             /* The outer most loop is not really a loop.  */
+<span class="lineNum">    1565 </span><span class="lineCov">   98276095 :             &amp;&amp; loop_outer (DF_REF_BB (use)-&gt;loop_father) != NULL)</span>
+<span class="lineNum">    1566 </span><span class="lineCov">    2638619 :           forward_propagate_into (use);</span>
+<span class="lineNum">    1567 </span>            :     }
+<span class="lineNum">    1568 </span>            : 
+<span class="lineNum">    1569 </span><span class="lineCov">     622472 :   fwprop_done ();</span>
+<span class="lineNum">    1570 </span><span class="lineCov">     622472 :   return 0;</span>
+<span class="lineNum">    1571 </span>            : }
+<span class="lineNum">    1572 </span>            : 
+<span class="lineNum">    1573 </span>            : namespace {
+<span class="lineNum">    1574 </span>            : 
+<span class="lineNum">    1575 </span>            : const pass_data pass_data_rtl_fwprop_addr =
+<span class="lineNum">    1576 </span>            : {
+<span class="lineNum">    1577 </span>            :   RTL_PASS, /* type */
+<span class="lineNum">    1578 </span>            :   &quot;fwprop2&quot;, /* name */
+<span class="lineNum">    1579 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1580 </span>            :   TV_FWPROP, /* tv_id */
+<span class="lineNum">    1581 </span>            :   0, /* properties_required */
+<span class="lineNum">    1582 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1583 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1584 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1585 </span>            :   TODO_df_finish, /* todo_flags_finish */
+<span class="lineNum">    1586 </span>            : };
+<span class="lineNum">    1587 </span>            : 
+<span class="lineNum">    1588 </span>            : class pass_rtl_fwprop_addr : public rtl_opt_pass
+<span class="lineNum">    1589 </span>            : {
+<span class="lineNum">    1590 </span>            : public:
+<span class="lineNum">    1591 </span>            :   pass_rtl_fwprop_addr (gcc::context *ctxt)
+<span class="lineNum">    1592 </span><span class="lineCov">     340624 :     : rtl_opt_pass (pass_data_rtl_fwprop_addr, ctxt)</span>
+<span class="lineNum">    1593 </span>            :   {}
+<a name="1594"><span class="lineNum">    1594 </span>            : </a>
+<a name="1595"><span class="lineNum">    1595 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1596 </span><span class="lineCov">     832594 :   virtual bool gate (function *) { return gate_fwprop (); }</span>
+<span class="lineNum">    1597 </span><span class="lineCov">     622472 :   virtual unsigned int execute (function *) { return fwprop_addr (); }</span>
+<span class="lineNum">    1598 </span>            : 
+<span class="lineNum">    1599 </span>            : }; // class pass_rtl_fwprop_addr
+<span class="lineNum">    1600 </span>            : 
+<span class="lineNum">    1601 </span>            : } // anon namespace
+<a name="1602"><span class="lineNum">    1602 </span>            : </a>
+<span class="lineNum">    1603 </span>            : rtl_opt_pass *
+<span class="lineNum">    1604 </span><span class="lineCov">     170312 : make_pass_rtl_fwprop_addr (gcc::context *ctxt)</span>
+<span class="lineNum">    1605 </span>            : {
+<span class="lineNum">    1606 </span><span class="lineCov">     170312 :   return new pass_rtl_fwprop_addr (ctxt);</span>
+<span class="lineNum">    1607 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

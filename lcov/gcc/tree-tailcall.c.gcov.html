@@ -1,0 +1,1285 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-tailcall.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-tailcall.c<span style="font-size: 80%;"> (source / <a href="tree-tailcall.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">445</td>
+            <td class="headerCovTableEntry">463</td>
+            <td class="headerCovTableEntryHi">96.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntry">26</td>
+            <td class="headerCovTableEntryMed">88.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Tail call optimization on trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;tree-into-ssa.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;except.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;dbgcnt.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;common/common-target.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;ipa-utils.h&quot;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : /* The file implements the tail recursion elimination.  It is also used to
+<span class="lineNum">      46 </span>            :    analyze the tail calls in general, passing the results to the rtl level
+<span class="lineNum">      47 </span>            :    where they are used for sibcall optimization.
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :    In addition to the standard tail recursion elimination, we handle the most
+<span class="lineNum">      50 </span>            :    trivial cases of making the call tail recursive by creating accumulators.
+<span class="lineNum">      51 </span>            :    For example the following function
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            :    int sum (int n)
+<span class="lineNum">      54 </span>            :    {
+<span class="lineNum">      55 </span>            :      if (n &gt; 0)
+<span class="lineNum">      56 </span>            :        return n + sum (n - 1);
+<span class="lineNum">      57 </span>            :      else
+<span class="lineNum">      58 </span>            :        return 0;
+<span class="lineNum">      59 </span>            :    }
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            :    is transformed into
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :    int sum (int n)
+<span class="lineNum">      64 </span>            :    {
+<span class="lineNum">      65 </span>            :      int acc = 0;
+<span class="lineNum">      66 </span>            : 
+<span class="lineNum">      67 </span>            :      while (n &gt; 0)
+<span class="lineNum">      68 </span>            :        acc += n--;
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            :      return acc;
+<span class="lineNum">      71 </span>            :    }
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            :    To do this, we maintain two accumulators (a_acc and m_acc) that indicate
+<span class="lineNum">      74 </span>            :    when we reach the return x statement, we should return a_acc + x * m_acc
+<span class="lineNum">      75 </span>            :    instead.  They are initially initialized to 0 and 1, respectively,
+<span class="lineNum">      76 </span>            :    so the semantics of the function is obviously preserved.  If we are
+<span class="lineNum">      77 </span>            :    guaranteed that the value of the accumulator never change, we
+<span class="lineNum">      78 </span>            :    omit the accumulator.
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            :    There are three cases how the function may exit.  The first one is
+<span class="lineNum">      81 </span>            :    handled in adjust_return_value, the other two in adjust_accumulator_values
+<span class="lineNum">      82 </span>            :    (the second case is actually a special case of the third one and we
+<span class="lineNum">      83 </span>            :    present it separately just for clarity):
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            :    1) Just return x, where x is not in any of the remaining special shapes.
+<span class="lineNum">      86 </span>            :       We rewrite this to a gimple equivalent of return m_acc * x + a_acc.
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span>            :    2) return f (...), where f is the current function, is rewritten in a
+<span class="lineNum">      89 </span>            :       classical tail-recursion elimination way, into assignment of arguments
+<span class="lineNum">      90 </span>            :       and jump to the start of the function.  Values of the accumulators
+<span class="lineNum">      91 </span>            :       are unchanged.
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            :    3) return a + m * f(...), where a and m do not depend on call to f.
+<span class="lineNum">      94 </span>            :       To preserve the semantics described before we want this to be rewritten
+<span class="lineNum">      95 </span>            :       in such a way that we finally return
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            :       a_acc + (a + m * f(...)) * m_acc = (a_acc + a * m_acc) + (m * m_acc) * f(...).
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            :       I.e. we increase a_acc by a * m_acc, multiply m_acc by m and
+<span class="lineNum">     100 </span>            :       eliminate the tail call to f.  Special cases when the value is just
+<span class="lineNum">     101 </span>            :       added or just multiplied are obtained by setting a = 0 or m = 1.
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span>            :    TODO -- it is possible to do similar tricks for other operations.  */
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            : /* A structure that describes the tailcall.  */
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            : struct tailcall
+<span class="lineNum">     108 </span>            : {
+<span class="lineNum">     109 </span>            :   /* The iterator pointing to the call statement.  */
+<span class="lineNum">     110 </span>            :   gimple_stmt_iterator call_gsi;
+<span class="lineNum">     111 </span>            : 
+<span class="lineNum">     112 </span>            :   /* True if it is a call to the current function.  */
+<span class="lineNum">     113 </span>            :   bool tail_recursion;
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span>            :   /* The return value of the caller is mult * f + add, where f is the return
+<span class="lineNum">     116 </span>            :      value of the call.  */
+<span class="lineNum">     117 </span>            :   tree mult, add;
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            :   /* Next tailcall in the chain.  */
+<span class="lineNum">     120 </span>            :   struct tailcall *next;
+<span class="lineNum">     121 </span>            : };
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span>            : /* The variables holding the value of multiplicative and additive
+<span class="lineNum">     124 </span>            :    accumulator.  */
+<span class="lineNum">     125 </span>            : static tree m_acc, a_acc;
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span>            : static bool optimize_tail_call (struct tailcall *, bool);
+<span class="lineNum">     128 </span>            : static void eliminate_tail_call (struct tailcall *);
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            : /* Returns false when the function is not suitable for tail call optimization
+<span class="lineNum">     131 </span>            :    from some reason (e.g. if it takes variable number of arguments).  */
+<a name="132"><span class="lineNum">     132 </span>            : </a>
+<span class="lineNum">     133 </span>            : static bool
+<span class="lineNum">     134 </span><span class="lineNoCov">          0 : suitable_for_tail_opt_p (void)</span>
+<span class="lineNum">     135 </span>            : {
+<span class="lineNum">     136 </span><span class="lineNoCov">          0 :   if (cfun-&gt;stdarg)</span>
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 :     return false;</span>
+<span class="lineNum">     138 </span>            : 
+<span class="lineNum">     139 </span>            :   return true;
+<span class="lineNum">     140 </span>            : }
+<span class="lineNum">     141 </span>            : /* Returns false when the function is not suitable for tail call optimization
+<span class="lineNum">     142 </span>            :    for some reason (e.g. if it takes variable number of arguments).
+<span class="lineNum">     143 </span>            :    This test must pass in addition to suitable_for_tail_opt_p in order to make
+<span class="lineNum">     144 </span>            :    tail call discovery happen.  */
+<a name="145"><span class="lineNum">     145 </span>            : </a>
+<span class="lineNum">     146 </span>            : static bool
+<span class="lineNum">     147 </span><span class="lineCov">     428884 : suitable_for_tail_call_opt_p (void)</span>
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span><span class="lineCov">     428884 :   tree param;</span>
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span>            :   /* alloca (until we have stack slot life analysis) inhibits
+<span class="lineNum">     152 </span>            :      sibling call optimizations, but not tail recursion.  */
+<span class="lineNum">     153 </span><span class="lineCov">     428884 :   if (cfun-&gt;calls_alloca)</span>
+<span class="lineNum">     154 </span>            :     return false;
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :   /* If we are using sjlj exceptions, we may need to add a call to
+<span class="lineNum">     157 </span>            :      _Unwind_SjLj_Unregister at exit of the function.  Which means
+<span class="lineNum">     158 </span>            :      that we cannot do any sibcall transformations.  */
+<span class="lineNum">     159 </span><span class="lineCov">     425027 :   if (targetm_common.except_unwind_info (&amp;global_options) == UI_SJLJ</span>
+<span class="lineNum">     160 </span><span class="lineCov">     425027 :       &amp;&amp; current_function_has_exception_handlers ())</span>
+<span class="lineNum">     161 </span>            :     return false;
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span>            :   /* Any function that calls setjmp might have longjmp called from
+<span class="lineNum">     164 </span>            :      any called function.  ??? We really should represent this
+<span class="lineNum">     165 </span>            :      properly in the CFG so that this needn't be special cased.  */
+<span class="lineNum">     166 </span><span class="lineCov">     425027 :   if (cfun-&gt;calls_setjmp)</span>
+<span class="lineNum">     167 </span>            :     return false;
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span>            :   /* ??? It is OK if the argument of a function is taken in some cases,
+<span class="lineNum">     170 </span>            :      but not in all cases.  See PR15387 and PR19616.  Revisit for 4.1.  */
+<span class="lineNum">     171 </span><span class="lineCov">     424630 :   for (param = DECL_ARGUMENTS (current_function_decl);</span>
+<span class="lineNum">     172 </span><span class="lineCov">    1466042 :        param;</span>
+<span class="lineNum">     173 </span><span class="lineCov">    1041412 :        param = DECL_CHAIN (param))</span>
+<span class="lineNum">     174 </span><span class="lineCov">    1044470 :     if (TREE_ADDRESSABLE (param))</span>
+<span class="lineNum">     175 </span>            :       return false;
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            :   return true;
+<span class="lineNum">     178 </span>            : }
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            : /* Checks whether the expression EXPR in stmt AT is independent of the
+<span class="lineNum">     181 </span>            :    statement pointed to by GSI (in a sense that we already know EXPR's value
+<span class="lineNum">     182 </span>            :    at GSI).  We use the fact that we are only called from the chain of
+<span class="lineNum">     183 </span>            :    basic blocks that have only single successor.  Returns the expression
+<span class="lineNum">     184 </span>            :    containing the value of EXPR at GSI.  */
+<a name="185"><span class="lineNum">     185 </span>            : </a>
+<span class="lineNum">     186 </span>            : static tree
+<span class="lineNum">     187 </span><span class="lineCov">      22470 : independent_of_stmt_p (tree expr, gimple *at, gimple_stmt_iterator gsi,</span>
+<span class="lineNum">     188 </span>            :                        bitmap to_move)
+<span class="lineNum">     189 </span>            : {
+<span class="lineNum">     190 </span><span class="lineCov">      22470 :   basic_block bb, call_bb, at_bb;</span>
+<span class="lineNum">     191 </span><span class="lineCov">      22470 :   edge e;</span>
+<span class="lineNum">     192 </span><span class="lineCov">      22470 :   edge_iterator ei;</span>
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span><span class="lineCov">      22470 :   if (is_gimple_min_invariant (expr))</span>
+<span class="lineNum">     195 </span>            :     return expr;
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">      13249 :   if (TREE_CODE (expr) != SSA_NAME)</span>
+<span class="lineNum">     198 </span>            :     return NULL_TREE;
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span><span class="lineCov">      26498 :   if (bitmap_bit_p (to_move, SSA_NAME_VERSION (expr)))</span>
+<span class="lineNum">     201 </span>            :     return expr;
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span>            :   /* Mark the blocks in the chain leading to the end.  */
+<span class="lineNum">     204 </span><span class="lineCov">      13249 :   at_bb = gimple_bb (at);</span>
+<span class="lineNum">     205 </span><span class="lineCov">      26498 :   call_bb = gimple_bb (gsi_stmt (gsi));</span>
+<span class="lineNum">     206 </span><span class="lineCov">      24079 :   for (bb = call_bb; bb != at_bb; bb = single_succ (bb))</span>
+<span class="lineNum">     207 </span><span class="lineCov">      10830 :     bb-&gt;aux = &amp;bb-&gt;aux;</span>
+<span class="lineNum">     208 </span><span class="lineCov">      13249 :   bb-&gt;aux = &amp;bb-&gt;aux;</span>
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span><span class="lineCov">      13264 :   while (1)</span>
+<span class="lineNum">     211 </span>            :     {
+<span class="lineNum">     212 </span><span class="lineCov">      13264 :       at = SSA_NAME_DEF_STMT (expr);</span>
+<span class="lineNum">     213 </span><span class="lineCov">      13264 :       bb = gimple_bb (at);</span>
+<span class="lineNum">     214 </span>            : 
+<span class="lineNum">     215 </span>            :       /* The default definition or defined before the chain.  */
+<span class="lineNum">     216 </span><span class="lineCov">      13264 :       if (!bb || !bb-&gt;aux)</span>
+<span class="lineNum">     217 </span>            :         break;
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span><span class="lineCov">       1826 :       if (bb == call_bb)</span>
+<span class="lineNum">     220 </span>            :         {
+<span class="lineNum">     221 </span><span class="lineCov">      13430 :           for (; !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     222 </span><span class="lineCov">      20040 :             if (gsi_stmt (gsi) == at)</span>
+<span class="lineNum">     223 </span>            :               break;
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span><span class="lineCov">       3574 :           if (!gsi_end_p (gsi))</span>
+<span class="lineNum">     226 </span><span class="lineCov">        164 :             expr = NULL_TREE;</span>
+<span class="lineNum">     227 </span>            :           break;
+<span class="lineNum">     228 </span>            :         }
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span><span class="lineCov">         78 :       if (gimple_code (at) != GIMPLE_PHI)</span>
+<span class="lineNum">     231 </span>            :         {
+<span class="lineNum">     232 </span>            :           expr = NULL_TREE;
+<span class="lineNum">     233 </span>            :           break;
+<span class="lineNum">     234 </span>            :         }
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span><span class="lineCov">        104 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     237 </span><span class="lineCov">         65 :         if (e-&gt;src-&gt;aux)</span>
+<span class="lineNum">     238 </span>            :           break;
+<span class="lineNum">     239 </span><span class="lineCov">         39 :       gcc_assert (e);</span>
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span><span class="lineCov">         39 :       expr = PHI_ARG_DEF_FROM_EDGE (at, e);</span>
+<span class="lineNum">     242 </span><span class="lineCov">         39 :       if (TREE_CODE (expr) != SSA_NAME)</span>
+<span class="lineNum">     243 </span>            :         {
+<span class="lineNum">     244 </span>            :           /* The value is a constant.  */
+<span class="lineNum">     245 </span>            :           break;
+<span class="lineNum">     246 </span>            :         }
+<span class="lineNum">     247 </span>            :     }
+<span class="lineNum">     248 </span>            : 
+<span class="lineNum">     249 </span>            :   /* Unmark the blocks.  */
+<span class="lineNum">     250 </span><span class="lineCov">      24079 :   for (bb = call_bb; bb != at_bb; bb = single_succ (bb))</span>
+<span class="lineNum">     251 </span><span class="lineCov">      10830 :     bb-&gt;aux = NULL;</span>
+<span class="lineNum">     252 </span><span class="lineCov">      13249 :   bb-&gt;aux = NULL;</span>
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span><span class="lineCov">      13249 :   return expr;</span>
+<span class="lineNum">     255 </span>            : }
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span>            : enum par { FAIL, OK, TRY_MOVE };
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span>            : /* Simulates the effect of an assignment STMT on the return value of the tail
+<span class="lineNum">     260 </span>            :    recursive CALL passed in ASS_VAR.  M and A are the multiplicative and the
+<span class="lineNum">     261 </span>            :    additive factor for the real return value.  */
+<a name="262"><span class="lineNum">     262 </span>            : </a>
+<span class="lineNum">     263 </span>            : static par
+<span class="lineNum">     264 </span><span class="lineCov">      76662 : process_assignment (gassign *stmt,</span>
+<span class="lineNum">     265 </span>            :                     gimple_stmt_iterator call, tree *m,
+<span class="lineNum">     266 </span>            :                     tree *a, tree *ass_var, bitmap to_move)
+<span class="lineNum">     267 </span>            : {
+<span class="lineNum">     268 </span><span class="lineCov">      76662 :   tree op0, op1 = NULL_TREE, non_ass_var = NULL_TREE;</span>
+<span class="lineNum">     269 </span><span class="lineCov">      76662 :   tree dest = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     270 </span><span class="lineCov">      76662 :   enum tree_code code = gimple_assign_rhs_code (stmt);</span>
+<span class="lineNum">     271 </span><span class="lineCov">      76662 :   enum gimple_rhs_class rhs_class = get_gimple_rhs_class (code);</span>
+<span class="lineNum">     272 </span><span class="lineCov">      76662 :   tree src_var = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span>            :   /* See if this is a simple copy operation of an SSA name to the function
+<span class="lineNum">     275 </span>            :      result.  In that case we may have a simple tail call.  Ignore type
+<span class="lineNum">     276 </span>            :      conversions that can never produce extra code between the function
+<span class="lineNum">     277 </span>            :      call and the function return.  */
+<span class="lineNum">     278 </span><span class="lineCov">      36893 :   if ((rhs_class == GIMPLE_SINGLE_RHS || gimple_assign_cast_p (stmt))</span>
+<span class="lineNum">     279 </span><span class="lineCov">      95819 :       &amp;&amp; src_var == *ass_var)</span>
+<span class="lineNum">     280 </span>            :     {
+<span class="lineNum">     281 </span>            :       /* Reject a tailcall if the type conversion might need
+<span class="lineNum">     282 </span>            :          additional code.  */
+<span class="lineNum">     283 </span><span class="lineCov">       9330 :       if (gimple_assign_cast_p (stmt))</span>
+<span class="lineNum">     284 </span>            :         {
+<span class="lineNum">     285 </span><span class="lineCov">       8485 :           if (TYPE_MODE (TREE_TYPE (dest)) != TYPE_MODE (TREE_TYPE (src_var)))</span>
+<span class="lineNum">     286 </span>            :             return FAIL;
+<span class="lineNum">     287 </span>            : 
+<span class="lineNum">     288 </span>            :           /* Even if the type modes are the same, if the precision of the
+<span class="lineNum">     289 </span>            :              type is smaller than mode's precision,
+<span class="lineNum">     290 </span>            :              reduce_to_bit_field_precision would generate additional code.  */
+<span class="lineNum">     291 </span><span class="lineCov">      12182 :           if (INTEGRAL_TYPE_P (TREE_TYPE (dest))</span>
+<span class="lineNum">     292 </span><span class="lineCov">      11554 :               &amp;&amp; !type_has_mode_precision_p (TREE_TYPE (dest)))</span>
+<span class="lineNum">     293 </span>            :             return FAIL;
+<span class="lineNum">     294 </span>            :         }
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span><span class="lineCov">       4885 :       *ass_var = dest;</span>
+<span class="lineNum">     297 </span><span class="lineCov">       4885 :       return OK;</span>
+<span class="lineNum">     298 </span>            :     }
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineCov">      67332 :   switch (rhs_class)</span>
+<span class="lineNum">     301 </span>            :     {
+<span class="lineNum">     302 </span><span class="lineCov">      16603 :     case GIMPLE_BINARY_RHS:</span>
+<span class="lineNum">     303 </span><span class="lineCov">      16603 :       op1 = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span>            :       /* Fall through.  */
+<span class="lineNum">     306 </span>            : 
+<span class="lineNum">     307 </span><span class="lineCov">      28407 :     case GIMPLE_UNARY_RHS:</span>
+<span class="lineNum">     308 </span><span class="lineCov">      28407 :       op0 = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     309 </span><span class="lineCov">      28407 :       break;</span>
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span>            :     default:
+<span class="lineNum">     312 </span>            :       return FAIL;
+<span class="lineNum">     313 </span>            :     }
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            :   /* Accumulator optimizations will reverse the order of operations.
+<span class="lineNum">     316 </span>            :      We can only do that for floating-point types if we're assuming
+<span class="lineNum">     317 </span>            :      that addition and multiplication are associative.  */
+<span class="lineNum">     318 </span><span class="lineCov">      28407 :   if (!flag_associative_math)</span>
+<span class="lineNum">     319 </span><span class="lineCov">      28147 :     if (FLOAT_TYPE_P (TREE_TYPE (DECL_RESULT (current_function_decl))))</span>
+<span class="lineNum">     320 </span>            :       return FAIL;
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span><span class="lineCov">      25612 :   if (rhs_class == GIMPLE_UNARY_RHS</span>
+<span class="lineNum">     323 </span><span class="lineCov">      11651 :       &amp;&amp; op0 == *ass_var)</span>
+<span class="lineNum">     324 </span>            :     ;
+<span class="lineNum">     325 </span><span class="lineCov">      24641 :   else if (op0 == *ass_var</span>
+<span class="lineNum">     326 </span><span class="lineCov">      24641 :            &amp;&amp; (non_ass_var = independent_of_stmt_p (op1, stmt, call,</span>
+<span class="lineNum">     327 </span>            :                                                     to_move)))
+<span class="lineNum">     328 </span>            :     ;
+<span class="lineNum">     329 </span><span class="lineCov">      15073 :   else if (op1 == *ass_var</span>
+<span class="lineNum">     330 </span><span class="lineCov">      15073 :            &amp;&amp; (non_ass_var = independent_of_stmt_p (op0, stmt, call,</span>
+<span class="lineNum">     331 </span>            :                                                     to_move)))
+<span class="lineNum">     332 </span>            :     ;
+<span class="lineNum">     333 </span>            :   else
+<span class="lineNum">     334 </span><span class="lineCov">       2335 :     return TRY_MOVE;</span>
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineCov">      23277 :   switch (code)</span>
+<span class="lineNum">     337 </span>            :     {
+<span class="lineNum">     338 </span><span class="lineCov">       5100 :     case PLUS_EXPR:</span>
+<span class="lineNum">     339 </span><span class="lineCov">       5100 :       *a = non_ass_var;</span>
+<span class="lineNum">     340 </span><span class="lineCov">       5100 :       *ass_var = dest;</span>
+<span class="lineNum">     341 </span><span class="lineCov">       5100 :       return OK;</span>
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span><span class="lineCov">        116 :     case POINTER_PLUS_EXPR:</span>
+<span class="lineNum">     344 </span><span class="lineCov">        116 :       if (op0 != *ass_var)</span>
+<span class="lineNum">     345 </span>            :         return FAIL;
+<span class="lineNum">     346 </span><span class="lineCov">         52 :       *a = non_ass_var;</span>
+<span class="lineNum">     347 </span><span class="lineCov">         52 :       *ass_var = dest;</span>
+<span class="lineNum">     348 </span><span class="lineCov">         52 :       return OK;</span>
+<span class="lineNum">     349 </span>            : 
+<span class="lineNum">     350 </span><span class="lineCov">        257 :     case MULT_EXPR:</span>
+<span class="lineNum">     351 </span><span class="lineCov">        257 :       *m = non_ass_var;</span>
+<span class="lineNum">     352 </span><span class="lineCov">        257 :       *ass_var = dest;</span>
+<span class="lineNum">     353 </span><span class="lineCov">        257 :       return OK;</span>
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span><span class="lineCov">         77 :     case NEGATE_EXPR:</span>
+<span class="lineNum">     356 </span><span class="lineCov">         77 :       *m = build_minus_one_cst (TREE_TYPE (op0));</span>
+<span class="lineNum">     357 </span><span class="lineCov">         77 :       *ass_var = dest;</span>
+<span class="lineNum">     358 </span><span class="lineCov">         77 :       return OK;</span>
+<span class="lineNum">     359 </span>            : 
+<span class="lineNum">     360 </span><span class="lineCov">        143 :     case MINUS_EXPR:</span>
+<span class="lineNum">     361 </span><span class="lineCov">        143 :       if (*ass_var == op0)</span>
+<span class="lineNum">     362 </span><span class="lineCov">         23 :         *a = fold_build1 (NEGATE_EXPR, TREE_TYPE (non_ass_var), non_ass_var);</span>
+<span class="lineNum">     363 </span>            :       else
+<span class="lineNum">     364 </span>            :         {
+<span class="lineNum">     365 </span><span class="lineCov">        120 :           *m = build_minus_one_cst (TREE_TYPE (non_ass_var));</span>
+<span class="lineNum">     366 </span><span class="lineCov">        120 :           *a = fold_build1 (NEGATE_EXPR, TREE_TYPE (non_ass_var), non_ass_var);</span>
+<span class="lineNum">     367 </span>            :         }
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">        143 :       *ass_var = dest;</span>
+<span class="lineNum">     370 </span><span class="lineCov">        143 :       return OK;</span>
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            :     default:
+<span class="lineNum">     373 </span>            :       return FAIL;
+<span class="lineNum">     374 </span>            :     }
+<span class="lineNum">     375 </span>            : }
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span>            : /* Propagate VAR through phis on edge E.  */
+<a name="378"><span class="lineNum">     378 </span>            : </a>
+<span class="lineNum">     379 </span>            : static tree
+<span class="lineNum">     380 </span><span class="lineCov">     275066 : propagate_through_phis (tree var, edge e)</span>
+<span class="lineNum">     381 </span>            : {
+<span class="lineNum">     382 </span><span class="lineCov">     275066 :   basic_block dest = e-&gt;dest;</span>
+<span class="lineNum">     383 </span><span class="lineCov">     275066 :   gphi_iterator gsi;</span>
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span><span class="lineCov">     521221 :   for (gsi = gsi_start_phis (dest); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     386 </span>            :     {
+<span class="lineNum">     387 </span><span class="lineCov">     277361 :       gphi *phi = gsi.phi ();</span>
+<span class="lineNum">     388 </span><span class="lineCov">     277361 :       if (PHI_ARG_DEF_FROM_EDGE (phi, e) == var)</span>
+<span class="lineNum">     389 </span><span class="lineCov">      93618 :         return PHI_RESULT (phi);</span>
+<span class="lineNum">     390 </span>            :     }
+<span class="lineNum">     391 </span>            :   return var;
+<span class="lineNum">     392 </span>            : }
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            : /* Finds tailcalls falling into basic block BB. The list of found tailcalls is
+<span class="lineNum">     395 </span>            :    added to the start of RET.  */
+<a name="396"><span class="lineNum">     396 </span>            : </a>
+<span class="lineNum">     397 </span>            : static void
+<span class="lineNum">     398 </span><span class="lineCov">    4374365 : find_tail_calls (basic_block bb, struct tailcall **ret)</span>
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">    4374365 :   tree ass_var = NULL_TREE, ret_var, func, param;</span>
+<span class="lineNum">     401 </span><span class="lineCov">    4374365 :   gimple *stmt;</span>
+<span class="lineNum">     402 </span><span class="lineCov">    4374365 :   gcall *call = NULL;</span>
+<span class="lineNum">     403 </span><span class="lineCov">    4374365 :   gimple_stmt_iterator gsi, agsi;</span>
+<span class="lineNum">     404 </span><span class="lineCov">    4374365 :   bool tail_recursion;</span>
+<span class="lineNum">     405 </span><span class="lineCov">    4374365 :   struct tailcall *nw;</span>
+<span class="lineNum">     406 </span><span class="lineCov">    4374365 :   edge e;</span>
+<span class="lineNum">     407 </span><span class="lineCov">    4374365 :   tree m, a;</span>
+<span class="lineNum">     408 </span><span class="lineCov">    4374365 :   basic_block abb;</span>
+<span class="lineNum">     409 </span><span class="lineCov">    4374365 :   size_t idx;</span>
+<span class="lineNum">     410 </span><span class="lineCov">    4374365 :   tree var;</span>
+<span class="lineNum">     411 </span>            : 
+<span class="lineNum">     412 </span><span class="lineCov">    4374365 :   if (!single_succ_p (bb))</span>
+<span class="lineNum">     413 </span><span class="lineCov">    3896908 :     return;</span>
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span><span class="lineCov">   31674122 :   for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&amp;gsi))</span>
+<span class="lineNum">     416 </span>            :     {
+<span class="lineNum">     417 </span><span class="lineCov">    9773564 :       stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span>            :       /* Ignore labels, returns, nops, clobbers and debug stmts.  */
+<span class="lineNum">     420 </span><span class="lineCov">    9773564 :       if (gimple_code (stmt) == GIMPLE_LABEL</span>
+<span class="lineNum">     421 </span><span class="lineCov">   19483990 :           || gimple_code (stmt) == GIMPLE_RETURN</span>
+<span class="lineNum">     422 </span><span class="lineCov">   15452842 :           || gimple_code (stmt) == GIMPLE_NOP</span>
+<span class="lineNum">     423 </span><span class="lineCov">   15450568 :           || gimple_code (stmt) == GIMPLE_PREDICT</span>
+<span class="lineNum">     424 </span><span class="lineCov">    7595023 :           || gimple_clobber_p (stmt)</span>
+<span class="lineNum">     425 </span><span class="lineCov">   23870520 :           || is_gimple_debug (stmt))</span>
+<span class="lineNum">     426 </span>            :         continue;
+<span class="lineNum">     427 </span>            : 
+<span class="lineNum">     428 </span>            :       /* Check for a call.  */
+<span class="lineNum">     429 </span><span class="lineCov">    4157578 :       if (is_gimple_call (stmt))</span>
+<span class="lineNum">     430 </span>            :         {
+<span class="lineNum">     431 </span><span class="lineCov">     843344 :           call = as_a &lt;gcall *&gt; (stmt);</span>
+<span class="lineNum">     432 </span><span class="lineCov">     843344 :           ass_var = gimple_call_lhs (call);</span>
+<span class="lineNum">     433 </span><span class="lineCov">     843344 :           break;</span>
+<span class="lineNum">     434 </span>            :         }
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            :       /* Allow simple copies between local variables, even if they're
+<span class="lineNum">     437 </span>            :          aggregates.  */
+<span class="lineNum">     438 </span><span class="lineCov">    1235445 :       if (is_gimple_assign (stmt)</span>
+<span class="lineNum">     439 </span><span class="lineCov">    2428658 :           &amp;&amp; auto_var_in_fn_p (gimple_assign_lhs (stmt), cfun-&gt;decl)</span>
+<span class="lineNum">     440 </span><span class="lineCov">    1253106 :           &amp;&amp; auto_var_in_fn_p (gimple_assign_rhs1 (stmt), cfun-&gt;decl))</span>
+<span class="lineNum">     441 </span>            :         continue;
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span>            :       /* If the statement references memory or volatile operands, fail.  */
+<span class="lineNum">     444 </span><span class="lineCov">    1226246 :       if (gimple_references_memory_p (stmt)</span>
+<span class="lineNum">     445 </span><span class="lineCov">    1319923 :           || gimple_has_volatile_ops (stmt))</span>
+<span class="lineNum">     446 </span>            :         return;
+<span class="lineNum">     447 </span>            :     }
+<span class="lineNum">     448 </span>            : 
+<span class="lineNum">     449 </span><span class="lineCov">    5449738 :   if (gsi_end_p (gsi))</span>
+<span class="lineNum">     450 </span>            :     {
+<span class="lineNum">     451 </span><span class="lineCov">    1881525 :       edge_iterator ei;</span>
+<span class="lineNum">     452 </span>            :       /* Recurse to the predecessors.  */
+<span class="lineNum">     453 </span><span class="lineCov">    6121841 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     454 </span><span class="lineCov">    2358791 :         find_tail_calls (e-&gt;src, ret);</span>
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span><span class="lineCov">    1881525 :       return;</span>
+<span class="lineNum">     457 </span>            :     }
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span>            :   /* If the LHS of our call is not just a simple register or local
+<span class="lineNum">     460 </span>            :      variable, we can't transform this into a tail or sibling call.
+<span class="lineNum">     461 </span>            :      This situation happens, in (e.g.) &quot;*p = foo()&quot; where foo returns a
+<span class="lineNum">     462 </span>            :      struct.  In this case we won't have a temporary here, but we need
+<span class="lineNum">     463 </span>            :      to carry out the side effect anyway, so tailcall is impossible.
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span>            :      ??? In some situations (when the struct is returned in memory via
+<span class="lineNum">     466 </span>            :      invisible argument) we could deal with this, e.g. by passing 'p'
+<span class="lineNum">     467 </span>            :      itself as that argument to foo, but it's too early to do this here,
+<span class="lineNum">     468 </span>            :      and expand_call() will not handle it anyway.  If it ever can, then
+<span class="lineNum">     469 </span>            :      we need to revisit this here, to allow that situation.  */
+<span class="lineNum">     470 </span><span class="lineCov">     843344 :   if (ass_var</span>
+<span class="lineNum">     471 </span><span class="lineCov">     235120 :       &amp;&amp; !is_gimple_reg (ass_var)</span>
+<span class="lineNum">     472 </span><span class="lineCov">     857233 :       &amp;&amp; !auto_var_in_fn_p (ass_var, cfun-&gt;decl))</span>
+<span class="lineNum">     473 </span>            :     return;
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span>            :   /* We found the call, check whether it is suitable.  */
+<span class="lineNum">     476 </span><span class="lineCov">     839896 :   tail_recursion = false;</span>
+<span class="lineNum">     477 </span><span class="lineCov">     839896 :   func = gimple_call_fndecl (call);</span>
+<span class="lineNum">     478 </span><span class="lineCov">     839896 :   if (func</span>
+<span class="lineNum">     479 </span><span class="lineCov">     775838 :       &amp;&amp; !fndecl_built_in_p (func)</span>
+<span class="lineNum">     480 </span><span class="lineCov">    1400428 :       &amp;&amp; recursive_call_p (current_function_decl, func))</span>
+<span class="lineNum">     481 </span>            :     {
+<span class="lineNum">     482 </span><span class="lineCov">       3397 :       tree arg;</span>
+<span class="lineNum">     483 </span>            : 
+<span class="lineNum">     484 </span><span class="lineCov">       3397 :       for (param = DECL_ARGUMENTS (current_function_decl), idx = 0;</span>
+<span class="lineNum">     485 </span><span class="lineCov">      13114 :            param &amp;&amp; idx &lt; gimple_call_num_args (call);</span>
+<span class="lineNum">     486 </span><span class="lineCov">       9717 :            param = DECL_CHAIN (param), idx ++)</span>
+<span class="lineNum">     487 </span>            :         {
+<span class="lineNum">     488 </span><span class="lineCov">       9952 :           arg = gimple_call_arg (call, idx);</span>
+<span class="lineNum">     489 </span><span class="lineCov">       9952 :           if (param != arg)</span>
+<span class="lineNum">     490 </span>            :             {
+<span class="lineNum">     491 </span>            :               /* Make sure there are no problems with copying.  The parameter
+<span class="lineNum">     492 </span>            :                  have a copyable type and the two arguments must have reasonably
+<span class="lineNum">     493 </span>            :                  equivalent types.  The latter requirement could be relaxed if
+<span class="lineNum">     494 </span>            :                  we emitted a suitable type conversion statement.  */
+<span class="lineNum">     495 </span><span class="lineCov">       9896 :               if (!is_gimple_reg_type (TREE_TYPE (param))</span>
+<span class="lineNum">     496 </span><span class="lineCov">      19692 :                   || !useless_type_conversion_p (TREE_TYPE (param),</span>
+<span class="lineNum">     497 </span><span class="lineCov">       9796 :                                                  TREE_TYPE (arg)))</span>
+<span class="lineNum">     498 </span>            :                 break;
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span>            :               /* The parameter should be a real operand, so that phi node
+<span class="lineNum">     501 </span>            :                  created for it at the start of the function has the meaning
+<span class="lineNum">     502 </span>            :                  of copying the value.  This test implies is_gimple_reg_type
+<span class="lineNum">     503 </span>            :                  from the previous condition, however this one could be
+<span class="lineNum">     504 </span>            :                  relaxed by being more careful with copying the new value
+<span class="lineNum">     505 </span>            :                  of the parameter (emitting appropriate GIMPLE_ASSIGN and
+<span class="lineNum">     506 </span>            :                  updating the virtual operands).  */
+<span class="lineNum">     507 </span><span class="lineCov">       9672 :               if (!is_gimple_reg (param))</span>
+<span class="lineNum">     508 </span>            :                 break;
+<span class="lineNum">     509 </span>            :             }
+<span class="lineNum">     510 </span>            :         }
+<span class="lineNum">     511 </span><span class="lineCov">       6794 :       if (idx == gimple_call_num_args (call) &amp;&amp; !param)</span>
+<span class="lineNum">     512 </span>            :         tail_recursion = true;
+<span class="lineNum">     513 </span>            :     }
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span>            :   /* Make sure the tail invocation of this function does not indirectly
+<span class="lineNum">     516 </span>            :      refer to local variables.  (Passing variables directly by value
+<span class="lineNum">     517 </span>            :      is OK.)  */
+<span class="lineNum">     518 </span><span class="lineCov">    4345566 :   FOR_EACH_LOCAL_DECL (cfun, idx, var)</span>
+<span class="lineNum">     519 </span>            :     {
+<span class="lineNum">     520 </span><span class="lineCov">    2906297 :       if (TREE_CODE (var) != PARM_DECL</span>
+<span class="lineNum">     521 </span><span class="lineCov">    2906297 :           &amp;&amp; auto_var_in_fn_p (var, cfun-&gt;decl)</span>
+<span class="lineNum">     522 </span><span class="lineCov">    2843551 :           &amp;&amp; may_be_aliased (var)</span>
+<span class="lineNum">     523 </span><span class="lineCov">    3091976 :           &amp;&amp; (ref_maybe_used_by_stmt_p (call, var)</span>
+<span class="lineNum">     524 </span><span class="lineCov">      53479 :               || call_may_clobber_ref_p (call, var)))</span>
+<span class="lineNum">     525 </span><span class="lineCov">     134646 :         return;</span>
+<span class="lineNum">     526 </span>            :     }
+<span class="lineNum">     527 </span>            : 
+<span class="lineNum">     528 </span>            :   /* Now check the statements after the call.  None of them has virtual
+<span class="lineNum">     529 </span>            :      operands, so they may only depend on the call through its return
+<span class="lineNum">     530 </span>            :      value.  The return value should also be dependent on each of them,
+<span class="lineNum">     531 </span>            :      since we are running after dce.  */
+<span class="lineNum">     532 </span><span class="lineCov">     705250 :   m = NULL_TREE;</span>
+<span class="lineNum">     533 </span><span class="lineCov">     705250 :   a = NULL_TREE;</span>
+<span class="lineNum">     534 </span><span class="lineCov">    1182707 :   auto_bitmap to_move_defs;</span>
+<span class="lineNum">     535 </span><span class="lineCov">    1182707 :   auto_vec&lt;gimple *&gt; to_move_stmts;</span>
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span><span class="lineCov">     705250 :   abb = bb;</span>
+<span class="lineNum">     538 </span><span class="lineCov">     705250 :   agsi = gsi;</span>
+<span class="lineNum">     539 </span><span class="lineCov">    1412550 :   while (1)</span>
+<span class="lineNum">     540 </span>            :     {
+<span class="lineNum">     541 </span><span class="lineCov">    1412550 :       tree tmp_a = NULL_TREE;</span>
+<span class="lineNum">     542 </span><span class="lineCov">    1412550 :       tree tmp_m = NULL_TREE;</span>
+<span class="lineNum">     543 </span><span class="lineCov">    1412550 :       gsi_next (&amp;agsi);</span>
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span><span class="lineCov">    3375232 :       while (gsi_end_p (agsi))</span>
+<span class="lineNum">     546 </span>            :         {
+<span class="lineNum">     547 </span><span class="lineCov">     275066 :           ass_var = propagate_through_phis (ass_var, single_succ_edge (abb));</span>
+<span class="lineNum">     548 </span><span class="lineCov">     275066 :           abb = single_succ (abb);</span>
+<span class="lineNum">     549 </span><span class="lineCov">     550132 :           agsi = gsi_start_bb (abb);</span>
+<span class="lineNum">     550 </span>            :         }
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span><span class="lineCov">    1412550 :       stmt = gsi_stmt (agsi);</span>
+<span class="lineNum">     553 </span><span class="lineCov">    2825100 :       if (gimple_code (stmt) == GIMPLE_RETURN)</span>
+<span class="lineNum">     554 </span>            :         break;
+<span class="lineNum">     555 </span>            : 
+<span class="lineNum">     556 </span><span class="lineCov">     773743 :       if (gimple_code (stmt) == GIMPLE_LABEL</span>
+<span class="lineNum">     557 </span><span class="lineCov">    1531068 :           || gimple_code (stmt) == GIMPLE_NOP</span>
+<span class="lineNum">     558 </span><span class="lineCov">    1530246 :           || gimple_code (stmt) == GIMPLE_PREDICT</span>
+<span class="lineNum">     559 </span><span class="lineCov">     759005 :           || gimple_clobber_p (stmt)</span>
+<span class="lineNum">     560 </span><span class="lineCov">    2157521 :           || is_gimple_debug (stmt))</span>
+<span class="lineNum">     561 </span><span class="lineCov">     696786 :         continue;</span>
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span><span class="lineCov">     153914 :       if (gimple_code (stmt) != GIMPLE_ASSIGN)</span>
+<span class="lineNum">     564 </span><span class="lineCov">      66443 :         return;</span>
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span>            :       /* This is a gimple assign. */
+<span class="lineNum">     567 </span><span class="lineCov">     153324 :       par ret = process_assignment (as_a &lt;gassign *&gt; (stmt), gsi,</span>
+<span class="lineNum">     568 </span>            :                                     &amp;tmp_m, &amp;tmp_a, &amp;ass_var, to_move_defs);
+<span class="lineNum">     569 </span><span class="lineCov">      76662 :       if (ret == FAIL)</span>
+<span class="lineNum">     570 </span>            :         return;
+<span class="lineNum">     571 </span><span class="lineCov">      12849 :       else if (ret == TRY_MOVE)</span>
+<span class="lineNum">     572 </span>            :         {
+<span class="lineNum">     573 </span><span class="lineCov">       2335 :           if (! tail_recursion)</span>
+<span class="lineNum">     574 </span>            :             return;
+<span class="lineNum">     575 </span>            :           /* Do not deal with checking dominance, the real fix is to
+<span class="lineNum">     576 </span>            :              do path isolation for the transform phase anyway, removing
+<span class="lineNum">     577 </span>            :              the need to compute the accumulators with new stmts.  */
+<span class="lineNum">     578 </span><span class="lineCov">         13 :           if (abb != bb)</span>
+<span class="lineNum">     579 </span>            :             return;
+<span class="lineNum">     580 </span><span class="lineNoCov">          0 :           for (unsigned opno = 1; opno &lt; gimple_num_ops (stmt); ++opno)</span>
+<span class="lineNum">     581 </span>            :             {
+<span class="lineNum">     582 </span><span class="lineNoCov">          0 :               tree op = gimple_op (stmt, opno);</span>
+<span class="lineNum">     583 </span><span class="lineNoCov">          0 :               if (independent_of_stmt_p (op, stmt, gsi, to_move_defs) != op)</span>
+<span class="lineNum">     584 </span>            :                 return;
+<span class="lineNum">     585 </span>            :             }
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :           bitmap_set_bit (to_move_defs,</span>
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :                           SSA_NAME_VERSION (gimple_assign_lhs (stmt)));</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :           to_move_stmts.safe_push (stmt);</span>
+<span class="lineNum">     589 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">     590 </span>            :         }
+<span class="lineNum">     591 </span>            : 
+<span class="lineNum">     592 </span><span class="lineCov">      10514 :       if (tmp_a)</span>
+<span class="lineNum">     593 </span>            :         {
+<span class="lineNum">     594 </span><span class="lineCov">       5295 :           tree type = TREE_TYPE (tmp_a);</span>
+<span class="lineNum">     595 </span><span class="lineCov">       5295 :           if (a)</span>
+<span class="lineNum">     596 </span><span class="lineCov">         75 :             a = fold_build2 (PLUS_EXPR, type, fold_convert (type, a), tmp_a);</span>
+<span class="lineNum">     597 </span>            :           else
+<span class="lineNum">     598 </span>            :             a = tmp_a;
+<span class="lineNum">     599 </span>            :         }
+<span class="lineNum">     600 </span><span class="lineCov">      10514 :       if (tmp_m)</span>
+<span class="lineNum">     601 </span>            :         {
+<span class="lineNum">     602 </span><span class="lineCov">        454 :           tree type = TREE_TYPE (tmp_m);</span>
+<span class="lineNum">     603 </span><span class="lineCov">        454 :           if (m)</span>
+<span class="lineNum">     604 </span><span class="lineCov">         24 :             m = fold_build2 (MULT_EXPR, type, fold_convert (type, m), tmp_m);</span>
+<span class="lineNum">     605 </span>            :           else
+<span class="lineNum">     606 </span>            :             m = tmp_m;
+<span class="lineNum">     607 </span>            : 
+<span class="lineNum">     608 </span><span class="lineCov">        454 :           if (a)</span>
+<span class="lineNum">     609 </span><span class="lineCov">        126 :             a = fold_build2 (MULT_EXPR, type, fold_convert (type, a), tmp_m);</span>
+<span class="lineNum">     610 </span>            :         }
+<span class="lineNum">     611 </span>            :     }
+<span class="lineNum">     612 </span>            : 
+<span class="lineNum">     613 </span>            :   /* See if this is a tail call we can handle.  */
+<span class="lineNum">     614 </span><span class="lineCov">     638807 :   ret_var = gimple_return_retval (as_a &lt;greturn *&gt; (stmt));</span>
+<span class="lineNum">     615 </span>            : 
+<span class="lineNum">     616 </span>            :   /* We may proceed if there either is no return value, or the return value
+<span class="lineNum">     617 </span>            :      is identical to the call's return.  */
+<span class="lineNum">     618 </span><span class="lineCov">     638807 :   if (ret_var</span>
+<span class="lineNum">     619 </span><span class="lineCov">     326988 :       &amp;&amp; (ret_var != ass_var))</span>
+<span class="lineNum">     620 </span>            :     return;
+<span class="lineNum">     621 </span>            : 
+<span class="lineNum">     622 </span>            :   /* If this is not a tail recursive call, we cannot handle addends or
+<span class="lineNum">     623 </span>            :      multiplicands.  */
+<span class="lineNum">     624 </span><span class="lineCov">     482615 :   if (!tail_recursion &amp;&amp; (m || a))</span>
+<span class="lineNum">     625 </span>            :     return;
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            :   /* For pointers only allow additions.  */
+<span class="lineNum">     628 </span><span class="lineCov">     477457 :   if (m &amp;&amp; POINTER_TYPE_P (TREE_TYPE (DECL_RESULT (current_function_decl))))</span>
+<span class="lineNum">     629 </span>            :     return;
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span>            :   /* Move queued defs.  */
+<span class="lineNum">     632 </span><span class="lineCov">     477457 :   if (tail_recursion)</span>
+<span class="lineNum">     633 </span>            :     {
+<span class="lineNum">     634 </span>            :       unsigned i;
+<span class="lineNum">     635 </span><span class="lineCov">        585 :       FOR_EACH_VEC_ELT (to_move_stmts, i, stmt)</span>
+<span class="lineNum">     636 </span>            :         {
+<span class="lineNum">     637 </span><span class="lineNoCov">          0 :           gimple_stmt_iterator mgsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     638 </span><span class="lineNoCov">          0 :           gsi_move_before (&amp;mgsi, &amp;gsi);</span>
+<span class="lineNum">     639 </span>            :         }
+<span class="lineNum">     640 </span>            :     }
+<span class="lineNum">     641 </span>            : 
+<span class="lineNum">     642 </span><span class="lineCov">     477457 :   nw = XNEW (struct tailcall);</span>
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span><span class="lineCov">     477457 :   nw-&gt;call_gsi = gsi;</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span><span class="lineCov">     477457 :   nw-&gt;tail_recursion = tail_recursion;</span>
+<span class="lineNum">     647 </span>            : 
+<span class="lineNum">     648 </span><span class="lineCov">     477457 :   nw-&gt;mult = m;</span>
+<span class="lineNum">     649 </span><span class="lineCov">     477457 :   nw-&gt;add = a;</span>
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span><span class="lineCov">     477457 :   nw-&gt;next = *ret;</span>
+<span class="lineNum">     652 </span><span class="lineCov">     477457 :   *ret = nw;</span>
+<span class="lineNum">     653 </span>            : }
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span>            : /* Helper to insert PHI_ARGH to the phi of VAR in the destination of edge E.  */
+<a name="656"><span class="lineNum">     656 </span>            : </a>
+<span class="lineNum">     657 </span>            : static void
+<span class="lineNum">     658 </span><span class="lineCov">        164 : add_successor_phi_arg (edge e, tree var, tree phi_arg)</span>
+<span class="lineNum">     659 </span>            : {
+<span class="lineNum">     660 </span><span class="lineCov">        164 :   gphi_iterator gsi;</span>
+<span class="lineNum">     661 </span>            : 
+<span class="lineNum">     662 </span><span class="lineCov">        409 :   for (gsi = gsi_start_phis (e-&gt;dest); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     663 </span><span class="lineCov">        409 :     if (PHI_RESULT (gsi.phi ()) == var)</span>
+<span class="lineNum">     664 </span>            :       break;
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span><span class="lineCov">        328 :   gcc_assert (!gsi_end_p (gsi));</span>
+<span class="lineNum">     667 </span><span class="lineCov">        164 :   add_phi_arg (gsi.phi (), phi_arg, e, UNKNOWN_LOCATION);</span>
+<span class="lineNum">     668 </span><span class="lineCov">        164 : }</span>
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span>            : /* Creates a GIMPLE statement which computes the operation specified by
+<span class="lineNum">     671 </span>            :    CODE, ACC and OP1 to a new variable with name LABEL and inserts the
+<span class="lineNum">     672 </span>            :    statement in the position specified by GSI.  Returns the
+<span class="lineNum">     673 </span>            :    tree node of the statement's result.  */
+<a name="674"><span class="lineNum">     674 </span>            : </a>
+<span class="lineNum">     675 </span>            : static tree
+<span class="lineNum">     676 </span><span class="lineCov">        148 : adjust_return_value_with_ops (enum tree_code code, const char *label,</span>
+<span class="lineNum">     677 </span>            :                               tree acc, tree op1, gimple_stmt_iterator gsi)
+<span class="lineNum">     678 </span>            : {
+<span class="lineNum">     679 </span>            : 
+<span class="lineNum">     680 </span><span class="lineCov">        148 :   tree ret_type = TREE_TYPE (DECL_RESULT (current_function_decl));</span>
+<span class="lineNum">     681 </span><span class="lineCov">        148 :   tree result = make_temp_ssa_name (ret_type, NULL, label);</span>
+<span class="lineNum">     682 </span><span class="lineCov">        148 :   gassign *stmt;</span>
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span><span class="lineCov">        148 :   if (POINTER_TYPE_P (ret_type))</span>
+<span class="lineNum">     685 </span>            :     {
+<span class="lineNum">     686 </span><span class="lineCov">          6 :       gcc_assert (code == PLUS_EXPR &amp;&amp; TREE_TYPE (acc) == sizetype);</span>
+<span class="lineNum">     687 </span>            :       code = POINTER_PLUS_EXPR;
+<span class="lineNum">     688 </span>            :     }
+<span class="lineNum">     689 </span><span class="lineCov">        148 :   if (types_compatible_p (TREE_TYPE (acc), TREE_TYPE (op1))</span>
+<span class="lineNum">     690 </span><span class="lineCov">        148 :       &amp;&amp; code != POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     691 </span><span class="lineCov">        137 :     stmt = gimple_build_assign (result, code, acc, op1);</span>
+<span class="lineNum">     692 </span>            :   else
+<span class="lineNum">     693 </span>            :     {
+<span class="lineNum">     694 </span><span class="lineCov">         11 :       tree tem;</span>
+<span class="lineNum">     695 </span><span class="lineCov">         11 :       if (code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     696 </span><span class="lineCov">          6 :         tem = fold_build2 (code, TREE_TYPE (op1), op1, acc);</span>
+<span class="lineNum">     697 </span>            :       else
+<span class="lineNum">     698 </span><span class="lineCov">          5 :         tem = fold_build2 (code, TREE_TYPE (op1),</span>
+<span class="lineNum">     699 </span>            :                            fold_convert (TREE_TYPE (op1), acc), op1);
+<span class="lineNum">     700 </span><span class="lineCov">         11 :       tree rhs = fold_convert (ret_type, tem);</span>
+<span class="lineNum">     701 </span><span class="lineCov">         11 :       rhs = force_gimple_operand_gsi (&amp;gsi, rhs,</span>
+<span class="lineNum">     702 </span>            :                                       false, NULL, true, GSI_SAME_STMT);
+<span class="lineNum">     703 </span><span class="lineCov">         11 :       stmt = gimple_build_assign (result, rhs);</span>
+<span class="lineNum">     704 </span>            :     }
+<span class="lineNum">     705 </span>            : 
+<span class="lineNum">     706 </span><span class="lineCov">        148 :   gsi_insert_before (&amp;gsi, stmt, GSI_NEW_STMT);</span>
+<span class="lineNum">     707 </span><span class="lineCov">        148 :   return result;</span>
+<span class="lineNum">     708 </span>            : }
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span>            : /* Creates a new GIMPLE statement that adjusts the value of accumulator ACC by
+<span class="lineNum">     711 </span>            :    the computation specified by CODE and OP1 and insert the statement
+<span class="lineNum">     712 </span>            :    at the position specified by GSI as a new statement.  Returns new SSA name
+<span class="lineNum">     713 </span>            :    of updated accumulator.  */
+<a name="714"><span class="lineNum">     714 </span>            : </a>
+<span class="lineNum">     715 </span>            : static tree
+<span class="lineNum">     716 </span><span class="lineCov">        161 : update_accumulator_with_ops (enum tree_code code, tree acc, tree op1,</span>
+<span class="lineNum">     717 </span>            :                              gimple_stmt_iterator gsi)
+<span class="lineNum">     718 </span>            : {
+<span class="lineNum">     719 </span><span class="lineCov">        161 :   gassign *stmt;</span>
+<span class="lineNum">     720 </span><span class="lineCov">        161 :   tree var = copy_ssa_name (acc);</span>
+<span class="lineNum">     721 </span><span class="lineCov">        161 :   if (types_compatible_p (TREE_TYPE (acc), TREE_TYPE (op1)))</span>
+<span class="lineNum">     722 </span><span class="lineCov">        148 :     stmt = gimple_build_assign (var, code, acc, op1);</span>
+<span class="lineNum">     723 </span>            :   else
+<span class="lineNum">     724 </span>            :     {
+<span class="lineNum">     725 </span><span class="lineCov">         13 :       tree rhs = fold_convert (TREE_TYPE (acc),</span>
+<span class="lineNum">     726 </span>            :                                fold_build2 (code,
+<span class="lineNum">     727 </span>            :                                             TREE_TYPE (op1),
+<span class="lineNum">     728 </span>            :                                             fold_convert (TREE_TYPE (op1), acc),
+<span class="lineNum">     729 </span>            :                                             op1));
+<span class="lineNum">     730 </span><span class="lineCov">         13 :       rhs = force_gimple_operand_gsi (&amp;gsi, rhs,</span>
+<span class="lineNum">     731 </span>            :                                       false, NULL, false, GSI_CONTINUE_LINKING);
+<span class="lineNum">     732 </span><span class="lineCov">         13 :       stmt = gimple_build_assign (var, rhs);</span>
+<span class="lineNum">     733 </span>            :     }
+<span class="lineNum">     734 </span><span class="lineCov">        161 :   gsi_insert_after (&amp;gsi, stmt, GSI_NEW_STMT);</span>
+<span class="lineNum">     735 </span><span class="lineCov">        161 :   return var;</span>
+<span class="lineNum">     736 </span>            : }
+<span class="lineNum">     737 </span>            : 
+<span class="lineNum">     738 </span>            : /* Adjust the accumulator values according to A and M after GSI, and update
+<span class="lineNum">     739 </span>            :    the phi nodes on edge BACK.  */
+<a name="740"><span class="lineNum">     740 </span>            : </a>
+<span class="lineNum">     741 </span>            : static void
+<span class="lineNum">     742 </span><span class="lineCov">        585 : adjust_accumulator_values (gimple_stmt_iterator gsi, tree m, tree a, edge back)</span>
+<span class="lineNum">     743 </span>            : {
+<span class="lineNum">     744 </span><span class="lineCov">        585 :   tree var, a_acc_arg, m_acc_arg;</span>
+<span class="lineNum">     745 </span>            : 
+<span class="lineNum">     746 </span><span class="lineCov">        585 :   if (m)</span>
+<span class="lineNum">     747 </span><span class="lineCov">         79 :     m = force_gimple_operand_gsi (&amp;gsi, m, true, NULL, true, GSI_SAME_STMT);</span>
+<span class="lineNum">     748 </span><span class="lineCov">        585 :   if (a)</span>
+<span class="lineNum">     749 </span><span class="lineCov">         82 :     a = force_gimple_operand_gsi (&amp;gsi, a, true, NULL, true, GSI_SAME_STMT);</span>
+<span class="lineNum">     750 </span>            : 
+<span class="lineNum">     751 </span><span class="lineCov">        585 :   a_acc_arg = a_acc;</span>
+<span class="lineNum">     752 </span><span class="lineCov">        585 :   m_acc_arg = m_acc;</span>
+<span class="lineNum">     753 </span><span class="lineCov">        585 :   if (a)</span>
+<span class="lineNum">     754 </span>            :     {
+<span class="lineNum">     755 </span><span class="lineCov">         82 :       if (m_acc)</span>
+<span class="lineNum">     756 </span>            :         {
+<span class="lineNum">     757 </span><span class="lineCov">         18 :           if (integer_onep (a))</span>
+<span class="lineNum">     758 </span><span class="lineCov">          1 :             var = m_acc;</span>
+<span class="lineNum">     759 </span>            :           else
+<span class="lineNum">     760 </span><span class="lineCov">         17 :             var = adjust_return_value_with_ops (MULT_EXPR, &quot;acc_tmp&quot;, m_acc,</span>
+<span class="lineNum">     761 </span>            :                                                 a, gsi);
+<span class="lineNum">     762 </span>            :         }
+<span class="lineNum">     763 </span>            :       else
+<span class="lineNum">     764 </span>            :         var = a;
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span><span class="lineCov">         82 :       a_acc_arg = update_accumulator_with_ops (PLUS_EXPR, a_acc, var, gsi);</span>
+<span class="lineNum">     767 </span>            :     }
+<span class="lineNum">     768 </span>            : 
+<span class="lineNum">     769 </span><span class="lineCov">        585 :   if (m)</span>
+<span class="lineNum">     770 </span><span class="lineCov">         79 :     m_acc_arg = update_accumulator_with_ops (MULT_EXPR, m_acc, m, gsi);</span>
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span><span class="lineCov">        585 :   if (a_acc)</span>
+<span class="lineNum">     773 </span><span class="lineCov">         85 :     add_successor_phi_arg (back, a_acc, a_acc_arg);</span>
+<span class="lineNum">     774 </span>            : 
+<span class="lineNum">     775 </span><span class="lineCov">        585 :   if (m_acc)</span>
+<span class="lineNum">     776 </span><span class="lineCov">         79 :     add_successor_phi_arg (back, m_acc, m_acc_arg);</span>
+<span class="lineNum">     777 </span><span class="lineCov">        585 : }</span>
+<span class="lineNum">     778 </span>            : 
+<span class="lineNum">     779 </span>            : /* Adjust value of the return at the end of BB according to M and A
+<span class="lineNum">     780 </span>            :    accumulators.  */
+<a name="781"><span class="lineNum">     781 </span>            : </a>
+<span class="lineNum">     782 </span>            : static void
+<span class="lineNum">     783 </span><span class="lineCov">        118 : adjust_return_value (basic_block bb, tree m, tree a)</span>
+<span class="lineNum">     784 </span>            : {
+<span class="lineNum">     785 </span><span class="lineCov">        118 :   tree retval;</span>
+<span class="lineNum">     786 </span><span class="lineCov">        236 :   greturn *ret_stmt = as_a &lt;greturn *&gt; (gimple_seq_last_stmt (bb_seq (bb)));</span>
+<span class="lineNum">     787 </span><span class="lineCov">        118 :   gimple_stmt_iterator gsi = gsi_last_bb (bb);</span>
+<span class="lineNum">     788 </span>            : 
+<span class="lineNum">     789 </span><span class="lineCov">        118 :   gcc_assert (gimple_code (ret_stmt) == GIMPLE_RETURN);</span>
+<span class="lineNum">     790 </span>            : 
+<span class="lineNum">     791 </span><span class="lineCov">        118 :   retval = gimple_return_retval (ret_stmt);</span>
+<span class="lineNum">     792 </span><span class="lineCov">        118 :   if (!retval || retval == error_mark_node)</span>
+<span class="lineNum">     793 </span><span class="lineNoCov">          0 :     return;</span>
+<span class="lineNum">     794 </span>            : 
+<span class="lineNum">     795 </span><span class="lineCov">        118 :   if (m)</span>
+<span class="lineNum">     796 </span><span class="lineCov">         64 :     retval = adjust_return_value_with_ops (MULT_EXPR, &quot;mul_tmp&quot;, m_acc, retval,</span>
+<span class="lineNum">     797 </span>            :                                            gsi);
+<span class="lineNum">     798 </span><span class="lineCov">        118 :   if (a)</span>
+<span class="lineNum">     799 </span><span class="lineCov">         67 :     retval = adjust_return_value_with_ops (PLUS_EXPR, &quot;acc_tmp&quot;, a_acc, retval,</span>
+<span class="lineNum">     800 </span>            :                                            gsi);
+<span class="lineNum">     801 </span><span class="lineCov">        118 :   gimple_return_set_retval (ret_stmt, retval);</span>
+<span class="lineNum">     802 </span><span class="lineCov">        236 :   update_stmt (ret_stmt);</span>
+<span class="lineNum">     803 </span>            : }
+<span class="lineNum">     804 </span>            : 
+<span class="lineNum">     805 </span>            : /* Subtract COUNT and FREQUENCY from the basic block and it's
+<a name="806"><span class="lineNum">     806 </span>            :    outgoing edge.  */</a>
+<span class="lineNum">     807 </span>            : static void
+<span class="lineNum">     808 </span><span class="lineCov">       1606 : decrease_profile (basic_block bb, profile_count count)</span>
+<span class="lineNum">     809 </span>            : {
+<span class="lineNum">     810 </span><span class="lineCov">       1606 :   bb-&gt;count = bb-&gt;count - count;</span>
+<span class="lineNum">     811 </span><span class="lineCov">       1606 :   if (!single_succ_p (bb))</span>
+<span class="lineNum">     812 </span>            :     {
+<span class="lineNum">     813 </span><span class="lineCov">        585 :       gcc_assert (!EDGE_COUNT (bb-&gt;succs));</span>
+<span class="lineNum">     814 </span>            :       return;
+<span class="lineNum">     815 </span>            :     }
+<span class="lineNum">     816 </span>            : }
+<span class="lineNum">     817 </span>            : 
+<span class="lineNum">     818 </span>            : /* Returns true if argument PARAM of the tail recursive call needs to be copied
+<span class="lineNum">     819 </span>            :    when the call is eliminated.  */
+<a name="820"><span class="lineNum">     820 </span>            : </a>
+<span class="lineNum">     821 </span>            : static bool
+<span class="lineNum">     822 </span><span class="lineCov">       2273 : arg_needs_copy_p (tree param)</span>
+<span class="lineNum">     823 </span>            : {
+<span class="lineNum">     824 </span><span class="lineCov">       2273 :   tree def;</span>
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span><span class="lineCov">       2273 :   if (!is_gimple_reg (param))</span>
+<span class="lineNum">     827 </span>            :     return false;
+<span class="lineNum">     828 </span>            : 
+<span class="lineNum">     829 </span>            :   /* Parameters that are only defined but never used need not be copied.  */
+<span class="lineNum">     830 </span><span class="lineCov">       2237 :   def = ssa_default_def (cfun, param);</span>
+<span class="lineNum">     831 </span><span class="lineCov">       2237 :   if (!def)</span>
+<span class="lineNum">     832 </span><span class="lineCov">         14 :     return false;</span>
+<span class="lineNum">     833 </span>            : 
+<span class="lineNum">     834 </span>            :   return true;
+<span class="lineNum">     835 </span>            : }
+<span class="lineNum">     836 </span>            : 
+<span class="lineNum">     837 </span>            : /* Eliminates tail call described by T.  TMP_VARS is a list of
+<span class="lineNum">     838 </span>            :    temporary variables used to copy the function arguments.  */
+<a name="839"><span class="lineNum">     839 </span>            : </a>
+<span class="lineNum">     840 </span>            : static void
+<span class="lineNum">     841 </span><span class="lineCov">        585 : eliminate_tail_call (struct tailcall *t)</span>
+<span class="lineNum">     842 </span>            : {
+<span class="lineNum">     843 </span><span class="lineCov">        585 :   tree param, rslt;</span>
+<span class="lineNum">     844 </span><span class="lineCov">        585 :   gimple *stmt, *call;</span>
+<span class="lineNum">     845 </span><span class="lineCov">        585 :   tree arg;</span>
+<span class="lineNum">     846 </span><span class="lineCov">        585 :   size_t idx;</span>
+<span class="lineNum">     847 </span><span class="lineCov">        585 :   basic_block bb, first;</span>
+<span class="lineNum">     848 </span><span class="lineCov">        585 :   edge e;</span>
+<span class="lineNum">     849 </span><span class="lineCov">        585 :   gphi *phi;</span>
+<span class="lineNum">     850 </span><span class="lineCov">        585 :   gphi_iterator gpi;</span>
+<span class="lineNum">     851 </span><span class="lineCov">        585 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     852 </span><span class="lineCov">        585 :   gimple *orig_stmt;</span>
+<span class="lineNum">     853 </span>            : 
+<span class="lineNum">     854 </span><span class="lineCov">        585 :   stmt = orig_stmt = gsi_stmt (t-&gt;call_gsi);</span>
+<span class="lineNum">     855 </span><span class="lineCov">        585 :   bb = gsi_bb (t-&gt;call_gsi);</span>
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span><span class="lineCov">        585 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     858 </span>            :     {
+<span class="lineNum">     859 </span><span class="lineCov">          6 :       fprintf (dump_file, &quot;Eliminated tail recursion in bb %d : &quot;,</span>
+<span class="lineNum">     860 </span>            :                bb-&gt;index);
+<span class="lineNum">     861 </span><span class="lineCov">          6 :       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">     862 </span><span class="lineCov">          6 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     863 </span>            :     }
+<span class="lineNum">     864 </span>            : 
+<span class="lineNum">     865 </span><span class="lineCov">       1170 :   gcc_assert (is_gimple_call (stmt));</span>
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span><span class="lineCov">        585 :   first = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     868 </span>            : 
+<span class="lineNum">     869 </span>            :   /* Remove the code after call_gsi that will become unreachable.  The
+<span class="lineNum">     870 </span>            :      possibly unreachable code in other blocks is removed later in
+<span class="lineNum">     871 </span>            :      cfg cleanup.  */
+<span class="lineNum">     872 </span><span class="lineCov">        585 :   gsi = t-&gt;call_gsi;</span>
+<span class="lineNum">     873 </span><span class="lineCov">       1755 :   gimple_stmt_iterator gsi2 = gsi_last_bb (gimple_bb (gsi_stmt (gsi)));</span>
+<span class="lineNum">     874 </span><span class="lineCov">       3504 :   while (gsi_stmt (gsi2) != gsi_stmt (gsi))</span>
+<span class="lineNum">     875 </span>            :     {
+<span class="lineNum">     876 </span><span class="lineCov">        583 :       gimple *t = gsi_stmt (gsi2);</span>
+<span class="lineNum">     877 </span>            :       /* Do not remove the return statement, so that redirect_edge_and_branch
+<span class="lineNum">     878 </span>            :          sees how the block ends.  */
+<span class="lineNum">     879 </span><span class="lineCov">       1166 :       if (gimple_code (t) != GIMPLE_RETURN)</span>
+<span class="lineNum">     880 </span>            :         {
+<span class="lineNum">     881 </span><span class="lineCov">        434 :           gimple_stmt_iterator gsi3 = gsi2;</span>
+<span class="lineNum">     882 </span><span class="lineCov">        434 :           gsi_prev (&amp;gsi2);</span>
+<span class="lineNum">     883 </span><span class="lineCov">        434 :           gsi_remove (&amp;gsi3, true);</span>
+<span class="lineNum">     884 </span><span class="lineCov">        434 :           release_defs (t);</span>
+<span class="lineNum">     885 </span>            :         }
+<span class="lineNum">     886 </span>            :       else
+<span class="lineNum">     887 </span><span class="lineCov">        149 :         gsi_prev (&amp;gsi2);</span>
+<span class="lineNum">     888 </span>            :     }
+<span class="lineNum">     889 </span>            : 
+<span class="lineNum">     890 </span>            :   /* Number of executions of function has reduced by the tailcall.  */
+<span class="lineNum">     891 </span><span class="lineCov">       1170 :   e = single_succ_edge (gsi_bb (t-&gt;call_gsi));</span>
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span><span class="lineCov">        585 :   profile_count count = e-&gt;count ();</span>
+<span class="lineNum">     894 </span>            : 
+<span class="lineNum">     895 </span>            :   /* When profile is inconsistent and the recursion edge is more frequent
+<span class="lineNum">     896 </span>            :      than number of executions of functions, scale it down, so we do not end
+<span class="lineNum">     897 </span>            :      up with 0 executions of entry block.  */
+<span class="lineNum">     898 </span><span class="lineCov">        585 :   if (count &gt;= ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;count)</span>
+<span class="lineNum">     899 </span><span class="lineCov">          8 :     count = ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;count.apply_scale (7, 8);</span>
+<span class="lineNum">     900 </span><span class="lineCov">        585 :   decrease_profile (EXIT_BLOCK_PTR_FOR_FN (cfun), count);</span>
+<span class="lineNum">     901 </span><span class="lineCov">        585 :   decrease_profile (ENTRY_BLOCK_PTR_FOR_FN (cfun), count);</span>
+<span class="lineNum">     902 </span><span class="lineCov">        585 :   if (e-&gt;dest != EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     903 </span><span class="lineCov">        436 :     decrease_profile (e-&gt;dest, count);</span>
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span>            :   /* Replace the call by a jump to the start of function.  */
+<span class="lineNum">     906 </span><span class="lineCov">       1170 :   e = redirect_edge_and_branch (single_succ_edge (gsi_bb (t-&gt;call_gsi)),</span>
+<span class="lineNum">     907 </span>            :                                 first);
+<span class="lineNum">     908 </span><span class="lineCov">        585 :   gcc_assert (e);</span>
+<span class="lineNum">     909 </span><span class="lineCov">        585 :   PENDING_STMT (e) = NULL;</span>
+<span class="lineNum">     910 </span>            : 
+<span class="lineNum">     911 </span>            :   /* Add phi node entries for arguments.  The ordering of the phi nodes should
+<span class="lineNum">     912 </span>            :      be the same as the ordering of the arguments.  */
+<span class="lineNum">     913 </span><span class="lineCov">        585 :   for (param = DECL_ARGUMENTS (current_function_decl),</span>
+<span class="lineNum">     914 </span><span class="lineCov">        585 :          idx = 0, gpi = gsi_start_phis (first);</span>
+<span class="lineNum">     915 </span><span class="lineCov">       1983 :        param;</span>
+<span class="lineNum">     916 </span><span class="lineCov">       1398 :        param = DECL_CHAIN (param), idx++)</span>
+<span class="lineNum">     917 </span>            :     {
+<span class="lineNum">     918 </span><span class="lineCov">       1398 :       if (!arg_needs_copy_p (param))</span>
+<span class="lineNum">     919 </span>            :         continue;
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span><span class="lineCov">       1373 :       arg = gimple_call_arg (stmt, idx);</span>
+<span class="lineNum">     922 </span><span class="lineCov">       1373 :       phi = gpi.phi ();</span>
+<span class="lineNum">     923 </span><span class="lineCov">       4119 :       gcc_assert (param == SSA_NAME_VAR (PHI_RESULT (phi)));</span>
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span><span class="lineCov">       2746 :       add_phi_arg (phi, arg, e, gimple_location (stmt));</span>
+<span class="lineNum">     926 </span><span class="lineCov">       1373 :       gsi_next (&amp;gpi);</span>
+<span class="lineNum">     927 </span>            :     }
+<span class="lineNum">     928 </span>            : 
+<span class="lineNum">     929 </span>            :   /* Update the values of accumulators.  */
+<span class="lineNum">     930 </span><span class="lineCov">        585 :   adjust_accumulator_values (t-&gt;call_gsi, t-&gt;mult, t-&gt;add, e);</span>
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span><span class="lineCov">        585 :   call = gsi_stmt (t-&gt;call_gsi);</span>
+<span class="lineNum">     933 </span><span class="lineCov">        585 :   rslt = gimple_call_lhs (call);</span>
+<span class="lineNum">     934 </span><span class="lineCov">        585 :   if (rslt != NULL_TREE &amp;&amp; TREE_CODE (rslt) == SSA_NAME)</span>
+<span class="lineNum">     935 </span>            :     {
+<span class="lineNum">     936 </span>            :       /* Result of the call will no longer be defined.  So adjust the
+<span class="lineNum">     937 </span>            :          SSA_NAME_DEF_STMT accordingly.  */
+<span class="lineNum">     938 </span><span class="lineCov">        570 :       SSA_NAME_DEF_STMT (rslt) = gimple_build_nop ();</span>
+<span class="lineNum">     939 </span>            :     }
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span><span class="lineCov">        585 :   gsi_remove (&amp;t-&gt;call_gsi, true);</span>
+<span class="lineNum">     942 </span><span class="lineCov">        585 :   release_defs (call);</span>
+<span class="lineNum">     943 </span><span class="lineCov">        585 : }</span>
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span>            : /* Optimizes the tailcall described by T.  If OPT_TAILCALLS is true, also
+<span class="lineNum">     946 </span>            :    mark the tailcalls for the sibcall optimization.  */
+<a name="947"><span class="lineNum">     947 </span>            : </a>
+<span class="lineNum">     948 </span>            : static bool
+<span class="lineNum">     949 </span><span class="lineCov">     477457 : optimize_tail_call (struct tailcall *t, bool opt_tailcalls)</span>
+<span class="lineNum">     950 </span>            : {
+<span class="lineNum">     951 </span><span class="lineCov">     477457 :   if (t-&gt;tail_recursion)</span>
+<span class="lineNum">     952 </span>            :     {
+<span class="lineNum">     953 </span><span class="lineCov">        585 :       eliminate_tail_call (t);</span>
+<span class="lineNum">     954 </span><span class="lineCov">        585 :       return true;</span>
+<span class="lineNum">     955 </span>            :     }
+<span class="lineNum">     956 </span>            : 
+<span class="lineNum">     957 </span><span class="lineCov">     476872 :   if (opt_tailcalls)</span>
+<span class="lineNum">     958 </span>            :     {
+<span class="lineNum">     959 </span><span class="lineCov">     214346 :       gcall *stmt = as_a &lt;gcall *&gt; (gsi_stmt (t-&gt;call_gsi));</span>
+<span class="lineNum">     960 </span>            : 
+<span class="lineNum">     961 </span><span class="lineCov">     107173 :       gimple_call_set_tail (stmt, true);</span>
+<span class="lineNum">     962 </span><span class="lineCov">     107173 :       cfun-&gt;tail_call_marked = true;</span>
+<span class="lineNum">     963 </span><span class="lineCov">     107173 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     964 </span>            :         {
+<span class="lineNum">     965 </span><span class="lineCov">         15 :           fprintf (dump_file, &quot;Found tail call &quot;);</span>
+<span class="lineNum">     966 </span><span class="lineCov">         15 :           print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     967 </span><span class="lineCov">         30 :           fprintf (dump_file, &quot; in bb %i\n&quot;, (gsi_bb (t-&gt;call_gsi))-&gt;index);</span>
+<span class="lineNum">     968 </span>            :         }
+<span class="lineNum">     969 </span>            :     }
+<span class="lineNum">     970 </span>            : 
+<span class="lineNum">     971 </span>            :   return false;
+<span class="lineNum">     972 </span>            : }
+<span class="lineNum">     973 </span>            : 
+<span class="lineNum">     974 </span>            : /* Creates a tail-call accumulator of the same type as the return type of the
+<span class="lineNum">     975 </span>            :    current function.  LABEL is the name used to creating the temporary
+<span class="lineNum">     976 </span>            :    variable for the accumulator.  The accumulator will be inserted in the
+<span class="lineNum">     977 </span>            :    phis of a basic block BB with single predecessor with an initial value
+<span class="lineNum">     978 </span>            :    INIT converted to the current function return type.  */
+<a name="979"><span class="lineNum">     979 </span>            : </a>
+<span class="lineNum">     980 </span>            : static tree
+<span class="lineNum">     981 </span><span class="lineCov">        156 : create_tailcall_accumulator (const char *label, basic_block bb, tree init)</span>
+<span class="lineNum">     982 </span>            : {
+<span class="lineNum">     983 </span><span class="lineCov">        156 :   tree ret_type = TREE_TYPE (DECL_RESULT (current_function_decl));</span>
+<span class="lineNum">     984 </span><span class="lineCov">        156 :   if (POINTER_TYPE_P (ret_type))</span>
+<span class="lineNum">     985 </span><span class="lineCov">          6 :     ret_type = sizetype;</span>
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span><span class="lineCov">        156 :   tree tmp = make_temp_ssa_name (ret_type, NULL, label);</span>
+<span class="lineNum">     988 </span><span class="lineCov">        156 :   gphi *phi;</span>
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span><span class="lineCov">        156 :   phi = create_phi_node (tmp, bb);</span>
+<span class="lineNum">     991 </span>            :   /* RET_TYPE can be a float when -ffast-maths is enabled.  */
+<span class="lineNum">     992 </span><span class="lineCov">        156 :   add_phi_arg (phi, fold_convert (ret_type, init), single_pred_edge (bb),</span>
+<span class="lineNum">     993 </span>            :                UNKNOWN_LOCATION);
+<span class="lineNum">     994 </span><span class="lineCov">        468 :   return PHI_RESULT (phi);</span>
+<span class="lineNum">     995 </span>            : }
+<span class="lineNum">     996 </span>            : 
+<span class="lineNum">     997 </span>            : /* Optimizes tail calls in the function, turning the tail recursion
+<span class="lineNum">     998 </span>            :    into iteration.  */
+<a name="999"><span class="lineNum">     999 </span>            : </a>
+<span class="lineNum">    1000 </span>            : static unsigned int
+<span class="lineNum">    1001 </span><span class="lineCov">    2074016 : tree_optimize_tail_calls_1 (bool opt_tailcalls)</span>
+<span class="lineNum">    1002 </span>            : {
+<span class="lineNum">    1003 </span><span class="lineCov">    2074016 :   edge e;</span>
+<span class="lineNum">    1004 </span><span class="lineCov">    2074016 :   bool phis_constructed = false;</span>
+<span class="lineNum">    1005 </span><span class="lineCov">    2074016 :   struct tailcall *tailcalls = NULL, *act, *next;</span>
+<span class="lineNum">    1006 </span><span class="lineCov">    2074016 :   bool changed = false;</span>
+<span class="lineNum">    1007 </span><span class="lineCov">    2074016 :   basic_block first = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1008 </span><span class="lineCov">    2074016 :   tree param;</span>
+<span class="lineNum">    1009 </span><span class="lineCov">    2074016 :   gimple *stmt;</span>
+<span class="lineNum">    1010 </span><span class="lineCov">    2074016 :   edge_iterator ei;</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span><span class="lineCov">    2074016 :   if (!suitable_for_tail_opt_p ())</span>
+<span class="lineNum">    1013 </span>            :     return 0;
+<span class="lineNum">    1014 </span><span class="lineCov">    2056737 :   if (opt_tailcalls)</span>
+<span class="lineNum">    1015 </span><span class="lineCov">     428884 :     opt_tailcalls = suitable_for_tail_call_opt_p ();</span>
+<span class="lineNum">    1016 </span>            : 
+<span class="lineNum">    1017 </span><span class="lineCov">    6129200 :   FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds)</span>
+<span class="lineNum">    1018 </span>            :     {
+<span class="lineNum">    1019 </span>            :       /* Only traverse the normal exits, i.e. those that end with return
+<span class="lineNum">    1020 </span>            :          statement.  */
+<span class="lineNum">    1021 </span><span class="lineCov">    2015726 :       stmt = last_stmt (e-&gt;src);</span>
+<span class="lineNum">    1022 </span>            : 
+<span class="lineNum">    1023 </span><span class="lineCov">    2015726 :       if (stmt</span>
+<span class="lineNum">    1024 </span><span class="lineCov">    2015726 :           &amp;&amp; gimple_code (stmt) == GIMPLE_RETURN)</span>
+<span class="lineNum">    1025 </span><span class="lineCov">    2015574 :         find_tail_calls (e-&gt;src, &amp;tailcalls);</span>
+<span class="lineNum">    1026 </span>            :     }
+<span class="lineNum">    1027 </span>            : 
+<span class="lineNum">    1028 </span>            :   /* Construct the phi nodes and accumulators if necessary.  */
+<span class="lineNum">    1029 </span><span class="lineCov">    2056737 :   a_acc = m_acc = NULL_TREE;</span>
+<span class="lineNum">    1030 </span><span class="lineCov">    2534194 :   for (act = tailcalls; act; act = act-&gt;next)</span>
+<span class="lineNum">    1031 </span>            :     {
+<span class="lineNum">    1032 </span><span class="lineCov">     477457 :       if (!act-&gt;tail_recursion)</span>
+<span class="lineNum">    1033 </span>            :         continue;
+<span class="lineNum">    1034 </span>            : 
+<span class="lineNum">    1035 </span><span class="lineCov">        585 :       if (!phis_constructed)</span>
+<span class="lineNum">    1036 </span>            :         {
+<span class="lineNum">    1037 </span>            :           /* Ensure that there is only one predecessor of the block
+<span class="lineNum">    1038 </span>            :              or if there are existing degenerate PHI nodes.  */
+<span class="lineNum">    1039 </span><span class="lineCov">        485 :           if (!single_pred_p (first)</span>
+<span class="lineNum">    1040 </span><span class="lineCov">        485 :               || !gimple_seq_empty_p (phi_nodes (first)))</span>
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :             first =</span>
+<span class="lineNum">    1042 </span><span class="lineNoCov">          0 :               split_edge (single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun)));</span>
+<span class="lineNum">    1043 </span>            : 
+<span class="lineNum">    1044 </span>            :           /* Copy the args if needed.  */
+<span class="lineNum">    1045 </span><span class="lineCov">        485 :           for (param = DECL_ARGUMENTS (current_function_decl);</span>
+<span class="lineNum">    1046 </span><span class="lineCov">       1360 :                param;</span>
+<span class="lineNum">    1047 </span><span class="lineCov">        875 :                param = DECL_CHAIN (param))</span>
+<span class="lineNum">    1048 </span><span class="lineCov">        875 :             if (arg_needs_copy_p (param))</span>
+<span class="lineNum">    1049 </span>            :               {
+<span class="lineNum">    1050 </span><span class="lineCov">        850 :                 tree name = ssa_default_def (cfun, param);</span>
+<span class="lineNum">    1051 </span><span class="lineCov">        850 :                 tree new_name = make_ssa_name (param, SSA_NAME_DEF_STMT (name));</span>
+<span class="lineNum">    1052 </span><span class="lineCov">        850 :                 gphi *phi;</span>
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span><span class="lineCov">        850 :                 set_ssa_default_def (cfun, param, new_name);</span>
+<span class="lineNum">    1055 </span><span class="lineCov">        850 :                 phi = create_phi_node (name, first);</span>
+<span class="lineNum">    1056 </span><span class="lineCov">        850 :                 add_phi_arg (phi, new_name, single_pred_edge (first),</span>
+<span class="lineNum">    1057 </span><span class="lineCov">        850 :                              EXPR_LOCATION (param));</span>
+<span class="lineNum">    1058 </span>            :               }
+<span class="lineNum">    1059 </span>            :           phis_constructed = true;
+<span class="lineNum">    1060 </span>            :         }
+<span class="lineNum">    1061 </span>            : 
+<span class="lineNum">    1062 </span><span class="lineCov">        585 :       if (act-&gt;add &amp;&amp; !a_acc)</span>
+<span class="lineNum">    1063 </span><span class="lineCov">         77 :         a_acc = create_tailcall_accumulator (&quot;add_acc&quot;, first,</span>
+<span class="lineNum">    1064 </span>            :                                              integer_zero_node);
+<span class="lineNum">    1065 </span>            : 
+<span class="lineNum">    1066 </span><span class="lineCov">        585 :       if (act-&gt;mult &amp;&amp; !m_acc)</span>
+<span class="lineNum">    1067 </span><span class="lineCov">         79 :         m_acc = create_tailcall_accumulator (&quot;mult_acc&quot;, first,</span>
+<span class="lineNum">    1068 </span>            :                                              integer_one_node);
+<span class="lineNum">    1069 </span>            :     }
+<span class="lineNum">    1070 </span>            : 
+<span class="lineNum">    1071 </span><span class="lineCov">    2056737 :   if (a_acc || m_acc)</span>
+<span class="lineNum">    1072 </span>            :     {
+<span class="lineNum">    1073 </span>            :       /* When the tail call elimination using accumulators is performed,
+<span class="lineNum">    1074 </span>            :          statements adding the accumulated value are inserted at all exits.
+<span class="lineNum">    1075 </span>            :          This turns all other tail calls to non-tail ones.  */
+<span class="lineNum">    1076 </span><span class="lineCov">        138 :       opt_tailcalls = false;</span>
+<span class="lineNum">    1077 </span>            :     }
+<span class="lineNum">    1078 </span>            : 
+<span class="lineNum">    1079 </span><span class="lineCov">    2534194 :   for (; tailcalls; tailcalls = next)</span>
+<span class="lineNum">    1080 </span>            :     {
+<span class="lineNum">    1081 </span><span class="lineCov">     477457 :       next = tailcalls-&gt;next;</span>
+<span class="lineNum">    1082 </span><span class="lineCov">     477457 :       changed |= optimize_tail_call (tailcalls, opt_tailcalls);</span>
+<span class="lineNum">    1083 </span><span class="lineCov">     477457 :       free (tailcalls);</span>
+<span class="lineNum">    1084 </span>            :     }
+<span class="lineNum">    1085 </span>            : 
+<span class="lineNum">    1086 </span><span class="lineCov">    2056737 :   if (a_acc || m_acc)</span>
+<span class="lineNum">    1087 </span>            :     {
+<span class="lineNum">    1088 </span>            :       /* Modify the remaining return statements.  */
+<span class="lineNum">    1089 </span><span class="lineCov">        394 :       FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds)</span>
+<span class="lineNum">    1090 </span>            :         {
+<span class="lineNum">    1091 </span><span class="lineCov">        118 :           stmt = last_stmt (e-&gt;src);</span>
+<span class="lineNum">    1092 </span>            : 
+<span class="lineNum">    1093 </span><span class="lineCov">        118 :           if (stmt</span>
+<span class="lineNum">    1094 </span><span class="lineCov">        118 :               &amp;&amp; gimple_code (stmt) == GIMPLE_RETURN)</span>
+<span class="lineNum">    1095 </span><span class="lineCov">        118 :             adjust_return_value (e-&gt;src, m_acc, a_acc);</span>
+<span class="lineNum">    1096 </span>            :         }
+<span class="lineNum">    1097 </span>            :     }
+<span class="lineNum">    1098 </span>            : 
+<span class="lineNum">    1099 </span><span class="lineCov">    2056737 :   if (changed)</span>
+<span class="lineNum">    1100 </span>            :     {
+<span class="lineNum">    1101 </span>            :       /* We may have created new loops.  Make them magically appear.  */
+<span class="lineNum">    1102 </span><span class="lineCov">        485 :       loops_state_set (LOOPS_NEED_FIXUP);</span>
+<span class="lineNum">    1103 </span><span class="lineCov">        485 :       free_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">    1104 </span>            :     }
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span>            :   /* Add phi nodes for the virtual operands defined in the function to the
+<span class="lineNum">    1107 </span>            :      header of the loop created by tail recursion elimination.  Do so
+<span class="lineNum">    1108 </span>            :      by triggering the SSA renamer.  */
+<span class="lineNum">    1109 </span><span class="lineCov">    2056737 :   if (phis_constructed)</span>
+<span class="lineNum">    1110 </span><span class="lineCov">        485 :     mark_virtual_operands_for_renaming (cfun);</span>
+<span class="lineNum">    1111 </span>            : 
+<span class="lineNum">    1112 </span><span class="lineCov">    2056737 :   if (changed)</span>
+<span class="lineNum">    1113 </span><span class="lineCov">        485 :     return TODO_cleanup_cfg | TODO_update_ssa_only_virtuals;</span>
+<span class="lineNum">    1114 </span>            :   return 0;
+<span class="lineNum">    1115 </span>            : }
+<a name="1116"><span class="lineNum">    1116 </span>            : </a>
+<span class="lineNum">    1117 </span>            : static bool
+<span class="lineNum">    1118 </span><span class="lineNoCov">          0 : gate_tail_calls (void)</span>
+<span class="lineNum">    1119 </span>            : {
+<span class="lineNum">    1120 </span><span class="lineCov">    2074039 :   return flag_optimize_sibling_calls != 0 &amp;&amp; dbg_cnt (tail_call);</span>
+<span class="lineNum">    1121 </span>            : }
+<a name="1122"><span class="lineNum">    1122 </span>            : </a>
+<span class="lineNum">    1123 </span>            : static unsigned int
+<span class="lineNum">    1124 </span><span class="lineNoCov">          0 : execute_tail_calls (void)</span>
+<span class="lineNum">    1125 </span>            : {
+<span class="lineNum">    1126 </span><span class="lineNoCov">          0 :   return tree_optimize_tail_calls_1 (true);</span>
+<span class="lineNum">    1127 </span>            : }
+<span class="lineNum">    1128 </span>            : 
+<span class="lineNum">    1129 </span>            : namespace {
+<span class="lineNum">    1130 </span>            : 
+<span class="lineNum">    1131 </span>            : const pass_data pass_data_tail_recursion =
+<span class="lineNum">    1132 </span>            : {
+<span class="lineNum">    1133 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">    1134 </span>            :   &quot;tailr&quot;, /* name */
+<span class="lineNum">    1135 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1136 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">    1137 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">    1138 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1139 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1140 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1141 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">    1142 </span>            : };
+<span class="lineNum">    1143 </span>            : 
+<span class="lineNum">    1144 </span>            : class pass_tail_recursion : public gimple_opt_pass
+<span class="lineNum">    1145 </span>            : {
+<span class="lineNum">    1146 </span>            : public:
+<span class="lineNum">    1147 </span>            :   pass_tail_recursion (gcc::context *ctxt)
+<span class="lineNum">    1148 </span><span class="lineCov">     681248 :     : gimple_opt_pass (pass_data_tail_recursion, ctxt)</span>
+<span class="lineNum">    1149 </span>            :   {}
+<a name="1150"><span class="lineNum">    1150 </span>            : </a>
+<a name="1151"><span class="lineNum">    1151 </span>            :   /* opt_pass methods: */</a>
+<a name="1152"><span class="lineNum">    1152 </span><span class="lineCov">     170312 :   opt_pass * clone () { return new pass_tail_recursion (m_ctxt); }</span></a>
+<span class="lineNum">    1153 </span><span class="lineCov">    2030301 :   virtual bool gate (function *) { return gate_tail_calls (); }</span>
+<span class="lineNum">    1154 </span><span class="lineCov">    1639375 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">    1155 </span>            :     {
+<span class="lineNum">    1156 </span><span class="lineCov">    1639375 :       return tree_optimize_tail_calls_1 (false);</span>
+<span class="lineNum">    1157 </span>            :     }
+<span class="lineNum">    1158 </span>            : 
+<span class="lineNum">    1159 </span>            : }; // class pass_tail_recursion
+<span class="lineNum">    1160 </span>            : 
+<span class="lineNum">    1161 </span>            : } // anon namespace
+<a name="1162"><span class="lineNum">    1162 </span>            : </a>
+<span class="lineNum">    1163 </span>            : gimple_opt_pass *
+<span class="lineNum">    1164 </span><span class="lineCov">     170312 : make_pass_tail_recursion (gcc::context *ctxt)</span>
+<span class="lineNum">    1165 </span>            : {
+<span class="lineNum">    1166 </span><span class="lineCov">     170312 :   return new pass_tail_recursion (ctxt);</span>
+<span class="lineNum">    1167 </span>            : }
+<span class="lineNum">    1168 </span>            : 
+<span class="lineNum">    1169 </span>            : namespace {
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span>            : const pass_data pass_data_tail_calls =
+<span class="lineNum">    1172 </span>            : {
+<span class="lineNum">    1173 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">    1174 </span>            :   &quot;tailc&quot;, /* name */
+<span class="lineNum">    1175 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1176 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">    1177 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">    1178 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1179 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1180 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1181 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">    1182 </span>            : };
+<span class="lineNum">    1183 </span>            : 
+<span class="lineNum">    1184 </span>            : class pass_tail_calls : public gimple_opt_pass
+<span class="lineNum">    1185 </span>            : {
+<span class="lineNum">    1186 </span>            : public:
+<span class="lineNum">    1187 </span>            :   pass_tail_calls (gcc::context *ctxt)
+<span class="lineNum">    1188 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_tail_calls, ctxt)</span>
+<span class="lineNum">    1189 </span>            :   {}
+<a name="1190"><span class="lineNum">    1190 </span>            : </a>
+<a name="1191"><span class="lineNum">    1191 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1192 </span><span class="lineCov">     620946 :   virtual bool gate (function *) { return gate_tail_calls (); }</span>
+<span class="lineNum">    1193 </span><span class="lineCov">     434641 :   virtual unsigned int execute (function *) { return execute_tail_calls (); }</span>
+<span class="lineNum">    1194 </span>            : 
+<span class="lineNum">    1195 </span>            : }; // class pass_tail_calls
+<span class="lineNum">    1196 </span>            : 
+<span class="lineNum">    1197 </span>            : } // anon namespace
+<a name="1198"><span class="lineNum">    1198 </span>            : </a>
+<span class="lineNum">    1199 </span>            : gimple_opt_pass *
+<span class="lineNum">    1200 </span><span class="lineCov">     170312 : make_pass_tail_calls (gcc::context *ctxt)</span>
+<span class="lineNum">    1201 </span>            : {
+<span class="lineNum">    1202 </span><span class="lineCov">     170312 :   return new pass_tail_calls (ctxt);</span>
+<span class="lineNum">    1203 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

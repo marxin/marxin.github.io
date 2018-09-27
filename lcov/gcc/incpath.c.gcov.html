@@ -1,0 +1,610 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/incpath.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - incpath.c<span style="font-size: 80%;"> (source / <a href="incpath.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">136</td>
+            <td class="headerCovTableEntry">194</td>
+            <td class="headerCovTableEntryLo">70.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntryMed">75.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Set up combined include path chain for the preprocessor.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1986-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            :    Broken out of cppinit.c and cppfiles.c and rewritten Mar 2003.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            :    This program is free software; you can redistribute it and/or modify it
+<span class="lineNum">       7 </span>            :    under the terms of the GNU General Public License as published by the
+<span class="lineNum">       8 </span>            :    Free Software Foundation; either version 3, or (at your option) any
+<span class="lineNum">       9 </span>            :    later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            :    This program is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            :    but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            :    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            :    GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            :    You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            :    along with this program; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            :    &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;cpplib.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;prefix.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;intl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;incpath.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cppdefault.h&quot;
+<span class="lineNum">      29 </span>            : 
+<span class="lineNum">      30 </span>            : /* Microsoft Windows does not natively support inodes.
+<span class="lineNum">      31 </span>            :    VMS has non-numeric inodes.  */
+<span class="lineNum">      32 </span>            : #ifdef VMS
+<span class="lineNum">      33 </span>            : # define INO_T_EQ(A, B) (!memcmp (&amp;(A), &amp;(B), sizeof (A)))
+<span class="lineNum">      34 </span>            : # define INO_T_COPY(DEST, SRC) memcpy (&amp;(DEST), &amp;(SRC), sizeof (SRC))
+<span class="lineNum">      35 </span>            : #elif !defined (HOST_LACKS_INODE_NUMBERS)
+<span class="lineNum">      36 </span>            : # define INO_T_EQ(A, B) ((A) == (B))
+<span class="lineNum">      37 </span>            : # define INO_T_COPY(DEST, SRC) (DEST) = (SRC)
+<span class="lineNum">      38 </span>            : #endif
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : #if defined INO_T_EQ
+<span class="lineNum">      41 </span>            : #define DIRS_EQ(A, B) ((A)-&gt;dev == (B)-&gt;dev \
+<span class="lineNum">      42 </span>            :         &amp;&amp; INO_T_EQ ((A)-&gt;ino, (B)-&gt;ino))
+<span class="lineNum">      43 </span>            : #else
+<span class="lineNum">      44 </span>            : #define DIRS_EQ(A, B) (!filename_cmp ((A)-&gt;canonical_name, (B)-&gt;canonical_name))
+<span class="lineNum">      45 </span>            : #endif
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            : static const char dir_separator_str[] = { DIR_SEPARATOR, 0 };
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : static void add_env_var_paths (const char *, incpath_kind);
+<span class="lineNum">      50 </span>            : static void add_standard_paths (const char *, const char *, const char *, int);
+<span class="lineNum">      51 </span>            : static void free_path (struct cpp_dir *, int);
+<span class="lineNum">      52 </span>            : static void merge_include_chains (const char *, cpp_reader *, int);
+<span class="lineNum">      53 </span>            : static void add_sysroot_to_chain (const char *, int);
+<span class="lineNum">      54 </span>            : static struct cpp_dir *remove_duplicates (cpp_reader *, struct cpp_dir *,
+<span class="lineNum">      55 </span>            :                                            struct cpp_dir *,
+<span class="lineNum">      56 </span>            :                                            struct cpp_dir *, int);
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            : /* Include chains heads and tails.  */
+<span class="lineNum">      59 </span>            : static struct cpp_dir *heads[INC_MAX];
+<span class="lineNum">      60 </span>            : static struct cpp_dir *tails[INC_MAX];
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            : static bool quote_ignores_source_dir;
+<span class="lineNum">      63 </span>            : enum { REASON_QUIET = 0, REASON_NOENT, REASON_DUP, REASON_DUP_SYS };
+<span class="lineNum">      64 </span>            : 
+<a name="65"><span class="lineNum">      65 </span>            : /* Free an element of the include chain, possibly giving a reason.  */</a>
+<span class="lineNum">      66 </span>            : static void
+<span class="lineNum">      67 </span><span class="lineCov">     831762 : free_path (struct cpp_dir *path, int reason)</span>
+<span class="lineNum">      68 </span>            : {
+<span class="lineNum">      69 </span><span class="lineCov">     831762 :   switch (reason)</span>
+<span class="lineNum">      70 </span>            :     {
+<span class="lineNum">      71 </span><span class="lineNoCov">          0 :     case REASON_DUP:</span>
+<span class="lineNum">      72 </span><span class="lineNoCov">          0 :     case REASON_DUP_SYS:</span>
+<span class="lineNum">      73 </span><span class="lineNoCov">          0 :       fprintf (stderr, _(&quot;ignoring duplicate directory \&quot;%s\&quot;\n&quot;), path-&gt;name);</span>
+<span class="lineNum">      74 </span><span class="lineNoCov">          0 :       if (reason == REASON_DUP_SYS)</span>
+<span class="lineNum">      75 </span><span class="lineNoCov">          0 :         fprintf (stderr,</span>
+<span class="lineNum">      76 </span><span class="lineNoCov">          0 :  _(&quot;  as it is a non-system directory that duplicates a system directory\n&quot;));</span>
+<span class="lineNum">      77 </span>            :       break;
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span><span class="lineCov">        630 :     case REASON_NOENT:</span>
+<span class="lineNum">      80 </span><span class="lineCov">        630 :       fprintf (stderr, _(&quot;ignoring nonexistent directory \&quot;%s\&quot;\n&quot;),</span>
+<span class="lineNum">      81 </span>            :                path-&gt;name);
+<span class="lineNum">      82 </span><span class="lineCov">        630 :       break;</span>
+<span class="lineNum">      83 </span>            : 
+<span class="lineNum">      84 </span>            :     case REASON_QUIET:
+<span class="lineNum">      85 </span>            :     default:
+<span class="lineNum">      86 </span>            :       break;
+<span class="lineNum">      87 </span>            :     }
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span><span class="lineCov">     831762 :   free (path-&gt;name);</span>
+<span class="lineNum">      90 </span><span class="lineCov">     831762 :   free (path);</span>
+<span class="lineNum">      91 </span><span class="lineCov">     831762 : }</span>
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : /* Read ENV_VAR for a PATH_SEPARATOR-separated list of file names; and
+<a name="94"><span class="lineNum">      94 </span>            :    append all the names to the search path CHAIN.  */</a>
+<span class="lineNum">      95 </span>            : static void
+<span class="lineNum">      96 </span><span class="lineCov">     263132 : add_env_var_paths (const char *env_var, incpath_kind chain)</span>
+<span class="lineNum">      97 </span>            : {
+<span class="lineNum">      98 </span><span class="lineCov">     263132 :   char *p, *q, *path;</span>
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span><span class="lineCov">     263132 :   q = getenv (env_var);</span>
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span><span class="lineCov">     263132 :   if (!q)</span>
+<span class="lineNum">     103 </span>            :     return;
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span><span class="lineNoCov">          0 :   for (p = q; *q; p = q + 1)</span>
+<span class="lineNum">     106 </span>            :     {
+<span class="lineNum">     107 </span>            :       q = p;
+<span class="lineNum">     108 </span><span class="lineNoCov">          0 :       while (*q != 0 &amp;&amp; *q != PATH_SEPARATOR)</span>
+<span class="lineNum">     109 </span><span class="lineNoCov">          0 :         q++;</span>
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span><span class="lineNoCov">          0 :       if (p == q)</span>
+<span class="lineNum">     112 </span><span class="lineNoCov">          0 :         path = xstrdup (&quot;.&quot;);</span>
+<span class="lineNum">     113 </span>            :       else
+<span class="lineNum">     114 </span>            :         {
+<span class="lineNum">     115 </span><span class="lineNoCov">          0 :           path = XNEWVEC (char, q - p + 1);</span>
+<span class="lineNum">     116 </span><span class="lineNoCov">          0 :           memcpy (path, p, q - p);</span>
+<span class="lineNum">     117 </span><span class="lineNoCov">          0 :           path[q - p] = '\0';</span>
+<span class="lineNum">     118 </span>            :         }
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span><span class="lineNoCov">          0 :       add_path (path, chain, chain == INC_SYSTEM, false);</span>
+<span class="lineNum">     121 </span>            :     }
+<span class="lineNum">     122 </span>            : }
+<span class="lineNum">     123 </span>            : 
+<a name="124"><span class="lineNum">     124 </span>            : /* Append the standard include chain defined in cppdefault.c.  */</a>
+<span class="lineNum">     125 </span>            : static void
+<span class="lineNum">     126 </span><span class="lineCov">     131537 : add_standard_paths (const char *sysroot, const char *iprefix,</span>
+<span class="lineNum">     127 </span>            :                     const char *imultilib, int cxx_stdinc)
+<span class="lineNum">     128 </span>            : {
+<span class="lineNum">     129 </span><span class="lineCov">     131537 :   const struct default_include *p;</span>
+<span class="lineNum">     130 </span><span class="lineCov">     131537 :   int relocated = cpp_relocated ();</span>
+<span class="lineNum">     131 </span><span class="lineCov">     131537 :   size_t len;</span>
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">     131537 :   if (iprefix &amp;&amp; (len = cpp_GCC_INCLUDE_DIR_len) != 0)</span>
+<span class="lineNum">     134 </span>            :     {
+<span class="lineNum">     135 </span>            :       /* Look for directories that start with the standard prefix.
+<span class="lineNum">     136 </span>            :          &quot;Translate&quot; them, i.e. replace /usr/local/lib/gcc... with
+<span class="lineNum">     137 </span>            :          IPREFIX and search them first.  */
+<span class="lineNum">     138 </span><span class="lineCov">    1445565 :       for (p = cpp_include_defaults; p-&gt;fname; p++)</span>
+<span class="lineNum">     139 </span>            :         {
+<span class="lineNum">     140 </span><span class="lineCov">    1314150 :           if (!p-&gt;cplusplus || cxx_stdinc)</span>
+<span class="lineNum">     141 </span>            :             {
+<span class="lineNum">     142 </span>            :               /* Should we be translating sysrooted dirs too?  Assume
+<span class="lineNum">     143 </span>            :                  that iprefix and sysroot are mutually exclusive, for
+<span class="lineNum">     144 </span>            :                  now.  */
+<span class="lineNum">     145 </span><span class="lineCov">     920001 :               if (sysroot &amp;&amp; p-&gt;add_sysroot)</span>
+<span class="lineNum">     146 </span>            :                 continue;
+<span class="lineNum">     147 </span><span class="lineCov">     920001 :               if (!filename_ncmp (p-&gt;fname, cpp_GCC_INCLUDE_DIR, len))</span>
+<span class="lineNum">     148 </span>            :                 {
+<span class="lineNum">     149 </span><span class="lineCov">     394341 :                   char *str = concat (iprefix, p-&gt;fname + len, NULL);</span>
+<span class="lineNum">     150 </span><span class="lineCov">     394341 :                   if (p-&gt;multilib == 1 &amp;&amp; imultilib)</span>
+<span class="lineNum">     151 </span><span class="lineNoCov">          0 :                     str = reconcat (str, str, dir_separator_str,</span>
+<span class="lineNum">     152 </span>            :                                     imultilib, NULL);
+<span class="lineNum">     153 </span><span class="lineCov">     394341 :                   else if (p-&gt;multilib == 2)</span>
+<span class="lineNum">     154 </span>            :                     {
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 :                       if (!imultiarch)</span>
+<span class="lineNum">     156 </span>            :                         {
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :                           free (str);</span>
+<span class="lineNum">     158 </span><span class="lineNoCov">          0 :                           continue;</span>
+<span class="lineNum">     159 </span>            :                         }
+<span class="lineNum">     160 </span><span class="lineNoCov">          0 :                       str = reconcat (str, str, dir_separator_str,</span>
+<span class="lineNum">     161 </span>            :                                       imultiarch, NULL);
+<span class="lineNum">     162 </span>            :                     }
+<span class="lineNum">     163 </span><span class="lineCov">     394341 :                   add_path (str, INC_SYSTEM, p-&gt;cxx_aware, false);</span>
+<span class="lineNum">     164 </span>            :                 }
+<span class="lineNum">     165 </span>            :             }
+<span class="lineNum">     166 </span>            :         }
+<span class="lineNum">     167 </span>            :     }
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineCov">    1446907 :   for (p = cpp_include_defaults; p-&gt;fname; p++)</span>
+<span class="lineNum">     170 </span>            :     {
+<span class="lineNum">     171 </span><span class="lineCov">    1315370 :       if (!p-&gt;cplusplus || cxx_stdinc)</span>
+<span class="lineNum">     172 </span>            :         {
+<span class="lineNum">     173 </span><span class="lineCov">     920969 :           char *str;</span>
+<span class="lineNum">     174 </span>            : 
+<span class="lineNum">     175 </span>            :           /* Should this directory start with the sysroot?  */
+<span class="lineNum">     176 </span><span class="lineCov">     920969 :           if (sysroot &amp;&amp; p-&gt;add_sysroot)</span>
+<span class="lineNum">     177 </span>            :             {
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :               char *sysroot_no_trailing_dir_separator = xstrdup (sysroot);</span>
+<span class="lineNum">     179 </span><span class="lineNoCov">          0 :               size_t sysroot_len = strlen (sysroot);</span>
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :               if (sysroot_len &gt; 0 &amp;&amp; sysroot[sysroot_len - 1] == DIR_SEPARATOR)</span>
+<span class="lineNum">     182 </span><span class="lineNoCov">          0 :                 sysroot_no_trailing_dir_separator[sysroot_len - 1] = '\0';</span>
+<span class="lineNum">     183 </span><span class="lineNoCov">          0 :               str = concat (sysroot_no_trailing_dir_separator, p-&gt;fname, NULL);</span>
+<span class="lineNum">     184 </span><span class="lineNoCov">          0 :               free (sysroot_no_trailing_dir_separator);</span>
+<span class="lineNum">     185 </span>            :             }
+<span class="lineNum">     186 </span><span class="lineCov">     394821 :           else if (!p-&gt;add_sysroot &amp;&amp; relocated</span>
+<span class="lineNum">     187 </span><span class="lineCov">    1315790 :                    &amp;&amp; !filename_ncmp (p-&gt;fname, cpp_PREFIX, cpp_PREFIX_len))</span>
+<span class="lineNum">     188 </span>            :             {
+<span class="lineNum">     189 </span><span class="lineCov">     394821 :               static const char *relocated_prefix;</span>
+<span class="lineNum">     190 </span><span class="lineCov">     394821 :               char *ostr;</span>
+<span class="lineNum">     191 </span>            :               /* If this path starts with the configure-time prefix,
+<span class="lineNum">     192 </span>            :                  but the compiler has been relocated, replace it
+<span class="lineNum">     193 </span>            :                  with the run-time prefix.  The run-time exec prefix
+<span class="lineNum">     194 </span>            :                  is GCC_EXEC_PREFIX.  Compute the path from there back
+<span class="lineNum">     195 </span>            :                  to the toplevel prefix.  */
+<span class="lineNum">     196 </span><span class="lineCov">     394821 :               if (!relocated_prefix)</span>
+<span class="lineNum">     197 </span>            :                 {
+<span class="lineNum">     198 </span><span class="lineCov">     370026 :                   char *dummy;</span>
+<span class="lineNum">     199 </span>            :                   /* Make relative prefix expects the first argument
+<span class="lineNum">     200 </span>            :                      to be a program, not a directory.  */
+<span class="lineNum">     201 </span><span class="lineCov">     370026 :                   dummy = concat (gcc_exec_prefix, &quot;dummy&quot;, NULL);</span>
+<span class="lineNum">     202 </span><span class="lineCov">     370026 :                   relocated_prefix</span>
+<span class="lineNum">     203 </span><span class="lineCov">     370026 :                     = make_relative_prefix (dummy,</span>
+<span class="lineNum">     204 </span>            :                                             cpp_EXEC_PREFIX,
+<span class="lineNum">     205 </span>            :                                             cpp_PREFIX);
+<span class="lineNum">     206 </span><span class="lineCov">     370026 :                   free (dummy);</span>
+<span class="lineNum">     207 </span>            :                 }
+<span class="lineNum">     208 </span><span class="lineCov">    1184463 :               ostr = concat (relocated_prefix,</span>
+<span class="lineNum">     209 </span><span class="lineCov">     394821 :                              p-&gt;fname + cpp_PREFIX_len,</span>
+<span class="lineNum">     210 </span>            :                              NULL);
+<span class="lineNum">     211 </span><span class="lineCov">     394821 :               str = update_path (ostr, p-&gt;component);</span>
+<span class="lineNum">     212 </span><span class="lineCov">     394821 :               free (ostr);</span>
+<span class="lineNum">     213 </span>            :             }
+<span class="lineNum">     214 </span>            :           else
+<span class="lineNum">     215 </span><span class="lineCov">     526148 :             str = update_path (p-&gt;fname, p-&gt;component);</span>
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span><span class="lineCov">     920969 :           if (p-&gt;multilib == 1 &amp;&amp; imultilib)</span>
+<span class="lineNum">     218 </span><span class="lineNoCov">          0 :             str = reconcat (str, str, dir_separator_str, imultilib, NULL);</span>
+<span class="lineNum">     219 </span><span class="lineCov">     920969 :           else if (p-&gt;multilib == 2)</span>
+<span class="lineNum">     220 </span>            :             {
+<span class="lineNum">     221 </span><span class="lineCov">     263074 :               if (!imultiarch)</span>
+<span class="lineNum">     222 </span>            :                 {
+<span class="lineNum">     223 </span><span class="lineCov">     263074 :                   free (str);</span>
+<span class="lineNum">     224 </span><span class="lineCov">     263074 :                   continue;</span>
+<span class="lineNum">     225 </span>            :                 }
+<span class="lineNum">     226 </span><span class="lineNoCov">          0 :               str = reconcat (str, str, dir_separator_str, imultiarch, NULL);</span>
+<span class="lineNum">     227 </span>            :             }
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">     657895 :           add_path (str, INC_SYSTEM, p-&gt;cxx_aware, false);</span>
+<span class="lineNum">     230 </span>            :         }
+<span class="lineNum">     231 </span>            :     }
+<span class="lineNum">     232 </span><span class="lineCov">     131537 : }</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            : /* For each duplicate path in chain HEAD, keep just the first one.
+<span class="lineNum">     235 </span>            :    Remove each path in chain HEAD that also exists in chain SYSTEM.
+<span class="lineNum">     236 </span>            :    Set the NEXT pointer of the last path in the resulting chain to
+<span class="lineNum">     237 </span>            :    JOIN, unless it duplicates JOIN in which case the last path is
+<span class="lineNum">     238 </span>            :    removed.  Return the head of the resulting chain.  Any of HEAD,
+<span class="lineNum">     239 </span>            :    JOIN and SYSTEM can be NULL.  */
+<a name="240"><span class="lineNum">     240 </span>            : </a>
+<span class="lineNum">     241 </span>            : static struct cpp_dir *
+<span class="lineNum">     242 </span><span class="lineCov">     394698 : remove_duplicates (cpp_reader *pfile, struct cpp_dir *head,</span>
+<span class="lineNum">     243 </span>            :                    struct cpp_dir *system, struct cpp_dir *join,
+<span class="lineNum">     244 </span>            :                    int verbose)
+<span class="lineNum">     245 </span>            : {
+<span class="lineNum">     246 </span><span class="lineCov">     394698 :   struct cpp_dir **pcur, *tmp, *cur;</span>
+<span class="lineNum">     247 </span><span class="lineCov">     394698 :   struct stat st;</span>
+<span class="lineNum">     248 </span>            : 
+<span class="lineNum">     249 </span><span class="lineCov">    2093813 :   for (pcur = &amp;head; *pcur; )</span>
+<span class="lineNum">     250 </span>            :     {
+<span class="lineNum">     251 </span><span class="lineCov">    1699115 :       int reason = REASON_QUIET;</span>
+<span class="lineNum">     252 </span>            : 
+<span class="lineNum">     253 </span><span class="lineCov">    1699115 :       cur = *pcur;</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">    1699115 :       if (stat (cur-&gt;name, &amp;st))</span>
+<span class="lineNum">     256 </span>            :         {
+<span class="lineNum">     257 </span>            :           /* Dirs that don't exist or have denied permissions are 
+<span class="lineNum">     258 </span>            :              silently ignored, unless verbose.  */
+<span class="lineNum">     259 </span><span class="lineCov">     827121 :           if ((errno != ENOENT) &amp;&amp; (errno != EPERM))</span>
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 :             cpp_errno (pfile, CPP_DL_ERROR, cur-&gt;name);</span>
+<span class="lineNum">     261 </span>            :           else
+<span class="lineNum">     262 </span>            :             {
+<span class="lineNum">     263 </span>            :               /* If -Wmissing-include-dirs is given, warn.  */
+<span class="lineNum">     264 </span><span class="lineCov">     827121 :               cpp_options *opts = cpp_get_options (pfile);</span>
+<span class="lineNum">     265 </span><span class="lineCov">     827121 :               if (opts-&gt;warn_missing_include_dirs &amp;&amp; cur-&gt;user_supplied_p)</span>
+<span class="lineNum">     266 </span><span class="lineCov">          1 :                 cpp_warning (pfile, CPP_W_MISSING_INCLUDE_DIRS, &quot;%s: %s&quot;,</span>
+<span class="lineNum">     267 </span>            :                              cur-&gt;name, xstrerror (errno));
+<span class="lineNum">     268 </span>            :               reason = REASON_NOENT;
+<span class="lineNum">     269 </span>            :             }
+<span class="lineNum">     270 </span>            :         }
+<span class="lineNum">     271 </span><span class="lineCov">     871994 :       else if (!S_ISDIR (st.st_mode))</span>
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :         cpp_error_with_line (pfile, CPP_DL_WARNING, 0, 0,</span>
+<span class="lineNum">     273 </span>            :                              &quot;%s: not a directory&quot;, cur-&gt;name);
+<span class="lineNum">     274 </span>            :       else
+<span class="lineNum">     275 </span>            :         {
+<span class="lineNum">     276 </span>            : #if defined (INO_T_COPY)
+<span class="lineNum">     277 </span><span class="lineCov">     871994 :           INO_T_COPY (cur-&gt;ino, st.st_ino);</span>
+<span class="lineNum">     278 </span><span class="lineCov">     871994 :           cur-&gt;dev  = st.st_dev;</span>
+<span class="lineNum">     279 </span>            : #endif
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            :           /* Remove this one if it is in the system chain.  */
+<span class="lineNum">     282 </span><span class="lineCov">     871994 :           reason = REASON_DUP_SYS;</span>
+<span class="lineNum">     283 </span><span class="lineCov">    2244784 :           for (tmp = system; tmp; tmp = tmp-&gt;next)</span>
+<span class="lineNum">     284 </span><span class="lineCov">    1372978 :            if (DIRS_EQ (tmp, cur) &amp;&amp; cur-&gt;construct == tmp-&gt;construct)</span>
+<span class="lineNum">     285 </span>            :               break;
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span><span class="lineCov">     871994 :           if (!tmp)</span>
+<span class="lineNum">     288 </span>            :             {
+<span class="lineNum">     289 </span>            :               /* Duplicate of something earlier in the same chain?  */
+<span class="lineNum">     290 </span><span class="lineCov">     871806 :               reason = REASON_DUP;</span>
+<span class="lineNum">     291 </span><span class="lineCov">    2457429 :               for (tmp = head; tmp != cur; tmp = tmp-&gt;next)</span>
+<span class="lineNum">     292 </span><span class="lineCov">    1590076 :                if (DIRS_EQ (cur, tmp) &amp;&amp; cur-&gt;construct == tmp-&gt;construct)</span>
+<span class="lineNum">     293 </span>            :                   break;
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">     871806 :               if (tmp == cur</span>
+<span class="lineNum">     296 </span>            :                   /* Last in the chain and duplicate of JOIN?  */
+<span class="lineNum">     297 </span><span class="lineCov">     867353 :                   &amp;&amp; !(cur-&gt;next == NULL &amp;&amp; join</span>
+<span class="lineNum">     298 </span><span class="lineCov">      66266 :                        &amp;&amp; DIRS_EQ (cur, join)</span>
+<span class="lineNum">     299 </span><span class="lineNoCov">          0 :                        &amp;&amp; cur-&gt;construct == join-&gt;construct))</span>
+<span class="lineNum">     300 </span>            :                 {
+<span class="lineNum">     301 </span>            :                   /* Unique, so keep this directory.  */
+<span class="lineNum">     302 </span><span class="lineCov">     867353 :                   pcur = &amp;cur-&gt;next;</span>
+<span class="lineNum">     303 </span><span class="lineCov">     867353 :                   continue;</span>
+<span class="lineNum">     304 </span>            :                 }
+<span class="lineNum">     305 </span>            :             }
+<span class="lineNum">     306 </span>            :         }
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            :       /* Remove this entry from the chain.  */
+<span class="lineNum">     309 </span><span class="lineCov">     831762 :       *pcur = cur-&gt;next;</span>
+<span class="lineNum">     310 </span><span class="lineCov">     832392 :       free_path (cur, verbose ? reason: REASON_QUIET);</span>
+<span class="lineNum">     311 </span>            :     }
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span><span class="lineCov">     394698 :   *pcur = join;</span>
+<span class="lineNum">     314 </span><span class="lineCov">     394698 :   return head;</span>
+<span class="lineNum">     315 </span>            : }
+<span class="lineNum">     316 </span>            : 
+<span class="lineNum">     317 </span>            : /* Add SYSROOT to any user-supplied paths in CHAIN starting with
+<span class="lineNum">     318 </span>            :    &quot;=&quot; or &quot;$SYSROOT&quot;.  */
+<a name="319"><span class="lineNum">     319 </span>            : </a>
+<span class="lineNum">     320 </span>            : static void
+<span class="lineNum">     321 </span><span class="lineNoCov">          0 : add_sysroot_to_chain (const char *sysroot, int chain)</span>
+<span class="lineNum">     322 </span>            : {
+<span class="lineNum">     323 </span><span class="lineNoCov">          0 :   struct cpp_dir *p;</span>
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span><span class="lineNoCov">          0 :   for (p = heads[chain]; p != NULL; p = p-&gt;next)</span>
+<span class="lineNum">     326 </span>            :     {
+<span class="lineNum">     327 </span><span class="lineNoCov">          0 :       if (p-&gt;user_supplied_p)</span>
+<span class="lineNum">     328 </span>            :         {
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :           if (p-&gt;name[0] == '=')</span>
+<span class="lineNum">     330 </span><span class="lineNoCov">          0 :             p-&gt;name = concat (sysroot, p-&gt;name + 1, NULL);</span>
+<span class="lineNum">     331 </span><span class="lineNoCov">          0 :           if (strncmp (p-&gt;name, &quot;$SYSROOT&quot;, strlen (&quot;$SYSROOT&quot;)) == 0)</span>
+<span class="lineNum">     332 </span><span class="lineNoCov">          0 :             p-&gt;name = concat (sysroot, p-&gt;name + strlen (&quot;$SYSROOT&quot;), NULL);</span>
+<span class="lineNum">     333 </span>            :         }
+<span class="lineNum">     334 </span>            :     }
+<span class="lineNum">     335 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     336 </span>            : 
+<span class="lineNum">     337 </span>            : /* Merge the four include chains together in the order quote, bracket,
+<span class="lineNum">     338 </span>            :    system, after.  Remove duplicate dirs (determined in
+<span class="lineNum">     339 </span>            :    system-specific manner).
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span>            :    We can't just merge the lists and then uniquify them because then
+<span class="lineNum">     342 </span>            :    we may lose directories from the &lt;&gt; search path that should be
+<span class="lineNum">     343 </span>            :    there; consider -iquote foo -iquote bar -Ifoo -Iquux.  It is
+<span class="lineNum">     344 </span>            :    however safe to treat -iquote bar -iquote foo -Ifoo -Iquux as if
+<span class="lineNum">     345 </span>            :    written -iquote bar -Ifoo -Iquux.  */
+<a name="346"><span class="lineNum">     346 </span>            : </a>
+<span class="lineNum">     347 </span>            : static void
+<span class="lineNum">     348 </span><span class="lineCov">     131566 : merge_include_chains (const char *sysroot, cpp_reader *pfile, int verbose)</span>
+<span class="lineNum">     349 </span>            : {
+<span class="lineNum">     350 </span>            :   /* Add the sysroot to user-supplied paths starting with &quot;=&quot;.  */
+<span class="lineNum">     351 </span><span class="lineCov">     131566 :   if (sysroot)</span>
+<span class="lineNum">     352 </span>            :     {
+<span class="lineNum">     353 </span><span class="lineNoCov">          0 :       add_sysroot_to_chain (sysroot, INC_QUOTE);</span>
+<span class="lineNum">     354 </span><span class="lineNoCov">          0 :       add_sysroot_to_chain (sysroot, INC_BRACKET);</span>
+<span class="lineNum">     355 </span><span class="lineNoCov">          0 :       add_sysroot_to_chain (sysroot, INC_SYSTEM);</span>
+<span class="lineNum">     356 </span><span class="lineNoCov">          0 :       add_sysroot_to_chain (sysroot, INC_AFTER);</span>
+<span class="lineNum">     357 </span>            :     }
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :   /* Join the SYSTEM and AFTER chains.  Remove duplicates in the
+<span class="lineNum">     360 </span>            :      resulting SYSTEM chain.  */
+<span class="lineNum">     361 </span><span class="lineCov">     131566 :   if (heads[INC_SYSTEM])</span>
+<span class="lineNum">     362 </span><span class="lineCov">     131566 :     tails[INC_SYSTEM]-&gt;next = heads[INC_AFTER];</span>
+<span class="lineNum">     363 </span>            :   else
+<span class="lineNum">     364 </span><span class="lineNoCov">          0 :     heads[INC_SYSTEM] = heads[INC_AFTER];</span>
+<span class="lineNum">     365 </span><span class="lineCov">     131566 :   heads[INC_SYSTEM]</span>
+<span class="lineNum">     366 </span><span class="lineCov">     131566 :     = remove_duplicates (pfile, heads[INC_SYSTEM], 0, 0, verbose);</span>
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            :   /* Remove duplicates from BRACKET that are in itself or SYSTEM, and
+<span class="lineNum">     369 </span>            :      join it to SYSTEM.  */
+<span class="lineNum">     370 </span><span class="lineCov">     131566 :   heads[INC_BRACKET]</span>
+<span class="lineNum">     371 </span><span class="lineCov">     131566 :     = remove_duplicates (pfile, heads[INC_BRACKET], heads[INC_SYSTEM],</span>
+<span class="lineNum">     372 </span>            :                          heads[INC_SYSTEM], verbose);
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span>            :   /* Remove duplicates from QUOTE that are in itself or SYSTEM, and
+<span class="lineNum">     375 </span>            :      join it to BRACKET.  */
+<span class="lineNum">     376 </span><span class="lineCov">     131566 :   heads[INC_QUOTE]</span>
+<span class="lineNum">     377 </span><span class="lineCov">     131566 :     = remove_duplicates (pfile, heads[INC_QUOTE], heads[INC_SYSTEM],</span>
+<span class="lineNum">     378 </span>            :                          heads[INC_BRACKET], verbose);
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            :   /* If verbose, print the list of dirs to search.  */
+<span class="lineNum">     381 </span><span class="lineCov">     131566 :   if (verbose)</span>
+<span class="lineNum">     382 </span>            :     {
+<span class="lineNum">     383 </span><span class="lineCov">        105 :       struct cpp_dir *p;</span>
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span><span class="lineCov">        105 :       fprintf (stderr, _(&quot;#include \&quot;...\&quot; search starts here:\n&quot;));</span>
+<span class="lineNum">     386 </span><span class="lineCov">        105 :       for (p = heads[INC_QUOTE];; p = p-&gt;next)</span>
+<span class="lineNum">     387 </span>            :         {
+<span class="lineNum">     388 </span><span class="lineCov">        525 :           if (p == heads[INC_BRACKET])</span>
+<span class="lineNum">     389 </span><span class="lineCov">        105 :             fprintf (stderr, _(&quot;#include &lt;...&gt; search starts here:\n&quot;));</span>
+<span class="lineNum">     390 </span><span class="lineCov">        525 :           if (!p)</span>
+<span class="lineNum">     391 </span>            :             break;
+<span class="lineNum">     392 </span><span class="lineCov">        420 :           fprintf (stderr, &quot; %s\n&quot;, p-&gt;name);</span>
+<span class="lineNum">     393 </span>            :         }
+<span class="lineNum">     394 </span><span class="lineCov">        105 :       fprintf (stderr, _(&quot;End of search list.\n&quot;));</span>
+<span class="lineNum">     395 </span>            :     }
+<span class="lineNum">     396 </span><span class="lineCov">     131566 : }</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span>            : /* Use given -I paths for #include &quot;...&quot; but not #include &lt;...&gt;, and
+<span class="lineNum">     399 </span>            :    don't search the directory of the present file for #include &quot;...&quot;.
+<span class="lineNum">     400 </span>            :    (Note that -I. -I- is not the same as the default setup; -I. uses
+<a name="401"><span class="lineNum">     401 </span>            :    the compiler's working dir.)  */</a>
+<span class="lineNum">     402 </span>            : void
+<span class="lineNum">     403 </span><span class="lineNoCov">          0 : split_quote_chain (void)</span>
+<span class="lineNum">     404 </span>            : {
+<span class="lineNum">     405 </span><span class="lineNoCov">          0 :   if (heads[INC_QUOTE])</span>
+<span class="lineNum">     406 </span><span class="lineNoCov">          0 :     free_path (heads[INC_QUOTE], REASON_QUIET);</span>
+<span class="lineNum">     407 </span><span class="lineNoCov">          0 :   if (tails[INC_QUOTE])</span>
+<span class="lineNum">     408 </span><span class="lineNoCov">          0 :     free_path (tails[INC_QUOTE], REASON_QUIET);</span>
+<span class="lineNum">     409 </span><span class="lineNoCov">          0 :   heads[INC_QUOTE] = heads[INC_BRACKET];</span>
+<span class="lineNum">     410 </span><span class="lineNoCov">          0 :   tails[INC_QUOTE] = tails[INC_BRACKET];</span>
+<span class="lineNum">     411 </span><span class="lineNoCov">          0 :   heads[INC_BRACKET] = NULL;</span>
+<span class="lineNum">     412 </span><span class="lineNoCov">          0 :   tails[INC_BRACKET] = NULL;</span>
+<span class="lineNum">     413 </span>            :   /* This is NOT redundant.  */
+<span class="lineNum">     414 </span><span class="lineNoCov">          0 :   quote_ignores_source_dir = true;</span>
+<span class="lineNum">     415 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            : /* Add P to the chain specified by CHAIN.  */
+<a name="418"><span class="lineNum">     418 </span>            : </a>
+<span class="lineNum">     419 </span>            : void
+<span class="lineNum">     420 </span><span class="lineCov">    1729799 : add_cpp_dir_path (cpp_dir *p, incpath_kind chain)</span>
+<span class="lineNum">     421 </span>            : {
+<span class="lineNum">     422 </span><span class="lineCov">    1729799 :   if (tails[chain])</span>
+<span class="lineNum">     423 </span><span class="lineCov">    1507274 :     tails[chain]-&gt;next = p;</span>
+<span class="lineNum">     424 </span>            :   else
+<span class="lineNum">     425 </span><span class="lineCov">     222525 :     heads[chain] = p;</span>
+<span class="lineNum">     426 </span><span class="lineCov">    1729799 :   tails[chain] = p;</span>
+<span class="lineNum">     427 </span><span class="lineCov">    1729799 : }</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            : /* Add PATH to the include chain CHAIN. PATH must be malloc-ed and
+<a name="430"><span class="lineNum">     430 </span>            :    NUL-terminated.  */</a>
+<span class="lineNum">     431 </span>            : void
+<span class="lineNum">     432 </span><span class="lineCov">    1729799 : add_path (char *path, incpath_kind chain, int cxx_aware, bool user_supplied_p)</span>
+<span class="lineNum">     433 </span>            : {
+<span class="lineNum">     434 </span><span class="lineCov">    1729799 :   cpp_dir *p;</span>
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            : #if defined (HAVE_DOS_BASED_FILE_SYSTEM)
+<span class="lineNum">     437 </span>            :   /* Remove unnecessary trailing slashes.  On some versions of MS
+<span class="lineNum">     438 </span>            :      Windows, trailing  _forward_ slashes cause no problems for stat().
+<span class="lineNum">     439 </span>            :      On newer versions, stat() does not recognize a directory that ends
+<span class="lineNum">     440 </span>            :      in a '\\' or '/', unless it is a drive root dir, such as &quot;c:/&quot;,
+<span class="lineNum">     441 </span>            :      where it is obligatory.  */
+<span class="lineNum">     442 </span>            :   int pathlen = strlen (path);
+<span class="lineNum">     443 </span>            :   char* end = path + pathlen - 1;
+<span class="lineNum">     444 </span>            :   /* Preserve the lead '/' or lead &quot;c:/&quot;.  */
+<span class="lineNum">     445 </span>            :   char* start = path + (pathlen &gt; 2 &amp;&amp; path[1] == ':' ? 3 : 1);
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :   for (; end &gt; start &amp;&amp; IS_DIR_SEPARATOR (*end); end--)
+<span class="lineNum">     448 </span>            :     *end = 0;
+<span class="lineNum">     449 </span>            : #endif
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span><span class="lineCov">    1729799 :   p = XNEW (cpp_dir);</span>
+<span class="lineNum">     452 </span><span class="lineCov">    1729799 :   p-&gt;next = NULL;</span>
+<span class="lineNum">     453 </span><span class="lineCov">    1729799 :   p-&gt;name = path;</span>
+<span class="lineNum">     454 </span>            : #ifndef INO_T_EQ
+<span class="lineNum">     455 </span>            :   p-&gt;canonical_name = lrealpath (path);
+<span class="lineNum">     456 </span>            : #endif
+<span class="lineNum">     457 </span><span class="lineCov">    1729799 :   if (chain == INC_SYSTEM || chain == INC_AFTER)</span>
+<span class="lineNum">     458 </span><span class="lineCov">    1744441 :     p-&gt;sysp = 1 + !cxx_aware;</span>
+<span class="lineNum">     459 </span>            :   else
+<span class="lineNum">     460 </span><span class="lineCov">     380153 :     p-&gt;sysp = 0;</span>
+<span class="lineNum">     461 </span><span class="lineCov">    1729799 :   p-&gt;construct = 0;</span>
+<span class="lineNum">     462 </span><span class="lineCov">    1729799 :   p-&gt;user_supplied_p = user_supplied_p;</span>
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span><span class="lineCov">    1729799 :   add_cpp_dir_path (p, chain);</span>
+<span class="lineNum">     465 </span><span class="lineCov">    1729799 : }</span>
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            : /* Exported function to handle include chain merging, duplicate
+<a name="468"><span class="lineNum">     468 </span>            :    removal, and registration with cpplib.  */</a>
+<span class="lineNum">     469 </span>            : void
+<span class="lineNum">     470 </span><span class="lineCov">     131566 : register_include_chains (cpp_reader *pfile, const char *sysroot,</span>
+<span class="lineNum">     471 </span>            :                          const char *iprefix, const char *imultilib,
+<span class="lineNum">     472 </span>            :                          int stdinc, int cxx_stdinc, int verbose)
+<span class="lineNum">     473 </span>            : {
+<span class="lineNum">     474 </span><span class="lineCov">     131566 :   static const char *const lang_env_vars[] =</span>
+<span class="lineNum">     475 </span>            :     { &quot;C_INCLUDE_PATH&quot;, &quot;CPLUS_INCLUDE_PATH&quot;,
+<span class="lineNum">     476 </span>            :       &quot;OBJC_INCLUDE_PATH&quot;, &quot;OBJCPLUS_INCLUDE_PATH&quot; };
+<span class="lineNum">     477 </span><span class="lineCov">     131566 :   cpp_options *cpp_opts = cpp_get_options (pfile);</span>
+<span class="lineNum">     478 </span><span class="lineCov">     131566 :   size_t idx = (cpp_opts-&gt;objc ? 2: 0);</span>
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span><span class="lineCov">     131566 :   if (cpp_opts-&gt;cplusplus)</span>
+<span class="lineNum">     481 </span><span class="lineCov">      57808 :     idx++;</span>
+<span class="lineNum">     482 </span>            :   else
+<span class="lineNum">     483 </span>            :     cxx_stdinc = false;
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span>            :   /* CPATH and language-dependent environment variables may add to the
+<span class="lineNum">     486 </span>            :      include chain.  */
+<span class="lineNum">     487 </span><span class="lineCov">     131566 :   add_env_var_paths (&quot;CPATH&quot;, INC_BRACKET);</span>
+<span class="lineNum">     488 </span><span class="lineCov">     131566 :   add_env_var_paths (lang_env_vars[idx], INC_SYSTEM);</span>
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span><span class="lineCov">     131566 :   target_c_incpath.extra_pre_includes (sysroot, iprefix, stdinc);</span>
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span>            :   /* Finally chain on the standard directories.  */
+<span class="lineNum">     493 </span><span class="lineCov">     131566 :   if (stdinc)</span>
+<span class="lineNum">     494 </span><span class="lineCov">     131537 :     add_standard_paths (sysroot, iprefix, imultilib, cxx_stdinc);</span>
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span><span class="lineCov">     131566 :   target_c_incpath.extra_includes (sysroot, iprefix, stdinc);</span>
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span><span class="lineCov">     131566 :   merge_include_chains (sysroot, pfile, verbose);</span>
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span><span class="lineCov">     131566 :   cpp_set_include_chains (pfile, heads[INC_QUOTE], heads[INC_BRACKET],</span>
+<span class="lineNum">     501 </span>            :                           quote_ignores_source_dir);
+<span class="lineNum">     502 </span><span class="lineCov">     131566 : }</span>
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span>            : /* Return the current chain of cpp dirs.  */
+<a name="505"><span class="lineNum">     505 </span>            : </a>
+<span class="lineNum">     506 </span>            : struct cpp_dir *
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 : get_added_cpp_dirs (incpath_kind chain)</span>
+<span class="lineNum">     508 </span>            : {
+<span class="lineNum">     509 </span><span class="lineNoCov">          0 :   return heads[chain];</span>
+<span class="lineNum">     510 </span>            : }
+<a name="511"><span class="lineNum">     511 </span>            : </a>
+<span class="lineNum">     512 </span>            : #if !(defined TARGET_EXTRA_INCLUDES) || !(defined TARGET_EXTRA_PRE_INCLUDES)
+<span class="lineNum">     513 </span><span class="lineCov">     263132 : static void hook_void_charptr_charptr_int (const char *sysroot ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     514 </span>            :                                            const char *iprefix ATTRIBUTE_UNUSED,
+<span class="lineNum">     515 </span>            :                                            int stdinc ATTRIBUTE_UNUSED)
+<span class="lineNum">     516 </span>            : {
+<span class="lineNum">     517 </span><span class="lineCov">     263132 : }</span>
+<span class="lineNum">     518 </span>            : #endif
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span>            : #ifndef TARGET_EXTRA_INCLUDES
+<span class="lineNum">     521 </span>            : #define TARGET_EXTRA_INCLUDES hook_void_charptr_charptr_int
+<span class="lineNum">     522 </span>            : #endif
+<span class="lineNum">     523 </span>            : #ifndef TARGET_EXTRA_PRE_INCLUDES
+<span class="lineNum">     524 </span>            : #define TARGET_EXTRA_PRE_INCLUDES hook_void_charptr_charptr_int
+<span class="lineNum">     525 </span>            : #endif
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span>            : struct target_c_incpath_s target_c_incpath = { TARGET_EXTRA_PRE_INCLUDES, TARGET_EXTRA_INCLUDES };
+<span class="lineNum">     528 </span>            : 
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

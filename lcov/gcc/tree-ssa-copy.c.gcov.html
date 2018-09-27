@@ -1,0 +1,742 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-copy.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-copy.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-copy.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">178</td>
+            <td class="headerCovTableEntry">218</td>
+            <td class="headerCovTableEntryMed">81.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntryHi">93.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Copy propagation and SSA_NAME replacement support routines.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;tree-ssa-propagate.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-scalar-evolution.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-ssa-loop-niter.h&quot;
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : /* This file implements the copy propagation pass and provides a
+<span class="lineNum">      39 </span>            :    handful of interfaces for performing const/copy propagation and
+<span class="lineNum">      40 </span>            :    simple expression replacement which keep variable annotations
+<span class="lineNum">      41 </span>            :    up-to-date.
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :    We require that for any copy operation where the RHS and LHS have
+<span class="lineNum">      44 </span>            :    a non-null memory tag the memory tag be the same.   It is OK
+<span class="lineNum">      45 </span>            :    for one or both of the memory tags to be NULL.
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :    We also require tracking if a variable is dereferenced in a load or
+<span class="lineNum">      48 </span>            :    store operation.
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :    We enforce these requirements by having all copy propagation and
+<span class="lineNum">      51 </span>            :    replacements of one SSA_NAME with a different SSA_NAME to use the
+<span class="lineNum">      52 </span>            :    APIs defined in this file.  */
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            : /*---------------------------------------------------------------------------
+<span class="lineNum">      55 </span>            :                                 Copy propagation
+<span class="lineNum">      56 </span>            : ---------------------------------------------------------------------------*/
+<span class="lineNum">      57 </span>            : /* Lattice for copy-propagation.  The lattice is initialized to
+<span class="lineNum">      58 </span>            :    UNDEFINED (value == NULL) for SSA names that can become a copy
+<span class="lineNum">      59 </span>            :    of something or VARYING (value == self) if not (see get_copy_of_val
+<span class="lineNum">      60 </span>            :    and stmt_may_generate_copy).  Other values make the name a COPY
+<span class="lineNum">      61 </span>            :    of that value.
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :    When visiting a statement or PHI node the lattice value for an
+<span class="lineNum">      64 </span>            :    SSA name can transition from UNDEFINED to COPY to VARYING.  */
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            : struct prop_value_t {
+<span class="lineNum">      67 </span>            :     /* Copy-of value.  */
+<span class="lineNum">      68 </span>            :     tree value;
+<span class="lineNum">      69 </span>            : };
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span><span class="lineCov">     756106 : class copy_prop : public ssa_propagation_engine</span>
+<span class="lineNum">      72 </span>            : {
+<span class="lineNum">      73 </span>            :  public:
+<span class="lineNum">      74 </span>            :   enum ssa_prop_result visit_stmt (gimple *, edge *, tree *) FINAL OVERRIDE;
+<span class="lineNum">      75 </span>            :   enum ssa_prop_result visit_phi (gphi *) FINAL OVERRIDE;
+<span class="lineNum">      76 </span>            : };
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : static prop_value_t *copy_of;
+<span class="lineNum">      79 </span>            : static unsigned n_copy_of;
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            : /* Return true if this statement may generate a useful copy.  */
+<a name="83"><span class="lineNum">      83 </span>            : </a>
+<span class="lineNum">      84 </span>            : static bool
+<span class="lineNum">      85 </span><span class="lineCov">   72225690 : stmt_may_generate_copy (gimple *stmt)</span>
+<span class="lineNum">      86 </span>            : {
+<span class="lineNum">      87 </span><span class="lineCov">  144451380 :   if (gimple_code (stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">      88 </span><span class="lineCov">         89 :     return !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_phi_result (stmt));</span>
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span><span class="lineCov">  144451202 :   if (gimple_code (stmt) != GIMPLE_ASSIGN)</span>
+<span class="lineNum">      91 </span>            :     return false;
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            :   /* If the statement has volatile operands, it won't generate a
+<span class="lineNum">      94 </span>            :      useful copy.  */
+<span class="lineNum">      95 </span><span class="lineCov">   39846022 :   if (gimple_has_volatile_ops (stmt))</span>
+<span class="lineNum">      96 </span>            :     return false;
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            :   /* Statements with loads and/or stores will never generate a useful copy.  */
+<span class="lineNum">      99 </span><span class="lineCov">   36153088 :   if (gimple_vuse (stmt))</span>
+<span class="lineNum">     100 </span>            :     return false;
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            :   /* Otherwise, the only statements that generate useful copies are
+<span class="lineNum">     103 </span>            :      assignments whose RHS is just an SSA name that doesn't flow
+<span class="lineNum">     104 </span>            :      through abnormal edges.  */
+<span class="lineNum">     105 </span><span class="lineCov">    7312141 :   return ((gimple_assign_rhs_code (stmt) == SSA_NAME</span>
+<span class="lineNum">     106 </span><span class="lineCov">      13848 :            &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_assign_rhs1 (stmt)))</span>
+<span class="lineNum">     107 </span><span class="lineCov">    7312810 :           || is_gimple_min_invariant (gimple_assign_rhs1 (stmt)));</span>
+<span class="lineNum">     108 </span>            : }
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* Return the copy-of value for VAR.  */
+<a name="112"><span class="lineNum">     112 </span>            : </a>
+<span class="lineNum">     113 </span>            : static inline prop_value_t *
+<span class="lineNum">     114 </span><span class="lineCov">    8952722 : get_copy_of_val (tree var)</span>
+<span class="lineNum">     115 </span>            : {
+<span class="lineNum">     116 </span><span class="lineCov">    8952722 :   prop_value_t *val = &amp;copy_of[SSA_NAME_VERSION (var)];</span>
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span><span class="lineCov">    8952722 :   if (val-&gt;value == NULL_TREE</span>
+<span class="lineNum">     119 </span><span class="lineCov">    8952722 :       &amp;&amp; !stmt_may_generate_copy (SSA_NAME_DEF_STMT (var)))</span>
+<span class="lineNum">     120 </span>            :     {
+<span class="lineNum">     121 </span>            :       /* If the variable will never generate a useful copy relation,
+<span class="lineNum">     122 </span>            :          make it its own copy.  */
+<span class="lineNum">     123 </span><span class="lineCov">     166657 :       val-&gt;value = var;</span>
+<span class="lineNum">     124 </span>            :     }
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span><span class="lineCov">    8952722 :   return val;</span>
+<span class="lineNum">     127 </span>            : }
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : /* Return the variable VAR is a copy of or VAR if VAR isn't the result
+<span class="lineNum">     130 </span>            :    of a copy.  */
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : static inline tree
+<span class="lineNum">     133 </span>            : valueize_val (tree var)
+<span class="lineNum">     134 </span>            : {
+<span class="lineNum">     135 </span><span class="lineCov">    7562676 :   if (TREE_CODE (var) == SSA_NAME)</span>
+<span class="lineNum">     136 </span>            :     {
+<span class="lineNum">     137 </span><span class="lineCov">    4758016 :       tree val = get_copy_of_val (var)-&gt;value;</span>
+<span class="lineNum">     138 </span><span class="lineCov">    4758016 :       if (val)</span>
+<span class="lineNum">     139 </span><span class="lineCov">    4758016 :         return val;</span>
+<span class="lineNum">     140 </span>            :     }
+<span class="lineNum">     141 </span>            :   return var;
+<span class="lineNum">     142 </span>            : }
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            : /* Set VAL to be the copy of VAR.  If that changed return true.  */
+<a name="145"><span class="lineNum">     145 </span>            : </a>
+<span class="lineNum">     146 </span>            : static inline bool
+<span class="lineNum">     147 </span><span class="lineCov">   31567793 : set_copy_of_val (tree var, tree val)</span>
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span><span class="lineCov">   31567793 :   unsigned int ver = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">     150 </span><span class="lineCov">   31567793 :   tree old;</span>
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span>            :   /* Set FIRST to be the first link in COPY_OF[DEST].  If that
+<span class="lineNum">     153 </span>            :      changed, return true.  */
+<span class="lineNum">     154 </span><span class="lineCov">   31567793 :   old = copy_of[ver].value;</span>
+<span class="lineNum">     155 </span><span class="lineCov">   31567793 :   copy_of[ver].value = val;</span>
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span><span class="lineCov">   31567793 :   if (old != val</span>
+<span class="lineNum">     158 </span><span class="lineCov">   31567793 :       || (val &amp;&amp; !operand_equal_p (old, val, 0)))</span>
+<span class="lineNum">     159 </span><span class="lineCov">   31545228 :     return true;</span>
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            :   return false;
+<span class="lineNum">     162 </span>            : }
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span>            : /* Dump the copy-of value for variable VAR to FILE.  */
+<a name="166"><span class="lineNum">     166 </span>            : </a>
+<span class="lineNum">     167 </span>            : static void
+<span class="lineNum">     168 </span><span class="lineNoCov">          0 : dump_copy_of (FILE *file, tree var)</span>
+<span class="lineNum">     169 </span>            : {
+<span class="lineNum">     170 </span><span class="lineNoCov">          0 :   tree val;</span>
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 :   print_generic_expr (file, var, dump_flags);</span>
+<span class="lineNum">     173 </span><span class="lineNoCov">          0 :   if (TREE_CODE (var) != SSA_NAME)</span>
+<span class="lineNum">     174 </span>            :     return;
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span><span class="lineNoCov">          0 :   val = copy_of[SSA_NAME_VERSION (var)].value;</span>
+<span class="lineNum">     177 </span><span class="lineNoCov">          0 :   fprintf (file, &quot; copy-of chain: &quot;);</span>
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :   print_generic_expr (file, var);</span>
+<span class="lineNum">     179 </span><span class="lineNoCov">          0 :   fprintf (file, &quot; &quot;);</span>
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :   if (!val)</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :     fprintf (file, &quot;[UNDEFINED]&quot;);</span>
+<span class="lineNum">     182 </span><span class="lineNoCov">          0 :   else if (val == var)</span>
+<span class="lineNum">     183 </span><span class="lineNoCov">          0 :     fprintf (file, &quot;[NOT A COPY]&quot;);</span>
+<span class="lineNum">     184 </span>            :   else
+<span class="lineNum">     185 </span>            :     {
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;-&gt; &quot;);</span>
+<span class="lineNum">     187 </span><span class="lineNoCov">          0 :       print_generic_expr (file, val);</span>
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 :       fprintf (file, &quot; &quot;);</span>
+<span class="lineNum">     189 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;[COPY]&quot;);</span>
+<span class="lineNum">     190 </span>            :     }
+<span class="lineNum">     191 </span>            : }
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span>            : /* Evaluate the RHS of STMT.  If it produces a valid copy, set the LHS
+<span class="lineNum">     195 </span>            :    value and store the LHS into *RESULT_P.  */
+<a name="196"><span class="lineNum">     196 </span>            : </a>
+<span class="lineNum">     197 </span>            : static enum ssa_prop_result
+<span class="lineNum">     198 </span><span class="lineCov">      17940 : copy_prop_visit_assignment (gimple *stmt, tree *result_p)</span>
+<span class="lineNum">     199 </span>            : {
+<span class="lineNum">     200 </span><span class="lineCov">      17940 :   tree lhs, rhs;</span>
+<span class="lineNum">     201 </span>            : 
+<span class="lineNum">     202 </span><span class="lineCov">      17940 :   lhs = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     203 </span><span class="lineCov">      35880 :   rhs = valueize_val (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span><span class="lineCov">      17940 :   if (TREE_CODE (lhs) == SSA_NAME)</span>
+<span class="lineNum">     206 </span>            :     {
+<span class="lineNum">     207 </span>            :       /* Straight copy between two SSA names.  First, make sure that
+<span class="lineNum">     208 </span>            :          we can propagate the RHS into uses of LHS.  */
+<span class="lineNum">     209 </span><span class="lineCov">      17940 :       if (!may_propagate_copy (lhs, rhs))</span>
+<span class="lineNum">     210 </span>            :         return SSA_PROP_VARYING;
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span><span class="lineCov">      17512 :       *result_p = lhs;</span>
+<span class="lineNum">     213 </span><span class="lineCov">      17512 :       if (set_copy_of_val (*result_p, rhs))</span>
+<span class="lineNum">     214 </span>            :         return SSA_PROP_INTERESTING;
+<span class="lineNum">     215 </span>            :       else
+<span class="lineNum">     216 </span><span class="lineNoCov">          0 :         return SSA_PROP_NOT_INTERESTING;</span>
+<span class="lineNum">     217 </span>            :     }
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   return SSA_PROP_VARYING;
+<span class="lineNum">     220 </span>            : }
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            : /* Visit the GIMPLE_COND STMT.  Return SSA_PROP_INTERESTING
+<span class="lineNum">     224 </span>            :    if it can determine which edge will be taken.  Otherwise, return
+<span class="lineNum">     225 </span>            :    SSA_PROP_VARYING.  */
+<a name="226"><span class="lineNum">     226 </span>            : </a>
+<span class="lineNum">     227 </span>            : static enum ssa_prop_result
+<span class="lineNum">     228 </span><span class="lineCov">    3772368 : copy_prop_visit_cond_stmt (gimple *stmt, edge *taken_edge_p)</span>
+<span class="lineNum">     229 </span>            : {
+<span class="lineNum">     230 </span><span class="lineCov">    3772368 :   enum ssa_prop_result retval = SSA_PROP_VARYING;</span>
+<span class="lineNum">     231 </span><span class="lineCov">    3772368 :   location_t loc = gimple_location (stmt);</span>
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span><span class="lineCov">    3772368 :   tree op0 = valueize_val (gimple_cond_lhs (stmt));</span>
+<span class="lineNum">     234 </span><span class="lineCov">    3772368 :   tree op1 = valueize_val (gimple_cond_rhs (stmt));</span>
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span>            :   /* See if we can determine the predicate's value.  */
+<span class="lineNum">     237 </span><span class="lineCov">    3772368 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     238 </span>            :     {
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;Trying to determine truth value of &quot;);</span>
+<span class="lineNum">     240 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;predicate &quot;);</span>
+<span class="lineNum">     241 </span><span class="lineNoCov">          0 :       print_gimple_stmt (dump_file, stmt, 0);</span>
+<span class="lineNum">     242 </span>            :     }
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span>            :   /* Fold COND and see whether we get a useful result.  */
+<span class="lineNum">     245 </span><span class="lineCov">    3772368 :   tree folded_cond = fold_binary_loc (loc, gimple_cond_code (stmt),</span>
+<span class="lineNum">     246 </span>            :                                       boolean_type_node, op0, op1);
+<span class="lineNum">     247 </span><span class="lineCov">    3772368 :   if (folded_cond)</span>
+<span class="lineNum">     248 </span>            :     {
+<span class="lineNum">     249 </span><span class="lineCov">     567070 :       basic_block bb = gimple_bb (stmt);</span>
+<span class="lineNum">     250 </span><span class="lineCov">     567070 :       *taken_edge_p = find_taken_edge (bb, folded_cond);</span>
+<span class="lineNum">     251 </span><span class="lineCov">     567070 :       if (*taken_edge_p)</span>
+<span class="lineNum">     252 </span><span class="lineCov">      76365 :         retval = SSA_PROP_INTERESTING;</span>
+<span class="lineNum">     253 </span>            :     }
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">    3772368 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS) &amp;&amp; *taken_edge_p)</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 :     fprintf (dump_file, &quot;\nConditional will always take edge %d-&gt;%d\n&quot;,</span>
+<span class="lineNum">     257 </span><span class="lineNoCov">          0 :              (*taken_edge_p)-&gt;src-&gt;index, (*taken_edge_p)-&gt;dest-&gt;index);</span>
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span><span class="lineCov">    3772368 :   return retval;</span>
+<span class="lineNum">     260 </span>            : }
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span>            : /* Evaluate statement STMT.  If the statement produces a new output
+<span class="lineNum">     264 </span>            :    value, return SSA_PROP_INTERESTING and store the SSA_NAME holding
+<span class="lineNum">     265 </span>            :    the new value in *RESULT_P.
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            :    If STMT is a conditional branch and we can determine its truth
+<span class="lineNum">     268 </span>            :    value, set *TAKEN_EDGE_P accordingly.
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            :    If the new value produced by STMT is varying, return
+<span class="lineNum">     271 </span>            :    SSA_PROP_VARYING.  */
+<a name="272"><span class="lineNum">     272 </span>            : </a>
+<span class="lineNum">     273 </span>            : enum ssa_prop_result
+<span class="lineNum">     274 </span><span class="lineCov">    6235404 : copy_prop::visit_stmt (gimple *stmt, edge *taken_edge_p, tree *result_p)</span>
+<span class="lineNum">     275 </span>            : {
+<span class="lineNum">     276 </span><span class="lineCov">    6235404 :   enum ssa_prop_result retval;</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineCov">    6235404 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     279 </span>            :     {
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\nVisiting statement:\n&quot;);</span>
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :       print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     282 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     283 </span>            :     }
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span><span class="lineCov">    6235404 :   if (gimple_assign_single_p (stmt)</span>
+<span class="lineNum">     286 </span><span class="lineCov">     404314 :       &amp;&amp; TREE_CODE (gimple_assign_lhs (stmt)) == SSA_NAME</span>
+<span class="lineNum">     287 </span><span class="lineCov">     252168 :       &amp;&amp; (TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME</span>
+<span class="lineNum">     288 </span><span class="lineCov">     221962 :           || is_gimple_min_invariant (gimple_assign_rhs1 (stmt))))</span>
+<span class="lineNum">     289 </span>            :     {
+<span class="lineNum">     290 </span>            :       /* If the statement is a copy assignment, evaluate its RHS to
+<span class="lineNum">     291 </span>            :          see if the lattice value of its output has changed.  */
+<span class="lineNum">     292 </span><span class="lineCov">      17940 :       retval = copy_prop_visit_assignment (stmt, result_p);</span>
+<span class="lineNum">     293 </span>            :     }
+<span class="lineNum">     294 </span><span class="lineCov">   12434928 :   else if (gimple_code (stmt) == GIMPLE_COND)</span>
+<span class="lineNum">     295 </span>            :     {
+<span class="lineNum">     296 </span>            :       /* See if we can determine which edge goes out of a conditional
+<span class="lineNum">     297 </span>            :          jump.  */
+<span class="lineNum">     298 </span><span class="lineCov">    3772368 :       retval = copy_prop_visit_cond_stmt (stmt, taken_edge_p);</span>
+<span class="lineNum">     299 </span>            :     }
+<span class="lineNum">     300 </span>            :   else
+<span class="lineNum">     301 </span>            :     retval = SSA_PROP_VARYING;
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span><span class="lineCov">    3790308 :   if (retval == SSA_PROP_VARYING)</span>
+<span class="lineNum">     304 </span>            :     {
+<span class="lineNum">     305 </span><span class="lineCov">    6141527 :       tree def;</span>
+<span class="lineNum">     306 </span><span class="lineCov">    6141527 :       ssa_op_iter i;</span>
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            :       /* Any other kind of statement is not interesting for constant
+<span class="lineNum">     309 </span>            :          propagation and, therefore, not worth simulating.  */
+<span class="lineNum">     310 </span><span class="lineCov">    6141527 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;No interesting values produced.\n&quot;);</span>
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span>            :       /* The assignment is not a copy operation.  Don't visit this
+<span class="lineNum">     314 </span>            :          statement again and mark all the definitions in the statement
+<span class="lineNum">     315 </span>            :          to be copies of nothing.  */
+<span class="lineNum">     316 </span><span class="lineCov">    7860265 :       FOR_EACH_SSA_TREE_OPERAND (def, stmt, i, SSA_OP_ALL_DEFS)</span>
+<span class="lineNum">     317 </span><span class="lineCov">    1718738 :         set_copy_of_val (def, def);</span>
+<span class="lineNum">     318 </span>            :     }
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span><span class="lineCov">    6235404 :   return retval;</span>
+<span class="lineNum">     321 </span>            : }
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span>            : 
+<span class="lineNum">     324 </span>            : /* Visit PHI node PHI.  If all the arguments produce the same value,
+<span class="lineNum">     325 </span>            :    set it to be the value of the LHS of PHI.  */
+<a name="326"><span class="lineNum">     326 </span>            : </a>
+<span class="lineNum">     327 </span>            : enum ssa_prop_result
+<span class="lineNum">     328 </span><span class="lineCov">    3794950 : copy_prop::visit_phi (gphi *phi)</span>
+<span class="lineNum">     329 </span>            : {
+<span class="lineNum">     330 </span><span class="lineCov">    3794950 :   enum ssa_prop_result retval;</span>
+<span class="lineNum">     331 </span><span class="lineCov">    3794950 :   unsigned i;</span>
+<span class="lineNum">     332 </span><span class="lineCov">    3794950 :   prop_value_t phi_val = { NULL_TREE };</span>
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span><span class="lineCov">    3794950 :   tree lhs = gimple_phi_result (phi);</span>
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineCov">    3794950 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     337 </span>            :     {
+<span class="lineNum">     338 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\nVisiting PHI node: &quot;);</span>
+<span class="lineNum">     339 </span><span class="lineNoCov">          0 :       print_gimple_stmt (dump_file, phi, 0, dump_flags);</span>
+<span class="lineNum">     340 </span>            :     }
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span><span class="lineCov">    8686249 :   for (i = 0; i &lt; gimple_phi_num_args (phi); i++)</span>
+<span class="lineNum">     343 </span>            :     {
+<span class="lineNum">     344 </span><span class="lineCov">    7120245 :       prop_value_t *arg_val;</span>
+<span class="lineNum">     345 </span><span class="lineCov">    7120245 :       tree arg_value;</span>
+<span class="lineNum">     346 </span><span class="lineCov">    7120245 :       tree arg = gimple_phi_arg_def (phi, i);</span>
+<span class="lineNum">     347 </span><span class="lineCov">    7120245 :       edge e = gimple_phi_arg_edge (phi, i);</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span>            :       /* We don't care about values flowing through non-executable
+<span class="lineNum">     350 </span>            :          edges.  */
+<span class="lineNum">     351 </span><span class="lineCov">    7120245 :       if (!(e-&gt;flags &amp; EDGE_EXECUTABLE))</span>
+<span class="lineNum">     352 </span>            :         continue;
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            :       /* Names that flow through abnormal edges cannot be used to
+<span class="lineNum">     355 </span>            :          derive copies.  */
+<span class="lineNum">     356 </span><span class="lineCov">    5957529 :       if (TREE_CODE (arg) == SSA_NAME &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (arg))</span>
+<span class="lineNum">     357 </span>            :         {
+<span class="lineNum">     358 </span>            :           phi_val.value = lhs;
+<span class="lineNum">     359 </span>            :           break;
+<span class="lineNum">     360 </span>            :         }
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span><span class="lineCov">    5955207 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     363 </span>            :         {
+<span class="lineNum">     364 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\tArgument #%d: &quot;, i);</span>
+<span class="lineNum">     365 </span><span class="lineNoCov">          0 :           dump_copy_of (dump_file, arg);</span>
+<span class="lineNum">     366 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     367 </span>            :         }
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">    5955207 :       if (TREE_CODE (arg) == SSA_NAME)</span>
+<span class="lineNum">     370 </span>            :         {
+<span class="lineNum">     371 </span><span class="lineCov">    4194706 :           arg_val = get_copy_of_val (arg);</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            :           /* If we didn't visit the definition of arg yet treat it as
+<span class="lineNum">     374 </span>            :              UNDEFINED.  This also handles PHI arguments that are the
+<span class="lineNum">     375 </span>            :              same as lhs.  We'll come here again.  */
+<span class="lineNum">     376 </span><span class="lineCov">    4194706 :           if (!arg_val-&gt;value)</span>
+<span class="lineNum">     377 </span>            :             continue;
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            :           arg_value = arg_val-&gt;value;
+<span class="lineNum">     380 </span>            :         }
+<span class="lineNum">     381 </span>            :       else
+<span class="lineNum">     382 </span>            :         arg_value = valueize_val (arg);
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            :       /* In loop-closed SSA form do not copy-propagate SSA-names across
+<span class="lineNum">     385 </span>            :          loop exit edges.  */
+<span class="lineNum">     386 </span><span class="lineCov">    5955207 :       if (loops_state_satisfies_p (LOOP_CLOSED_SSA)</span>
+<span class="lineNum">     387 </span><span class="lineCov">    3112040 :           &amp;&amp; TREE_CODE (arg_value) == SSA_NAME</span>
+<span class="lineNum">     388 </span><span class="lineCov">    8015816 :           &amp;&amp; loop_exit_edge_p (e-&gt;src-&gt;loop_father, e))</span>
+<span class="lineNum">     389 </span>            :         {
+<span class="lineNum">     390 </span>            :           phi_val.value = lhs;
+<span class="lineNum">     391 </span>            :           break;
+<span class="lineNum">     392 </span>            :         }
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            :       /* If the LHS didn't have a value yet, make it a copy of the
+<span class="lineNum">     395 </span>            :          first argument we find.   */
+<span class="lineNum">     396 </span><span class="lineCov">    5691226 :       if (phi_val.value == NULL_TREE)</span>
+<span class="lineNum">     397 </span>            :         {
+<span class="lineNum">     398 </span>            :           phi_val.value = arg_value;
+<span class="lineNum">     399 </span>            :           continue;
+<span class="lineNum">     400 </span>            :         }
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span>            :       /* If PHI_VAL and ARG don't have a common copy-of chain, then
+<span class="lineNum">     403 </span>            :          this PHI node cannot be a copy operation.  */
+<span class="lineNum">     404 </span><span class="lineCov">    2149089 :       if (phi_val.value != arg_value</span>
+<span class="lineNum">     405 </span><span class="lineCov">    2149089 :           &amp;&amp; !operand_equal_p (phi_val.value, arg_value, 0))</span>
+<span class="lineNum">     406 </span>            :         {
+<span class="lineNum">     407 </span>            :           phi_val.value = lhs;
+<span class="lineNum">     408 </span>            :           break;
+<span class="lineNum">     409 </span>            :         }
+<span class="lineNum">     410 </span>            :     }
+<span class="lineNum">     411 </span>            : 
+<span class="lineNum">     412 </span><span class="lineCov">    3794950 :   if (phi_val.value</span>
+<span class="lineNum">     413 </span><span class="lineCov">    3794950 :       &amp;&amp; may_propagate_copy (lhs, phi_val.value)</span>
+<span class="lineNum">     414 </span><span class="lineCov">    7586939 :       &amp;&amp; set_copy_of_val (lhs, phi_val.value))</span>
+<span class="lineNum">     415 </span><span class="lineCov">    3769424 :     retval = (phi_val.value != lhs) ? SSA_PROP_INTERESTING : SSA_PROP_VARYING;</span>
+<span class="lineNum">     416 </span>            :   else
+<span class="lineNum">     417 </span>            :     retval = SSA_PROP_NOT_INTERESTING;
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span><span class="lineCov">    3794950 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     420 </span>            :     {
+<span class="lineNum">     421 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;PHI node &quot;);</span>
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :       dump_copy_of (dump_file, lhs);</span>
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\nTelling the propagator to &quot;);</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :       if (retval == SSA_PROP_INTERESTING)</span>
+<span class="lineNum">     425 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;add SSA edges out of this PHI and continue.&quot;);</span>
+<span class="lineNum">     426 </span><span class="lineNoCov">          0 :       else if (retval == SSA_PROP_VARYING)</span>
+<span class="lineNum">     427 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;add SSA edges out of this PHI and never visit again.&quot;);</span>
+<span class="lineNum">     428 </span>            :       else
+<span class="lineNum">     429 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;do nothing with SSA edges and keep iterating.&quot;);</span>
+<span class="lineNum">     430 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n\n&quot;);</span>
+<span class="lineNum">     431 </span>            :     }
+<span class="lineNum">     432 </span>            : 
+<span class="lineNum">     433 </span><span class="lineCov">    3794950 :   return retval;</span>
+<span class="lineNum">     434 </span>            : }
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            : /* Initialize structures used for copy propagation.  */
+<a name="438"><span class="lineNum">     438 </span>            : </a>
+<span class="lineNum">     439 </span>            : static void
+<span class="lineNum">     440 </span><span class="lineCov">     756106 : init_copy_prop (void)</span>
+<span class="lineNum">     441 </span>            : {
+<span class="lineNum">     442 </span><span class="lineCov">     756106 :   basic_block bb;</span>
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span><span class="lineCov">     756106 :   n_copy_of = num_ssa_names;</span>
+<span class="lineNum">     445 </span><span class="lineCov">     756106 :   copy_of = XCNEWVEC (prop_value_t, n_copy_of);</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span><span class="lineCov">   10472931 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     448 </span>            :     {
+<span class="lineNum">     449 </span><span class="lineCov">  185245503 :       for (gimple_stmt_iterator si = gsi_start_bb (bb); !gsi_end_p (si);</span>
+<span class="lineNum">     450 </span><span class="lineCov">   78047514 :            gsi_next (&amp;si))</span>
+<span class="lineNum">     451 </span>            :         {
+<span class="lineNum">     452 </span><span class="lineCov">   78047514 :           gimple *stmt = gsi_stmt (si);</span>
+<span class="lineNum">     453 </span><span class="lineCov">   78047514 :           ssa_op_iter iter;</span>
+<span class="lineNum">     454 </span><span class="lineCov">   78047514 :           tree def;</span>
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span>            :           /* The only statements that we care about are those that may
+<span class="lineNum">     457 </span>            :              generate useful copies.  We also need to mark conditional
+<span class="lineNum">     458 </span>            :              jumps so that their outgoing edges are added to the work
+<span class="lineNum">     459 </span>            :              lists of the propagator.  */
+<span class="lineNum">     460 </span><span class="lineCov">   78047514 :           if (stmt_ends_bb_p (stmt))</span>
+<span class="lineNum">     461 </span><span class="lineCov">    5988481 :             prop_set_simulate_again (stmt, true);</span>
+<span class="lineNum">     462 </span><span class="lineCov">   72059033 :           else if (stmt_may_generate_copy (stmt))</span>
+<span class="lineNum">     463 </span><span class="lineCov">     169340 :             prop_set_simulate_again (stmt, true);</span>
+<span class="lineNum">     464 </span>            :           else
+<span class="lineNum">     465 </span><span class="lineCov">   71889693 :             prop_set_simulate_again (stmt, false);</span>
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            :           /* Mark all the outputs of this statement as not being
+<span class="lineNum">     468 </span>            :              the copy of anything.  */
+<span class="lineNum">     469 </span><span class="lineCov">  104131507 :           FOR_EACH_SSA_TREE_OPERAND (def, stmt, iter, SSA_OP_ALL_DEFS)</span>
+<span class="lineNum">     470 </span><span class="lineCov">   52167986 :             if (!prop_simulate_again_p (stmt))</span>
+<span class="lineNum">     471 </span><span class="lineCov">   24349648 :               set_copy_of_val (def, def);</span>
+<span class="lineNum">     472 </span>            :         }
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span><span class="lineCov">   18192613 :       for (gphi_iterator si = gsi_start_phis (bb); !gsi_end_p (si);</span>
+<span class="lineNum">     475 </span><span class="lineCov">    4237894 :            gsi_next (&amp;si))</span>
+<span class="lineNum">     476 </span>            :         {
+<span class="lineNum">     477 </span><span class="lineCov">    4237894 :           gphi *phi = si.phi ();</span>
+<span class="lineNum">     478 </span><span class="lineCov">    4237894 :           tree def;</span>
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span><span class="lineCov">    4237894 :           def = gimple_phi_result (phi);</span>
+<span class="lineNum">     481 </span><span class="lineCov">    8475788 :           if (virtual_operand_p (def))</span>
+<span class="lineNum">     482 </span><span class="lineCov">    1689906 :             prop_set_simulate_again (phi, false);</span>
+<span class="lineNum">     483 </span>            :           else
+<span class="lineNum">     484 </span><span class="lineCov">    2547988 :             prop_set_simulate_again (phi, true);</span>
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineCov">    8475788 :           if (!prop_simulate_again_p (phi))</span>
+<span class="lineNum">     487 </span><span class="lineCov">    1689906 :             set_copy_of_val (def, def);</span>
+<span class="lineNum">     488 </span>            :         }
+<span class="lineNum">     489 </span>            :     }
+<span class="lineNum">     490 </span><span class="lineCov">     756106 : }</span>
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span><span class="lineCov">     756106 : class copy_folder : public substitute_and_fold_engine</span>
+<span class="lineNum">     493 </span>            : {
+<span class="lineNum">     494 </span>            :  public:
+<span class="lineNum">     495 </span>            :   tree get_value (tree) FINAL OVERRIDE;
+<span class="lineNum">     496 </span>            : };
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span>            : /* Callback for substitute_and_fold to get at the final copy-of values.  */
+<a name="499"><span class="lineNum">     499 </span>            : </a>
+<span class="lineNum">     500 </span>            : tree
+<span class="lineNum">     501 </span><span class="lineCov">   51783318 : copy_folder::get_value (tree name)</span>
+<span class="lineNum">     502 </span>            : {
+<span class="lineNum">     503 </span><span class="lineCov">   51783318 :   tree val;</span>
+<span class="lineNum">     504 </span><span class="lineCov">   51783318 :   if (SSA_NAME_VERSION (name) &gt;= n_copy_of)</span>
+<span class="lineNum">     505 </span>            :     return NULL_TREE;
+<span class="lineNum">     506 </span><span class="lineCov">   51783318 :   val = copy_of[SSA_NAME_VERSION (name)].value;</span>
+<span class="lineNum">     507 </span><span class="lineCov">   51783318 :   if (val &amp;&amp; val != name)</span>
+<span class="lineNum">     508 </span><span class="lineCov">     880021 :     return val;</span>
+<span class="lineNum">     509 </span>            :   return NULL_TREE;
+<span class="lineNum">     510 </span>            : }
+<span class="lineNum">     511 </span>            : 
+<span class="lineNum">     512 </span>            : /* Deallocate memory used in copy propagation and do final
+<span class="lineNum">     513 </span>            :    substitution.  */
+<a name="514"><span class="lineNum">     514 </span>            : </a>
+<span class="lineNum">     515 </span>            : static bool
+<span class="lineNum">     516 </span><span class="lineCov">     756106 : fini_copy_prop (void)</span>
+<span class="lineNum">     517 </span>            : {
+<span class="lineNum">     518 </span><span class="lineCov">     756106 :   unsigned i;</span>
+<span class="lineNum">     519 </span><span class="lineCov">     756106 :   tree var;</span>
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span>            :   /* Set the final copy-of value for each variable by traversing the
+<span class="lineNum">     522 </span>            :      copy-of chains.  */
+<span class="lineNum">     523 </span><span class="lineCov">   43872240 :   FOR_EACH_SSA_NAME (i, var, cfun)</span>
+<span class="lineNum">     524 </span>            :     {
+<span class="lineNum">     525 </span><span class="lineCov">   32500255 :       if (!copy_of[i].value</span>
+<span class="lineNum">     526 </span><span class="lineCov">   30486495 :           || copy_of[i].value == var)</span>
+<span class="lineNum">     527 </span>            :         continue;
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span>            :       /* In theory the points-to solution of all members of the
+<span class="lineNum">     530 </span>            :          copy chain is their intersection.  For now we do not bother
+<span class="lineNum">     531 </span>            :          to compute this but only make sure we do not lose points-to
+<span class="lineNum">     532 </span>            :          information completely by setting the points-to solution
+<span class="lineNum">     533 </span>            :          of the representative to the first solution we find if
+<span class="lineNum">     534 </span>            :          it doesn't have one already.  */
+<span class="lineNum">     535 </span><span class="lineCov">     334835 :       if (copy_of[i].value != var</span>
+<span class="lineNum">     536 </span><span class="lineCov">     334835 :           &amp;&amp; TREE_CODE (copy_of[i].value) == SSA_NAME)</span>
+<span class="lineNum">     537 </span>            :         {
+<span class="lineNum">     538 </span><span class="lineCov">     278473 :           basic_block copy_of_bb</span>
+<span class="lineNum">     539 </span><span class="lineCov">     556946 :             = gimple_bb (SSA_NAME_DEF_STMT (copy_of[i].value));</span>
+<span class="lineNum">     540 </span><span class="lineCov">     278473 :           basic_block var_bb = gimple_bb (SSA_NAME_DEF_STMT (var));</span>
+<span class="lineNum">     541 </span><span class="lineCov">     655379 :           if (POINTER_TYPE_P (TREE_TYPE (var))</span>
+<span class="lineNum">     542 </span><span class="lineCov">     181004 :               &amp;&amp; SSA_NAME_PTR_INFO (var)</span>
+<span class="lineNum">     543 </span><span class="lineCov">     443565 :               &amp;&amp; !SSA_NAME_PTR_INFO (copy_of[i].value))</span>
+<span class="lineNum">     544 </span>            :             {
+<span class="lineNum">     545 </span><span class="lineCov">        438 :               duplicate_ssa_name_ptr_info (copy_of[i].value,</span>
+<span class="lineNum">     546 </span><span class="lineCov">        438 :                                            SSA_NAME_PTR_INFO (var));</span>
+<span class="lineNum">     547 </span>            :               /* Points-to information is cfg insensitive,
+<span class="lineNum">     548 </span>            :                  but alignment info might be cfg sensitive, if it
+<span class="lineNum">     549 </span>            :                  e.g. is derived from VRP derived non-zero bits.
+<span class="lineNum">     550 </span>            :                  So, do not copy alignment info if the two SSA_NAMEs
+<span class="lineNum">     551 </span>            :                  aren't defined in the same basic block.  */
+<span class="lineNum">     552 </span><span class="lineCov">        219 :               if (var_bb != copy_of_bb)</span>
+<span class="lineNum">     553 </span><span class="lineCov">        163 :                 mark_ptr_info_alignment_unknown</span>
+<span class="lineNum">     554 </span><span class="lineCov">        163 :                                 (SSA_NAME_PTR_INFO (copy_of[i].value));</span>
+<span class="lineNum">     555 </span>            :             }
+<span class="lineNum">     556 </span><span class="lineCov">     278254 :           else if (!POINTER_TYPE_P (TREE_TYPE (var))</span>
+<span class="lineNum">     557 </span><span class="lineCov">     375942 :                    &amp;&amp; SSA_NAME_RANGE_INFO (var)</span>
+<span class="lineNum">     558 </span><span class="lineCov">     137604 :                    &amp;&amp; !SSA_NAME_RANGE_INFO (copy_of[i].value)</span>
+<span class="lineNum">     559 </span><span class="lineCov">     285944 :                    &amp;&amp; var_bb == copy_of_bb)</span>
+<span class="lineNum">     560 </span><span class="lineCov">         43 :             duplicate_ssa_name_range_info (copy_of[i].value,</span>
+<span class="lineNum">     561 </span><span class="lineCov">         43 :                                            SSA_NAME_RANGE_TYPE (var),</span>
+<span class="lineNum">     562 </span><span class="lineCov">         86 :                                            SSA_NAME_RANGE_INFO (var));</span>
+<span class="lineNum">     563 </span>            :         }
+<span class="lineNum">     564 </span>            :     }
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span><span class="lineCov">    2268318 :   class copy_folder copy_folder;</span>
+<span class="lineNum">     567 </span><span class="lineCov">     756106 :   bool changed = copy_folder.substitute_and_fold ();</span>
+<span class="lineNum">     568 </span><span class="lineCov">     756106 :   if (changed)</span>
+<span class="lineNum">     569 </span>            :     {
+<span class="lineNum">     570 </span><span class="lineCov">      67007 :       free_numbers_of_iterations_estimates (cfun);</span>
+<span class="lineNum">     571 </span><span class="lineCov">      67007 :       if (scev_initialized_p ())</span>
+<span class="lineNum">     572 </span><span class="lineCov">       3567 :         scev_reset ();</span>
+<span class="lineNum">     573 </span>            :     }
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span><span class="lineCov">     756106 :   free (copy_of);</span>
+<span class="lineNum">     576 </span>            : 
+<span class="lineNum">     577 </span><span class="lineCov">    1512212 :   return changed;</span>
+<span class="lineNum">     578 </span>            : }
+<span class="lineNum">     579 </span>            : 
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span>            : /* Main entry point to the copy propagator.
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span>            :    PHIS_ONLY is true if we should only consider PHI nodes as generating
+<span class="lineNum">     584 </span>            :    copy propagation opportunities.
+<span class="lineNum">     585 </span>            : 
+<span class="lineNum">     586 </span>            :    The algorithm propagates the value COPY-OF using ssa_propagate.  For
+<span class="lineNum">     587 </span>            :    every variable X_i, COPY-OF(X_i) indicates which variable is X_i created
+<span class="lineNum">     588 </span>            :    from.  The following example shows how the algorithm proceeds at a
+<span class="lineNum">     589 </span>            :    high level:
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            :             1   a_24 = x_1
+<span class="lineNum">     592 </span>            :             2   a_2 = PHI &lt;a_24, x_1&gt;
+<span class="lineNum">     593 </span>            :             3   a_5 = PHI &lt;a_2&gt;
+<span class="lineNum">     594 </span>            :             4   x_1 = PHI &lt;x_298, a_5, a_2&gt;
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span>            :    The end result should be that a_2, a_5, a_24 and x_1 are a copy of
+<span class="lineNum">     597 </span>            :    x_298.  Propagation proceeds as follows.
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span>            :    Visit #1: a_24 is copy-of x_1.  Value changed.
+<span class="lineNum">     600 </span>            :    Visit #2: a_2 is copy-of x_1.  Value changed.
+<span class="lineNum">     601 </span>            :    Visit #3: a_5 is copy-of x_1.  Value changed.
+<span class="lineNum">     602 </span>            :    Visit #4: x_1 is copy-of x_298.  Value changed.
+<span class="lineNum">     603 </span>            :    Visit #1: a_24 is copy-of x_298.  Value changed.
+<span class="lineNum">     604 </span>            :    Visit #2: a_2 is copy-of x_298.  Value changed.
+<span class="lineNum">     605 </span>            :    Visit #3: a_5 is copy-of x_298.  Value changed.
+<span class="lineNum">     606 </span>            :    Visit #4: x_1 is copy-of x_298.  Stable state reached.
+<span class="lineNum">     607 </span>            : 
+<span class="lineNum">     608 </span>            :    When visiting PHI nodes, we only consider arguments that flow
+<span class="lineNum">     609 </span>            :    through edges marked executable by the propagation engine.  So,
+<span class="lineNum">     610 </span>            :    when visiting statement #2 for the first time, we will only look at
+<span class="lineNum">     611 </span>            :    the first argument (a_24) and optimistically assume that its value
+<span class="lineNum">     612 </span>            :    is the copy of a_24 (x_1).  */
+<a name="613"><span class="lineNum">     613 </span>            : </a>
+<span class="lineNum">     614 </span>            : static unsigned int
+<span class="lineNum">     615 </span><span class="lineCov">     756106 : execute_copy_prop (void)</span>
+<span class="lineNum">     616 </span>            : {
+<span class="lineNum">     617 </span><span class="lineCov">     756106 :   init_copy_prop ();</span>
+<span class="lineNum">     618 </span><span class="lineCov">    2268318 :   class copy_prop copy_prop;</span>
+<span class="lineNum">     619 </span><span class="lineCov">     756106 :   copy_prop.ssa_propagate ();</span>
+<span class="lineNum">     620 </span><span class="lineCov">     756106 :   if (fini_copy_prop ())</span>
+<span class="lineNum">     621 </span><span class="lineCov">      67007 :     return TODO_cleanup_cfg;</span>
+<span class="lineNum">     622 </span>            :   return 0;
+<span class="lineNum">     623 </span>            : }
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span>            : namespace {
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            : const pass_data pass_data_copy_prop =
+<span class="lineNum">     628 </span>            : {
+<span class="lineNum">     629 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     630 </span>            :   &quot;copyprop&quot;, /* name */
+<span class="lineNum">     631 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     632 </span>            :   TV_TREE_COPY_PROP, /* tv_id */
+<span class="lineNum">     633 </span>            :   ( PROP_ssa | PROP_cfg ), /* properties_required */
+<span class="lineNum">     634 </span>            :   0, /* properties_provided */
+<span class="lineNum">     635 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     636 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     637 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     638 </span>            : };
+<span class="lineNum">     639 </span>            : 
+<span class="lineNum">     640 </span>            : class pass_copy_prop : public gimple_opt_pass
+<span class="lineNum">     641 </span>            : {
+<span class="lineNum">     642 </span>            : public:
+<span class="lineNum">     643 </span>            :   pass_copy_prop (gcc::context *ctxt)
+<span class="lineNum">     644 </span><span class="lineCov">    1362496 :     : gimple_opt_pass (pass_data_copy_prop, ctxt)</span>
+<span class="lineNum">     645 </span>            :   {}
+<a name="646"><span class="lineNum">     646 </span>            : </a>
+<a name="647"><span class="lineNum">     647 </span>            :   /* opt_pass methods: */</a>
+<a name="648"><span class="lineNum">     648 </span><span class="lineCov">     510936 :   opt_pass * clone () { return new pass_copy_prop (m_ctxt); }</span></a>
+<span class="lineNum">     649 </span><span class="lineCov">     756216 :   virtual bool gate (function *) { return flag_tree_copy_prop != 0; }</span>
+<span class="lineNum">     650 </span><span class="lineCov">     756106 :   virtual unsigned int execute (function *) { return execute_copy_prop (); }</span>
+<span class="lineNum">     651 </span>            : 
+<span class="lineNum">     652 </span>            : }; // class pass_copy_prop
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span>            : } // anon namespace
+<a name="655"><span class="lineNum">     655 </span>            : </a>
+<span class="lineNum">     656 </span>            : gimple_opt_pass *
+<span class="lineNum">     657 </span><span class="lineCov">     170312 : make_pass_copy_prop (gcc::context *ctxt)</span>
+<span class="lineNum">     658 </span>            : {
+<span class="lineNum">     659 </span><span class="lineCov">     170312 :   return new pass_copy_prop (ctxt);</span>
+<span class="lineNum">     660 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

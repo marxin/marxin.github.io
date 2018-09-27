@@ -1,0 +1,2062 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/cprop.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - cprop.c<span style="font-size: 80%;"> (source / <a href="cprop.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">663</td>
+            <td class="headerCovTableEntry">718</td>
+            <td class="headerCovTableEntryHi">92.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntry">45</td>
+            <td class="headerCovTableEntryMed">82.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Global constant/copy propagation for RTL.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1997-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;toplev.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;lcm.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;cfgcleanup.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;cselib.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;intl.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;dbgcnt.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;gcse.h&quot;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            : /* An obstack for our working variables.  */
+<span class="lineNum">      47 </span>            : static struct obstack cprop_obstack;
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : /* Occurrence of an expression.
+<span class="lineNum">      50 </span>            :    There is one per basic block.  If a pattern appears more than once the
+<span class="lineNum">      51 </span>            :    last appearance is used.  */
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            : struct cprop_occr
+<span class="lineNum">      54 </span>            : {
+<span class="lineNum">      55 </span>            :   /* Next occurrence of this expression.  */
+<span class="lineNum">      56 </span>            :   struct cprop_occr *next;
+<span class="lineNum">      57 </span>            :   /* The insn that computes the expression.  */
+<span class="lineNum">      58 </span>            :   rtx_insn *insn;
+<span class="lineNum">      59 </span>            : };
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : /* Hash table entry for assignment expressions.  */
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            : struct cprop_expr
+<span class="lineNum">      64 </span>            : {
+<span class="lineNum">      65 </span>            :   /* The expression (DEST := SRC).  */
+<span class="lineNum">      66 </span>            :   rtx dest;
+<span class="lineNum">      67 </span>            :   rtx src;
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :   /* Index in the available expression bitmaps.  */
+<span class="lineNum">      70 </span>            :   int bitmap_index;
+<span class="lineNum">      71 </span>            :   /* Next entry with the same hash.  */
+<span class="lineNum">      72 </span>            :   struct cprop_expr *next_same_hash;
+<span class="lineNum">      73 </span>            :   /* List of available occurrence in basic blocks in the function.
+<span class="lineNum">      74 </span>            :      An &quot;available occurrence&quot; is one that is the last occurrence in the
+<span class="lineNum">      75 </span>            :      basic block and whose operands are not modified by following statements
+<span class="lineNum">      76 </span>            :      in the basic block [including this insn].  */
+<span class="lineNum">      77 </span>            :   struct cprop_occr *avail_occr;
+<span class="lineNum">      78 </span>            : };
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : /* Hash table for copy propagation expressions.
+<span class="lineNum">      81 </span>            :    Each hash table is an array of buckets.
+<span class="lineNum">      82 </span>            :    ??? It is known that if it were an array of entries, structure elements
+<span class="lineNum">      83 </span>            :    `next_same_hash' and `bitmap_index' wouldn't be necessary.  However, it is
+<span class="lineNum">      84 </span>            :    not clear whether in the final analysis a sufficient amount of memory would
+<span class="lineNum">      85 </span>            :    be saved as the size of the available expression bitmaps would be larger
+<span class="lineNum">      86 </span>            :    [one could build a mapping table without holes afterwards though].
+<span class="lineNum">      87 </span>            :    Someday I'll perform the computation and figure it out.  */
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : struct hash_table_d
+<span class="lineNum">      90 </span>            : {
+<span class="lineNum">      91 </span>            :   /* The table itself.
+<span class="lineNum">      92 </span>            :      This is an array of `set_hash_table_size' elements.  */
+<span class="lineNum">      93 </span>            :   struct cprop_expr **table;
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :   /* Size of the hash table, in elements.  */
+<span class="lineNum">      96 </span>            :   unsigned int size;
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            :   /* Number of hash table elements.  */
+<span class="lineNum">      99 </span>            :   unsigned int n_elems;
+<span class="lineNum">     100 </span>            : };
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            : /* Copy propagation hash table.  */
+<span class="lineNum">     103 </span>            : static struct hash_table_d set_hash_table;
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            : /* Array of implicit set patterns indexed by basic block index.  */
+<span class="lineNum">     106 </span>            : static rtx *implicit_sets;
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            : /* Array of indexes of expressions for implicit set patterns indexed by basic
+<span class="lineNum">     109 </span>            :    block index.  In other words, implicit_set_indexes[i] is the bitmap_index
+<span class="lineNum">     110 </span>            :    of the expression whose RTX is implicit_sets[i].  */
+<span class="lineNum">     111 </span>            : static int *implicit_set_indexes;
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span>            : /* Bitmap containing one bit for each register in the program.
+<span class="lineNum">     114 </span>            :    Used when performing GCSE to track which registers have been set since
+<span class="lineNum">     115 </span>            :    the start or end of the basic block while traversing that block.  */
+<span class="lineNum">     116 </span>            : static regset reg_set_bitmap;
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            : /* Various variables for statistics gathering.  */
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span>            : /* Memory used in a pass.
+<span class="lineNum">     121 </span>            :    This isn't intended to be absolutely precise.  Its intent is only
+<span class="lineNum">     122 </span>            :    to keep an eye on memory usage.  */
+<span class="lineNum">     123 </span>            : static int bytes_used;
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            : /* Number of local constants propagated.  */
+<span class="lineNum">     126 </span>            : static int local_const_prop_count;
+<span class="lineNum">     127 </span>            : /* Number of local copies propagated.  */
+<span class="lineNum">     128 </span>            : static int local_copy_prop_count;
+<span class="lineNum">     129 </span>            : /* Number of global constants propagated.  */
+<span class="lineNum">     130 </span>            : static int global_const_prop_count;
+<span class="lineNum">     131 </span>            : /* Number of global copies propagated.  */
+<span class="lineNum">     132 </span>            : static int global_copy_prop_count;
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span>            : #define GOBNEW(T)               ((T *) cprop_alloc (sizeof (T)))
+<span class="lineNum">     135 </span>            : #define GOBNEWVAR(T, S)         ((T *) cprop_alloc ((S)))
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span>            : /* Cover function to obstack_alloc.  */
+<a name="138"><span class="lineNum">     138 </span>            : </a>
+<span class="lineNum">     139 </span>            : static void *
+<span class="lineNum">     140 </span><span class="lineCov">   15646599 : cprop_alloc (unsigned long size)</span>
+<span class="lineNum">     141 </span>            : {
+<span class="lineNum">     142 </span><span class="lineCov">   15646599 :   bytes_used += size;</span>
+<span class="lineNum">     143 </span><span class="lineCov">   15646599 :   return obstack_alloc (&amp;cprop_obstack, size);</span>
+<span class="lineNum">     144 </span>            : }
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            : /* Return nonzero if register X is unchanged from INSN to the end
+<span class="lineNum">     147 </span>            :    of INSN's basic block.  */
+<a name="148"><span class="lineNum">     148 </span>            : </a>
+<span class="lineNum">     149 </span>            : static int
+<span class="lineNum">     150 </span><span class="lineNoCov">          0 : reg_available_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     151 </span>            : {
+<span class="lineNum">     152 </span><span class="lineCov">   37509534 :   return ! REGNO_REG_SET_P (reg_set_bitmap, REGNO (x));</span>
+<span class="lineNum">     153 </span>            : }
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span>            : /* Hash a set of register REGNO.
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span>            :    Sets are hashed on the register that is set.  This simplifies the PRE copy
+<span class="lineNum">     158 </span>            :    propagation code.
+<span class="lineNum">     159 </span>            : 
+<span class="lineNum">     160 </span>            :    ??? May need to make things more elaborate.  Later, as necessary.  */
+<a name="161"><span class="lineNum">     161 </span>            : </a>
+<span class="lineNum">     162 </span>            : static unsigned int
+<span class="lineNum">     163 </span><span class="lineNoCov">          0 : hash_mod (int regno, int hash_table_size)</span>
+<span class="lineNum">     164 </span>            : {
+<span class="lineNum">     165 </span><span class="lineCov">   61712862 :   return (unsigned) regno % hash_table_size;</span>
+<span class="lineNum">     166 </span>            : }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            : /* Insert assignment DEST:=SET from INSN in the hash table.
+<span class="lineNum">     169 </span>            :    DEST is a register and SET is a register or a suitable constant.
+<span class="lineNum">     170 </span>            :    If the assignment is already present in the table, record it as
+<span class="lineNum">     171 </span>            :    the last occurrence in INSN's basic block.
+<span class="lineNum">     172 </span>            :    IMPLICIT is true if it's an implicit set, false otherwise.  */
+<a name="173"><span class="lineNum">     173 </span>            : </a>
+<span class="lineNum">     174 </span>            : static void
+<span class="lineNum">     175 </span><span class="lineCov">    8240297 : insert_set_in_table (rtx dest, rtx src, rtx_insn *insn,</span>
+<span class="lineNum">     176 </span>            :                      struct hash_table_d *table, bool implicit)
+<span class="lineNum">     177 </span>            : {
+<span class="lineNum">     178 </span><span class="lineCov">    8240297 :   bool found = false;</span>
+<span class="lineNum">     179 </span><span class="lineCov">    8240297 :   unsigned int hash;</span>
+<span class="lineNum">     180 </span><span class="lineCov">    8240297 :   struct cprop_expr *cur_expr, *last_expr = NULL;</span>
+<span class="lineNum">     181 </span><span class="lineCov">    8240297 :   struct cprop_occr *cur_occr;</span>
+<span class="lineNum">     182 </span>            : 
+<span class="lineNum">     183 </span><span class="lineCov">    8240297 :   hash = hash_mod (REGNO (dest), table-&gt;size);</span>
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span><span class="lineCov">   11478070 :   for (cur_expr = table-&gt;table[hash]; cur_expr;</span>
+<span class="lineNum">     186 </span><span class="lineCov">    3237773 :        cur_expr = cur_expr-&gt;next_same_hash)</span>
+<span class="lineNum">     187 </span>            :     {
+<span class="lineNum">     188 </span><span class="lineCov">    4071768 :       if (dest == cur_expr-&gt;dest</span>
+<span class="lineNum">     189 </span><span class="lineCov">    3795160 :           &amp;&amp; src == cur_expr-&gt;src)</span>
+<span class="lineNum">     190 </span>            :         {
+<span class="lineNum">     191 </span>            :           found = true;
+<span class="lineNum">     192 </span>            :           break;
+<span class="lineNum">     193 </span>            :         }
+<span class="lineNum">     194 </span><span class="lineCov">    3237773 :       last_expr = cur_expr;</span>
+<span class="lineNum">     195 </span>            :     }
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">    8240297 :   if (! found)</span>
+<span class="lineNum">     198 </span>            :     {
+<span class="lineNum">     199 </span><span class="lineCov">    7406302 :       cur_expr = GOBNEW (struct cprop_expr);</span>
+<span class="lineNum">     200 </span><span class="lineCov">    7406302 :       bytes_used += sizeof (struct cprop_expr);</span>
+<span class="lineNum">     201 </span><span class="lineCov">    7406302 :       if (table-&gt;table[hash] == NULL)</span>
+<span class="lineNum">     202 </span>            :         /* This is the first pattern that hashed to this index.  */
+<span class="lineNum">     203 </span><span class="lineCov">    5951882 :         table-&gt;table[hash] = cur_expr;</span>
+<span class="lineNum">     204 </span>            :       else
+<span class="lineNum">     205 </span>            :         /* Add EXPR to end of this hash chain.  */
+<span class="lineNum">     206 </span><span class="lineCov">    1454420 :         last_expr-&gt;next_same_hash = cur_expr;</span>
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            :       /* Set the fields of the expr element.
+<span class="lineNum">     209 </span>            :          We must copy X because it can be modified when copy propagation is
+<span class="lineNum">     210 </span>            :          performed on its operands.  */
+<span class="lineNum">     211 </span><span class="lineCov">    7406302 :       cur_expr-&gt;dest = copy_rtx (dest);</span>
+<span class="lineNum">     212 </span><span class="lineCov">    7406302 :       cur_expr-&gt;src = copy_rtx (src);</span>
+<span class="lineNum">     213 </span><span class="lineCov">    7406302 :       cur_expr-&gt;bitmap_index = table-&gt;n_elems++;</span>
+<span class="lineNum">     214 </span><span class="lineCov">    7406302 :       cur_expr-&gt;next_same_hash = NULL;</span>
+<span class="lineNum">     215 </span><span class="lineCov">    7406302 :       cur_expr-&gt;avail_occr = NULL;</span>
+<span class="lineNum">     216 </span>            :     }
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span>            :   /* Now record the occurrence.  */
+<span class="lineNum">     219 </span><span class="lineCov">    8240297 :   cur_occr = cur_expr-&gt;avail_occr;</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span><span class="lineCov">    8240297 :   if (cur_occr</span>
+<span class="lineNum">     222 </span><span class="lineCov">    8240297 :       &amp;&amp; BLOCK_FOR_INSN (cur_occr-&gt;insn) == BLOCK_FOR_INSN (insn))</span>
+<span class="lineNum">     223 </span>            :     {
+<span class="lineNum">     224 </span>            :       /* Found another instance of the expression in the same basic block.
+<span class="lineNum">     225 </span>            :          Prefer this occurrence to the currently recorded one.  We want
+<span class="lineNum">     226 </span>            :          the last one in the block and the block is scanned from start
+<span class="lineNum">     227 </span>            :          to end.  */
+<span class="lineNum">     228 </span><span class="lineNoCov">          0 :       cur_occr-&gt;insn = insn;</span>
+<span class="lineNum">     229 </span>            :     }
+<span class="lineNum">     230 </span>            :   else
+<span class="lineNum">     231 </span>            :     {
+<span class="lineNum">     232 </span>            :       /* First occurrence of this expression in this basic block.  */
+<span class="lineNum">     233 </span><span class="lineCov">    8240297 :       cur_occr = GOBNEW (struct cprop_occr);</span>
+<span class="lineNum">     234 </span><span class="lineCov">    8240297 :       bytes_used += sizeof (struct cprop_occr);</span>
+<span class="lineNum">     235 </span><span class="lineCov">    8240297 :       cur_occr-&gt;insn = insn;</span>
+<span class="lineNum">     236 </span><span class="lineCov">    8240297 :       cur_occr-&gt;next = cur_expr-&gt;avail_occr;</span>
+<span class="lineNum">     237 </span><span class="lineCov">    8240297 :       cur_expr-&gt;avail_occr = cur_occr;</span>
+<span class="lineNum">     238 </span>            :     }
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span>            :   /* Record bitmap_index of the implicit set in implicit_set_indexes.  */
+<span class="lineNum">     241 </span><span class="lineCov">    8240297 :   if (implicit)</span>
+<span class="lineNum">     242 </span><span class="lineCov">    3382292 :     implicit_set_indexes[BLOCK_FOR_INSN (insn)-&gt;index]</span>
+<span class="lineNum">     243 </span><span class="lineCov">    3382292 :       = cur_expr-&gt;bitmap_index;</span>
+<span class="lineNum">     244 </span><span class="lineCov">    8240297 : }</span>
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span>            : /* Determine whether the rtx X should be treated as a constant for CPROP.
+<span class="lineNum">     247 </span>            :    Since X might be inserted more than once we have to take care that it
+<span class="lineNum">     248 </span>            :    is sharable.  */
+<a name="249"><span class="lineNum">     249 </span>            : </a>
+<span class="lineNum">     250 </span>            : static bool
+<span class="lineNum">     251 </span><span class="lineCov">  115261866 : cprop_constant_p (const_rtx x)</span>
+<span class="lineNum">     252 </span>            : {
+<span class="lineNum">     253 </span><span class="lineCov">  115261866 :   return CONSTANT_P (x) &amp;&amp; (GET_CODE (x) != CONST || shared_const_p (x));</span>
+<span class="lineNum">     254 </span>            : }
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span>            : /* Determine whether the rtx X should be treated as a register that can
+<span class="lineNum">     257 </span>            :    be propagated.  Any pseudo-register is fine.  */
+<a name="258"><span class="lineNum">     258 </span>            : </a>
+<span class="lineNum">     259 </span>            : static bool
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 : cprop_reg_p (const_rtx x)</span>
+<span class="lineNum">     261 </span>            : {
+<span class="lineNum">     262 </span><span class="lineCov">  342142892 :   return REG_P (x) &amp;&amp; !HARD_REGISTER_P (x);</span>
+<span class="lineNum">     263 </span>            : }
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span>            : /* Scan SET present in INSN and add an entry to the hash TABLE.
+<span class="lineNum">     266 </span>            :    IMPLICIT is true if it's an implicit set, false otherwise.  */
+<a name="267"><span class="lineNum">     267 </span>            : </a>
+<span class="lineNum">     268 </span>            : static void
+<span class="lineNum">     269 </span><span class="lineCov">   85521529 : hash_scan_set (rtx set, rtx_insn *insn, struct hash_table_d *table,</span>
+<span class="lineNum">     270 </span>            :                bool implicit)
+<span class="lineNum">     271 </span>            : {
+<span class="lineNum">     272 </span><span class="lineCov">   85521529 :   rtx src = SET_SRC (set);</span>
+<span class="lineNum">     273 </span><span class="lineCov">   85521529 :   rtx dest = SET_DEST (set);</span>
+<span class="lineNum">     274 </span>            : 
+<span class="lineNum">     275 </span><span class="lineCov">   85521529 :   if (cprop_reg_p (dest)</span>
+<span class="lineNum">     276 </span><span class="lineCov">   35899323 :       &amp;&amp; reg_available_p (dest, insn)</span>
+<span class="lineNum">     277 </span><span class="lineCov">   35555383 :       &amp;&amp; can_copy_p (GET_MODE (dest)))</span>
+<span class="lineNum">     278 </span>            :     {
+<span class="lineNum">     279 </span>            :       /* See if a REG_EQUAL note shows this equivalent to a simpler expression.
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            :          This allows us to do a single CPROP pass and still eliminate
+<span class="lineNum">     282 </span>            :          redundant constants, addresses or other expressions that are
+<span class="lineNum">     283 </span>            :          constructed with multiple instructions.
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            :          However, keep the original SRC if INSN is a simple reg-reg move.  In
+<span class="lineNum">     286 </span>            :          In this case, there will almost always be a REG_EQUAL note on the
+<span class="lineNum">     287 </span>            :          insn that sets SRC.  By recording the REG_EQUAL value here as SRC
+<span class="lineNum">     288 </span>            :          for INSN, we miss copy propagation opportunities.
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span>            :          Note that this does not impede profitable constant propagations.  We
+<span class="lineNum">     291 </span>            :          &quot;look through&quot; reg-reg sets in lookup_set.  */
+<span class="lineNum">     292 </span><span class="lineCov">   35555383 :       rtx note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">     293 </span><span class="lineCov">   35555383 :       if (note != 0</span>
+<span class="lineNum">     294 </span><span class="lineCov">    2111376 :           &amp;&amp; REG_NOTE_KIND (note) == REG_EQUAL</span>
+<span class="lineNum">     295 </span><span class="lineCov">    1802778 :           &amp;&amp; !REG_P (src)</span>
+<span class="lineNum">     296 </span><span class="lineCov">   37161068 :           &amp;&amp; cprop_constant_p (XEXP (note, 0)))</span>
+<span class="lineNum">     297 </span><span class="lineCov">     678370 :         src = XEXP (note, 0), set = gen_rtx_SET (dest, src);</span>
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span>            :       /* Record sets for constant/copy propagation.  */
+<span class="lineNum">     300 </span><span class="lineCov">   35555383 :       if ((cprop_reg_p (src)</span>
+<span class="lineNum">     301 </span><span class="lineCov">    1610220 :            &amp;&amp; src != dest</span>
+<span class="lineNum">     302 </span><span class="lineCov">    1610211 :            &amp;&amp; reg_available_p (src, insn))</span>
+<span class="lineNum">     303 </span><span class="lineCov">   33995889 :           || cprop_constant_p (src))</span>
+<span class="lineNum">     304 </span><span class="lineCov">    8240297 :         insert_set_in_table (dest, src, insn, table, implicit);</span>
+<span class="lineNum">     305 </span>            :     }
+<span class="lineNum">     306 </span><span class="lineCov">   85521529 : }</span>
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : /* Process INSN and add hash table entries as appropriate.  */
+<a name="309"><span class="lineNum">     309 </span>            : </a>
+<span class="lineNum">     310 </span>            : static void
+<span class="lineNum">     311 </span><span class="lineCov">   86778244 : hash_scan_insn (rtx_insn *insn, struct hash_table_d *table)</span>
+<span class="lineNum">     312 </span>            : {
+<span class="lineNum">     313 </span><span class="lineCov">   86778244 :   rtx pat = PATTERN (insn);</span>
+<span class="lineNum">     314 </span><span class="lineCov">   86778244 :   int i;</span>
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span>            :   /* Pick out the sets of INSN and for other forms of instructions record
+<span class="lineNum">     317 </span>            :      what's been modified.  */
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span><span class="lineCov">   86778244 :   if (GET_CODE (pat) == SET)</span>
+<span class="lineNum">     320 </span><span class="lineCov">   67937052 :     hash_scan_set (pat, insn, table, false);</span>
+<span class="lineNum">     321 </span><span class="lineCov">   18841192 :   else if (GET_CODE (pat) == PARALLEL)</span>
+<span class="lineNum">     322 </span><span class="lineCov">   41937016 :     for (i = 0; i &lt; XVECLEN (pat, 0); i++)</span>
+<span class="lineNum">     323 </span>            :       {
+<span class="lineNum">     324 </span><span class="lineCov">   28264943 :         rtx x = XVECEXP (pat, 0, i);</span>
+<span class="lineNum">     325 </span>            : 
+<span class="lineNum">     326 </span><span class="lineCov">   28264943 :         if (GET_CODE (x) == SET)</span>
+<span class="lineNum">     327 </span><span class="lineCov">   14161048 :           hash_scan_set (x, insn, table, false);</span>
+<span class="lineNum">     328 </span>            :       }
+<span class="lineNum">     329 </span><span class="lineCov">   86778244 : }</span>
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span>            : /* Dump the hash table TABLE to file FILE under the name NAME.  */
+<a name="332"><span class="lineNum">     332 </span>            : </a>
+<span class="lineNum">     333 </span>            : static void
+<span class="lineNum">     334 </span><span class="lineCov">         63 : dump_hash_table (FILE *file, const char *name, struct hash_table_d *table)</span>
+<span class="lineNum">     335 </span>            : {
+<span class="lineNum">     336 </span><span class="lineCov">         63 :   int i;</span>
+<span class="lineNum">     337 </span>            :   /* Flattened out table, so it's printed in proper order.  */
+<span class="lineNum">     338 </span><span class="lineCov">         63 :   struct cprop_expr **flat_table;</span>
+<span class="lineNum">     339 </span><span class="lineCov">         63 :   unsigned int *hash_val;</span>
+<span class="lineNum">     340 </span><span class="lineCov">         63 :   struct cprop_expr *expr;</span>
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span><span class="lineCov">         63 :   flat_table = XCNEWVEC (struct cprop_expr *, table-&gt;n_elems);</span>
+<span class="lineNum">     343 </span><span class="lineCov">         63 :   hash_val = XNEWVEC (unsigned int, table-&gt;n_elems);</span>
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span><span class="lineCov">       1324 :   for (i = 0; i &lt; (int) table-&gt;size; i++)</span>
+<span class="lineNum">     346 </span><span class="lineCov">       1400 :     for (expr = table-&gt;table[i]; expr != NULL; expr = expr-&gt;next_same_hash)</span>
+<span class="lineNum">     347 </span>            :       {
+<span class="lineNum">     348 </span><span class="lineCov">        139 :         flat_table[expr-&gt;bitmap_index] = expr;</span>
+<span class="lineNum">     349 </span><span class="lineCov">        139 :         hash_val[expr-&gt;bitmap_index] = i;</span>
+<span class="lineNum">     350 </span>            :       }
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span><span class="lineCov">         63 :   fprintf (file, &quot;%s hash table (%d buckets, %d entries)\n&quot;,</span>
+<span class="lineNum">     353 </span>            :            name, table-&gt;size, table-&gt;n_elems);
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span><span class="lineCov">        202 :   for (i = 0; i &lt; (int) table-&gt;n_elems; i++)</span>
+<span class="lineNum">     356 </span><span class="lineCov">        139 :     if (flat_table[i] != 0)</span>
+<span class="lineNum">     357 </span>            :       {
+<span class="lineNum">     358 </span><span class="lineCov">        139 :         expr = flat_table[i];</span>
+<span class="lineNum">     359 </span><span class="lineCov">        278 :         fprintf (file, &quot;Index %d (hash value %d)\n  &quot;,</span>
+<span class="lineNum">     360 </span><span class="lineCov">        139 :                  expr-&gt;bitmap_index, hash_val[i]);</span>
+<span class="lineNum">     361 </span><span class="lineCov">        139 :         print_rtl (file, expr-&gt;dest);</span>
+<span class="lineNum">     362 </span><span class="lineCov">        139 :         fprintf (file, &quot; := &quot;);</span>
+<span class="lineNum">     363 </span><span class="lineCov">        139 :         print_rtl (file, expr-&gt;src);</span>
+<span class="lineNum">     364 </span><span class="lineCov">        139 :         fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     365 </span>            :       }
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span><span class="lineCov">         63 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">         63 :   free (flat_table);</span>
+<span class="lineNum">     370 </span><span class="lineCov">         63 :   free (hash_val);</span>
+<span class="lineNum">     371 </span><span class="lineCov">         63 : }</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            : /* Record as unavailable all registers that are DEF operands of INSN.  */
+<a name="374"><span class="lineNum">     374 </span>            : </a>
+<span class="lineNum">     375 </span>            : static void
+<span class="lineNum">     376 </span><span class="lineCov">   86778244 : make_set_regs_unavailable (rtx_insn *insn)</span>
+<span class="lineNum">     377 </span>            : {
+<span class="lineNum">     378 </span><span class="lineCov">   86778244 :   df_ref def;</span>
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span><span class="lineCov">  637449439 :   FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     381 </span><span class="lineCov">  550671195 :     SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (def));</span>
+<span class="lineNum">     382 </span><span class="lineCov">   86778244 : }</span>
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : /* Top level function to create an assignment hash table.
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span>            :    Assignment entries are placed in the hash table if
+<span class="lineNum">     387 </span>            :    - they are of the form (set (pseudo-reg) src),
+<span class="lineNum">     388 </span>            :    - src is something we want to perform const/copy propagation on,
+<span class="lineNum">     389 </span>            :    - none of the operands or target are subsequently modified in the block
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span>            :    Currently src must be a pseudo-reg or a const_int.
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span>            :    TABLE is the table computed.  */
+<a name="394"><span class="lineNum">     394 </span>            : </a>
+<span class="lineNum">     395 </span>            : static void
+<span class="lineNum">     396 </span><span class="lineCov">     970906 : compute_hash_table_work (struct hash_table_d *table)</span>
+<span class="lineNum">     397 </span>            : {
+<span class="lineNum">     398 </span><span class="lineCov">     970906 :   basic_block bb;</span>
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span>            :   /* Allocate vars to track sets of regs.  */
+<span class="lineNum">     401 </span><span class="lineCov">     970906 :   reg_set_bitmap = ALLOC_REG_SET (NULL);</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span><span class="lineCov">   18522372 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     404 </span>            :     {
+<span class="lineNum">     405 </span><span class="lineCov">   17551466 :       rtx_insn *insn;</span>
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span>            :       /* Reset tables used to keep track of what's not yet invalid [since
+<span class="lineNum">     408 </span>            :          the end of the block].  */
+<span class="lineNum">     409 </span><span class="lineCov">   17551466 :       CLEAR_REG_SET (reg_set_bitmap);</span>
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            :       /* Go over all insns from the last to the first.  This is convenient
+<span class="lineNum">     412 </span>            :          for tracking available registers, i.e. not set between INSN and
+<span class="lineNum">     413 </span>            :          the end of the basic block BB.  */
+<span class="lineNum">     414 </span><span class="lineCov">  399814456 :       FOR_BB_INSNS_REVERSE (bb, insn)</span>
+<span class="lineNum">     415 </span>            :         {
+<span class="lineNum">     416 </span>            :           /* Only real insns are interesting.  */
+<span class="lineNum">     417 </span><span class="lineCov">  191131495 :           if (!NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     418 </span>            :             continue;
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span>            :           /* Record interesting sets from INSN in the hash table.  */
+<span class="lineNum">     421 </span><span class="lineCov">   86778244 :           hash_scan_insn (insn, table);</span>
+<span class="lineNum">     422 </span>            : 
+<span class="lineNum">     423 </span>            :           /* Any registers set in INSN will make SETs above it not AVAIL.  */
+<span class="lineNum">     424 </span><span class="lineCov">   86778244 :           make_set_regs_unavailable (insn);</span>
+<span class="lineNum">     425 </span>            :         }
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span>            :       /* Insert implicit sets in the hash table, pretending they appear as
+<span class="lineNum">     428 </span>            :          insns at the head of the basic block.  */
+<span class="lineNum">     429 </span><span class="lineCov">   17551466 :       if (implicit_sets[bb-&gt;index] != NULL_RTX)</span>
+<span class="lineNum">     430 </span><span class="lineCov">    3423429 :         hash_scan_set (implicit_sets[bb-&gt;index], BB_HEAD (bb), table, true);</span>
+<span class="lineNum">     431 </span>            :     }
+<span class="lineNum">     432 </span>            : 
+<span class="lineNum">     433 </span><span class="lineCov">     970906 :   FREE_REG_SET (reg_set_bitmap);</span>
+<span class="lineNum">     434 </span><span class="lineCov">     970906 : }</span>
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            : /* Allocate space for the set/expr hash TABLE.
+<span class="lineNum">     437 </span>            :    It is used to determine the number of buckets to use.  */
+<a name="438"><span class="lineNum">     438 </span>            : </a>
+<span class="lineNum">     439 </span>            : static void
+<span class="lineNum">     440 </span><span class="lineCov">     970906 : alloc_hash_table (struct hash_table_d *table)</span>
+<span class="lineNum">     441 </span>            : {
+<span class="lineNum">     442 </span><span class="lineCov">     970906 :   int n;</span>
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span><span class="lineCov">     970906 :   n = get_max_insn_count ();</span>
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span><span class="lineCov">     970906 :   table-&gt;size = n / 4;</span>
+<span class="lineNum">     447 </span><span class="lineCov">     970906 :   if (table-&gt;size &lt; 11)</span>
+<span class="lineNum">     448 </span><span class="lineCov">     368817 :     table-&gt;size = 11;</span>
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span>            :   /* Attempt to maintain efficient use of hash table.
+<span class="lineNum">     451 </span>            :      Making it an odd number is simplest for now.
+<span class="lineNum">     452 </span>            :      ??? Later take some measurements.  */
+<span class="lineNum">     453 </span><span class="lineCov">     970906 :   table-&gt;size |= 1;</span>
+<span class="lineNum">     454 </span><span class="lineCov">     970906 :   n = table-&gt;size * sizeof (struct cprop_expr *);</span>
+<span class="lineNum">     455 </span><span class="lineCov">     970906 :   table-&gt;table = XNEWVAR (struct cprop_expr *, n);</span>
+<span class="lineNum">     456 </span><span class="lineCov">     970906 : }</span>
+<span class="lineNum">     457 </span>            : 
+<span class="lineNum">     458 </span>            : /* Free things allocated by alloc_hash_table.  */
+<a name="459"><span class="lineNum">     459 </span>            : </a>
+<span class="lineNum">     460 </span>            : static void
+<span class="lineNum">     461 </span><span class="lineNoCov">          0 : free_hash_table (struct hash_table_d *table)</span>
+<span class="lineNum">     462 </span>            : {
+<span class="lineNum">     463 </span><span class="lineCov">     970906 :   free (table-&gt;table);</span>
+<span class="lineNum">     464 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            : /* Compute the hash TABLE for doing copy/const propagation or
+<span class="lineNum">     467 </span>            :    expression hash table.  */
+<a name="468"><span class="lineNum">     468 </span>            : </a>
+<span class="lineNum">     469 </span>            : static void
+<span class="lineNum">     470 </span><span class="lineCov">     970906 : compute_hash_table (struct hash_table_d *table)</span>
+<span class="lineNum">     471 </span>            : {
+<span class="lineNum">     472 </span>            :   /* Initialize count of number of entries in hash table.  */
+<span class="lineNum">     473 </span><span class="lineCov">     970906 :   table-&gt;n_elems = 0;</span>
+<span class="lineNum">     474 </span><span class="lineCov">     970906 :   memset (table-&gt;table, 0, table-&gt;size * sizeof (struct cprop_expr *));</span>
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span><span class="lineCov">     970906 :   compute_hash_table_work (table);</span>
+<span class="lineNum">     477 </span><span class="lineCov">     970906 : }</span>
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span>            : /* Expression tracking support.  */
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            : /* Lookup REGNO in the set TABLE.  The result is a pointer to the
+<span class="lineNum">     482 </span>            :    table entry, or NULL if not found.  */
+<a name="483"><span class="lineNum">     483 </span>            : </a>
+<span class="lineNum">     484 </span>            : static struct cprop_expr *
+<span class="lineNum">     485 </span><span class="lineNoCov">          0 : lookup_set (unsigned int regno, struct hash_table_d *table)</span>
+<span class="lineNum">     486 </span>            : {
+<span class="lineNum">     487 </span><span class="lineCov">  106945130 :   unsigned int hash = hash_mod (regno, table-&gt;size);</span>
+<span class="lineNum">     488 </span><span class="lineCov">   53472565 :   struct cprop_expr *expr;</span>
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span><span class="lineNoCov">          0 :   expr = table-&gt;table[hash];</span>
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span><span class="lineCov">   57309242 :   while (expr &amp;&amp; REGNO (expr-&gt;dest) != regno)</span>
+<span class="lineNum">     493 </span><span class="lineCov">    3836677 :     expr = expr-&gt;next_same_hash;</span>
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span><span class="lineNoCov">          0 :   return expr;</span>
+<span class="lineNum">     496 </span>            : }
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span>            : /* Return the next entry for REGNO in list EXPR.  */
+<a name="499"><span class="lineNum">     499 </span>            : </a>
+<span class="lineNum">     500 </span>            : static struct cprop_expr *
+<span class="lineNum">     501 </span><span class="lineNoCov">          0 : next_set (unsigned int regno, struct cprop_expr *expr)</span>
+<span class="lineNum">     502 </span>            : {
+<span class="lineNum">     503 </span><span class="lineCov">   20380417 :   do</span>
+<span class="lineNum">     504 </span><span class="lineCov">   20380417 :     expr = expr-&gt;next_same_hash;</span>
+<span class="lineNum">     505 </span><span class="lineCov">   20380417 :   while (expr &amp;&amp; REGNO (expr-&gt;dest) != regno);</span>
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 :   return expr;</span>
+<span class="lineNum">     508 </span>            : }
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span>            : /* Reset tables used to keep track of what's still available [since the
+<span class="lineNum">     511 </span>            :    start of the block].  */
+<a name="512"><span class="lineNum">     512 </span>            : </a>
+<span class="lineNum">     513 </span>            : static void
+<span class="lineNum">     514 </span><span class="lineNoCov">          0 : reset_opr_set_tables (void)</span>
+<span class="lineNum">     515 </span>            : {
+<span class="lineNum">     516 </span>            :   /* Maintain a bitmap of which regs have been set since beginning of
+<span class="lineNum">     517 </span>            :      the block.  */
+<span class="lineNum">     518 </span><span class="lineNoCov">          0 :   CLEAR_REG_SET (reg_set_bitmap);</span>
+<span class="lineNum">     519 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span>            : /* Return nonzero if the register X has not been set yet [since the
+<span class="lineNum">     522 </span>            :    start of the basic block containing INSN].  */
+<a name="523"><span class="lineNum">     523 </span>            : </a>
+<span class="lineNum">     524 </span>            : static int
+<span class="lineNum">     525 </span><span class="lineNoCov">          0 : reg_not_set_p (const_rtx x, const rtx_insn *insn ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     526 </span>            : {
+<span class="lineNum">     527 </span><span class="lineCov">   95811938 :   return ! REGNO_REG_SET_P (reg_set_bitmap, REGNO (x));</span>
+<span class="lineNum">     528 </span>            : }
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span>            : /* Record things set by INSN.
+<span class="lineNum">     531 </span>            :    This data is used by reg_not_set_p.  */
+<a name="532"><span class="lineNum">     532 </span>            : </a>
+<span class="lineNum">     533 </span>            : static void
+<span class="lineNum">     534 </span><span class="lineCov">  144320899 : mark_oprs_set (rtx_insn *insn)</span>
+<span class="lineNum">     535 </span>            : {
+<span class="lineNum">     536 </span><span class="lineCov">  144320899 :   df_ref def;</span>
+<span class="lineNum">     537 </span>            : 
+<span class="lineNum">     538 </span><span class="lineCov">  625948023 :   FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     539 </span><span class="lineCov">  481627124 :     SET_REGNO_REG_SET (reg_set_bitmap, DF_REF_REGNO (def));</span>
+<span class="lineNum">     540 </span><span class="lineCov">  144320899 : }</span>
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span>            : /* Compute copy/constant propagation working variables.  */
+<span class="lineNum">     543 </span>            : 
+<span class="lineNum">     544 </span>            : /* Local properties of assignments.  */
+<span class="lineNum">     545 </span>            : static sbitmap *cprop_avloc;
+<span class="lineNum">     546 </span>            : static sbitmap *cprop_kill;
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span>            : /* Global properties of assignments (computed from the local properties).  */
+<span class="lineNum">     549 </span>            : static sbitmap *cprop_avin;
+<span class="lineNum">     550 </span>            : static sbitmap *cprop_avout;
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span>            : /* Allocate vars used for copy/const propagation.  N_BLOCKS is the number of
+<span class="lineNum">     553 </span>            :    basic blocks.  N_SETS is the number of sets.  */
+<a name="554"><span class="lineNum">     554 </span>            : </a>
+<span class="lineNum">     555 </span>            : static void
+<span class="lineNum">     556 </span><span class="lineCov">     875971 : alloc_cprop_mem (int n_blocks, int n_sets)</span>
+<span class="lineNum">     557 </span>            : {
+<span class="lineNum">     558 </span><span class="lineCov">     875971 :   cprop_avloc = sbitmap_vector_alloc (n_blocks, n_sets);</span>
+<span class="lineNum">     559 </span><span class="lineCov">     875971 :   cprop_kill = sbitmap_vector_alloc (n_blocks, n_sets);</span>
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span><span class="lineCov">     875971 :   cprop_avin = sbitmap_vector_alloc (n_blocks, n_sets);</span>
+<span class="lineNum">     562 </span><span class="lineCov">     875971 :   cprop_avout = sbitmap_vector_alloc (n_blocks, n_sets);</span>
+<span class="lineNum">     563 </span><span class="lineCov">     875971 : }</span>
+<span class="lineNum">     564 </span>            : 
+<span class="lineNum">     565 </span>            : /* Free vars used by copy/const propagation.  */
+<a name="566"><span class="lineNum">     566 </span>            : </a>
+<span class="lineNum">     567 </span>            : static void
+<span class="lineNum">     568 </span><span class="lineCov">     875971 : free_cprop_mem (void)</span>
+<span class="lineNum">     569 </span>            : {
+<span class="lineNum">     570 </span><span class="lineCov">    1751942 :   sbitmap_vector_free (cprop_avloc);</span>
+<span class="lineNum">     571 </span><span class="lineCov">    1751942 :   sbitmap_vector_free (cprop_kill);</span>
+<span class="lineNum">     572 </span><span class="lineCov">    1751942 :   sbitmap_vector_free (cprop_avin);</span>
+<span class="lineNum">     573 </span><span class="lineCov">    1751942 :   sbitmap_vector_free (cprop_avout);</span>
+<span class="lineNum">     574 </span><span class="lineCov">     875971 : }</span>
+<span class="lineNum">     575 </span>            : 
+<span class="lineNum">     576 </span>            : /* Compute the local properties of each recorded expression.
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span>            :    Local properties are those that are defined by the block, irrespective of
+<span class="lineNum">     579 </span>            :    other blocks.
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span>            :    An expression is killed in a block if its operands, either DEST or SRC, are
+<span class="lineNum">     582 </span>            :    modified in the block.
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span>            :    An expression is computed (locally available) in a block if it is computed
+<span class="lineNum">     585 </span>            :    at least once and expression would contain the same value if the
+<span class="lineNum">     586 </span>            :    computation was moved to the end of the block.
+<span class="lineNum">     587 </span>            : 
+<span class="lineNum">     588 </span>            :    KILL and COMP are destination sbitmaps for recording local properties.  */
+<a name="589"><span class="lineNum">     589 </span>            : </a>
+<span class="lineNum">     590 </span>            : static void
+<span class="lineNum">     591 </span><span class="lineCov">     875971 : compute_local_properties (sbitmap *kill, sbitmap *comp,</span>
+<span class="lineNum">     592 </span>            :                           struct hash_table_d *table)
+<span class="lineNum">     593 </span>            : {
+<span class="lineNum">     594 </span><span class="lineCov">     875971 :   unsigned int i;</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span>            :   /* Initialize the bitmaps that were passed in.  */
+<span class="lineNum">     597 </span><span class="lineCov">     875971 :   bitmap_vector_clear (kill, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     598 </span><span class="lineCov">     875971 :   bitmap_vector_clear (comp, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     599 </span>            : 
+<span class="lineNum">     600 </span><span class="lineCov">   39005922 :   for (i = 0; i &lt; table-&gt;size; i++)</span>
+<span class="lineNum">     601 </span>            :     {
+<span class="lineNum">     602 </span><span class="lineCov">   38129951 :       struct cprop_expr *expr;</span>
+<span class="lineNum">     603 </span>            : 
+<span class="lineNum">     604 </span><span class="lineCov">   45536253 :       for (expr = table-&gt;table[i]; expr != NULL; expr = expr-&gt;next_same_hash)</span>
+<span class="lineNum">     605 </span>            :         {
+<span class="lineNum">     606 </span><span class="lineCov">    7406302 :           int indx = expr-&gt;bitmap_index;</span>
+<span class="lineNum">     607 </span><span class="lineCov">    7406302 :           df_ref def;</span>
+<span class="lineNum">     608 </span><span class="lineCov">    7406302 :           struct cprop_occr *occr;</span>
+<span class="lineNum">     609 </span>            : 
+<span class="lineNum">     610 </span>            :           /* For each definition of the destination pseudo-reg, the expression
+<span class="lineNum">     611 </span>            :              is killed in the block where the definition is.  */
+<span class="lineNum">     612 </span><span class="lineCov">   14812604 :           for (def = DF_REG_DEF_CHAIN (REGNO (expr-&gt;dest));</span>
+<span class="lineNum">     613 </span><span class="lineCov">   22459181 :                def; def = DF_REF_NEXT_REG (def))</span>
+<span class="lineNum">     614 </span><span class="lineCov">   15052879 :             bitmap_set_bit (kill[DF_REF_BB (def)-&gt;index], indx);</span>
+<span class="lineNum">     615 </span>            : 
+<span class="lineNum">     616 </span>            :           /* If the source is a pseudo-reg, for each definition of the source,
+<span class="lineNum">     617 </span>            :              the expression is killed in the block where the definition is.  */
+<span class="lineNum">     618 </span><span class="lineCov">    7406302 :           if (REG_P (expr-&gt;src))</span>
+<span class="lineNum">     619 </span><span class="lineCov">    2913952 :             for (def = DF_REG_DEF_CHAIN (REGNO (expr-&gt;src));</span>
+<span class="lineNum">     620 </span><span class="lineCov">    3728560 :                  def; def = DF_REF_NEXT_REG (def))</span>
+<span class="lineNum">     621 </span><span class="lineCov">    2271584 :               bitmap_set_bit (kill[DF_REF_BB (def)-&gt;index], indx);</span>
+<span class="lineNum">     622 </span>            : 
+<span class="lineNum">     623 </span>            :           /* The occurrences recorded in avail_occr are exactly those that
+<span class="lineNum">     624 </span>            :              are locally available in the block where they are.  */
+<span class="lineNum">     625 </span><span class="lineCov">   15646599 :           for (occr = expr-&gt;avail_occr; occr != NULL; occr = occr-&gt;next)</span>
+<span class="lineNum">     626 </span>            :             {
+<span class="lineNum">     627 </span><span class="lineCov">   16480594 :               bitmap_set_bit (comp[BLOCK_FOR_INSN (occr-&gt;insn)-&gt;index], indx);</span>
+<span class="lineNum">     628 </span>            :             }
+<span class="lineNum">     629 </span>            :         }
+<span class="lineNum">     630 </span>            :     }
+<span class="lineNum">     631 </span><span class="lineCov">     875971 : }</span>
+<span class="lineNum">     632 </span>            : 
+<span class="lineNum">     633 </span>            : /* Hash table support.  */
+<span class="lineNum">     634 </span>            : 
+<span class="lineNum">     635 </span>            : /* Top level routine to do the dataflow analysis needed by copy/const
+<span class="lineNum">     636 </span>            :    propagation.  */
+<a name="637"><span class="lineNum">     637 </span>            : </a>
+<span class="lineNum">     638 </span>            : static void
+<span class="lineNum">     639 </span><span class="lineCov">     875971 : compute_cprop_data (void)</span>
+<span class="lineNum">     640 </span>            : {
+<span class="lineNum">     641 </span><span class="lineCov">     875971 :   basic_block bb;</span>
+<span class="lineNum">     642 </span>            : 
+<span class="lineNum">     643 </span><span class="lineCov">     875971 :   compute_local_properties (cprop_kill, cprop_avloc, &amp;set_hash_table);</span>
+<span class="lineNum">     644 </span><span class="lineCov">     875971 :   compute_available (cprop_avloc, cprop_kill, cprop_avout, cprop_avin);</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span>            :   /* Merge implicit sets into CPROP_AVIN.  They are always available at the
+<span class="lineNum">     647 </span>            :      entry of their basic block.  We need to do this because 1) implicit sets
+<span class="lineNum">     648 </span>            :      aren't recorded for the local pass so they cannot be propagated within
+<span class="lineNum">     649 </span>            :      their basic block by this pass and 2) the global pass would otherwise
+<span class="lineNum">     650 </span>            :      propagate them only in the successors of their basic block.  */
+<span class="lineNum">     651 </span><span class="lineCov">   17981683 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     652 </span>            :     {
+<span class="lineNum">     653 </span><span class="lineCov">   17105712 :       int index = implicit_set_indexes[bb-&gt;index];</span>
+<span class="lineNum">     654 </span><span class="lineCov">   17105712 :       if (index != -1)</span>
+<span class="lineNum">     655 </span><span class="lineCov">    3382292 :         bitmap_set_bit (cprop_avin[bb-&gt;index], index);</span>
+<span class="lineNum">     656 </span>            :     }
+<span class="lineNum">     657 </span><span class="lineCov">     875971 : }</span>
+<span class="lineNum">     658 </span>            : 
+<span class="lineNum">     659 </span>            : /* Copy/constant propagation.  */
+<span class="lineNum">     660 </span>            : 
+<span class="lineNum">     661 </span>            : /* Maximum number of register uses in an insn that we handle.  */
+<span class="lineNum">     662 </span>            : #define MAX_USES 8
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span>            : /* Table of uses (registers, both hard and pseudo) found in an insn.
+<span class="lineNum">     665 </span>            :    Allocated statically to avoid alloc/free complexity and overhead.  */
+<span class="lineNum">     666 </span>            : static rtx reg_use_table[MAX_USES];
+<span class="lineNum">     667 </span>            : 
+<span class="lineNum">     668 </span>            : /* Index into `reg_use_table' while building it.  */
+<span class="lineNum">     669 </span>            : static unsigned reg_use_count;
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            : /* Set up a list of register numbers used in INSN.  The found uses are stored
+<span class="lineNum">     672 </span>            :    in `reg_use_table'.  `reg_use_count' is initialized to zero before entry,
+<span class="lineNum">     673 </span>            :    and contains the number of uses in the table upon exit.
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span>            :    ??? If a register appears multiple times we will record it multiple times.
+<span class="lineNum">     676 </span>            :    This doesn't hurt anything but it will slow things down.  */
+<a name="677"><span class="lineNum">     677 </span>            : </a>
+<span class="lineNum">     678 </span>            : static void
+<span class="lineNum">     679 </span><span class="lineCov">  637586679 : find_used_regs (rtx *xptr, void *data ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     680 </span>            : {
+<span class="lineNum">     681 </span><span class="lineCov">  637586679 :   int i, j;</span>
+<span class="lineNum">     682 </span><span class="lineCov">  637586679 :   enum rtx_code code;</span>
+<span class="lineNum">     683 </span><span class="lineCov">  637586679 :   const char *fmt;</span>
+<span class="lineNum">     684 </span><span class="lineCov">  637586679 :   rtx x = *xptr;</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span>            :   /* repeat is used to turn tail-recursion into iteration since GCC
+<span class="lineNum">     687 </span>            :      can't do it when there's no return value.  */
+<span class="lineNum">     688 </span><span class="lineCov">  880011984 :  repeat:</span>
+<span class="lineNum">     689 </span><span class="lineCov">  880011984 :   if (x == 0)</span>
+<span class="lineNum">     690 </span>            :     return;
+<span class="lineNum">     691 </span>            : 
+<span class="lineNum">     692 </span><span class="lineCov">  880011984 :   code = GET_CODE (x);</span>
+<span class="lineNum">     693 </span><span class="lineCov">  880011984 :   if (REG_P (x))</span>
+<span class="lineNum">     694 </span>            :     {
+<span class="lineNum">     695 </span><span class="lineCov">  201879437 :       if (reg_use_count == MAX_USES)</span>
+<span class="lineNum">     696 </span>            :         return;
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span><span class="lineCov">  201799349 :       reg_use_table[reg_use_count] = x;</span>
+<span class="lineNum">     699 </span><span class="lineCov">  201799349 :       reg_use_count++;</span>
+<span class="lineNum">     700 </span>            :     }
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span>            :   /* Recursively scan the operands of this expression.  */
+<span class="lineNum">     703 </span>            : 
+<span class="lineNum">     704 </span><span class="lineCov"> 1839919329 :   for (i = GET_RTX_LENGTH (code) - 1, fmt = GET_RTX_FORMAT (code); i &gt;= 0; i--)</span>
+<span class="lineNum">     705 </span>            :     {
+<span class="lineNum">     706 </span><span class="lineCov"> 1202412738 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">     707 </span>            :         {
+<span class="lineNum">     708 </span>            :           /* If we are about to do the last recursive call
+<span class="lineNum">     709 </span>            :              needed at this level, change it into iteration.
+<span class="lineNum">     710 </span>            :              This function is called enough to be worth it.  */
+<span class="lineNum">     711 </span><span class="lineCov">  524153427 :           if (i == 0)</span>
+<span class="lineNum">     712 </span>            :             {
+<span class="lineNum">     713 </span><span class="lineCov">  242425305 :               x = XEXP (x, 0);</span>
+<span class="lineNum">     714 </span><span class="lineCov">  242425305 :               goto repeat;</span>
+<span class="lineNum">     715 </span>            :             }
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span><span class="lineCov">  281728122 :           find_used_regs (&amp;XEXP (x, i), data);</span>
+<span class="lineNum">     718 </span>            :         }
+<span class="lineNum">     719 </span><span class="lineCov">  678259311 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">     720 </span><span class="lineCov">   16398096 :         for (j = 0; j &lt; XVECLEN (x, i); j++)</span>
+<span class="lineNum">     721 </span><span class="lineCov">   10243345 :           find_used_regs (&amp;XVECEXP (x, i, j), data);</span>
+<span class="lineNum">     722 </span>            :     }
+<span class="lineNum">     723 </span>            : }
+<span class="lineNum">     724 </span>            : 
+<span class="lineNum">     725 </span>            : /* Try to replace all uses of FROM in INSN with TO.
+<span class="lineNum">     726 </span>            :    Return nonzero if successful.  */
+<a name="727"><span class="lineNum">     727 </span>            : </a>
+<span class="lineNum">     728 </span>            : static int
+<span class="lineNum">     729 </span><span class="lineCov">    4518281 : try_replace_reg (rtx from, rtx to, rtx_insn *insn)</span>
+<span class="lineNum">     730 </span>            : {
+<span class="lineNum">     731 </span><span class="lineCov">    4518281 :   rtx note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">     732 </span><span class="lineCov">    4518281 :   rtx src = 0;</span>
+<span class="lineNum">     733 </span><span class="lineCov">    4518281 :   int success = 0;</span>
+<span class="lineNum">     734 </span><span class="lineCov">    4518281 :   rtx set = single_set (insn);</span>
+<span class="lineNum">     735 </span>            : 
+<span class="lineNum">     736 </span><span class="lineCov">    4518281 :   bool check_rtx_costs = true;</span>
+<span class="lineNum">     737 </span><span class="lineCov">    9036562 :   bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));</span>
+<span class="lineNum">     738 </span><span class="lineCov">    4518281 :   int old_cost = set ? set_rtx_cost (set, speed) : 0;</span>
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span><span class="lineCov">    4518281 :   if (!set</span>
+<span class="lineNum">     741 </span><span class="lineCov">    4393555 :       || CONSTANT_P (SET_SRC (set))</span>
+<span class="lineNum">     742 </span><span class="lineCov">    4295706 :       || (note != 0</span>
+<span class="lineNum">     743 </span><span class="lineCov">    1420588 :           &amp;&amp; REG_NOTE_KIND (note) == REG_EQUAL</span>
+<span class="lineNum">     744 </span><span class="lineCov">    1420588 :           &amp;&amp; (GET_CODE (XEXP (note, 0)) == CONST</span>
+<span class="lineNum">     745 </span><span class="lineCov">    1418532 :               || CONSTANT_P (XEXP (note, 0)))))</span>
+<span class="lineNum">     746 </span><span class="lineCov">     498603 :     check_rtx_costs = false;</span>
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span>            :   /* Usually we substitute easy stuff, so we won't copy everything.
+<span class="lineNum">     749 </span>            :      We however need to take care to not duplicate non-trivial CONST
+<span class="lineNum">     750 </span>            :      expressions.  */
+<span class="lineNum">     751 </span><span class="lineCov">    4518281 :   to = copy_rtx (to);</span>
+<span class="lineNum">     752 </span>            : 
+<span class="lineNum">     753 </span><span class="lineCov">    4518281 :   validate_replace_src_group (from, to, insn);</span>
+<span class="lineNum">     754 </span>            : 
+<span class="lineNum">     755 </span>            :   /* If TO is a constant, check the cost of the set after propagation
+<span class="lineNum">     756 </span>            :      to the cost of the set before the propagation.  If the cost is
+<span class="lineNum">     757 </span>            :      higher, then do not replace FROM with TO.  */
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span><span class="lineCov">    4518281 :   if (check_rtx_costs</span>
+<span class="lineNum">     760 </span><span class="lineCov">    4019678 :       &amp;&amp; CONSTANT_P (to)</span>
+<span class="lineNum">     761 </span><span class="lineCov">    7204035 :       &amp;&amp; set_rtx_cost (set, speed) &gt; old_cost)</span>
+<span class="lineNum">     762 </span>            :     {
+<span class="lineNum">     763 </span><span class="lineCov">    1474760 :       cancel_changes (0);</span>
+<span class="lineNum">     764 </span><span class="lineCov">    1474760 :       return false;</span>
+<span class="lineNum">     765 </span>            :     }
+<span class="lineNum">     766 </span>            : 
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span><span class="lineCov">    3043521 :   if (num_changes_pending () &amp;&amp; apply_change_group ())</span>
+<span class="lineNum">     769 </span><span class="lineCov">    1632290 :     success = 1;</span>
+<span class="lineNum">     770 </span>            : 
+<span class="lineNum">     771 </span>            :   /* Try to simplify SET_SRC if we have substituted a constant.  */
+<span class="lineNum">     772 </span><span class="lineCov">    1632290 :   if (success &amp;&amp; set &amp;&amp; CONSTANT_P (to))</span>
+<span class="lineNum">     773 </span>            :     {
+<span class="lineNum">     774 </span><span class="lineCov">     200558 :       src = simplify_rtx (SET_SRC (set));</span>
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span><span class="lineCov">     200558 :       if (src)</span>
+<span class="lineNum">     777 </span><span class="lineCov">       4162 :         validate_change (insn, &amp;SET_SRC (set), src, 0);</span>
+<span class="lineNum">     778 </span>            :     }
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span>            :   /* If there is already a REG_EQUAL note, update the expression in it
+<span class="lineNum">     781 </span>            :      with our replacement.  */
+<span class="lineNum">     782 </span><span class="lineCov">    3043521 :   if (note != 0 &amp;&amp; REG_NOTE_KIND (note) == REG_EQUAL)</span>
+<span class="lineNum">     783 </span><span class="lineCov">    1191027 :     set_unique_reg_note (insn, REG_EQUAL,</span>
+<span class="lineNum">     784 </span>            :                          simplify_replace_rtx (XEXP (note, 0), from, to));
+<span class="lineNum">     785 </span><span class="lineCov">    3043521 :   if (!success &amp;&amp; set &amp;&amp; reg_mentioned_p (from, SET_SRC (set)))</span>
+<span class="lineNum">     786 </span>            :     {
+<span class="lineNum">     787 </span>            :       /* If above failed and this is a single set, try to simplify the source
+<span class="lineNum">     788 </span>            :          of the set given our substitution.  We could perhaps try this for
+<span class="lineNum">     789 </span>            :          multiple SETs, but it probably won't buy us anything.  */
+<span class="lineNum">     790 </span><span class="lineCov">    1117862 :       src = simplify_replace_rtx (SET_SRC (set), from, to);</span>
+<span class="lineNum">     791 </span>            : 
+<span class="lineNum">     792 </span><span class="lineCov">    1117862 :       if (!rtx_equal_p (src, SET_SRC (set))</span>
+<span class="lineNum">     793 </span><span class="lineCov">    1117862 :           &amp;&amp; validate_change (insn, &amp;SET_SRC (set), src, 0))</span>
+<span class="lineNum">     794 </span>            :         success = 1;
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span>            :       /* If we've failed perform the replacement, have a single SET to
+<span class="lineNum">     797 </span>            :          a REG destination and don't yet have a note, add a REG_EQUAL note
+<span class="lineNum">     798 </span>            :          to not lose information.  */
+<span class="lineNum">     799 </span><span class="lineCov">    1114156 :       if (!success &amp;&amp; note == 0 &amp;&amp; set != 0 &amp;&amp; REG_P (SET_DEST (set)))</span>
+<span class="lineNum">     800 </span><span class="lineCov">     381725 :         note = set_unique_reg_note (insn, REG_EQUAL, copy_rtx (src));</span>
+<span class="lineNum">     801 </span>            :     }
+<span class="lineNum">     802 </span>            : 
+<span class="lineNum">     803 </span><span class="lineCov">    3043521 :   if (set &amp;&amp; MEM_P (SET_DEST (set)) &amp;&amp; reg_mentioned_p (from, SET_DEST (set)))</span>
+<span class="lineNum">     804 </span>            :     {
+<span class="lineNum">     805 </span>            :       /* Registers can also appear as uses in SET_DEST if it is a MEM.
+<span class="lineNum">     806 </span>            :          We could perhaps try this for multiple SETs, but it probably
+<span class="lineNum">     807 </span>            :          won't buy us anything.  */
+<span class="lineNum">     808 </span><span class="lineCov">       8838 :       rtx dest = simplify_replace_rtx (SET_DEST (set), from, to);</span>
+<span class="lineNum">     809 </span>            : 
+<span class="lineNum">     810 </span><span class="lineCov">       8838 :       if (!rtx_equal_p (dest, SET_DEST (set))</span>
+<span class="lineNum">     811 </span><span class="lineCov">       8838 :           &amp;&amp; validate_change (insn, &amp;SET_DEST (set), dest, 0))</span>
+<span class="lineNum">     812 </span>            :         success = 1;
+<span class="lineNum">     813 </span>            :     }
+<span class="lineNum">     814 </span>            : 
+<span class="lineNum">     815 </span>            :   /* REG_EQUAL may get simplified into register.
+<span class="lineNum">     816 </span>            :      We don't allow that. Remove that note. This code ought
+<span class="lineNum">     817 </span>            :      not to happen, because previous code ought to synthesize
+<span class="lineNum">     818 </span>            :      reg-reg move, but be on the safe side.  */
+<span class="lineNum">     819 </span><span class="lineCov">    3043521 :   if (note &amp;&amp; REG_NOTE_KIND (note) == REG_EQUAL &amp;&amp; REG_P (XEXP (note, 0)))</span>
+<span class="lineNum">     820 </span><span class="lineNoCov">          0 :     remove_note (insn, note);</span>
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span>            :   return success;
+<span class="lineNum">     823 </span>            : }
+<span class="lineNum">     824 </span>            : 
+<span class="lineNum">     825 </span>            : /* Find a set of REGNOs that are available on entry to INSN's block.  If found,
+<span class="lineNum">     826 </span>            :    SET_RET[0] will be assigned a set with a register source and SET_RET[1] a
+<span class="lineNum">     827 </span>            :    set with a constant source.  If not found the corresponding entry is set to
+<span class="lineNum">     828 </span>            :    NULL.  */
+<a name="829"><span class="lineNum">     829 </span>            : </a>
+<span class="lineNum">     830 </span>            : static void
+<span class="lineNum">     831 </span><span class="lineCov">   51667884 : find_avail_set (int regno, rtx_insn *insn, struct cprop_expr *set_ret[2])</span>
+<span class="lineNum">     832 </span>            : {
+<span class="lineNum">     833 </span><span class="lineCov">   51667884 :   set_ret[0] = set_ret[1] = NULL;</span>
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span>            :   /* Loops are not possible here.  To get a loop we would need two sets
+<span class="lineNum">     836 </span>            :      available at the start of the block containing INSN.  i.e. we would
+<span class="lineNum">     837 </span>            :      need two sets like this available at the start of the block:
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :        (set (reg X) (reg Y))
+<span class="lineNum">     840 </span>            :        (set (reg Y) (reg X))
+<span class="lineNum">     841 </span>            : 
+<span class="lineNum">     842 </span>            :      This can not happen since the set of (reg Y) would have killed the
+<span class="lineNum">     843 </span>            :      set of (reg X) making it unavailable at the start of this block.  */
+<span class="lineNum">     844 </span><span class="lineCov">   52189618 :   while (1)</span>
+<span class="lineNum">     845 </span>            :     {
+<span class="lineNum">     846 </span><span class="lineCov">   52189618 :       rtx src;</span>
+<span class="lineNum">     847 </span><span class="lineCov">   52189618 :       struct cprop_expr *set = lookup_set (regno, &amp;set_hash_table);</span>
+<span class="lineNum">     848 </span>            : 
+<span class="lineNum">     849 </span>            :       /* Find a set that is available at the start of the block
+<span class="lineNum">     850 </span>            :          which contains INSN.  */
+<span class="lineNum">     851 </span><span class="lineCov">   70865995 :       while (set)</span>
+<span class="lineNum">     852 </span>            :         {
+<span class="lineNum">     853 </span><span class="lineCov">   40974788 :           if (bitmap_bit_p (cprop_avin[BLOCK_FOR_INSN (insn)-&gt;index],</span>
+<span class="lineNum">     854 </span>            :                         set-&gt;bitmap_index))
+<span class="lineNum">     855 </span>            :             break;
+<span class="lineNum">     856 </span>            :           set = next_set (regno, set);
+<span class="lineNum">     857 </span>            :         }
+<span class="lineNum">     858 </span>            : 
+<span class="lineNum">     859 </span>            :       /* If no available set was found we've reached the end of the
+<span class="lineNum">     860 </span>            :          (possibly empty) copy chain.  */
+<span class="lineNum">     861 </span><span class="lineCov">   52189618 :       if (set == 0)</span>
+<span class="lineNum">     862 </span>            :         break;
+<span class="lineNum">     863 </span>            : 
+<span class="lineNum">     864 </span><span class="lineCov">    1811017 :       src = set-&gt;src;</span>
+<span class="lineNum">     865 </span>            : 
+<span class="lineNum">     866 </span>            :       /* We know the set is available.
+<span class="lineNum">     867 </span>            :          Now check that SRC is locally anticipatable (i.e. none of the
+<span class="lineNum">     868 </span>            :          source operands have changed since the start of the block).
+<span class="lineNum">     869 </span>            : 
+<span class="lineNum">     870 </span>            :          If the source operand changed, we may still use it for the next
+<span class="lineNum">     871 </span>            :          iteration of this loop, but we may not use it for substitutions.  */
+<span class="lineNum">     872 </span>            : 
+<span class="lineNum">     873 </span><span class="lineCov">    1811017 :       if (cprop_constant_p (src))</span>
+<span class="lineNum">     874 </span><span class="lineCov">    1289283 :         set_ret[1] = set;</span>
+<span class="lineNum">     875 </span><span class="lineCov">     521734 :       else if (reg_not_set_p (src, insn))</span>
+<span class="lineNum">     876 </span><span class="lineCov">     520638 :         set_ret[0] = set;</span>
+<span class="lineNum">     877 </span>            : 
+<span class="lineNum">     878 </span>            :       /* If the source of the set is anything except a register, then
+<span class="lineNum">     879 </span>            :          we have reached the end of the copy chain.  */
+<span class="lineNum">     880 </span><span class="lineCov">    1811017 :       if (! REG_P (src))</span>
+<span class="lineNum">     881 </span>            :         break;
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span>            :       /* Follow the copy chain, i.e. start another iteration of the loop
+<span class="lineNum">     884 </span>            :          and see if we have an available copy into SRC.  */
+<span class="lineNum">     885 </span><span class="lineCov">     521734 :       regno = REGNO (src);</span>
+<span class="lineNum">     886 </span><span class="lineCov">     521734 :     }</span>
+<span class="lineNum">     887 </span><span class="lineCov">   51667884 : }</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span>            : /* Subroutine of cprop_insn that tries to propagate constants into
+<span class="lineNum">     890 </span>            :    JUMP_INSNS.  JUMP must be a conditional jump.  If SETCC is non-NULL
+<span class="lineNum">     891 </span>            :    it is the instruction that immediately precedes JUMP, and must be a
+<span class="lineNum">     892 </span>            :    single SET of a register.  FROM is what we will try to replace,
+<span class="lineNum">     893 </span>            :    SRC is the constant we will try to substitute for it.  Return nonzero
+<span class="lineNum">     894 </span>            :    if a change was made.  */
+<a name="895"><span class="lineNum">     895 </span>            : </a>
+<span class="lineNum">     896 </span>            : static int
+<span class="lineNum">     897 </span><span class="lineCov">     541252 : cprop_jump (basic_block bb, rtx_insn *setcc, rtx_insn *jump, rtx from, rtx src)</span>
+<span class="lineNum">     898 </span>            : {
+<span class="lineNum">     899 </span><span class="lineCov">     541252 :   rtx new_rtx, set_src, note_src;</span>
+<span class="lineNum">     900 </span><span class="lineCov">     541252 :   rtx set = pc_set (jump);</span>
+<span class="lineNum">     901 </span><span class="lineCov">     541252 :   rtx note = find_reg_equal_equiv_note (jump);</span>
+<span class="lineNum">     902 </span>            : 
+<span class="lineNum">     903 </span><span class="lineCov">     541252 :   if (note)</span>
+<span class="lineNum">     904 </span>            :     {
+<span class="lineNum">     905 </span><span class="lineNoCov">          0 :       note_src = XEXP (note, 0);</span>
+<span class="lineNum">     906 </span><span class="lineNoCov">          0 :       if (GET_CODE (note_src) == EXPR_LIST)</span>
+<span class="lineNum">     907 </span>            :         note_src = NULL_RTX;
+<span class="lineNum">     908 </span>            :     }
+<span class="lineNum">     909 </span>            :   else note_src = NULL_RTX;
+<span class="lineNum">     910 </span>            : 
+<span class="lineNum">     911 </span>            :   /* Prefer REG_EQUAL notes except those containing EXPR_LISTs.  */
+<span class="lineNum">     912 </span><span class="lineCov">     541252 :   set_src = note_src ? note_src : SET_SRC (set);</span>
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span>            :   /* First substitute the SETCC condition into the JUMP instruction,
+<span class="lineNum">     915 </span>            :      then substitute that given values into this expanded JUMP.  */
+<span class="lineNum">     916 </span><span class="lineCov">     541252 :   if (setcc != NULL_RTX</span>
+<span class="lineNum">     917 </span><span class="lineCov">     541252 :       &amp;&amp; !modified_between_p (from, setcc, jump)</span>
+<span class="lineNum">     918 </span><span class="lineCov">    1082504 :       &amp;&amp; !modified_between_p (src, setcc, jump))</span>
+<span class="lineNum">     919 </span>            :     {
+<span class="lineNum">     920 </span><span class="lineCov">     541252 :       rtx setcc_src;</span>
+<span class="lineNum">     921 </span><span class="lineCov">     541252 :       rtx setcc_set = single_set (setcc);</span>
+<span class="lineNum">     922 </span><span class="lineCov">     541252 :       rtx setcc_note = find_reg_equal_equiv_note (setcc);</span>
+<span class="lineNum">     923 </span><span class="lineCov">     124188 :       setcc_src = (setcc_note &amp;&amp; GET_CODE (XEXP (setcc_note, 0)) != EXPR_LIST)</span>
+<span class="lineNum">     924 </span><span class="lineCov">     541252 :                 ? XEXP (setcc_note, 0) : SET_SRC (setcc_set);</span>
+<span class="lineNum">     925 </span><span class="lineCov">     541252 :       set_src = simplify_replace_rtx (set_src, SET_DEST (setcc_set),</span>
+<span class="lineNum">     926 </span>            :                                       setcc_src);
+<span class="lineNum">     927 </span>            :     }
+<span class="lineNum">     928 </span>            :   else
+<span class="lineNum">     929 </span>            :     setcc = NULL;
+<span class="lineNum">     930 </span>            : 
+<span class="lineNum">     931 </span><span class="lineCov">     541252 :   new_rtx = simplify_replace_rtx (set_src, from, src);</span>
+<span class="lineNum">     932 </span>            : 
+<span class="lineNum">     933 </span>            :   /* If no simplification can be made, then try the next register.  */
+<span class="lineNum">     934 </span><span class="lineCov">     541252 :   if (rtx_equal_p (new_rtx, SET_SRC (set)))</span>
+<span class="lineNum">     935 </span>            :     return 0;
+<span class="lineNum">     936 </span>            : 
+<span class="lineNum">     937 </span>            :   /* If this is now a no-op delete it, otherwise this must be a valid insn.  */
+<span class="lineNum">     938 </span><span class="lineCov">     537428 :   if (new_rtx == pc_rtx)</span>
+<span class="lineNum">     939 </span><span class="lineCov">        857 :     delete_insn (jump);</span>
+<span class="lineNum">     940 </span>            :   else
+<span class="lineNum">     941 </span>            :     {
+<span class="lineNum">     942 </span>            :       /* Ensure the value computed inside the jump insn to be equivalent
+<span class="lineNum">     943 </span>            :          to one computed by setcc.  */
+<span class="lineNum">     944 </span><span class="lineCov">     536571 :       if (setcc &amp;&amp; modified_in_p (new_rtx, setcc))</span>
+<span class="lineNum">     945 </span>            :         return 0;
+<span class="lineNum">     946 </span><span class="lineCov">       1100 :       if (! validate_unshare_change (jump, &amp;SET_SRC (set), new_rtx, 0))</span>
+<span class="lineNum">     947 </span>            :         {
+<span class="lineNum">     948 </span>            :           /* When (some) constants are not valid in a comparison, and there
+<span class="lineNum">     949 </span>            :              are two registers to be replaced by constants before the entire
+<span class="lineNum">     950 </span>            :              comparison can be folded into a constant, we need to keep
+<span class="lineNum">     951 </span>            :              intermediate information in REG_EQUAL notes.  For targets with
+<span class="lineNum">     952 </span>            :              separate compare insns, such notes are added by try_replace_reg.
+<span class="lineNum">     953 </span>            :              When we have a combined compare-and-branch instruction, however,
+<span class="lineNum">     954 </span>            :              we need to attach a note to the branch itself to make this
+<span class="lineNum">     955 </span>            :              optimization work.  */
+<span class="lineNum">     956 </span>            : 
+<span class="lineNum">     957 </span><span class="lineNoCov">          0 :           if (!rtx_equal_p (new_rtx, note_src))</span>
+<span class="lineNum">     958 </span><span class="lineNoCov">          0 :             set_unique_reg_note (jump, REG_EQUAL, copy_rtx (new_rtx));</span>
+<span class="lineNum">     959 </span><span class="lineNoCov">          0 :           return 0;</span>
+<span class="lineNum">     960 </span>            :         }
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span>            :       /* Remove REG_EQUAL note after simplification.  */
+<span class="lineNum">     963 </span><span class="lineCov">       1100 :       if (note_src)</span>
+<span class="lineNum">     964 </span><span class="lineNoCov">          0 :         remove_note (jump, note);</span>
+<span class="lineNum">     965 </span>            :      }
+<span class="lineNum">     966 </span>            : 
+<span class="lineNum">     967 </span>            :   /* Delete the cc0 setter.  */
+<span class="lineNum">     968 </span><span class="lineCov">       1957 :   if (HAVE_cc0 &amp;&amp; setcc != NULL &amp;&amp; CC0_P (SET_DEST (single_set (setcc))))</span>
+<span class="lineNum">     969 </span>            :     delete_insn (setcc);
+<span class="lineNum">     970 </span>            : 
+<span class="lineNum">     971 </span><span class="lineCov">       1957 :   global_const_prop_count++;</span>
+<span class="lineNum">     972 </span><span class="lineCov">       1957 :   if (dump_file != NULL)</span>
+<span class="lineNum">     973 </span>            :     {
+<span class="lineNum">     974 </span><span class="lineNoCov">          0 :       fprintf (dump_file,</span>
+<span class="lineNum">     975 </span>            :                &quot;GLOBAL CONST-PROP: Replacing reg %d in jump_insn %d with &quot;
+<span class="lineNum">     976 </span><span class="lineNoCov">          0 :                &quot;constant &quot;, REGNO (from), INSN_UID (jump));</span>
+<span class="lineNum">     977 </span><span class="lineNoCov">          0 :       print_rtl (dump_file, src);</span>
+<span class="lineNum">     978 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     979 </span>            :     }
+<span class="lineNum">     980 </span><span class="lineCov">       1957 :   purge_dead_edges (bb);</span>
+<span class="lineNum">     981 </span>            : 
+<span class="lineNum">     982 </span>            :   /* If a conditional jump has been changed into unconditional jump, remove
+<span class="lineNum">     983 </span>            :      the jump and make the edge fallthru - this is always called in
+<span class="lineNum">     984 </span>            :      cfglayout mode.  */
+<span class="lineNum">     985 </span><span class="lineCov">       1957 :   if (new_rtx != pc_rtx &amp;&amp; simplejump_p (jump))</span>
+<span class="lineNum">     986 </span>            :     {
+<span class="lineNum">     987 </span><span class="lineCov">       1100 :       edge e;</span>
+<span class="lineNum">     988 </span><span class="lineCov">       1100 :       edge_iterator ei;</span>
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span><span class="lineCov">       2200 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     991 </span><span class="lineCov">       1100 :         if (e-&gt;dest != EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     992 </span><span class="lineCov">       1100 :             &amp;&amp; BB_HEAD (e-&gt;dest) == JUMP_LABEL (jump))</span>
+<span class="lineNum">     993 </span>            :           {
+<span class="lineNum">     994 </span><span class="lineCov">       1100 :             e-&gt;flags |= EDGE_FALLTHRU;</span>
+<span class="lineNum">     995 </span><span class="lineCov">       1100 :             break;</span>
+<span class="lineNum">     996 </span>            :           }
+<span class="lineNum">     997 </span><span class="lineCov">       1100 :       delete_insn (jump);</span>
+<span class="lineNum">     998 </span>            :     }
+<span class="lineNum">     999 </span>            : 
+<span class="lineNum">    1000 </span>            :   return 1;
+<span class="lineNum">    1001 </span>            : }
+<span class="lineNum">    1002 </span>            : 
+<span class="lineNum">    1003 </span>            : /* Subroutine of cprop_insn that tries to propagate constants.  FROM is what
+<span class="lineNum">    1004 </span>            :    we will try to replace, SRC is the constant we will try to substitute for
+<span class="lineNum">    1005 </span>            :    it and INSN is the instruction where this will be happening.  */
+<a name="1006"><span class="lineNum">    1006 </span>            : </a>
+<span class="lineNum">    1007 </span>            : static int
+<span class="lineNum">    1008 </span><span class="lineCov">    3088755 : constprop_register (rtx from, rtx src, rtx_insn *insn)</span>
+<span class="lineNum">    1009 </span>            : {
+<span class="lineNum">    1010 </span><span class="lineCov">    3088755 :   rtx sset;</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span>            :   /* Check for reg or cc0 setting instructions followed by
+<span class="lineNum">    1013 </span>            :      conditional branch instructions first.  */
+<span class="lineNum">    1014 </span><span class="lineCov">    3088755 :   if ((sset = single_set (insn)) != NULL</span>
+<span class="lineNum">    1015 </span><span class="lineCov">    3003507 :       &amp;&amp; NEXT_INSN (insn)</span>
+<span class="lineNum">    1016 </span><span class="lineCov">    9094811 :       &amp;&amp; any_condjump_p (NEXT_INSN (insn)) &amp;&amp; onlyjump_p (NEXT_INSN (insn)))</span>
+<span class="lineNum">    1017 </span>            :     {
+<span class="lineNum">    1018 </span><span class="lineCov">     541252 :       rtx dest = SET_DEST (sset);</span>
+<span class="lineNum">    1019 </span><span class="lineCov">     541252 :       if ((REG_P (dest) || CC0_P (dest))</span>
+<span class="lineNum">    1020 </span><span class="lineCov">     541252 :           &amp;&amp; cprop_jump (BLOCK_FOR_INSN (insn), insn, NEXT_INSN (insn),</span>
+<span class="lineNum">    1021 </span>            :                          from, src))
+<span class="lineNum">    1022 </span>            :         return 1;
+<span class="lineNum">    1023 </span>            :     }
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span>            :   /* Handle normal insns next.  */
+<span class="lineNum">    1026 </span><span class="lineCov">    3086798 :   if (NONJUMP_INSN_P (insn) &amp;&amp; try_replace_reg (from, src, insn))</span>
+<span class="lineNum">    1027 </span>            :     return 1;
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span>            :   /* Try to propagate a CONST_INT into a conditional jump.
+<span class="lineNum">    1030 </span>            :      We're pretty specific about what we will handle in this
+<span class="lineNum">    1031 </span>            :      code, we can extend this as necessary over time.
+<span class="lineNum">    1032 </span>            : 
+<span class="lineNum">    1033 </span>            :      Right now the insn in question must look like
+<span class="lineNum">    1034 </span>            :      (set (pc) (if_then_else ...))  */
+<span class="lineNum">    1035 </span><span class="lineCov">    2879198 :   else if (any_condjump_p (insn) &amp;&amp; onlyjump_p (insn))</span>
+<span class="lineNum">    1036 </span><span class="lineNoCov">          0 :     return cprop_jump (BLOCK_FOR_INSN (insn), NULL, insn, from, src);</span>
+<span class="lineNum">    1037 </span>            :   return 0;
+<span class="lineNum">    1038 </span>            : }
+<span class="lineNum">    1039 </span>            : 
+<span class="lineNum">    1040 </span>            : /* Perform constant and copy propagation on INSN.
+<span class="lineNum">    1041 </span>            :    Return nonzero if a change was made.  */
+<a name="1042"><span class="lineNum">    1042 </span>            : </a>
+<span class="lineNum">    1043 </span>            : static int
+<span class="lineNum">    1044 </span><span class="lineCov">  144320899 : cprop_insn (rtx_insn *insn)</span>
+<span class="lineNum">    1045 </span>            : {
+<span class="lineNum">    1046 </span><span class="lineCov">  144320899 :   unsigned i;</span>
+<span class="lineNum">    1047 </span><span class="lineCov">  144320899 :   int changed = 0, changed_this_round;</span>
+<span class="lineNum">    1048 </span><span class="lineCov">  144906422 :   rtx note;</span>
+<span class="lineNum">    1049 </span>            : 
+<span class="lineNum">    1050 </span><span class="lineCov">  144906422 :   do</span>
+<span class="lineNum">    1051 </span>            :     {
+<span class="lineNum">    1052 </span><span class="lineCov">  144906422 :       changed_this_round = 0;</span>
+<span class="lineNum">    1053 </span><span class="lineCov">  144906422 :       reg_use_count = 0;</span>
+<span class="lineNum">    1054 </span><span class="lineCov">  289812844 :       note_uses (&amp;PATTERN (insn), find_used_regs, NULL);</span>
+<span class="lineNum">    1055 </span>            : 
+<span class="lineNum">    1056 </span>            :       /* We may win even when propagating constants into notes.  */
+<span class="lineNum">    1057 </span><span class="lineCov">  144906422 :       note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">    1058 </span><span class="lineCov">  144906422 :       if (note)</span>
+<span class="lineNum">    1059 </span><span class="lineCov">    3708406 :         find_used_regs (&amp;XEXP (note, 0), NULL);</span>
+<span class="lineNum">    1060 </span>            : 
+<span class="lineNum">    1061 </span><span class="lineCov">  240196626 :       for (i = 0; i &lt; reg_use_count; i++)</span>
+<span class="lineNum">    1062 </span>            :         {
+<span class="lineNum">    1063 </span><span class="lineCov">   95290204 :           rtx reg_used = reg_use_table[i];</span>
+<span class="lineNum">    1064 </span><span class="lineCov">   95290204 :           unsigned int regno = REGNO (reg_used);</span>
+<span class="lineNum">    1065 </span><span class="lineCov">   95290204 :           rtx src_cst = NULL, src_reg = NULL;</span>
+<span class="lineNum">    1066 </span><span class="lineCov">   95290204 :           struct cprop_expr *set[2];</span>
+<span class="lineNum">    1067 </span>            : 
+<span class="lineNum">    1068 </span>            :           /* If the register has already been set in this block, there's
+<span class="lineNum">    1069 </span>            :              nothing we can do.  */
+<span class="lineNum">    1070 </span><span class="lineCov">   95290204 :           if (! reg_not_set_p (reg_used, insn))</span>
+<span class="lineNum">    1071 </span><span class="lineCov">   43622320 :             continue;</span>
+<span class="lineNum">    1072 </span>            : 
+<span class="lineNum">    1073 </span>            :           /* Find an assignment that sets reg_used and is available
+<span class="lineNum">    1074 </span>            :              at the start of the block.  */
+<span class="lineNum">    1075 </span><span class="lineCov">   51667884 :           find_avail_set (regno, insn, set);</span>
+<span class="lineNum">    1076 </span><span class="lineCov">   51667884 :           if (set[0])</span>
+<span class="lineNum">    1077 </span><span class="lineCov">     519832 :             src_reg = set[0]-&gt;src;</span>
+<span class="lineNum">    1078 </span><span class="lineCov">   51667884 :           if (set[1])</span>
+<span class="lineNum">    1079 </span><span class="lineCov">    1289283 :             src_cst = set[1]-&gt;src;</span>
+<span class="lineNum">    1080 </span>            : 
+<span class="lineNum">    1081 </span>            :           /* Constant propagation.  */
+<span class="lineNum">    1082 </span><span class="lineCov">    1289283 :           if (src_cst &amp;&amp; cprop_constant_p (src_cst)</span>
+<span class="lineNum">    1083 </span><span class="lineCov">    2578566 :               &amp;&amp; constprop_register (reg_used, src_cst, insn))</span>
+<span class="lineNum">    1084 </span>            :             {
+<span class="lineNum">    1085 </span><span class="lineCov">      91863 :               changed_this_round = changed = 1;</span>
+<span class="lineNum">    1086 </span><span class="lineCov">      91863 :               global_const_prop_count++;</span>
+<span class="lineNum">    1087 </span><span class="lineCov">      91863 :               if (dump_file != NULL)</span>
+<span class="lineNum">    1088 </span>            :                 {
+<span class="lineNum">    1089 </span><span class="lineCov">          6 :                   fprintf (dump_file,</span>
+<span class="lineNum">    1090 </span>            :                            &quot;GLOBAL CONST-PROP: Replacing reg %d in &quot;, regno);
+<span class="lineNum">    1091 </span><span class="lineCov">         12 :                   fprintf (dump_file, &quot;insn %d with constant &quot;,</span>
+<span class="lineNum">    1092 </span><span class="lineCov">          6 :                            INSN_UID (insn));</span>
+<span class="lineNum">    1093 </span><span class="lineCov">          6 :                   print_rtl (dump_file, src_cst);</span>
+<span class="lineNum">    1094 </span><span class="lineCov">          6 :                   fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1095 </span>            :                 }
+<span class="lineNum">    1096 </span><span class="lineCov">     183726 :               if (insn-&gt;deleted ())</span>
+<span class="lineNum">    1097 </span><span class="lineNoCov">          0 :                 return 1;</span>
+<span class="lineNum">    1098 </span>            :             }
+<span class="lineNum">    1099 </span>            :           /* Copy propagation.  */
+<span class="lineNum">    1100 </span><span class="lineCov">     519121 :           else if (src_reg &amp;&amp; cprop_reg_p (src_reg)</span>
+<span class="lineNum">    1101 </span><span class="lineCov">    1038242 :                    &amp;&amp; REGNO (src_reg) != regno</span>
+<span class="lineNum">    1102 </span><span class="lineCov">   52095142 :                    &amp;&amp; try_replace_reg (reg_used, src_reg, insn))</span>
+<span class="lineNum">    1103 </span>            :             {
+<span class="lineNum">    1104 </span><span class="lineCov">     508194 :               changed_this_round = changed = 1;</span>
+<span class="lineNum">    1105 </span><span class="lineCov">     508194 :               global_copy_prop_count++;</span>
+<span class="lineNum">    1106 </span><span class="lineCov">     508194 :               if (dump_file != NULL)</span>
+<span class="lineNum">    1107 </span>            :                 {
+<span class="lineNum">    1108 </span><span class="lineNoCov">          0 :                   fprintf (dump_file,</span>
+<span class="lineNum">    1109 </span>            :                            &quot;GLOBAL COPY-PROP: Replacing reg %d in insn %d&quot;,
+<span class="lineNum">    1110 </span><span class="lineNoCov">          0 :                            regno, INSN_UID (insn));</span>
+<span class="lineNum">    1111 </span><span class="lineNoCov">          0 :                   fprintf (dump_file, &quot; with reg %d\n&quot;, REGNO (src_reg));</span>
+<span class="lineNum">    1112 </span>            :                 }
+<span class="lineNum">    1113 </span>            : 
+<span class="lineNum">    1114 </span>            :               /* The original insn setting reg_used may or may not now be
+<span class="lineNum">    1115 </span>            :                  deletable.  We leave the deletion to DCE.  */
+<span class="lineNum">    1116 </span>            :               /* FIXME: If it turns out that the insn isn't deletable,
+<span class="lineNum">    1117 </span>            :                  then we may have unnecessarily extended register lifetimes
+<span class="lineNum">    1118 </span>            :                  and made things worse.  */
+<span class="lineNum">    1119 </span>            :             }
+<span class="lineNum">    1120 </span>            :         }
+<span class="lineNum">    1121 </span>            :     }
+<span class="lineNum">    1122 </span>            :   /* If try_replace_reg simplified the insn, the regs found by find_used_regs
+<span class="lineNum">    1123 </span>            :      may not be valid anymore.  Start over.  */
+<span class="lineNum">    1124 </span><span class="lineCov">  144906422 :   while (changed_this_round);</span>
+<span class="lineNum">    1125 </span>            : 
+<span class="lineNum">    1126 </span><span class="lineCov">  144320899 :   if (changed &amp;&amp; DEBUG_INSN_P (insn))</span>
+<span class="lineNum">    1127 </span><span class="lineCov">      25970 :     return 0;</span>
+<span class="lineNum">    1128 </span>            : 
+<span class="lineNum">    1129 </span>            :   return changed;
+<span class="lineNum">    1130 </span>            : }
+<span class="lineNum">    1131 </span>            : 
+<span class="lineNum">    1132 </span>            : /* Like find_used_regs, but avoid recording uses that appear in
+<span class="lineNum">    1133 </span>            :    input-output contexts such as zero_extract or pre_dec.  This
+<span class="lineNum">    1134 </span>            :    restricts the cases we consider to those for which local cprop
+<span class="lineNum">    1135 </span>            :    can legitimately make replacements.  */
+<a name="1136"><span class="lineNum">    1136 </span>            : </a>
+<span class="lineNum">    1137 </span>            : static void
+<span class="lineNum">    1138 </span><span class="lineCov">  187035964 : local_cprop_find_used_regs (rtx *xptr, void *data)</span>
+<span class="lineNum">    1139 </span>            : {
+<span class="lineNum">    1140 </span><span class="lineCov">  187035964 :   rtx x = *xptr;</span>
+<span class="lineNum">    1141 </span>            : 
+<span class="lineNum">    1142 </span><span class="lineCov">  187035964 :   if (x == 0)</span>
+<span class="lineNum">    1143 </span>            :     return;
+<span class="lineNum">    1144 </span>            : 
+<span class="lineNum">    1145 </span><span class="lineCov">  187035964 :   switch (GET_CODE (x))</span>
+<span class="lineNum">    1146 </span>            :     {
+<span class="lineNum">    1147 </span>            :     case ZERO_EXTRACT:
+<span class="lineNum">    1148 </span>            :     case SIGN_EXTRACT:
+<span class="lineNum">    1149 </span>            :     case STRICT_LOW_PART:
+<span class="lineNum">    1150 </span>            :       return;
+<span class="lineNum">    1151 </span>            : 
+<span class="lineNum">    1152 </span>            :     case PRE_DEC:
+<span class="lineNum">    1153 </span>            :     case PRE_INC:
+<span class="lineNum">    1154 </span>            :     case POST_DEC:
+<span class="lineNum">    1155 </span>            :     case POST_INC:
+<span class="lineNum">    1156 </span>            :     case PRE_MODIFY:
+<span class="lineNum">    1157 </span>            :     case POST_MODIFY:
+<span class="lineNum">    1158 </span>            :       /* Can only legitimately appear this early in the context of
+<span class="lineNum">    1159 </span>            :          stack pushes for function arguments, but handle all of the
+<span class="lineNum">    1160 </span>            :          codes nonetheless.  */
+<span class="lineNum">    1161 </span>            :       return;
+<span class="lineNum">    1162 </span>            : 
+<span class="lineNum">    1163 </span><span class="lineCov">     565525 :     case SUBREG:</span>
+<span class="lineNum">    1164 </span><span class="lineCov">     565525 :       if (read_modify_subreg_p (x))</span>
+<span class="lineNum">    1165 </span>            :         return;
+<span class="lineNum">    1166 </span>            :       break;
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            :     default:
+<span class="lineNum">    1169 </span>            :       break;
+<span class="lineNum">    1170 </span>            :     }
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span><span class="lineCov">  182601527 :   find_used_regs (xptr, data);</span>
+<span class="lineNum">    1173 </span>            : }
+<span class="lineNum">    1174 </span>            : 
+<span class="lineNum">    1175 </span>            : /* Try to perform local const/copy propagation on X in INSN.  */
+<a name="1176"><span class="lineNum">    1176 </span>            : </a>
+<span class="lineNum">    1177 </span>            : static bool
+<span class="lineNum">    1178 </span><span class="lineCov">  105088890 : do_local_cprop (rtx x, rtx_insn *insn)</span>
+<span class="lineNum">    1179 </span>            : {
+<span class="lineNum">    1180 </span><span class="lineCov">  105088890 :   rtx newreg = NULL, newcnst = NULL;</span>
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span>            :   /* Rule out USE instructions and ASM statements as we don't want to
+<span class="lineNum">    1183 </span>            :      change the hard registers mentioned.  */
+<span class="lineNum">    1184 </span><span class="lineCov">  105088890 :   if (REG_P (x)</span>
+<span class="lineNum">    1185 </span><span class="lineCov">  105088890 :       &amp;&amp; (cprop_reg_p (x)</span>
+<span class="lineNum">    1186 </span><span class="lineCov">   72986896 :           || (GET_CODE (PATTERN (insn)) != USE</span>
+<span class="lineNum">    1187 </span><span class="lineCov">   72015604 :               &amp;&amp; asm_noperands (PATTERN (insn)) &lt; 0)))</span>
+<span class="lineNum">    1188 </span>            :     {
+<span class="lineNum">    1189 </span><span class="lineCov">  104600053 :       cselib_val *val = cselib_lookup (x, GET_MODE (x), 0, VOIDmode);</span>
+<span class="lineNum">    1190 </span><span class="lineCov">  104600053 :       struct elt_loc_list *l;</span>
+<span class="lineNum">    1191 </span>            : 
+<span class="lineNum">    1192 </span><span class="lineCov">  104600053 :       if (!val)</span>
+<span class="lineNum">    1193 </span>            :         return false;
+<span class="lineNum">    1194 </span><span class="lineCov">  110377821 :       for (l = val-&gt;locs; l; l = l-&gt;next)</span>
+<span class="lineNum">    1195 </span>            :         {
+<span class="lineNum">    1196 </span><span class="lineCov">   71723738 :           rtx this_rtx = l-&gt;loc;</span>
+<span class="lineNum">    1197 </span><span class="lineCov">   71723738 :           rtx note;</span>
+<span class="lineNum">    1198 </span>            : 
+<span class="lineNum">    1199 </span><span class="lineCov">   71723738 :           if (cprop_constant_p (this_rtx))</span>
+<span class="lineNum">    1200 </span><span class="lineCov">    1799472 :             newcnst = this_rtx;</span>
+<span class="lineNum">    1201 </span><span class="lineCov">   71723738 :           if (cprop_reg_p (this_rtx)</span>
+<span class="lineNum">    1202 </span>            :               /* Don't copy propagate if it has attached REG_EQUIV note.
+<span class="lineNum">    1203 </span>            :                  At this point this only function parameters should have
+<span class="lineNum">    1204 </span>            :                  REG_EQUIV notes and if the argument slot is used somewhere
+<span class="lineNum">    1205 </span>            :                  explicitly, it means address of parameter has been taken,
+<span class="lineNum">    1206 </span>            :                  so we should not extend the lifetime of the pseudo.  */
+<span class="lineNum">    1207 </span><span class="lineCov">   29648579 :               &amp;&amp; (!(note = find_reg_note (l-&gt;setting_insn, REG_EQUIV, NULL_RTX))</span>
+<span class="lineNum">    1208 </span><span class="lineCov">       3111 :                   || ! MEM_P (XEXP (note, 0))))</span>
+<span class="lineNum">    1209 </span>            :             newreg = this_rtx;
+<span class="lineNum">    1210 </span>            :         }
+<span class="lineNum">    1211 </span><span class="lineCov">   38654083 :       if (newcnst &amp;&amp; constprop_register (x, newcnst, insn))</span>
+<span class="lineNum">    1212 </span>            :         {
+<span class="lineNum">    1213 </span><span class="lineCov">     117694 :           if (dump_file != NULL)</span>
+<span class="lineNum">    1214 </span>            :             {
+<span class="lineNum">    1215 </span><span class="lineCov">          4 :               fprintf (dump_file, &quot;LOCAL CONST-PROP: Replacing reg %d in &quot;,</span>
+<span class="lineNum">    1216 </span>            :                        REGNO (x));
+<span class="lineNum">    1217 </span><span class="lineCov">          4 :               fprintf (dump_file, &quot;insn %d with constant &quot;,</span>
+<span class="lineNum">    1218 </span><span class="lineCov">          2 :                        INSN_UID (insn));</span>
+<span class="lineNum">    1219 </span><span class="lineCov">          2 :               print_rtl (dump_file, newcnst);</span>
+<span class="lineNum">    1220 </span><span class="lineCov">          2 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1221 </span>            :             }
+<span class="lineNum">    1222 </span><span class="lineCov">     117694 :           local_const_prop_count++;</span>
+<span class="lineNum">    1223 </span><span class="lineCov">     117694 :           return true;</span>
+<span class="lineNum">    1224 </span>            :         }
+<span class="lineNum">    1225 </span><span class="lineCov">   38536389 :       else if (newreg &amp;&amp; newreg != x &amp;&amp; try_replace_reg (x, newreg, insn))</span>
+<span class="lineNum">    1226 </span>            :         {
+<span class="lineNum">    1227 </span><span class="lineCov">     920496 :           if (dump_file != NULL)</span>
+<span class="lineNum">    1228 </span>            :             {
+<span class="lineNum">    1229 </span><span class="lineCov">         10 :               fprintf (dump_file,</span>
+<span class="lineNum">    1230 </span>            :                        &quot;LOCAL COPY-PROP: Replacing reg %d in insn %d&quot;,
+<span class="lineNum">    1231 </span><span class="lineCov">         10 :                        REGNO (x), INSN_UID (insn));</span>
+<span class="lineNum">    1232 </span><span class="lineCov">         20 :               fprintf (dump_file, &quot; with reg %d\n&quot;, REGNO (newreg));</span>
+<span class="lineNum">    1233 </span>            :             }
+<span class="lineNum">    1234 </span><span class="lineCov">     920496 :           local_copy_prop_count++;</span>
+<span class="lineNum">    1235 </span><span class="lineCov">     920496 :           return true;</span>
+<span class="lineNum">    1236 </span>            :         }
+<span class="lineNum">    1237 </span>            :     }
+<span class="lineNum">    1238 </span>            :   return false;
+<span class="lineNum">    1239 </span>            : }
+<span class="lineNum">    1240 </span>            : 
+<span class="lineNum">    1241 </span>            : /* Do local const/copy propagation (i.e. within each basic block).  */
+<a name="1242"><span class="lineNum">    1242 </span>            : </a>
+<span class="lineNum">    1243 </span>            : static int
+<span class="lineNum">    1244 </span><span class="lineCov">     970906 : local_cprop_pass (void)</span>
+<span class="lineNum">    1245 </span>            : {
+<span class="lineNum">    1246 </span><span class="lineCov">     970906 :   basic_block bb;</span>
+<span class="lineNum">    1247 </span><span class="lineCov">     970906 :   rtx_insn *insn;</span>
+<span class="lineNum">    1248 </span><span class="lineCov">     970906 :   bool changed = false;</span>
+<span class="lineNum">    1249 </span><span class="lineCov">     970906 :   unsigned i;</span>
+<span class="lineNum">    1250 </span>            : 
+<span class="lineNum">    1251 </span><span class="lineCov">     970906 :   auto_vec&lt;rtx_insn *&gt; uncond_traps;</span>
+<span class="lineNum">    1252 </span>            : 
+<span class="lineNum">    1253 </span><span class="lineCov">     970906 :   cselib_init (0);</span>
+<span class="lineNum">    1254 </span><span class="lineCov">   17223592 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1255 </span>            :     {
+<span class="lineNum">    1256 </span><span class="lineCov">  205861466 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">    1257 </span>            :         {
+<span class="lineNum">    1258 </span><span class="lineCov">  189608780 :           if (INSN_P (insn))</span>
+<span class="lineNum">    1259 </span>            :             {
+<span class="lineNum">    1260 </span><span class="lineCov">  164429583 :               bool was_uncond_trap</span>
+<span class="lineNum">    1261 </span><span class="lineCov">  164429583 :                 = (GET_CODE (PATTERN (insn)) == TRAP_IF</span>
+<span class="lineNum">    1262 </span><span class="lineCov">  164429583 :                    &amp;&amp; XEXP (PATTERN (insn), 0) == const1_rtx);</span>
+<span class="lineNum">    1263 </span><span class="lineCov">  164429583 :               rtx note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">    1264 </span><span class="lineCov">  165467773 :               do</span>
+<span class="lineNum">    1265 </span>            :                 {
+<span class="lineNum">    1266 </span><span class="lineCov">  165467773 :                   reg_use_count = 0;</span>
+<span class="lineNum">    1267 </span><span class="lineCov">  330935546 :                   note_uses (&amp;PATTERN (insn), local_cprop_find_used_regs,</span>
+<span class="lineNum">    1268 </span>            :                              NULL);
+<span class="lineNum">    1269 </span><span class="lineCov">  165467773 :                   if (note)</span>
+<span class="lineNum">    1270 </span><span class="lineCov">    5189593 :                     local_cprop_find_used_regs (&amp;XEXP (note, 0), NULL);</span>
+<span class="lineNum">    1271 </span>            : 
+<span class="lineNum">    1272 </span><span class="lineCov">  269518473 :                   for (i = 0; i &lt; reg_use_count; i++)</span>
+<span class="lineNum">    1273 </span>            :                     {
+<span class="lineNum">    1274 </span><span class="lineCov">  105088890 :                       if (do_local_cprop (reg_use_table[i], insn))</span>
+<span class="lineNum">    1275 </span>            :                         {
+<span class="lineNum">    1276 </span><span class="lineCov">    1038190 :                           if (!DEBUG_INSN_P (insn))</span>
+<span class="lineNum">    1277 </span><span class="lineCov">    1026094 :                             changed = true;</span>
+<span class="lineNum">    1278 </span>            :                           break;
+<span class="lineNum">    1279 </span>            :                         }
+<span class="lineNum">    1280 </span>            :                     }
+<span class="lineNum">    1281 </span><span class="lineCov">  165467773 :                   if (!was_uncond_trap</span>
+<span class="lineNum">    1282 </span><span class="lineCov">  330926770 :                       &amp;&amp; GET_CODE (PATTERN (insn)) == TRAP_IF</span>
+<span class="lineNum">    1283 </span><span class="lineCov">  165467773 :                       &amp;&amp; XEXP (PATTERN (insn), 0) == const1_rtx)</span>
+<span class="lineNum">    1284 </span>            :                     {
+<span class="lineNum">    1285 </span><span class="lineNoCov">          0 :                       uncond_traps.safe_push (insn);</span>
+<span class="lineNum">    1286 </span><span class="lineNoCov">          0 :                       break;</span>
+<span class="lineNum">    1287 </span>            :                     }
+<span class="lineNum">    1288 </span><span class="lineCov">  330935546 :                   if (insn-&gt;deleted ())</span>
+<span class="lineNum">    1289 </span>            :                     break;
+<span class="lineNum">    1290 </span>            :                 }
+<span class="lineNum">    1291 </span><span class="lineCov">  165467773 :               while (i &lt; reg_use_count);</span>
+<span class="lineNum">    1292 </span>            :             }
+<span class="lineNum">    1293 </span><span class="lineCov">  189608780 :           cselib_process_insn (insn);</span>
+<span class="lineNum">    1294 </span>            :         }
+<span class="lineNum">    1295 </span>            : 
+<span class="lineNum">    1296 </span>            :       /* Forget everything at the end of a basic block.  */
+<span class="lineNum">    1297 </span><span class="lineCov">   16252686 :       cselib_clear_table ();</span>
+<span class="lineNum">    1298 </span>            :     }
+<span class="lineNum">    1299 </span>            : 
+<span class="lineNum">    1300 </span><span class="lineCov">     970906 :   cselib_finish ();</span>
+<span class="lineNum">    1301 </span>            : 
+<span class="lineNum">    1302 </span><span class="lineCov">     970906 :   while (!uncond_traps.is_empty ())</span>
+<span class="lineNum">    1303 </span>            :     {
+<span class="lineNum">    1304 </span><span class="lineNoCov">          0 :       rtx_insn *insn = uncond_traps.pop ();</span>
+<span class="lineNum">    1305 </span><span class="lineNoCov">          0 :       basic_block to_split = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">    1306 </span><span class="lineNoCov">          0 :       remove_edge (split_block (to_split, insn));</span>
+<span class="lineNum">    1307 </span><span class="lineNoCov">          0 :       emit_barrier_after_bb (to_split);</span>
+<span class="lineNum">    1308 </span>            :     }
+<span class="lineNum">    1309 </span>            : 
+<span class="lineNum">    1310 </span><span class="lineCov">     970906 :   return changed;</span>
+<span class="lineNum">    1311 </span>            : }
+<span class="lineNum">    1312 </span>            : 
+<span class="lineNum">    1313 </span>            : /* Similar to get_condition, only the resulting condition must be
+<span class="lineNum">    1314 </span>            :    valid at JUMP, instead of at EARLIEST.
+<span class="lineNum">    1315 </span>            : 
+<span class="lineNum">    1316 </span>            :    This differs from noce_get_condition in ifcvt.c in that we prefer not to
+<span class="lineNum">    1317 </span>            :    settle for the condition variable in the jump instruction being integral.
+<span class="lineNum">    1318 </span>            :    We prefer to be able to record the value of a user variable, rather than
+<span class="lineNum">    1319 </span>            :    the value of a temporary used in a condition.  This could be solved by
+<span class="lineNum">    1320 </span>            :    recording the value of *every* register scanned by canonicalize_condition,
+<span class="lineNum">    1321 </span>            :    but this would require some code reorganization.  */
+<a name="1322"><span class="lineNum">    1322 </span>            : </a>
+<span class="lineNum">    1323 </span>            : rtx
+<span class="lineNum">    1324 </span><span class="lineCov">   11429047 : fis_get_condition (rtx_insn *jump)</span>
+<span class="lineNum">    1325 </span>            : {
+<span class="lineNum">    1326 </span><span class="lineCov">   11429047 :   return get_condition (jump, NULL, false, true);</span>
+<span class="lineNum">    1327 </span>            : }
+<span class="lineNum">    1328 </span>            : 
+<span class="lineNum">    1329 </span>            : /* Check the comparison COND to see if we can safely form an implicit
+<span class="lineNum">    1330 </span>            :    set from it.  */
+<a name="1331"><span class="lineNum">    1331 </span>            : </a>
+<span class="lineNum">    1332 </span>            : static bool
+<span class="lineNum">    1333 </span><span class="lineCov">    7080120 : implicit_set_cond_p (const_rtx cond)</span>
+<span class="lineNum">    1334 </span>            : {
+<span class="lineNum">    1335 </span><span class="lineCov">    7080120 :   machine_mode mode;</span>
+<span class="lineNum">    1336 </span><span class="lineCov">    7080120 :   rtx cst;</span>
+<span class="lineNum">    1337 </span>            : 
+<span class="lineNum">    1338 </span>            :   /* COND must be either an EQ or NE comparison.  */
+<span class="lineNum">    1339 </span><span class="lineCov">    7080120 :   if (GET_CODE (cond) != EQ &amp;&amp; GET_CODE (cond) != NE)</span>
+<span class="lineNum">    1340 </span>            :     return false;
+<span class="lineNum">    1341 </span>            : 
+<span class="lineNum">    1342 </span>            :   /* The first operand of COND must be a register we can propagate.  */
+<span class="lineNum">    1343 </span><span class="lineCov">    5570991 :   if (!cprop_reg_p (XEXP (cond, 0)))</span>
+<span class="lineNum">    1344 </span>            :     return false;
+<span class="lineNum">    1345 </span>            : 
+<span class="lineNum">    1346 </span>            :   /* The second operand of COND must be a suitable constant.  */
+<span class="lineNum">    1347 </span><span class="lineCov">    4614446 :   mode = GET_MODE (XEXP (cond, 0));</span>
+<span class="lineNum">    1348 </span><span class="lineCov">    4614446 :   cst = XEXP (cond, 1);</span>
+<span class="lineNum">    1349 </span>            : 
+<span class="lineNum">    1350 </span>            :   /* We can't perform this optimization if either operand might be or might
+<span class="lineNum">    1351 </span>            :      contain a signed zero.  */
+<span class="lineNum">    1352 </span><span class="lineCov">    4614446 :   if (HONOR_SIGNED_ZEROS (mode))</span>
+<span class="lineNum">    1353 </span>            :     {
+<span class="lineNum">    1354 </span>            :       /* It is sufficient to check if CST is or contains a zero.  We must
+<span class="lineNum">    1355 </span>            :          handle float, complex, and vector.  If any subpart is a zero, then
+<span class="lineNum">    1356 </span>            :          the optimization can't be performed.  */
+<span class="lineNum">    1357 </span>            :       /* ??? The complex and vector checks are not implemented yet.  We just
+<span class="lineNum">    1358 </span>            :          always return zero for them.  */
+<span class="lineNum">    1359 </span><span class="lineNoCov">          0 :       if (CONST_DOUBLE_AS_FLOAT_P (cst)</span>
+<span class="lineNum">    1360 </span><span class="lineNoCov">          0 :           &amp;&amp; real_equal (CONST_DOUBLE_REAL_VALUE (cst), &amp;dconst0))</span>
+<span class="lineNum">    1361 </span>            :         return 0;
+<span class="lineNum">    1362 </span>            :       else
+<span class="lineNum">    1363 </span><span class="lineNoCov">          0 :         return 0;</span>
+<span class="lineNum">    1364 </span>            :     }
+<span class="lineNum">    1365 </span>            : 
+<span class="lineNum">    1366 </span><span class="lineCov">    4614446 :   return cprop_constant_p (cst);</span>
+<span class="lineNum">    1367 </span>            : }
+<span class="lineNum">    1368 </span>            : 
+<span class="lineNum">    1369 </span>            : /* Find the implicit sets of a function.  An &quot;implicit set&quot; is a constraint
+<span class="lineNum">    1370 </span>            :    on the value of a variable, implied by a conditional jump.  For example,
+<span class="lineNum">    1371 </span>            :    following &quot;if (x == 2)&quot;, the then branch may be optimized as though the
+<span class="lineNum">    1372 </span>            :    conditional performed an &quot;explicit set&quot;, in this example, &quot;x = 2&quot;.  This
+<span class="lineNum">    1373 </span>            :    function records the set patterns that are implicit at the start of each
+<span class="lineNum">    1374 </span>            :    basic block.
+<span class="lineNum">    1375 </span>            : 
+<span class="lineNum">    1376 </span>            :    If an implicit set is found but the set is implicit on a critical edge,
+<span class="lineNum">    1377 </span>            :    this critical edge is split.
+<span class="lineNum">    1378 </span>            : 
+<span class="lineNum">    1379 </span>            :    Return true if the CFG was modified, false otherwise.  */
+<a name="1380"><span class="lineNum">    1380 </span>            : </a>
+<span class="lineNum">    1381 </span>            : static bool
+<span class="lineNum">    1382 </span><span class="lineCov">     970906 : find_implicit_sets (void)</span>
+<span class="lineNum">    1383 </span>            : {
+<span class="lineNum">    1384 </span><span class="lineCov">     970906 :   basic_block bb, dest;</span>
+<span class="lineNum">    1385 </span><span class="lineCov">     970906 :   rtx cond, new_rtx;</span>
+<span class="lineNum">    1386 </span><span class="lineCov">     970906 :   unsigned int count = 0;</span>
+<span class="lineNum">    1387 </span><span class="lineCov">     970906 :   bool edges_split = false;</span>
+<span class="lineNum">    1388 </span><span class="lineCov">     970906 :   size_t implicit_sets_size = last_basic_block_for_fn (cfun) + 10;</span>
+<span class="lineNum">    1389 </span>            : 
+<span class="lineNum">    1390 </span><span class="lineCov">     970906 :   implicit_sets = XCNEWVEC (rtx, implicit_sets_size);</span>
+<span class="lineNum">    1391 </span>            : 
+<span class="lineNum">    1392 </span><span class="lineCov">   18522372 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1393 </span>            :     {
+<span class="lineNum">    1394 </span>            :       /* Check for more than one successor.  */
+<span class="lineNum">    1395 </span><span class="lineCov">   17551466 :       if (EDGE_COUNT (bb-&gt;succs) &lt;= 1)</span>
+<span class="lineNum">    1396 </span>            :         continue;
+<span class="lineNum">    1397 </span>            : 
+<span class="lineNum">    1398 </span><span class="lineCov">    8763320 :       cond = fis_get_condition (BB_END (bb));</span>
+<span class="lineNum">    1399 </span>            : 
+<span class="lineNum">    1400 </span>            :       /* If no condition is found or if it isn't of a suitable form,
+<span class="lineNum">    1401 </span>            :          ignore it.  */
+<span class="lineNum">    1402 </span><span class="lineCov">    8763320 :       if (! cond || ! implicit_set_cond_p (cond))</span>
+<span class="lineNum">    1403 </span><span class="lineCov">    5339891 :         continue;</span>
+<span class="lineNum">    1404 </span>            : 
+<span class="lineNum">    1405 </span><span class="lineCov">    6846858 :       dest = GET_CODE (cond) == EQ</span>
+<span class="lineNum">    1406 </span><span class="lineCov">    3423429 :         ? BRANCH_EDGE (bb)-&gt;dest : FALLTHRU_EDGE (bb)-&gt;dest;</span>
+<span class="lineNum">    1407 </span>            : 
+<span class="lineNum">    1408 </span>            :       /* If DEST doesn't go anywhere, ignore it.  */
+<span class="lineNum">    1409 </span><span class="lineCov">    3423429 :       if (! dest || dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1410 </span>            :         continue;
+<span class="lineNum">    1411 </span>            : 
+<span class="lineNum">    1412 </span>            :       /* We have found a suitable implicit set.  Try to record it now as
+<span class="lineNum">    1413 </span>            :          a SET in DEST.  If DEST has more than one predecessor, the edge
+<span class="lineNum">    1414 </span>            :          between BB and DEST is a critical edge and we must split it,
+<span class="lineNum">    1415 </span>            :          because we can only record one implicit set per DEST basic block.  */
+<span class="lineNum">    1416 </span><span class="lineCov">    3423429 :       if (! single_pred_p (dest))</span>
+<span class="lineNum">    1417 </span>            :         {
+<span class="lineNum">    1418 </span><span class="lineCov">    1300046 :           dest = split_edge (find_edge (bb, dest));</span>
+<span class="lineNum">    1419 </span><span class="lineCov">    1300046 :           edges_split = true;</span>
+<span class="lineNum">    1420 </span>            :         }
+<span class="lineNum">    1421 </span>            : 
+<span class="lineNum">    1422 </span><span class="lineCov">    3423429 :       if (implicit_sets_size &lt;= (size_t) dest-&gt;index)</span>
+<span class="lineNum">    1423 </span>            :       {
+<span class="lineNum">    1424 </span><span class="lineCov">      21548 :         size_t old_implicit_sets_size = implicit_sets_size;</span>
+<span class="lineNum">    1425 </span><span class="lineCov">      21548 :         implicit_sets_size *= 2;</span>
+<span class="lineNum">    1426 </span><span class="lineCov">      21548 :         implicit_sets = XRESIZEVEC (rtx, implicit_sets, implicit_sets_size);</span>
+<span class="lineNum">    1427 </span><span class="lineCov">      43096 :         memset (implicit_sets + old_implicit_sets_size, 0,</span>
+<span class="lineNum">    1428 </span><span class="lineCov">      21548 :                 (implicit_sets_size - old_implicit_sets_size) * sizeof (rtx));</span>
+<span class="lineNum">    1429 </span>            :       }
+<span class="lineNum">    1430 </span>            : 
+<span class="lineNum">    1431 </span><span class="lineCov">    3423429 :       new_rtx = gen_rtx_SET (XEXP (cond, 0), XEXP (cond, 1));</span>
+<span class="lineNum">    1432 </span><span class="lineCov">    3423429 :       implicit_sets[dest-&gt;index] = new_rtx;</span>
+<span class="lineNum">    1433 </span><span class="lineCov">    3423429 :       if (dump_file)</span>
+<span class="lineNum">    1434 </span>            :         {
+<span class="lineNum">    1435 </span><span class="lineCov">         54 :           fprintf (dump_file, &quot;Implicit set of reg %d in &quot;,</span>
+<span class="lineNum">    1436 </span><span class="lineCov">         54 :                    REGNO (XEXP (cond, 0)));</span>
+<span class="lineNum">    1437 </span><span class="lineCov">         54 :           fprintf (dump_file, &quot;basic block %d\n&quot;, dest-&gt;index);</span>
+<span class="lineNum">    1438 </span>            :         }
+<span class="lineNum">    1439 </span><span class="lineCov">    3423429 :       count++;</span>
+<span class="lineNum">    1440 </span>            :     }
+<span class="lineNum">    1441 </span>            : 
+<span class="lineNum">    1442 </span><span class="lineCov">     970906 :   if (dump_file)</span>
+<span class="lineNum">    1443 </span><span class="lineCov">         63 :     fprintf (dump_file, &quot;Found %d implicit sets\n&quot;, count);</span>
+<span class="lineNum">    1444 </span>            : 
+<span class="lineNum">    1445 </span>            :   /* Confess our sins.  */
+<span class="lineNum">    1446 </span><span class="lineCov">     970906 :   return edges_split;</span>
+<span class="lineNum">    1447 </span>            : }
+<span class="lineNum">    1448 </span>            : 
+<span class="lineNum">    1449 </span>            : /* Bypass conditional jumps.  */
+<span class="lineNum">    1450 </span>            : 
+<span class="lineNum">    1451 </span>            : /* The value of last_basic_block at the beginning of the jump_bypass
+<span class="lineNum">    1452 </span>            :    pass.  The use of redirect_edge_and_branch_force may introduce new
+<span class="lineNum">    1453 </span>            :    basic blocks, but the data flow analysis is only valid for basic
+<span class="lineNum">    1454 </span>            :    block indices less than bypass_last_basic_block.  */
+<span class="lineNum">    1455 </span>            : 
+<span class="lineNum">    1456 </span>            : static int bypass_last_basic_block;
+<span class="lineNum">    1457 </span>            : 
+<span class="lineNum">    1458 </span>            : /* Find a set of REGNO to a constant that is available at the end of basic
+<span class="lineNum">    1459 </span>            :    block BB.  Return NULL if no such set is found.  Based heavily upon
+<span class="lineNum">    1460 </span>            :    find_avail_set.  */
+<a name="1461"><span class="lineNum">    1461 </span>            : </a>
+<span class="lineNum">    1462 </span>            : static struct cprop_expr *
+<span class="lineNum">    1463 </span><span class="lineCov">    1205194 : find_bypass_set (int regno, int bb)</span>
+<span class="lineNum">    1464 </span>            : {
+<span class="lineNum">    1465 </span><span class="lineCov">    1205194 :   struct cprop_expr *result = 0;</span>
+<span class="lineNum">    1466 </span>            : 
+<span class="lineNum">    1467 </span><span class="lineCov">    1282947 :   for (;;)</span>
+<span class="lineNum">    1468 </span>            :     {
+<span class="lineNum">    1469 </span><span class="lineCov">    1282947 :       rtx src;</span>
+<span class="lineNum">    1470 </span><span class="lineCov">    1282947 :       struct cprop_expr *set = lookup_set (regno, &amp;set_hash_table);</span>
+<span class="lineNum">    1471 </span>            : 
+<span class="lineNum">    1472 </span><span class="lineCov">    2553049 :       while (set)</span>
+<span class="lineNum">    1473 </span>            :         {
+<span class="lineNum">    1474 </span><span class="lineCov">    1491910 :           if (bitmap_bit_p (cprop_avout[bb], set-&gt;bitmap_index))</span>
+<span class="lineNum">    1475 </span>            :             break;
+<span class="lineNum">    1476 </span>            :           set = next_set (regno, set);
+<span class="lineNum">    1477 </span>            :         }
+<span class="lineNum">    1478 </span>            : 
+<span class="lineNum">    1479 </span><span class="lineCov">    1282947 :       if (set == 0)</span>
+<span class="lineNum">    1480 </span>            :         break;
+<span class="lineNum">    1481 </span>            : 
+<span class="lineNum">    1482 </span><span class="lineCov">     221808 :       src = set-&gt;src;</span>
+<span class="lineNum">    1483 </span><span class="lineCov">     221808 :       if (cprop_constant_p (src))</span>
+<span class="lineNum">    1484 </span><span class="lineCov">     144055 :         result = set;</span>
+<span class="lineNum">    1485 </span>            : 
+<span class="lineNum">    1486 </span><span class="lineCov">     221808 :       if (! REG_P (src))</span>
+<span class="lineNum">    1487 </span>            :         break;
+<span class="lineNum">    1488 </span>            : 
+<span class="lineNum">    1489 </span><span class="lineCov">      77753 :       regno = REGNO (src);</span>
+<span class="lineNum">    1490 </span><span class="lineCov">      77753 :     }</span>
+<span class="lineNum">    1491 </span><span class="lineCov">    1205194 :   return result;</span>
+<span class="lineNum">    1492 </span>            : }
+<span class="lineNum">    1493 </span>            : 
+<span class="lineNum">    1494 </span>            : /* Subroutine of bypass_block that checks whether a pseudo is killed by
+<span class="lineNum">    1495 </span>            :    any of the instructions inserted on an edge.  Jump bypassing places
+<span class="lineNum">    1496 </span>            :    condition code setters on CFG edges using insert_insn_on_edge.  This
+<span class="lineNum">    1497 </span>            :    function is required to check that our data flow analysis is still
+<span class="lineNum">    1498 </span>            :    valid prior to commit_edge_insertions.  */
+<a name="1499"><span class="lineNum">    1499 </span>            : </a>
+<span class="lineNum">    1500 </span>            : static bool
+<span class="lineNum">    1501 </span><span class="lineCov">        287 : reg_killed_on_edge (const_rtx reg, const_edge e)</span>
+<span class="lineNum">    1502 </span>            : {
+<span class="lineNum">    1503 </span><span class="lineCov">        287 :   rtx_insn *insn;</span>
+<span class="lineNum">    1504 </span>            : 
+<span class="lineNum">    1505 </span><span class="lineCov">       1113 :   for (insn = e-&gt;insns.r; insn; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">    1506 </span><span class="lineCov">        413 :     if (INSN_P (insn) &amp;&amp; reg_set_p (reg, insn))</span>
+<span class="lineNum">    1507 </span>            :       return true;
+<span class="lineNum">    1508 </span>            : 
+<span class="lineNum">    1509 </span>            :   return false;
+<span class="lineNum">    1510 </span>            : }
+<span class="lineNum">    1511 </span>            : 
+<span class="lineNum">    1512 </span>            : /* Subroutine of bypass_conditional_jumps that attempts to bypass the given
+<span class="lineNum">    1513 </span>            :    basic block BB which has more than one predecessor.  If not NULL, SETCC
+<span class="lineNum">    1514 </span>            :    is the first instruction of BB, which is immediately followed by JUMP_INSN
+<span class="lineNum">    1515 </span>            :    JUMP.  Otherwise, SETCC is NULL, and JUMP is the first insn of BB.
+<span class="lineNum">    1516 </span>            :    Returns nonzero if a change was made.
+<span class="lineNum">    1517 </span>            : 
+<span class="lineNum">    1518 </span>            :    During the jump bypassing pass, we may place copies of SETCC instructions
+<span class="lineNum">    1519 </span>            :    on CFG edges.  The following routine must be careful to pay attention to
+<span class="lineNum">    1520 </span>            :    these inserted insns when performing its transformations.  */
+<a name="1521"><span class="lineNum">    1521 </span>            : </a>
+<span class="lineNum">    1522 </span>            : static int
+<span class="lineNum">    1523 </span><span class="lineCov">     519153 : bypass_block (basic_block bb, rtx_insn *setcc, rtx_insn *jump)</span>
+<span class="lineNum">    1524 </span>            : {
+<span class="lineNum">    1525 </span><span class="lineCov">     519153 :   rtx_insn *insn;</span>
+<span class="lineNum">    1526 </span><span class="lineCov">     519153 :   rtx note;</span>
+<span class="lineNum">    1527 </span><span class="lineCov">     519153 :   edge e, edest;</span>
+<span class="lineNum">    1528 </span><span class="lineCov">     519153 :   int change;</span>
+<span class="lineNum">    1529 </span><span class="lineCov">     519153 :   int may_be_loop_header = false;</span>
+<span class="lineNum">    1530 </span><span class="lineCov">     519153 :   unsigned removed_p;</span>
+<span class="lineNum">    1531 </span><span class="lineCov">     519153 :   unsigned i;</span>
+<span class="lineNum">    1532 </span><span class="lineCov">     519153 :   edge_iterator ei;</span>
+<span class="lineNum">    1533 </span>            : 
+<span class="lineNum">    1534 </span><span class="lineCov">     519153 :   insn = (setcc != NULL) ? setcc : jump;</span>
+<span class="lineNum">    1535 </span>            : 
+<span class="lineNum">    1536 </span>            :   /* Determine set of register uses in INSN.  */
+<span class="lineNum">    1537 </span><span class="lineCov">     519153 :   reg_use_count = 0;</span>
+<span class="lineNum">    1538 </span><span class="lineCov">    1038306 :   note_uses (&amp;PATTERN (insn), find_used_regs, NULL);</span>
+<span class="lineNum">    1539 </span><span class="lineCov">     519153 :   note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">    1540 </span><span class="lineCov">     519153 :   if (note)</span>
+<span class="lineNum">    1541 </span><span class="lineCov">       1857 :     find_used_regs (&amp;XEXP (note, 0), NULL);</span>
+<span class="lineNum">    1542 </span>            : 
+<span class="lineNum">    1543 </span><span class="lineCov">     519153 :   if (current_loops)</span>
+<span class="lineNum">    1544 </span>            :     {
+<span class="lineNum">    1545 </span>            :       /* If we are to preserve loop structure then do not bypass
+<span class="lineNum">    1546 </span>            :          a loop header.  This will either rotate the loop, create
+<span class="lineNum">    1547 </span>            :          multiple entry loops or even irreducible regions.  */
+<span class="lineNum">    1548 </span><span class="lineCov">     366785 :       if (bb == bb-&gt;loop_father-&gt;header)</span>
+<span class="lineNum">    1549 </span>            :         return 0;
+<span class="lineNum">    1550 </span>            :     }
+<span class="lineNum">    1551 </span>            :   else
+<span class="lineNum">    1552 </span>            :     {
+<span class="lineNum">    1553 </span><span class="lineCov">     598243 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1554 </span><span class="lineCov">     338050 :         if (e-&gt;flags &amp; EDGE_DFS_BACK)</span>
+<span class="lineNum">    1555 </span>            :           {
+<span class="lineNum">    1556 </span>            :             may_be_loop_header = true;
+<span class="lineNum">    1557 </span>            :             break;
+<span class="lineNum">    1558 </span>            :           }
+<span class="lineNum">    1559 </span>            :     }
+<span class="lineNum">    1560 </span>            : 
+<span class="lineNum">    1561 </span><span class="lineCov">     432284 :   change = 0;</span>
+<span class="lineNum">    1562 </span><span class="lineCov">    1885887 :   for (ei = ei_start (bb-&gt;preds); (e = ei_safe_edge (ei)); )</span>
+<span class="lineNum">    1563 </span>            :     {
+<span class="lineNum">    1564 </span><span class="lineCov">    1021319 :       removed_p = 0;</span>
+<span class="lineNum">    1565 </span>            : 
+<span class="lineNum">    1566 </span><span class="lineCov">    1021319 :       if (e-&gt;flags &amp; EDGE_COMPLEX)</span>
+<span class="lineNum">    1567 </span>            :         {
+<span class="lineNum">    1568 </span><span class="lineCov">       3879 :           ei_next (&amp;ei);</span>
+<span class="lineNum">    1569 </span><span class="lineCov">       3879 :           continue;</span>
+<span class="lineNum">    1570 </span>            :         }
+<span class="lineNum">    1571 </span>            : 
+<span class="lineNum">    1572 </span>            :       /* We can't redirect edges from new basic blocks.  */
+<span class="lineNum">    1573 </span><span class="lineCov">    1017440 :       if (e-&gt;src-&gt;index &gt;= bypass_last_basic_block)</span>
+<span class="lineNum">    1574 </span>            :         {
+<span class="lineNum">    1575 </span><span class="lineNoCov">          0 :           ei_next (&amp;ei);</span>
+<span class="lineNum">    1576 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">    1577 </span>            :         }
+<span class="lineNum">    1578 </span>            : 
+<span class="lineNum">    1579 </span>            :       /* The irreducible loops created by redirecting of edges entering the
+<span class="lineNum">    1580 </span>            :          loop from outside would decrease effectiveness of some of the
+<span class="lineNum">    1581 </span>            :          following optimizations, so prevent this.  */
+<span class="lineNum">    1582 </span><span class="lineCov">    1017440 :       if (may_be_loop_header</span>
+<span class="lineNum">    1583 </span><span class="lineCov">      98210 :           &amp;&amp; !(e-&gt;flags &amp; EDGE_DFS_BACK))</span>
+<span class="lineNum">    1584 </span>            :         {
+<span class="lineNum">    1585 </span><span class="lineCov">      46177 :           ei_next (&amp;ei);</span>
+<span class="lineNum">    1586 </span><span class="lineCov">      46177 :           continue;</span>
+<span class="lineNum">    1587 </span>            :         }
+<span class="lineNum">    1588 </span>            : 
+<span class="lineNum">    1589 </span><span class="lineCov">    2075248 :       for (i = 0; i &lt; reg_use_count; i++)</span>
+<span class="lineNum">    1590 </span>            :         {
+<span class="lineNum">    1591 </span><span class="lineCov">    1205194 :           rtx reg_used = reg_use_table[i];</span>
+<span class="lineNum">    1592 </span><span class="lineCov">    1205194 :           unsigned int regno = REGNO (reg_used);</span>
+<span class="lineNum">    1593 </span><span class="lineCov">    1205194 :           basic_block dest, old_dest;</span>
+<span class="lineNum">    1594 </span><span class="lineCov">    1205194 :           struct cprop_expr *set;</span>
+<span class="lineNum">    1595 </span><span class="lineCov">    1205194 :           rtx src, new_rtx;</span>
+<span class="lineNum">    1596 </span>            : 
+<span class="lineNum">    1597 </span><span class="lineCov">    1205194 :           set = find_bypass_set (regno, e-&gt;src-&gt;index);</span>
+<span class="lineNum">    1598 </span>            : 
+<span class="lineNum">    1599 </span><span class="lineCov">    1205194 :           if (! set)</span>
+<span class="lineNum">    1600 </span>            :             continue;
+<span class="lineNum">    1601 </span>            : 
+<span class="lineNum">    1602 </span>            :           /* Check the data flow is valid after edge insertions.  */
+<span class="lineNum">    1603 </span><span class="lineCov">     144055 :           if (e-&gt;insns.r &amp;&amp; reg_killed_on_edge (reg_used, e))</span>
+<span class="lineNum">    1604 </span>            :             continue;
+<span class="lineNum">    1605 </span>            : 
+<span class="lineNum">    1606 </span><span class="lineCov">     144055 :           src = SET_SRC (pc_set (jump));</span>
+<span class="lineNum">    1607 </span>            : 
+<span class="lineNum">    1608 </span><span class="lineCov">     144055 :           if (setcc != NULL)</span>
+<span class="lineNum">    1609 </span><span class="lineCov">     432114 :             src = simplify_replace_rtx (src,</span>
+<span class="lineNum">    1610 </span><span class="lineCov">     144038 :                                         SET_DEST (PATTERN (setcc)),</span>
+<span class="lineNum">    1611 </span><span class="lineCov">     288076 :                                         SET_SRC (PATTERN (setcc)));</span>
+<span class="lineNum">    1612 </span>            : 
+<span class="lineNum">    1613 </span><span class="lineCov">     144055 :           new_rtx = simplify_replace_rtx (src, reg_used, set-&gt;src);</span>
+<span class="lineNum">    1614 </span>            : 
+<span class="lineNum">    1615 </span>            :           /* Jump bypassing may have already placed instructions on
+<span class="lineNum">    1616 </span>            :              edges of the CFG.  We can't bypass an outgoing edge that
+<span class="lineNum">    1617 </span>            :              has instructions associated with it, as these insns won't
+<span class="lineNum">    1618 </span>            :              get executed if the incoming edge is redirected.  */
+<span class="lineNum">    1619 </span><span class="lineCov">     144055 :           if (new_rtx == pc_rtx)</span>
+<span class="lineNum">    1620 </span>            :             {
+<span class="lineNum">    1621 </span><span class="lineCov">      51754 :               edest = FALLTHRU_EDGE (bb);</span>
+<span class="lineNum">    1622 </span><span class="lineCov">      51754 :               dest = edest-&gt;insns.r ? NULL : edest-&gt;dest;</span>
+<span class="lineNum">    1623 </span>            :             }
+<span class="lineNum">    1624 </span><span class="lineCov">      92301 :           else if (GET_CODE (new_rtx) == LABEL_REF)</span>
+<span class="lineNum">    1625 </span>            :             {
+<span class="lineNum">    1626 </span><span class="lineCov">      49466 :               dest = BLOCK_FOR_INSN (XEXP (new_rtx, 0));</span>
+<span class="lineNum">    1627 </span>            :               /* Don't bypass edges containing instructions.  */
+<span class="lineNum">    1628 </span><span class="lineCov">      49466 :               edest = find_edge (bb, dest);</span>
+<span class="lineNum">    1629 </span><span class="lineCov">      49466 :               if (edest &amp;&amp; edest-&gt;insns.r)</span>
+<span class="lineNum">    1630 </span><span class="lineCov">          1 :                 dest = NULL;</span>
+<span class="lineNum">    1631 </span>            :             }
+<span class="lineNum">    1632 </span>            :           else
+<span class="lineNum">    1633 </span>            :             dest = NULL;
+<span class="lineNum">    1634 </span>            : 
+<span class="lineNum">    1635 </span>            :           /* Avoid unification of the edge with other edges from original
+<span class="lineNum">    1636 </span>            :              branch.  We would end up emitting the instruction on &quot;both&quot;
+<span class="lineNum">    1637 </span>            :              edges.  */
+<span class="lineNum">    1638 </span><span class="lineCov">     101218 :           if (dest &amp;&amp; setcc &amp;&amp; !CC0_P (SET_DEST (PATTERN (setcc)))</span>
+<span class="lineNum">    1639 </span><span class="lineCov">     144055 :               &amp;&amp; find_edge (e-&gt;src, dest))</span>
+<span class="lineNum">    1640 </span>            :             dest = NULL;
+<span class="lineNum">    1641 </span>            : 
+<span class="lineNum">    1642 </span><span class="lineCov">     144055 :           old_dest = e-&gt;dest;</span>
+<span class="lineNum">    1643 </span><span class="lineCov">     288110 :           if (dest != NULL</span>
+<span class="lineNum">    1644 </span><span class="lineCov">     144055 :               &amp;&amp; dest != old_dest</span>
+<span class="lineNum">    1645 </span><span class="lineCov">     101209 :               &amp;&amp; dest != EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1646 </span>            :             {
+<span class="lineNum">    1647 </span><span class="lineCov">     101209 :               redirect_edge_and_branch_force (e, dest);</span>
+<span class="lineNum">    1648 </span>            : 
+<span class="lineNum">    1649 </span>            :               /* Copy the register setter to the redirected edge.
+<span class="lineNum">    1650 </span>            :                  Don't copy CC0 setters, as CC0 is dead after jump.  */
+<span class="lineNum">    1651 </span><span class="lineCov">     101209 :               if (setcc)</span>
+<span class="lineNum">    1652 </span>            :                 {
+<span class="lineNum">    1653 </span><span class="lineCov">     101208 :                   rtx pat = PATTERN (setcc);</span>
+<span class="lineNum">    1654 </span><span class="lineCov">     101208 :                   if (!CC0_P (SET_DEST (pat)))</span>
+<span class="lineNum">    1655 </span><span class="lineCov">     101208 :                     insert_insn_on_edge (copy_insn (pat), e);</span>
+<span class="lineNum">    1656 </span>            :                 }
+<span class="lineNum">    1657 </span>            : 
+<span class="lineNum">    1658 </span><span class="lineCov">     101209 :               if (dump_file != NULL)</span>
+<span class="lineNum">    1659 </span>            :                 {
+<span class="lineNum">    1660 </span><span class="lineNoCov">          0 :                   fprintf (dump_file, &quot;JUMP-BYPASS: Proved reg %d &quot;</span>
+<span class="lineNum">    1661 </span>            :                                       &quot;in jump_insn %d equals constant &quot;,
+<span class="lineNum">    1662 </span><span class="lineNoCov">          0 :                            regno, INSN_UID (jump));</span>
+<span class="lineNum">    1663 </span><span class="lineNoCov">          0 :                   print_rtl (dump_file, set-&gt;src);</span>
+<span class="lineNum">    1664 </span><span class="lineNoCov">          0 :                   fprintf (dump_file, &quot;\n\t     when BB %d is entered from &quot;</span>
+<span class="lineNum">    1665 </span>            :                                       &quot;BB %d.  Redirect edge %d-&gt;%d to %d.\n&quot;,
+<span class="lineNum">    1666 </span><span class="lineNoCov">          0 :                            old_dest-&gt;index, e-&gt;src-&gt;index, e-&gt;src-&gt;index,</span>
+<span class="lineNum">    1667 </span>            :                            old_dest-&gt;index, dest-&gt;index);
+<span class="lineNum">    1668 </span>            :                 }
+<span class="lineNum">    1669 </span>            :               change = 1;
+<span class="lineNum">    1670 </span>            :               removed_p = 1;
+<span class="lineNum">    1671 </span>            :               break;
+<span class="lineNum">    1672 </span>            :             }
+<span class="lineNum">    1673 </span>            :         }
+<span class="lineNum">    1674 </span><span class="lineCov">     870054 :       if (!removed_p)</span>
+<span class="lineNum">    1675 </span><span class="lineCov">     870054 :         ei_next (&amp;ei);</span>
+<span class="lineNum">    1676 </span>            :     }
+<span class="lineNum">    1677 </span>            :   return change;
+<span class="lineNum">    1678 </span>            : }
+<span class="lineNum">    1679 </span>            : 
+<span class="lineNum">    1680 </span>            : /* Find basic blocks with more than one predecessor that only contain a
+<span class="lineNum">    1681 </span>            :    single conditional jump.  If the result of the comparison is known at
+<span class="lineNum">    1682 </span>            :    compile-time from any incoming edge, redirect that edge to the
+<span class="lineNum">    1683 </span>            :    appropriate target.  Return nonzero if a change was made.
+<span class="lineNum">    1684 </span>            : 
+<span class="lineNum">    1685 </span>            :    This function is now mis-named, because we also handle indirect jumps.  */
+<a name="1686"><span class="lineNum">    1686 </span>            : </a>
+<span class="lineNum">    1687 </span>            : static int
+<span class="lineNum">    1688 </span><span class="lineCov">     875971 : bypass_conditional_jumps (void)</span>
+<span class="lineNum">    1689 </span>            : {
+<span class="lineNum">    1690 </span><span class="lineCov">     875971 :   basic_block bb;</span>
+<span class="lineNum">    1691 </span><span class="lineCov">     875971 :   int changed;</span>
+<span class="lineNum">    1692 </span><span class="lineCov">     875971 :   rtx_insn *setcc;</span>
+<span class="lineNum">    1693 </span><span class="lineCov">     875971 :   rtx_insn *insn;</span>
+<span class="lineNum">    1694 </span><span class="lineCov">     875971 :   rtx dest;</span>
+<span class="lineNum">    1695 </span>            : 
+<span class="lineNum">    1696 </span>            :   /* Note we start at block 1.  */
+<span class="lineNum">    1697 </span><span class="lineCov">     875971 :   if (ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1698 </span>            :     return 0;
+<span class="lineNum">    1699 </span>            : 
+<span class="lineNum">    1700 </span><span class="lineCov">     875971 :   mark_dfs_back_edges ();</span>
+<span class="lineNum">    1701 </span>            : 
+<span class="lineNum">    1702 </span><span class="lineCov">     875971 :   changed = 0;</span>
+<span class="lineNum">    1703 </span><span class="lineCov">   17105712 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb-&gt;next_bb,</span>
+<span class="lineNum">    1704 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">    1705 </span>            :     {
+<span class="lineNum">    1706 </span>            :       /* Check for more than one predecessor.  */
+<span class="lineNum">    1707 </span><span class="lineCov">   16229741 :       if (!single_pred_p (bb))</span>
+<span class="lineNum">    1708 </span>            :         {
+<span class="lineNum">    1709 </span><span class="lineCov">    4310910 :           setcc = NULL;</span>
+<span class="lineNum">    1710 </span><span class="lineCov">   60577216 :           FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">    1711 </span><span class="lineCov">   32000106 :             if (DEBUG_INSN_P (insn))</span>
+<span class="lineNum">    1712 </span>            :               continue;
+<span class="lineNum">    1713 </span><span class="lineCov">   14936441 :             else if (NONJUMP_INSN_P (insn))</span>
+<span class="lineNum">    1714 </span>            :               {
+<span class="lineNum">    1715 </span><span class="lineCov">    5444377 :                 if (setcc)</span>
+<span class="lineNum">    1716 </span>            :                   break;
+<span class="lineNum">    1717 </span><span class="lineCov">    7950372 :                 if (GET_CODE (PATTERN (insn)) != SET)</span>
+<span class="lineNum">    1718 </span>            :                   break;
+<span class="lineNum">    1719 </span>            : 
+<span class="lineNum">    1720 </span><span class="lineCov">    2967256 :                 dest = SET_DEST (PATTERN (insn));</span>
+<span class="lineNum">    1721 </span><span class="lineCov">    2967256 :                 if (REG_P (dest) || CC0_P (dest))</span>
+<span class="lineNum">    1722 </span>            :                   setcc = insn;
+<span class="lineNum">    1723 </span>            :                 else
+<span class="lineNum">    1724 </span>            :                   break;
+<span class="lineNum">    1725 </span>            :               }
+<span class="lineNum">    1726 </span><span class="lineCov">    9492064 :             else if (JUMP_P (insn))</span>
+<span class="lineNum">    1727 </span>            :               {
+<span class="lineNum">    1728 </span><span class="lineCov">     519351 :                 if ((any_condjump_p (insn) || computed_jump_p (insn))</span>
+<span class="lineNum">    1729 </span><span class="lineCov">     519327 :                     &amp;&amp; onlyjump_p (insn))</span>
+<span class="lineNum">    1730 </span><span class="lineCov">     519153 :                   changed |= bypass_block (bb, setcc, insn);</span>
+<span class="lineNum">    1731 </span>            :                 break;
+<span class="lineNum">    1732 </span>            :               }
+<span class="lineNum">    1733 </span><span class="lineCov">    8972881 :             else if (INSN_P (insn))</span>
+<span class="lineNum">    1734 </span>            :               break;
+<span class="lineNum">    1735 </span>            :         }
+<span class="lineNum">    1736 </span>            :     }
+<span class="lineNum">    1737 </span>            : 
+<span class="lineNum">    1738 </span>            :   /* If we bypassed any register setting insns, we inserted a
+<span class="lineNum">    1739 </span>            :      copy on the redirected edge.  These need to be committed.  */
+<span class="lineNum">    1740 </span><span class="lineCov">     875971 :   if (changed)</span>
+<span class="lineNum">    1741 </span><span class="lineCov">      38754 :     commit_edge_insertions ();</span>
+<span class="lineNum">    1742 </span>            : 
+<span class="lineNum">    1743 </span>            :   return changed;
+<span class="lineNum">    1744 </span>            : }
+<span class="lineNum">    1745 </span>            : 
+<span class="lineNum">    1746 </span>            : /* Main function for the CPROP pass.  */
+<a name="1747"><span class="lineNum">    1747 </span>            : </a>
+<span class="lineNum">    1748 </span>            : static int
+<span class="lineNum">    1749 </span><span class="lineCov">    1750455 : one_cprop_pass (void)</span>
+<span class="lineNum">    1750 </span>            : {
+<span class="lineNum">    1751 </span><span class="lineCov">    1750455 :   int i;</span>
+<span class="lineNum">    1752 </span><span class="lineCov">    1750455 :   int changed = 0;</span>
+<span class="lineNum">    1753 </span>            : 
+<span class="lineNum">    1754 </span>            :   /* Return if there's nothing to do, or it is too expensive.  */
+<span class="lineNum">    1755 </span><span class="lineCov">    1750455 :   if (n_basic_blocks_for_fn (cfun) &lt;= NUM_FIXED_BLOCKS + 1</span>
+<span class="lineNum">    1756 </span><span class="lineCov">    1750455 :       || gcse_or_cprop_is_too_expensive (_ (&quot;const/copy propagation disabled&quot;)))</span>
+<span class="lineNum">    1757 </span><span class="lineCov">     779549 :     return 0;</span>
+<span class="lineNum">    1758 </span>            : 
+<span class="lineNum">    1759 </span><span class="lineCov">     970906 :   global_const_prop_count = local_const_prop_count = 0;</span>
+<span class="lineNum">    1760 </span><span class="lineCov">     970906 :   global_copy_prop_count = local_copy_prop_count = 0;</span>
+<span class="lineNum">    1761 </span>            : 
+<span class="lineNum">    1762 </span><span class="lineCov">     970906 :   bytes_used = 0;</span>
+<span class="lineNum">    1763 </span><span class="lineCov">     970906 :   gcc_obstack_init (&amp;cprop_obstack);</span>
+<span class="lineNum">    1764 </span>            : 
+<span class="lineNum">    1765 </span>            :   /* Do a local const/copy propagation pass first.  The global pass
+<span class="lineNum">    1766 </span>            :      only handles global opportunities.
+<span class="lineNum">    1767 </span>            :      If the local pass changes something, remove any unreachable blocks
+<span class="lineNum">    1768 </span>            :      because the CPROP global dataflow analysis may get into infinite
+<span class="lineNum">    1769 </span>            :      loops for CFGs with unreachable blocks.
+<span class="lineNum">    1770 </span>            : 
+<span class="lineNum">    1771 </span>            :      FIXME: This local pass should not be necessary after CSE (but for
+<span class="lineNum">    1772 </span>            :             some reason it still is).  It is also (proven) not necessary
+<span class="lineNum">    1773 </span>            :             to run the local pass right after FWPWOP.
+<span class="lineNum">    1774 </span>            : 
+<span class="lineNum">    1775 </span>            :      FIXME: The global analysis would not get into infinite loops if it
+<span class="lineNum">    1776 </span>            :             would use the DF solver (via df_simple_dataflow) instead of
+<span class="lineNum">    1777 </span>            :             the solver implemented in this file.  */
+<span class="lineNum">    1778 </span><span class="lineCov">     970906 :   changed |= local_cprop_pass ();</span>
+<span class="lineNum">    1779 </span><span class="lineCov">     970906 :   if (changed)</span>
+<span class="lineNum">    1780 </span><span class="lineCov">     127792 :     delete_unreachable_blocks ();</span>
+<span class="lineNum">    1781 </span>            : 
+<span class="lineNum">    1782 </span>            :   /* Determine implicit sets.  This may change the CFG (split critical
+<span class="lineNum">    1783 </span>            :      edges if that exposes an implicit set).
+<span class="lineNum">    1784 </span>            :      Note that find_implicit_sets() does not rely on up-to-date DF caches
+<span class="lineNum">    1785 </span>            :      so that we do not have to re-run df_analyze() even if local CPROP
+<span class="lineNum">    1786 </span>            :      changed something.
+<span class="lineNum">    1787 </span>            :      ??? This could run earlier so that any uncovered implicit sets
+<span class="lineNum">    1788 </span>            :          sets could be exploited in local_cprop_pass() also.  Later.  */
+<span class="lineNum">    1789 </span><span class="lineCov">     970906 :   changed |= find_implicit_sets ();</span>
+<span class="lineNum">    1790 </span>            : 
+<span class="lineNum">    1791 </span>            :   /* If local_cprop_pass() or find_implicit_sets() changed something,
+<span class="lineNum">    1792 </span>            :      run df_analyze() to bring all insn caches up-to-date, and to take
+<span class="lineNum">    1793 </span>            :      new basic blocks from edge splitting on the DF radar.
+<span class="lineNum">    1794 </span>            :      NB: This also runs the fast DCE pass, because execute_rtl_cprop
+<span class="lineNum">    1795 </span>            :      sets DF_LR_RUN_DCE.  */
+<span class="lineNum">    1796 </span><span class="lineCov">     970906 :   if (changed)</span>
+<span class="lineNum">    1797 </span><span class="lineCov">     416360 :     df_analyze ();</span>
+<span class="lineNum">    1798 </span>            : 
+<span class="lineNum">    1799 </span>            :   /* Initialize implicit_set_indexes array.  */
+<span class="lineNum">    1800 </span><span class="lineCov">     970906 :   implicit_set_indexes = XNEWVEC (int, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1801 </span><span class="lineCov">   21145213 :   for (i = 0; i &lt; last_basic_block_for_fn (cfun); i++)</span>
+<span class="lineNum">    1802 </span><span class="lineCov">   20174307 :     implicit_set_indexes[i] = -1;</span>
+<span class="lineNum">    1803 </span>            : 
+<span class="lineNum">    1804 </span><span class="lineCov">     970906 :   alloc_hash_table (&amp;set_hash_table);</span>
+<span class="lineNum">    1805 </span><span class="lineCov">     970906 :   compute_hash_table (&amp;set_hash_table);</span>
+<span class="lineNum">    1806 </span>            : 
+<span class="lineNum">    1807 </span>            :   /* Free implicit_sets before peak usage.  */
+<span class="lineNum">    1808 </span><span class="lineCov">     970906 :   free (implicit_sets);</span>
+<span class="lineNum">    1809 </span><span class="lineCov">     970906 :   implicit_sets = NULL;</span>
+<span class="lineNum">    1810 </span>            : 
+<span class="lineNum">    1811 </span><span class="lineCov">     970906 :   if (dump_file)</span>
+<span class="lineNum">    1812 </span><span class="lineCov">         63 :     dump_hash_table (dump_file, &quot;SET&quot;, &amp;set_hash_table);</span>
+<span class="lineNum">    1813 </span><span class="lineCov">     970906 :   if (set_hash_table.n_elems &gt; 0)</span>
+<span class="lineNum">    1814 </span>            :     {
+<span class="lineNum">    1815 </span><span class="lineCov">     875971 :       basic_block bb;</span>
+<span class="lineNum">    1816 </span><span class="lineCov">    1751942 :       auto_vec&lt;rtx_insn *&gt; uncond_traps;</span>
+<span class="lineNum">    1817 </span>            : 
+<span class="lineNum">    1818 </span><span class="lineCov">     875971 :       alloc_cprop_mem (last_basic_block_for_fn (cfun),</span>
+<span class="lineNum">    1819 </span>            :                        set_hash_table.n_elems);
+<span class="lineNum">    1820 </span><span class="lineCov">     875971 :       compute_cprop_data ();</span>
+<span class="lineNum">    1821 </span>            : 
+<span class="lineNum">    1822 </span><span class="lineCov">     875971 :       free (implicit_set_indexes);</span>
+<span class="lineNum">    1823 </span><span class="lineCov">     875971 :       implicit_set_indexes = NULL;</span>
+<span class="lineNum">    1824 </span>            : 
+<span class="lineNum">    1825 </span>            :       /* Allocate vars to track sets of regs.  */
+<span class="lineNum">    1826 </span><span class="lineCov">     875971 :       reg_set_bitmap = ALLOC_REG_SET (NULL);</span>
+<span class="lineNum">    1827 </span>            : 
+<span class="lineNum">    1828 </span><span class="lineCov">   17105712 :       FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb-&gt;next_bb,</span>
+<span class="lineNum">    1829 </span>            :                       EXIT_BLOCK_PTR_FOR_FN (cfun),
+<span class="lineNum">    1830 </span>            :                       next_bb)
+<span class="lineNum">    1831 </span>            :         {
+<span class="lineNum">    1832 </span><span class="lineCov">   16229741 :           bool seen_uncond_trap = false;</span>
+<span class="lineNum">    1833 </span><span class="lineCov">   16229741 :           rtx_insn *insn;</span>
+<span class="lineNum">    1834 </span>            : 
+<span class="lineNum">    1835 </span>            :           /* Reset tables used to keep track of what's still valid [since
+<span class="lineNum">    1836 </span>            :              the start of the block].  */
+<span class="lineNum">    1837 </span><span class="lineCov">   16229741 :           reset_opr_set_tables ();</span>
+<span class="lineNum">    1838 </span>            : 
+<span class="lineNum">    1839 </span><span class="lineCov">  185583126 :           FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">    1840 </span><span class="lineCov">  169353385 :             if (INSN_P (insn))</span>
+<span class="lineNum">    1841 </span>            :               {
+<span class="lineNum">    1842 </span><span class="lineCov">  144320899 :                 bool was_uncond_trap</span>
+<span class="lineNum">    1843 </span><span class="lineCov">  144320899 :                   = (GET_CODE (PATTERN (insn)) == TRAP_IF</span>
+<span class="lineNum">    1844 </span><span class="lineCov">  144320899 :                      &amp;&amp; XEXP (PATTERN (insn), 0) == const1_rtx);</span>
+<span class="lineNum">    1845 </span>            : 
+<span class="lineNum">    1846 </span><span class="lineCov">  144320899 :                 changed |= cprop_insn (insn);</span>
+<span class="lineNum">    1847 </span>            : 
+<span class="lineNum">    1848 </span>            :                 /* Keep track of everything modified by this insn.  */
+<span class="lineNum">    1849 </span>            :                 /* ??? Need to be careful w.r.t. mods done to INSN.
+<span class="lineNum">    1850 </span>            :                        Don't call mark_oprs_set if we turned the
+<span class="lineNum">    1851 </span>            :                        insn into a NOTE, or deleted the insn.  */
+<span class="lineNum">    1852 </span><span class="lineCov">  144320899 :                 if (! NOTE_P (insn) &amp;&amp; ! insn-&gt;deleted ())</span>
+<span class="lineNum">    1853 </span><span class="lineCov">  144320899 :                   mark_oprs_set (insn);</span>
+<span class="lineNum">    1854 </span>            : 
+<span class="lineNum">    1855 </span><span class="lineCov">  144320899 :                 if (!was_uncond_trap</span>
+<span class="lineNum">    1856 </span><span class="lineCov">  288635266 :                     &amp;&amp; GET_CODE (PATTERN (insn)) == TRAP_IF</span>
+<span class="lineNum">    1857 </span><span class="lineCov">  144320899 :                     &amp;&amp; XEXP (PATTERN (insn), 0) == const1_rtx)</span>
+<span class="lineNum">    1858 </span>            :                   {
+<span class="lineNum">    1859 </span>            :                     /* If we have already seen an unconditional trap
+<span class="lineNum">    1860 </span>            :                        earlier, the rest of the bb is going to be removed
+<span class="lineNum">    1861 </span>            :                        as unreachable.  Just turn it into a note, so that
+<span class="lineNum">    1862 </span>            :                        RTL verification doesn't complain about it before
+<span class="lineNum">    1863 </span>            :                        it is finally removed.  */
+<span class="lineNum">    1864 </span><span class="lineNoCov">          0 :                     if (seen_uncond_trap)</span>
+<span class="lineNum">    1865 </span><span class="lineNoCov">          0 :                       set_insn_deleted (insn);</span>
+<span class="lineNum">    1866 </span>            :                     else
+<span class="lineNum">    1867 </span>            :                       {
+<span class="lineNum">    1868 </span><span class="lineNoCov">          0 :                         seen_uncond_trap = true;</span>
+<span class="lineNum">    1869 </span><span class="lineNoCov">          0 :                         uncond_traps.safe_push (insn);</span>
+<span class="lineNum">    1870 </span>            :                       }
+<span class="lineNum">    1871 </span>            :                   }
+<span class="lineNum">    1872 </span>            :               }
+<span class="lineNum">    1873 </span>            :         }
+<span class="lineNum">    1874 </span>            : 
+<span class="lineNum">    1875 </span>            :       /* Make sure bypass_conditional_jumps will ignore not just its new
+<span class="lineNum">    1876 </span>            :          basic blocks, but also the ones after unconditional traps (those are
+<span class="lineNum">    1877 </span>            :          unreachable and will be eventually removed as such).  */
+<span class="lineNum">    1878 </span><span class="lineCov">     875971 :       bypass_last_basic_block = last_basic_block_for_fn (cfun);</span>
+<span class="lineNum">    1879 </span>            : 
+<span class="lineNum">    1880 </span><span class="lineCov">     875971 :       while (!uncond_traps.is_empty ())</span>
+<span class="lineNum">    1881 </span>            :         {
+<span class="lineNum">    1882 </span><span class="lineNoCov">          0 :           rtx_insn *insn = uncond_traps.pop ();</span>
+<span class="lineNum">    1883 </span><span class="lineNoCov">          0 :           basic_block to_split = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">    1884 </span><span class="lineNoCov">          0 :           remove_edge (split_block (to_split, insn));</span>
+<span class="lineNum">    1885 </span><span class="lineNoCov">          0 :           emit_barrier_after_bb (to_split);</span>
+<span class="lineNum">    1886 </span>            :         }
+<span class="lineNum">    1887 </span>            : 
+<span class="lineNum">    1888 </span><span class="lineCov">     875971 :       changed |= bypass_conditional_jumps ();</span>
+<span class="lineNum">    1889 </span>            : 
+<span class="lineNum">    1890 </span><span class="lineCov">     875971 :       FREE_REG_SET (reg_set_bitmap);</span>
+<span class="lineNum">    1891 </span><span class="lineCov">     875971 :       free_cprop_mem ();</span>
+<span class="lineNum">    1892 </span>            :     }
+<span class="lineNum">    1893 </span>            :   else
+<span class="lineNum">    1894 </span>            :     {
+<span class="lineNum">    1895 </span><span class="lineCov">      94935 :       free (implicit_set_indexes);</span>
+<span class="lineNum">    1896 </span><span class="lineCov">      94935 :       implicit_set_indexes = NULL;</span>
+<span class="lineNum">    1897 </span>            :     }
+<span class="lineNum">    1898 </span>            : 
+<span class="lineNum">    1899 </span><span class="lineCov">    1941812 :   free_hash_table (&amp;set_hash_table);</span>
+<span class="lineNum">    1900 </span><span class="lineCov">     970906 :   obstack_free (&amp;cprop_obstack, NULL);</span>
+<span class="lineNum">    1901 </span>            : 
+<span class="lineNum">    1902 </span><span class="lineCov">     970906 :   if (dump_file)</span>
+<span class="lineNum">    1903 </span>            :     {
+<span class="lineNum">    1904 </span><span class="lineCov">         63 :       fprintf (dump_file, &quot;CPROP of %s, %d basic blocks, %d bytes needed, &quot;,</span>
+<span class="lineNum">    1905 </span><span class="lineCov">         63 :                current_function_name (), n_basic_blocks_for_fn (cfun),</span>
+<span class="lineNum">    1906 </span>            :                bytes_used);
+<span class="lineNum">    1907 </span><span class="lineCov">         63 :       fprintf (dump_file, &quot;%d local const props, %d local copy props, &quot;,</span>
+<span class="lineNum">    1908 </span>            :                local_const_prop_count, local_copy_prop_count);
+<span class="lineNum">    1909 </span><span class="lineCov">         63 :       fprintf (dump_file, &quot;%d global const props, %d global copy props\n\n&quot;,</span>
+<span class="lineNum">    1910 </span>            :                global_const_prop_count, global_copy_prop_count);
+<span class="lineNum">    1911 </span>            :     }
+<span class="lineNum">    1912 </span>            : 
+<span class="lineNum">    1913 </span>            :   return changed;
+<span class="lineNum">    1914 </span>            : }
+<span class="lineNum">    1915 </span>            : 
+<span class="lineNum">    1916 </span>            : /* All the passes implemented in this file.  Each pass has its
+<span class="lineNum">    1917 </span>            :    own gate and execute function, and at the end of the file a
+<span class="lineNum">    1918 </span>            :    pass definition for passes.c.
+<span class="lineNum">    1919 </span>            : 
+<span class="lineNum">    1920 </span>            :    We do not construct an accurate cfg in functions which call
+<span class="lineNum">    1921 </span>            :    setjmp, so none of these passes runs if the function calls
+<span class="lineNum">    1922 </span>            :    setjmp.
+<span class="lineNum">    1923 </span>            :    FIXME: Should just handle setjmp via REG_SETJMP notes.  */
+<a name="1924"><span class="lineNum">    1924 </span>            : </a>
+<span class="lineNum">    1925 </span>            : static unsigned int
+<span class="lineNum">    1926 </span><span class="lineCov">    1750455 : execute_rtl_cprop (void)</span>
+<span class="lineNum">    1927 </span>            : {
+<span class="lineNum">    1928 </span><span class="lineCov">    1750455 :   int changed;</span>
+<span class="lineNum">    1929 </span><span class="lineCov">    1750455 :   delete_unreachable_blocks ();</span>
+<span class="lineNum">    1930 </span><span class="lineCov">    1750455 :   df_set_flags (DF_LR_RUN_DCE);</span>
+<span class="lineNum">    1931 </span><span class="lineCov">    1750455 :   df_analyze ();</span>
+<span class="lineNum">    1932 </span><span class="lineCov">    1750455 :   changed = one_cprop_pass ();</span>
+<span class="lineNum">    1933 </span><span class="lineCov">    1750455 :   flag_rerun_cse_after_global_opts |= changed;</span>
+<span class="lineNum">    1934 </span><span class="lineCov">    1750455 :   if (changed)</span>
+<span class="lineNum">    1935 </span><span class="lineCov">     446743 :     cleanup_cfg (CLEANUP_CFG_CHANGED);</span>
+<span class="lineNum">    1936 </span><span class="lineCov">    1750455 :   return 0;</span>
+<span class="lineNum">    1937 </span>            : }
+<span class="lineNum">    1938 </span>            : 
+<span class="lineNum">    1939 </span>            : namespace {
+<span class="lineNum">    1940 </span>            : 
+<span class="lineNum">    1941 </span>            : const pass_data pass_data_rtl_cprop =
+<span class="lineNum">    1942 </span>            : {
+<span class="lineNum">    1943 </span>            :   RTL_PASS, /* type */
+<span class="lineNum">    1944 </span>            :   &quot;cprop&quot;, /* name */
+<span class="lineNum">    1945 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1946 </span>            :   TV_CPROP, /* tv_id */
+<span class="lineNum">    1947 </span>            :   PROP_cfglayout, /* properties_required */
+<span class="lineNum">    1948 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1949 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1950 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1951 </span>            :   TODO_df_finish, /* todo_flags_finish */
+<span class="lineNum">    1952 </span>            : };
+<span class="lineNum">    1953 </span>            : 
+<span class="lineNum">    1954 </span>            : class pass_rtl_cprop : public rtl_opt_pass
+<span class="lineNum">    1955 </span>            : {
+<span class="lineNum">    1956 </span>            : public:
+<span class="lineNum">    1957 </span>            :   pass_rtl_cprop (gcc::context *ctxt)
+<span class="lineNum">    1958 </span><span class="lineCov">    1021872 :     : rtl_opt_pass (pass_data_rtl_cprop, ctxt)</span>
+<span class="lineNum">    1959 </span>            :   {}
+<a name="1960"><span class="lineNum">    1960 </span>            : </a>
+<a name="1961"><span class="lineNum">    1961 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1962 </span><span class="lineCov">     340624 :   opt_pass * clone () { return new pass_rtl_cprop (m_ctxt); }</span>
+<span class="lineNum">    1963 </span><span class="lineCov">    2497782 :   virtual bool gate (function *fun)</span>
+<span class="lineNum">    1964 </span>            :     {
+<span class="lineNum">    1965 </span><span class="lineCov">    1867497 :       return optimize &gt; 0 &amp;&amp; flag_gcse</span>
+<span class="lineNum">    1966 </span><span class="lineCov">    1751775 :         &amp;&amp; !fun-&gt;calls_setjmp</span>
+<span class="lineNum">    1967 </span><span class="lineCov">    4248240 :         &amp;&amp; dbg_cnt (cprop);</span>
+<a name="1968"><span class="lineNum">    1968 </span>            :     }</a>
+<span class="lineNum">    1969 </span>            : 
+<span class="lineNum">    1970 </span><span class="lineCov">    1750455 :   virtual unsigned int execute (function *) { return execute_rtl_cprop (); }</span>
+<span class="lineNum">    1971 </span>            : 
+<span class="lineNum">    1972 </span>            : }; // class pass_rtl_cprop
+<span class="lineNum">    1973 </span>            : 
+<span class="lineNum">    1974 </span>            : } // anon namespace
+<a name="1975"><span class="lineNum">    1975 </span>            : </a>
+<span class="lineNum">    1976 </span>            : rtl_opt_pass *
+<span class="lineNum">    1977 </span><span class="lineCov">     170312 : make_pass_rtl_cprop (gcc::context *ctxt)</span>
+<span class="lineNum">    1978 </span>            : {
+<span class="lineNum">    1979 </span><span class="lineCov">     170312 :   return new pass_rtl_cprop (ctxt);</span>
+<span class="lineNum">    1980 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

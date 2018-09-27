@@ -1,0 +1,810 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/hsa-regalloc.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - hsa-regalloc.c<span style="font-size: 80%;"> (source / <a href="hsa-regalloc.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">381</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* HSAIL IL Register allocation and out-of-SSA.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2013-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Michael Matz &lt;matz@suse.de&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;is-a.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;vec.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;dominance.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;basic-block.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;function.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;cfg.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;bitmap.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;print-tree.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;symbol-summary.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;hsa-common.h&quot;
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* Process a PHI node PHI of basic block BB as a part of naive out-f-ssa.  */
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : static void
+<span class="lineNum">      45 </span><span class="lineNoCov">          0 : naive_process_phi (hsa_insn_phi *phi, const vec&lt;edge&gt; &amp;predecessors)</span>
+<span class="lineNum">      46 </span>            : {
+<span class="lineNum">      47 </span><span class="lineNoCov">          0 :   unsigned count = phi-&gt;operand_count ();</span>
+<span class="lineNum">      48 </span><span class="lineNoCov">          0 :   for (unsigned i = 0; i &lt; count; i++)</span>
+<span class="lineNum">      49 </span>            :     {
+<span class="lineNum">      50 </span><span class="lineNoCov">          0 :       gcc_checking_assert (phi-&gt;get_op (i));</span>
+<span class="lineNum">      51 </span><span class="lineNoCov">          0 :       hsa_op_base *op = phi-&gt;get_op (i);</span>
+<span class="lineNum">      52 </span><span class="lineNoCov">          0 :       hsa_bb *hbb;</span>
+<span class="lineNum">      53 </span><span class="lineNoCov">          0 :       edge e;</span>
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span><span class="lineNoCov">          0 :       if (!op)</span>
+<span class="lineNum">      56 </span>            :         break;
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span><span class="lineNoCov">          0 :       e = predecessors[i];</span>
+<span class="lineNum">      59 </span><span class="lineNoCov">          0 :       if (single_succ_p (e-&gt;src))</span>
+<span class="lineNum">      60 </span><span class="lineNoCov">          0 :         hbb = hsa_bb_for_bb (e-&gt;src);</span>
+<span class="lineNum">      61 </span>            :       else
+<span class="lineNum">      62 </span>            :         {
+<span class="lineNum">      63 </span><span class="lineNoCov">          0 :           basic_block old_dest = e-&gt;dest;</span>
+<span class="lineNum">      64 </span><span class="lineNoCov">          0 :           hbb = hsa_init_new_bb (split_edge (e));</span>
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :           /* If switch insn used this edge, fix jump table.  */
+<span class="lineNum">      67 </span><span class="lineNoCov">          0 :           hsa_bb *source = hsa_bb_for_bb (e-&gt;src);</span>
+<span class="lineNum">      68 </span><span class="lineNoCov">          0 :           hsa_insn_sbr *sbr;</span>
+<span class="lineNum">      69 </span><span class="lineNoCov">          0 :           if (source-&gt;m_last_insn</span>
+<span class="lineNum">      70 </span><span class="lineNoCov">          0 :               &amp;&amp; (sbr = dyn_cast &lt;hsa_insn_sbr *&gt; (source-&gt;m_last_insn)))</span>
+<span class="lineNum">      71 </span><span class="lineNoCov">          0 :             sbr-&gt;replace_all_labels (old_dest, hbb-&gt;m_bb);</span>
+<span class="lineNum">      72 </span>            :         }
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span><span class="lineNoCov">          0 :       hsa_build_append_simple_mov (phi-&gt;m_dest, op, hbb);</span>
+<span class="lineNum">      75 </span>            :     }
+<span class="lineNum">      76 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* Naive out-of SSA.  */
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : static void
+<span class="lineNum">      81 </span><span class="lineNoCov">          0 : naive_outof_ssa (void)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineNoCov">          0 :   basic_block bb;</span>
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span><span class="lineNoCov">          0 :   hsa_cfun-&gt;m_in_ssa = false;</span>
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span><span class="lineNoCov">          0 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">      88 </span>            :   {
+<span class="lineNum">      89 </span><span class="lineNoCov">          0 :     hsa_bb *hbb = hsa_bb_for_bb (bb);</span>
+<span class="lineNum">      90 </span><span class="lineNoCov">          0 :     hsa_insn_phi *phi;</span>
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            :     /* naive_process_phi can call split_edge on an incoming edge which order if
+<span class="lineNum">      93 </span>            :        the incoming edges to the basic block and thus make it inconsistent with
+<span class="lineNum">      94 </span>            :        the ordering of PHI arguments, so we collect them in advance.  */
+<span class="lineNum">      95 </span><span class="lineNoCov">          0 :     auto_vec&lt;edge, 8&gt; predecessors;</span>
+<span class="lineNum">      96 </span><span class="lineNoCov">          0 :     unsigned pred_count = EDGE_COUNT (bb-&gt;preds);</span>
+<span class="lineNum">      97 </span><span class="lineNoCov">          0 :     for (unsigned i = 0; i &lt; pred_count; i++)</span>
+<span class="lineNum">      98 </span><span class="lineNoCov">          0 :       predecessors.safe_push (EDGE_PRED (bb, i));</span>
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span><span class="lineNoCov">          0 :     for (phi = hbb-&gt;m_first_phi;</span>
+<span class="lineNum">     101 </span><span class="lineNoCov">          0 :          phi;</span>
+<span class="lineNum">     102 </span><span class="lineNoCov">          0 :          phi = phi-&gt;m_next ? as_a &lt;hsa_insn_phi *&gt; (phi-&gt;m_next) : NULL)</span>
+<span class="lineNum">     103 </span><span class="lineNoCov">          0 :       naive_process_phi (phi, predecessors);</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            :     /* Zap PHI nodes, they will be deallocated when everything else will.  */
+<span class="lineNum">     106 </span><span class="lineNoCov">          0 :     hbb-&gt;m_first_phi = NULL;</span>
+<span class="lineNum">     107 </span><span class="lineNoCov">          0 :     hbb-&gt;m_last_phi = NULL;</span>
+<span class="lineNum">     108 </span>            :   }
+<span class="lineNum">     109 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* Return register class number for the given HSA TYPE.  0 means the 'c' one
+<span class="lineNum">     112 </span>            :    bit register class, 1 means 's' 32 bit class, 2 stands for 'd' 64 bit class
+<span class="lineNum">     113 </span>            :    and 3 for 'q' 128 bit class.  */
+<a name="114"><span class="lineNum">     114 </span>            : </a>
+<span class="lineNum">     115 </span>            : static int
+<span class="lineNum">     116 </span><span class="lineNoCov">          0 : m_reg_class_for_type (BrigType16_t type)</span>
+<span class="lineNum">     117 </span>            : {
+<span class="lineNum">     118 </span><span class="lineNoCov">          0 :   switch (type)</span>
+<span class="lineNum">     119 </span>            :     {
+<span class="lineNum">     120 </span>            :     case BRIG_TYPE_B1:
+<span class="lineNum">     121 </span>            :       return 0;
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U8:</span>
+<span class="lineNum">     124 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U16:</span>
+<span class="lineNum">     125 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U32:</span>
+<span class="lineNum">     126 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S8:</span>
+<span class="lineNum">     127 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S16:</span>
+<span class="lineNum">     128 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S32:</span>
+<span class="lineNum">     129 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F16:</span>
+<span class="lineNum">     130 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F32:</span>
+<span class="lineNum">     131 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_B8:</span>
+<span class="lineNum">     132 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_B16:</span>
+<span class="lineNum">     133 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_B32:</span>
+<span class="lineNum">     134 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U8X4:</span>
+<span class="lineNum">     135 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S8X4:</span>
+<span class="lineNum">     136 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U16X2:</span>
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S16X2:</span>
+<span class="lineNum">     138 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F16X2:</span>
+<span class="lineNum">     139 </span><span class="lineNoCov">          0 :       return 1;</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U64:</span>
+<span class="lineNum">     142 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S64:</span>
+<span class="lineNum">     143 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F64:</span>
+<span class="lineNum">     144 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_B64:</span>
+<span class="lineNum">     145 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U8X8:</span>
+<span class="lineNum">     146 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S8X8:</span>
+<span class="lineNum">     147 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U16X4:</span>
+<span class="lineNum">     148 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S16X4:</span>
+<span class="lineNum">     149 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F16X4:</span>
+<span class="lineNum">     150 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U32X2:</span>
+<span class="lineNum">     151 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S32X2:</span>
+<span class="lineNum">     152 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F32X2:</span>
+<span class="lineNum">     153 </span><span class="lineNoCov">          0 :       return 2;</span>
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_B128:</span>
+<span class="lineNum">     156 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U8X16:</span>
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S8X16:</span>
+<span class="lineNum">     158 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U16X8:</span>
+<span class="lineNum">     159 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S16X8:</span>
+<span class="lineNum">     160 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F16X8:</span>
+<span class="lineNum">     161 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U32X4:</span>
+<span class="lineNum">     162 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_U64X2:</span>
+<span class="lineNum">     163 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S32X4:</span>
+<span class="lineNum">     164 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_S64X2:</span>
+<span class="lineNum">     165 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F32X4:</span>
+<span class="lineNum">     166 </span><span class="lineNoCov">          0 :     case BRIG_TYPE_F64X2:</span>
+<span class="lineNum">     167 </span><span class="lineNoCov">          0 :       return 3;</span>
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     170 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     171 </span>            :     }
+<span class="lineNum">     172 </span>            : }
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span>            : /* If the Ith operands of INSN is or contains a register (in an address),
+<span class="lineNum">     175 </span>            :    return the address of that register operand.  If not return NULL.  */
+<a name="176"><span class="lineNum">     176 </span>            : </a>
+<span class="lineNum">     177 </span>            : static hsa_op_reg **
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 : insn_reg_addr (hsa_insn_basic *insn, int i)</span>
+<span class="lineNum">     179 </span>            : {
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :   hsa_op_base *op = insn-&gt;get_op (i);</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :   if (!op)</span>
+<span class="lineNum">     182 </span>            :     return NULL;
+<span class="lineNum">     183 </span><span class="lineNoCov">          0 :   hsa_op_reg *reg = dyn_cast &lt;hsa_op_reg *&gt; (op);</span>
+<span class="lineNum">     184 </span><span class="lineNoCov">          0 :   if (reg)</span>
+<span class="lineNum">     185 </span><span class="lineNoCov">          0 :     return (hsa_op_reg **) insn-&gt;get_op_addr (i);</span>
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 :   hsa_op_address *addr = dyn_cast &lt;hsa_op_address *&gt; (op);</span>
+<span class="lineNum">     187 </span><span class="lineNoCov">          0 :   if (addr &amp;&amp; addr-&gt;m_reg)</span>
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 :     return &amp;addr-&gt;m_reg;</span>
+<span class="lineNum">     189 </span>            :   return NULL;
+<span class="lineNum">     190 </span>            : }
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span>            : struct m_reg_class_desc
+<span class="lineNum">     193 </span>            : {
+<span class="lineNum">     194 </span>            :   unsigned next_avail, max_num;
+<span class="lineNum">     195 </span>            :   unsigned used_num, max_used;
+<span class="lineNum">     196 </span>            :   uint64_t used[2];
+<span class="lineNum">     197 </span>            :   char cl_char;
+<span class="lineNum">     198 </span>            : };
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            : /* Rewrite the instructions in BB to observe spilled live ranges.
+<span class="lineNum">     201 </span>            :    CLASSES is the global register class state.  */
+<a name="202"><span class="lineNum">     202 </span>            : </a>
+<span class="lineNum">     203 </span>            : static void
+<span class="lineNum">     204 </span><span class="lineNoCov">          0 : rewrite_code_bb (basic_block bb, struct m_reg_class_desc *classes)</span>
+<span class="lineNum">     205 </span>            : {
+<span class="lineNum">     206 </span><span class="lineNoCov">          0 :   hsa_bb *hbb = hsa_bb_for_bb (bb);</span>
+<span class="lineNum">     207 </span><span class="lineNoCov">          0 :   hsa_insn_basic *insn, *next_insn;</span>
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :   for (insn = hbb-&gt;m_first_insn; insn; insn = next_insn)</span>
+<span class="lineNum">     210 </span>            :     {
+<span class="lineNum">     211 </span><span class="lineNoCov">          0 :       next_insn = insn-&gt;m_next;</span>
+<span class="lineNum">     212 </span><span class="lineNoCov">          0 :       unsigned count = insn-&gt;operand_count ();</span>
+<span class="lineNum">     213 </span><span class="lineNoCov">          0 :       for (unsigned i = 0; i &lt; count; i++)</span>
+<span class="lineNum">     214 </span>            :         {
+<span class="lineNum">     215 </span><span class="lineNoCov">          0 :           gcc_checking_assert (insn-&gt;get_op (i));</span>
+<span class="lineNum">     216 </span><span class="lineNoCov">          0 :           hsa_op_reg **regaddr = insn_reg_addr (insn, i);</span>
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span><span class="lineNoCov">          0 :           if (regaddr)</span>
+<span class="lineNum">     219 </span>            :             {
+<span class="lineNum">     220 </span><span class="lineNoCov">          0 :               hsa_op_reg *reg = *regaddr;</span>
+<span class="lineNum">     221 </span><span class="lineNoCov">          0 :               if (reg-&gt;m_reg_class)</span>
+<span class="lineNum">     222 </span><span class="lineNoCov">          0 :                 continue;</span>
+<span class="lineNum">     223 </span><span class="lineNoCov">          0 :               gcc_assert (reg-&gt;m_spill_sym);</span>
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span><span class="lineNoCov">          0 :               int cl = m_reg_class_for_type (reg-&gt;m_type);</span>
+<span class="lineNum">     226 </span><span class="lineNoCov">          0 :               hsa_op_reg *tmp, *tmp2;</span>
+<span class="lineNum">     227 </span><span class="lineNoCov">          0 :               if (insn-&gt;op_output_p (i))</span>
+<span class="lineNum">     228 </span><span class="lineNoCov">          0 :                 tmp = hsa_spill_out (insn, reg, &amp;tmp2);</span>
+<span class="lineNum">     229 </span>            :               else
+<span class="lineNum">     230 </span><span class="lineNoCov">          0 :                 tmp = hsa_spill_in (insn, reg, &amp;tmp2);</span>
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span><span class="lineNoCov">          0 :               *regaddr = tmp;</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span><span class="lineNoCov">          0 :               tmp-&gt;m_reg_class = classes[cl].cl_char;</span>
+<span class="lineNum">     235 </span><span class="lineNoCov">          0 :               tmp-&gt;m_hard_num = (char) (classes[cl].max_num + i);</span>
+<span class="lineNum">     236 </span><span class="lineNoCov">          0 :               if (tmp2)</span>
+<span class="lineNum">     237 </span>            :                 {
+<span class="lineNum">     238 </span><span class="lineNoCov">          0 :                   gcc_assert (cl == 0);</span>
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 :                   tmp2-&gt;m_reg_class = classes[1].cl_char;</span>
+<span class="lineNum">     240 </span><span class="lineNoCov">          0 :                   tmp2-&gt;m_hard_num = (char) (classes[1].max_num + i);</span>
+<span class="lineNum">     241 </span>            :                 }
+<span class="lineNum">     242 </span>            :             }
+<span class="lineNum">     243 </span>            :         }
+<span class="lineNum">     244 </span>            :     }
+<span class="lineNum">     245 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     246 </span>            : 
+<span class="lineNum">     247 </span>            : /* Dump current function to dump file F, with info specific
+<span class="lineNum">     248 </span>            :    to register allocation.  */
+<a name="249"><span class="lineNum">     249 </span>            : </a>
+<span class="lineNum">     250 </span>            : void
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 : dump_hsa_cfun_regalloc (FILE *f)</span>
+<span class="lineNum">     252 </span>            : {
+<span class="lineNum">     253 </span><span class="lineNoCov">          0 :   basic_block bb;</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :   fprintf (f, &quot;\nHSAIL IL for %s\n&quot;, hsa_cfun-&gt;m_name);</span>
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineNoCov">          0 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     258 </span>            :   {
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 :     hsa_bb *hbb = (struct hsa_bb *) bb-&gt;aux;</span>
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 :     bitmap_print (dump_file, hbb-&gt;m_livein, &quot;m_livein  &quot;, &quot;\n&quot;);</span>
+<span class="lineNum">     261 </span><span class="lineNoCov">          0 :     dump_hsa_bb (f, hbb);</span>
+<span class="lineNum">     262 </span><span class="lineNoCov">          0 :     bitmap_print (dump_file, hbb-&gt;m_liveout, &quot;m_liveout &quot;, &quot;\n&quot;);</span>
+<span class="lineNum">     263 </span>            :   }
+<span class="lineNum">     264 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span>            : /* Given the global register allocation state CLASSES and a
+<span class="lineNum">     267 </span>            :    register REG, try to give it a hardware register.  If successful,
+<span class="lineNum">     268 </span>            :    store that hardreg in REG and return it, otherwise return -1.
+<span class="lineNum">     269 </span>            :    Also changes CLASSES to accommodate for the allocated register.  */
+<a name="270"><span class="lineNum">     270 </span>            : </a>
+<span class="lineNum">     271 </span>            : static int
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 : try_alloc_reg (struct m_reg_class_desc *classes, hsa_op_reg *reg)</span>
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span><span class="lineNoCov">          0 :   int cl = m_reg_class_for_type (reg-&gt;m_type);</span>
+<span class="lineNum">     275 </span><span class="lineNoCov">          0 :   int ret = -1;</span>
+<span class="lineNum">     276 </span><span class="lineNoCov">          0 :   if (classes[1].used_num + classes[2].used_num * 2 + classes[3].used_num * 4</span>
+<span class="lineNum">     277 </span>            :       &gt;= 128 - 5)
+<span class="lineNum">     278 </span>            :     return -1;
+<span class="lineNum">     279 </span><span class="lineNoCov">          0 :   if (classes[cl].used_num &lt; classes[cl].max_num)</span>
+<span class="lineNum">     280 </span>            :     {
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :       unsigned int i;</span>
+<span class="lineNum">     282 </span><span class="lineNoCov">          0 :       classes[cl].used_num++;</span>
+<span class="lineNum">     283 </span><span class="lineNoCov">          0 :       if (classes[cl].used_num &gt; classes[cl].max_used)</span>
+<span class="lineNum">     284 </span><span class="lineNoCov">          0 :         classes[cl].max_used = classes[cl].used_num;</span>
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; classes[cl].used_num; i++)</span>
+<span class="lineNum">     286 </span><span class="lineNoCov">          0 :         if (! (classes[cl].used[i / 64] &amp; (((uint64_t)1) &lt;&lt; (i &amp; 63))))</span>
+<span class="lineNum">     287 </span>            :           break;
+<span class="lineNum">     288 </span><span class="lineNoCov">          0 :       ret = i;</span>
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :       classes[cl].used[i / 64] |= (((uint64_t)1) &lt;&lt; (i &amp; 63));</span>
+<span class="lineNum">     290 </span><span class="lineNoCov">          0 :       reg-&gt;m_reg_class = classes[cl].cl_char;</span>
+<span class="lineNum">     291 </span><span class="lineNoCov">          0 :       reg-&gt;m_hard_num = i;</span>
+<span class="lineNum">     292 </span>            :     }
+<span class="lineNum">     293 </span>            :   return ret;
+<span class="lineNum">     294 </span>            : }
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span>            : /* Free up hardregs used by REG, into allocation state CLASSES.  */
+<a name="297"><span class="lineNum">     297 </span>            : </a>
+<span class="lineNum">     298 </span>            : static void
+<span class="lineNum">     299 </span><span class="lineNoCov">          0 : free_reg (struct m_reg_class_desc *classes, hsa_op_reg *reg)</span>
+<span class="lineNum">     300 </span>            : {
+<span class="lineNum">     301 </span><span class="lineNoCov">          0 :   int cl = m_reg_class_for_type (reg-&gt;m_type);</span>
+<span class="lineNum">     302 </span><span class="lineNoCov">          0 :   int ret = reg-&gt;m_hard_num;</span>
+<span class="lineNum">     303 </span><span class="lineNoCov">          0 :   gcc_assert (reg-&gt;m_reg_class == classes[cl].cl_char);</span>
+<span class="lineNum">     304 </span><span class="lineNoCov">          0 :   classes[cl].used_num--;</span>
+<span class="lineNum">     305 </span><span class="lineNoCov">          0 :   classes[cl].used[ret / 64] &amp;= ~(((uint64_t)1) &lt;&lt; (ret &amp; 63));</span>
+<span class="lineNum">     306 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : /* Note that the live range for REG ends at least at END.  */
+<a name="309"><span class="lineNum">     309 </span>            : </a>
+<span class="lineNum">     310 </span>            : static void
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 : note_lr_end (hsa_op_reg *reg, int end)</span>
+<span class="lineNum">     312 </span>            : {
+<span class="lineNum">     313 </span><span class="lineNoCov">          0 :   if (reg-&gt;m_lr_end &lt; end)</span>
+<span class="lineNum">     314 </span><span class="lineNoCov">          0 :     reg-&gt;m_lr_end = end;</span>
+<span class="lineNum">     315 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     316 </span>            : 
+<span class="lineNum">     317 </span>            : /* Note that the live range for REG starts at least at BEGIN.  */
+<a name="318"><span class="lineNum">     318 </span>            : </a>
+<span class="lineNum">     319 </span>            : static void
+<span class="lineNum">     320 </span><span class="lineNoCov">          0 : note_lr_begin (hsa_op_reg *reg, int begin)</span>
+<span class="lineNum">     321 </span>            : {
+<span class="lineNum">     322 </span><span class="lineNoCov">          0 :   if (reg-&gt;m_lr_begin &gt; begin)</span>
+<span class="lineNum">     323 </span><span class="lineNoCov">          0 :     reg-&gt;m_lr_begin = begin;</span>
+<span class="lineNum">     324 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     325 </span>            : 
+<span class="lineNum">     326 </span>            : /* Given two registers A and B, return -1, 0 or 1 if A's live range
+<span class="lineNum">     327 </span>            :    starts before, at or after B's live range.  */
+<a name="328"><span class="lineNum">     328 </span>            : </a>
+<span class="lineNum">     329 </span>            : static int
+<span class="lineNum">     330 </span><span class="lineNoCov">          0 : cmp_begin (const void *a, const void *b)</span>
+<span class="lineNum">     331 </span>            : {
+<span class="lineNum">     332 </span><span class="lineNoCov">          0 :   const hsa_op_reg * const *rega = (const hsa_op_reg * const *)a;</span>
+<span class="lineNum">     333 </span><span class="lineNoCov">          0 :   const hsa_op_reg * const *regb = (const hsa_op_reg * const *)b;</span>
+<span class="lineNum">     334 </span><span class="lineNoCov">          0 :   int ret;</span>
+<span class="lineNum">     335 </span><span class="lineNoCov">          0 :   if (rega == regb)</span>
+<span class="lineNum">     336 </span>            :     return 0;
+<span class="lineNum">     337 </span><span class="lineNoCov">          0 :   ret = (*rega)-&gt;m_lr_begin - (*regb)-&gt;m_lr_begin;</span>
+<span class="lineNum">     338 </span><span class="lineNoCov">          0 :   if (ret)</span>
+<span class="lineNum">     339 </span>            :     return ret;
+<span class="lineNum">     340 </span><span class="lineNoCov">          0 :   return ((*rega)-&gt;m_order - (*regb)-&gt;m_order);</span>
+<span class="lineNum">     341 </span>            : }
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span>            : /* Given two registers REGA and REGB, return true if REGA's
+<span class="lineNum">     344 </span>            :    live range ends after REGB's.  This results in a sorting order
+<span class="lineNum">     345 </span>            :    with earlier end points at the end.  */
+<a name="346"><span class="lineNum">     346 </span>            : </a>
+<span class="lineNum">     347 </span>            : static bool
+<span class="lineNum">     348 </span><span class="lineNoCov">          0 : cmp_end (hsa_op_reg * const &amp;rega, hsa_op_reg * const &amp;regb)</span>
+<span class="lineNum">     349 </span>            : {
+<span class="lineNum">     350 </span><span class="lineNoCov">          0 :   int ret;</span>
+<span class="lineNum">     351 </span><span class="lineNoCov">          0 :   if (rega == regb)</span>
+<span class="lineNum">     352 </span>            :     return false;
+<span class="lineNum">     353 </span><span class="lineNoCov">          0 :   ret = (regb)-&gt;m_lr_end - (rega)-&gt;m_lr_end;</span>
+<span class="lineNum">     354 </span><span class="lineNoCov">          0 :   if (ret)</span>
+<span class="lineNum">     355 </span><span class="lineNoCov">          0 :     return ret &lt; 0;</span>
+<span class="lineNum">     356 </span><span class="lineNoCov">          0 :   return (((regb)-&gt;m_order - (rega)-&gt;m_order)) &lt; 0;</span>
+<span class="lineNum">     357 </span>            : }
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            : /* Expire all old intervals in ACTIVE (a per-regclass vector),
+<span class="lineNum">     360 </span>            :    that is, those that end before the interval REG starts.  Give
+<span class="lineNum">     361 </span>            :    back resources freed so into the state CLASSES.  */
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span>            : static void
+<span class="lineNum">     364 </span><span class="lineNoCov">          0 : expire_old_intervals (hsa_op_reg *reg, vec&lt;hsa_op_reg*&gt; *active,</span>
+<span class="lineNum">     365 </span>            :                       struct m_reg_class_desc *classes)
+<span class="lineNum">     366 </span>            : {
+<span class="lineNum">     367 </span><span class="lineNoCov">          0 :   for (int i = 0; i &lt; 4; i++)</span>
+<span class="lineNum">     368 </span><span class="lineNoCov">          0 :     while (!active[i].is_empty ())</span>
+<span class="lineNum">     369 </span>            :       {
+<span class="lineNum">     370 </span><span class="lineNoCov">          0 :         hsa_op_reg *a = active[i].pop ();</span>
+<span class="lineNum">     371 </span><span class="lineNoCov">          0 :         if (a-&gt;m_lr_end &gt; reg-&gt;m_lr_begin)</span>
+<span class="lineNum">     372 </span>            :           {
+<span class="lineNum">     373 </span><span class="lineNoCov">          0 :             active[i].quick_push (a);</span>
+<span class="lineNum">     374 </span><span class="lineNoCov">          0 :             break;</span>
+<span class="lineNum">     375 </span>            :           }
+<span class="lineNum">     376 </span><span class="lineNoCov">          0 :         free_reg (classes, a);</span>
+<span class="lineNum">     377 </span>            :       }
+<span class="lineNum">     378 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            : /* The interval REG didn't get a hardreg.  Spill it or one of those
+<span class="lineNum">     381 </span>            :    from ACTIVE (if the latter, then REG will become allocated to the
+<span class="lineNum">     382 </span>            :    hardreg that formerly was used by it).  */
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : static void
+<span class="lineNum">     385 </span><span class="lineNoCov">          0 : spill_at_interval (hsa_op_reg *reg, vec&lt;hsa_op_reg*&gt; *active)</span>
+<span class="lineNum">     386 </span>            : {
+<span class="lineNum">     387 </span><span class="lineNoCov">          0 :   int cl = m_reg_class_for_type (reg-&gt;m_type);</span>
+<span class="lineNum">     388 </span><span class="lineNoCov">          0 :   gcc_assert (!active[cl].is_empty ());</span>
+<span class="lineNum">     389 </span><span class="lineNoCov">          0 :   hsa_op_reg *cand = active[cl][0];</span>
+<span class="lineNum">     390 </span><span class="lineNoCov">          0 :   if (cand-&gt;m_lr_end &gt; reg-&gt;m_lr_end)</span>
+<span class="lineNum">     391 </span>            :     {
+<span class="lineNum">     392 </span><span class="lineNoCov">          0 :       reg-&gt;m_reg_class = cand-&gt;m_reg_class;</span>
+<span class="lineNum">     393 </span><span class="lineNoCov">          0 :       reg-&gt;m_hard_num = cand-&gt;m_hard_num;</span>
+<span class="lineNum">     394 </span><span class="lineNoCov">          0 :       active[cl].ordered_remove (0);</span>
+<span class="lineNum">     395 </span><span class="lineNoCov">          0 :       unsigned place = active[cl].lower_bound (reg, cmp_end);</span>
+<span class="lineNum">     396 </span><span class="lineNoCov">          0 :       active[cl].quick_insert (place, reg);</span>
+<span class="lineNum">     397 </span>            :     }
+<span class="lineNum">     398 </span>            :   else
+<span class="lineNum">     399 </span>            :     cand = reg;
+<span class="lineNum">     400 </span>            : 
+<span class="lineNum">     401 </span><span class="lineNoCov">          0 :   gcc_assert (!cand-&gt;m_spill_sym);</span>
+<span class="lineNum">     402 </span><span class="lineNoCov">          0 :   BrigType16_t type = cand-&gt;m_type;</span>
+<span class="lineNum">     403 </span><span class="lineNoCov">          0 :   if (type == BRIG_TYPE_B1)</span>
+<span class="lineNum">     404 </span><span class="lineNoCov">          0 :     type = BRIG_TYPE_U8;</span>
+<span class="lineNum">     405 </span><span class="lineNoCov">          0 :   cand-&gt;m_reg_class = 0;</span>
+<span class="lineNum">     406 </span><span class="lineNoCov">          0 :   cand-&gt;m_spill_sym = hsa_get_spill_symbol (type);</span>
+<span class="lineNum">     407 </span><span class="lineNoCov">          0 :   cand-&gt;m_spill_sym-&gt;m_name_number = cand-&gt;m_order;</span>
+<span class="lineNum">     408 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span>            : /* Given the global register state CLASSES allocate all HSA virtual
+<span class="lineNum">     411 </span>            :    registers either to hardregs or to a spill symbol.  */
+<span class="lineNum">     412 </span>            : 
+<span class="lineNum">     413 </span>            : static void
+<span class="lineNum">     414 </span><span class="lineNoCov">          0 : linear_scan_regalloc (struct m_reg_class_desc *classes)</span>
+<span class="lineNum">     415 </span>            : {
+<span class="lineNum">     416 </span>            :   /* Compute liveness.  */
+<span class="lineNum">     417 </span><span class="lineNoCov">          0 :   bool changed;</span>
+<span class="lineNum">     418 </span><span class="lineNoCov">          0 :   int i, n;</span>
+<span class="lineNum">     419 </span><span class="lineNoCov">          0 :   int insn_order;</span>
+<span class="lineNum">     420 </span><span class="lineNoCov">          0 :   int *bbs = XNEWVEC (int, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     421 </span><span class="lineNoCov">          0 :   bitmap work = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :   vec&lt;hsa_op_reg*&gt; ind2reg = vNULL;</span>
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :   vec&lt;hsa_op_reg*&gt; active[4] = {vNULL, vNULL, vNULL, vNULL};</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :   hsa_insn_basic *m_last_insn;</span>
+<span class="lineNum">     425 </span>            : 
+<span class="lineNum">     426 </span>            :   /* We will need the reverse post order for linearization,
+<span class="lineNum">     427 </span>            :      and the post order for liveness analysis, which is the same
+<span class="lineNum">     428 </span>            :      backward.  */
+<span class="lineNum">     429 </span><span class="lineNoCov">          0 :   n = pre_and_rev_post_order_compute (NULL, bbs, true);</span>
+<span class="lineNum">     430 </span><span class="lineNoCov">          0 :   ind2reg.safe_grow_cleared (hsa_cfun-&gt;m_reg_count);</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            :   /* Give all instructions a linearized number, at the same time
+<span class="lineNum">     433 </span>            :      build a mapping from register index to register.  */
+<span class="lineNum">     434 </span><span class="lineNoCov">          0 :   insn_order = 1;</span>
+<span class="lineNum">     435 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     436 </span>            :     {
+<span class="lineNum">     437 </span><span class="lineNoCov">          0 :       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);</span>
+<span class="lineNum">     438 </span><span class="lineNoCov">          0 :       hsa_bb *hbb = hsa_bb_for_bb (bb);</span>
+<span class="lineNum">     439 </span><span class="lineNoCov">          0 :       hsa_insn_basic *insn;</span>
+<span class="lineNum">     440 </span><span class="lineNoCov">          0 :       for (insn = hbb-&gt;m_first_insn; insn; insn = insn-&gt;m_next)</span>
+<span class="lineNum">     441 </span>            :         {
+<span class="lineNum">     442 </span><span class="lineNoCov">          0 :           unsigned opi;</span>
+<span class="lineNum">     443 </span><span class="lineNoCov">          0 :           insn-&gt;m_number = insn_order++;</span>
+<span class="lineNum">     444 </span><span class="lineNoCov">          0 :           for (opi = 0; opi &lt; insn-&gt;operand_count (); opi++)</span>
+<span class="lineNum">     445 </span>            :             {
+<span class="lineNum">     446 </span><span class="lineNoCov">          0 :               gcc_checking_assert (insn-&gt;get_op (opi));</span>
+<span class="lineNum">     447 </span><span class="lineNoCov">          0 :               hsa_op_reg **regaddr = insn_reg_addr (insn, opi);</span>
+<span class="lineNum">     448 </span><span class="lineNoCov">          0 :               if (regaddr)</span>
+<span class="lineNum">     449 </span><span class="lineNoCov">          0 :                 ind2reg[(*regaddr)-&gt;m_order] = *regaddr;</span>
+<span class="lineNum">     450 </span>            :             }
+<span class="lineNum">     451 </span>            :         }
+<span class="lineNum">     452 </span>            :     }
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span>            :   /* Initialize all live ranges to [after-end, 0).  */
+<span class="lineNum">     455 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; hsa_cfun-&gt;m_reg_count; i++)</span>
+<span class="lineNum">     456 </span><span class="lineNoCov">          0 :     if (ind2reg[i])</span>
+<span class="lineNum">     457 </span><span class="lineNoCov">          0 :       ind2reg[i]-&gt;m_lr_begin = insn_order, ind2reg[i]-&gt;m_lr_end = 0;</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span>            :   /* Classic liveness analysis, as long as something changes:
+<span class="lineNum">     460 </span>            :        m_liveout is union (m_livein of successors)
+<span class="lineNum">     461 </span>            :        m_livein is m_liveout minus defs plus uses.  */
+<span class="lineNum">     462 </span><span class="lineNoCov">          0 :   do</span>
+<span class="lineNum">     463 </span>            :     {
+<span class="lineNum">     464 </span><span class="lineNoCov">          0 :       changed = false;</span>
+<span class="lineNum">     465 </span><span class="lineNoCov">          0 :       for (i = n - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     466 </span>            :         {
+<span class="lineNum">     467 </span><span class="lineNoCov">          0 :           edge e;</span>
+<span class="lineNum">     468 </span><span class="lineNoCov">          0 :           edge_iterator ei;</span>
+<span class="lineNum">     469 </span><span class="lineNoCov">          0 :           basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);</span>
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :           hsa_bb *hbb = hsa_bb_for_bb (bb);</span>
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            :           /* Union of successors m_livein (or empty if none).  */
+<span class="lineNum">     473 </span><span class="lineNoCov">          0 :           bool first = true;</span>
+<span class="lineNum">     474 </span><span class="lineNoCov">          0 :           FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     475 </span><span class="lineNoCov">          0 :             if (e-&gt;dest != EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     476 </span>            :               {
+<span class="lineNum">     477 </span><span class="lineNoCov">          0 :                 hsa_bb *succ = hsa_bb_for_bb (e-&gt;dest);</span>
+<span class="lineNum">     478 </span><span class="lineNoCov">          0 :                 if (first)</span>
+<span class="lineNum">     479 </span>            :                   {
+<span class="lineNum">     480 </span><span class="lineNoCov">          0 :                     bitmap_copy (work, succ-&gt;m_livein);</span>
+<span class="lineNum">     481 </span><span class="lineNoCov">          0 :                     first = false;</span>
+<span class="lineNum">     482 </span>            :                   }
+<span class="lineNum">     483 </span>            :                 else
+<span class="lineNum">     484 </span><span class="lineNoCov">          0 :                   bitmap_ior_into (work, succ-&gt;m_livein);</span>
+<span class="lineNum">     485 </span>            :               }
+<span class="lineNum">     486 </span><span class="lineNoCov">          0 :           if (first)</span>
+<span class="lineNum">     487 </span><span class="lineNoCov">          0 :             bitmap_clear (work);</span>
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span><span class="lineNoCov">          0 :           bitmap_copy (hbb-&gt;m_liveout, work);</span>
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span>            :           /* Remove defs, include uses in a backward insn walk.  */
+<span class="lineNum">     492 </span><span class="lineNoCov">          0 :           hsa_insn_basic *insn;</span>
+<span class="lineNum">     493 </span><span class="lineNoCov">          0 :           for (insn = hbb-&gt;m_last_insn; insn; insn = insn-&gt;m_prev)</span>
+<span class="lineNum">     494 </span>            :             {
+<span class="lineNum">     495 </span><span class="lineNoCov">          0 :               unsigned opi;</span>
+<span class="lineNum">     496 </span><span class="lineNoCov">          0 :               unsigned ndefs = insn-&gt;input_count ();</span>
+<span class="lineNum">     497 </span><span class="lineNoCov">          0 :               for (opi = 0; opi &lt; ndefs &amp;&amp; insn-&gt;get_op (opi); opi++)</span>
+<span class="lineNum">     498 </span>            :                 {
+<span class="lineNum">     499 </span><span class="lineNoCov">          0 :                   gcc_checking_assert (insn-&gt;get_op (opi));</span>
+<span class="lineNum">     500 </span><span class="lineNoCov">          0 :                   hsa_op_reg **regaddr = insn_reg_addr (insn, opi);</span>
+<span class="lineNum">     501 </span><span class="lineNoCov">          0 :                   if (regaddr)</span>
+<span class="lineNum">     502 </span><span class="lineNoCov">          0 :                     bitmap_clear_bit (work, (*regaddr)-&gt;m_order);</span>
+<span class="lineNum">     503 </span>            :                 }
+<span class="lineNum">     504 </span><span class="lineNoCov">          0 :               for (; opi &lt; insn-&gt;operand_count (); opi++)</span>
+<span class="lineNum">     505 </span>            :                 {
+<span class="lineNum">     506 </span><span class="lineNoCov">          0 :                   gcc_checking_assert (insn-&gt;get_op (opi));</span>
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 :                   hsa_op_reg **regaddr = insn_reg_addr (insn, opi);</span>
+<span class="lineNum">     508 </span><span class="lineNoCov">          0 :                   if (regaddr)</span>
+<span class="lineNum">     509 </span><span class="lineNoCov">          0 :                     bitmap_set_bit (work, (*regaddr)-&gt;m_order);</span>
+<span class="lineNum">     510 </span>            :                 }
+<span class="lineNum">     511 </span>            :             }
+<span class="lineNum">     512 </span>            : 
+<span class="lineNum">     513 </span>            :           /* Note if that changed something.  */
+<span class="lineNum">     514 </span><span class="lineNoCov">          0 :           if (bitmap_ior_into (hbb-&gt;m_livein, work))</span>
+<span class="lineNum">     515 </span><span class="lineNoCov">          0 :             changed = true;</span>
+<span class="lineNum">     516 </span>            :         }
+<span class="lineNum">     517 </span>            :     }
+<span class="lineNum">     518 </span>            :   while (changed);
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span>            :   /* Make one pass through all instructions in linear order,
+<span class="lineNum">     521 </span>            :      noting and merging possible live range start and end points.  */
+<span class="lineNum">     522 </span>            :   m_last_insn = NULL;
+<span class="lineNum">     523 </span><span class="lineNoCov">          0 :   for (i = n - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     524 </span>            :     {
+<span class="lineNum">     525 </span><span class="lineNoCov">          0 :       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);</span>
+<span class="lineNum">     526 </span><span class="lineNoCov">          0 :       hsa_bb *hbb = hsa_bb_for_bb (bb);</span>
+<span class="lineNum">     527 </span><span class="lineNoCov">          0 :       hsa_insn_basic *insn;</span>
+<span class="lineNum">     528 </span><span class="lineNoCov">          0 :       int after_end_number;</span>
+<span class="lineNum">     529 </span><span class="lineNoCov">          0 :       unsigned bit;</span>
+<span class="lineNum">     530 </span><span class="lineNoCov">          0 :       bitmap_iterator bi;</span>
+<span class="lineNum">     531 </span>            : 
+<span class="lineNum">     532 </span><span class="lineNoCov">          0 :       if (m_last_insn)</span>
+<span class="lineNum">     533 </span><span class="lineNoCov">          0 :         after_end_number = m_last_insn-&gt;m_number;</span>
+<span class="lineNum">     534 </span>            :       else
+<span class="lineNum">     535 </span>            :         after_end_number = insn_order;
+<span class="lineNum">     536 </span>            :       /* Everything live-out in this BB has at least an end point
+<span class="lineNum">     537 </span>            :          after us.  */
+<span class="lineNum">     538 </span><span class="lineNoCov">          0 :       EXECUTE_IF_SET_IN_BITMAP (hbb-&gt;m_liveout, 0, bit, bi)</span>
+<span class="lineNum">     539 </span><span class="lineNoCov">          0 :         note_lr_end (ind2reg[bit], after_end_number);</span>
+<span class="lineNum">     540 </span>            : 
+<span class="lineNum">     541 </span><span class="lineNoCov">          0 :       for (insn = hbb-&gt;m_last_insn; insn; insn = insn-&gt;m_prev)</span>
+<span class="lineNum">     542 </span>            :         {
+<span class="lineNum">     543 </span><span class="lineNoCov">          0 :           unsigned opi;</span>
+<span class="lineNum">     544 </span><span class="lineNoCov">          0 :           unsigned ndefs = insn-&gt;input_count ();</span>
+<span class="lineNum">     545 </span><span class="lineNoCov">          0 :           for (opi = 0; opi &lt; insn-&gt;operand_count (); opi++)</span>
+<span class="lineNum">     546 </span>            :             {
+<span class="lineNum">     547 </span><span class="lineNoCov">          0 :               gcc_checking_assert (insn-&gt;get_op (opi));</span>
+<span class="lineNum">     548 </span><span class="lineNoCov">          0 :               hsa_op_reg **regaddr = insn_reg_addr (insn, opi);</span>
+<span class="lineNum">     549 </span><span class="lineNoCov">          0 :               if (regaddr)</span>
+<span class="lineNum">     550 </span>            :                 {
+<span class="lineNum">     551 </span><span class="lineNoCov">          0 :                   hsa_op_reg *reg = *regaddr;</span>
+<span class="lineNum">     552 </span><span class="lineNoCov">          0 :                   if (opi &lt; ndefs)</span>
+<span class="lineNum">     553 </span><span class="lineNoCov">          0 :                     note_lr_begin (reg, insn-&gt;m_number);</span>
+<span class="lineNum">     554 </span>            :                   else
+<span class="lineNum">     555 </span><span class="lineNoCov">          0 :                     note_lr_end (reg, insn-&gt;m_number);</span>
+<span class="lineNum">     556 </span>            :                 }
+<span class="lineNum">     557 </span>            :             }
+<span class="lineNum">     558 </span>            :         }
+<span class="lineNum">     559 </span>            : 
+<span class="lineNum">     560 </span>            :       /* Everything live-in in this BB has a start point before
+<span class="lineNum">     561 </span>            :          our first insn.  */
+<span class="lineNum">     562 </span><span class="lineNoCov">          0 :       int before_start_number;</span>
+<span class="lineNum">     563 </span><span class="lineNoCov">          0 :       if (hbb-&gt;m_first_insn)</span>
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :         before_start_number = hbb-&gt;m_first_insn-&gt;m_number;</span>
+<span class="lineNum">     565 </span>            :       else
+<span class="lineNum">     566 </span>            :         before_start_number = after_end_number;
+<span class="lineNum">     567 </span><span class="lineNoCov">          0 :       before_start_number--;</span>
+<span class="lineNum">     568 </span><span class="lineNoCov">          0 :       EXECUTE_IF_SET_IN_BITMAP (hbb-&gt;m_livein, 0, bit, bi)</span>
+<span class="lineNum">     569 </span><span class="lineNoCov">          0 :         note_lr_begin (ind2reg[bit], before_start_number);</span>
+<span class="lineNum">     570 </span>            : 
+<span class="lineNum">     571 </span><span class="lineNoCov">          0 :       if (hbb-&gt;m_first_insn)</span>
+<span class="lineNum">     572 </span><span class="lineNoCov">          0 :         m_last_insn = hbb-&gt;m_first_insn;</span>
+<span class="lineNum">     573 </span>            :     }
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; hsa_cfun-&gt;m_reg_count; i++)</span>
+<span class="lineNum">     576 </span><span class="lineNoCov">          0 :     if (ind2reg[i])</span>
+<span class="lineNum">     577 </span>            :       {
+<span class="lineNum">     578 </span>            :         /* All regs that have still their start at after all code actually
+<span class="lineNum">     579 </span>            :            are defined at the start of the routine (prologue).  */
+<span class="lineNum">     580 </span><span class="lineNoCov">          0 :         if (ind2reg[i]-&gt;m_lr_begin == insn_order)</span>
+<span class="lineNum">     581 </span><span class="lineNoCov">          0 :           ind2reg[i]-&gt;m_lr_begin = 0;</span>
+<span class="lineNum">     582 </span>            :         /* All regs that have no use but a def will have lr_end == 0,
+<span class="lineNum">     583 </span>            :            they are actually live from def until after the insn they are
+<span class="lineNum">     584 </span>            :            defined in.  */
+<span class="lineNum">     585 </span><span class="lineNoCov">          0 :         if (ind2reg[i]-&gt;m_lr_end == 0)</span>
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :           ind2reg[i]-&gt;m_lr_end = ind2reg[i]-&gt;m_lr_begin + 1;</span>
+<span class="lineNum">     587 </span>            :       }
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span>            :   /* Sort all intervals by increasing start point.  */
+<span class="lineNum">     590 </span><span class="lineNoCov">          0 :   gcc_assert (ind2reg.length () == (size_t) hsa_cfun-&gt;m_reg_count);</span>
+<span class="lineNum">     591 </span>            : 
+<span class="lineNum">     592 </span><span class="lineNoCov">          0 :   if (flag_checking)</span>
+<span class="lineNum">     593 </span><span class="lineNoCov">          0 :     for (unsigned i = 0; i &lt; ind2reg.length (); i++)</span>
+<span class="lineNum">     594 </span><span class="lineNoCov">          0 :       gcc_assert (ind2reg[i]);</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span><span class="lineNoCov">          0 :   ind2reg.qsort (cmp_begin);</span>
+<span class="lineNum">     597 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; 4; i++)</span>
+<span class="lineNum">     598 </span><span class="lineNoCov">          0 :     active[i].reserve_exact (hsa_cfun-&gt;m_reg_count);</span>
+<span class="lineNum">     599 </span>            : 
+<span class="lineNum">     600 </span>            :   /* Now comes the linear scan allocation.  */
+<span class="lineNum">     601 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; hsa_cfun-&gt;m_reg_count; i++)</span>
+<span class="lineNum">     602 </span>            :     {
+<span class="lineNum">     603 </span><span class="lineNoCov">          0 :       hsa_op_reg *reg = ind2reg[i];</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :       if (!reg)</span>
+<span class="lineNum">     605 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :       expire_old_intervals (reg, active, classes);</span>
+<span class="lineNum">     607 </span><span class="lineNoCov">          0 :       int cl = m_reg_class_for_type (reg-&gt;m_type);</span>
+<span class="lineNum">     608 </span><span class="lineNoCov">          0 :       if (try_alloc_reg (classes, reg) &gt;= 0)</span>
+<span class="lineNum">     609 </span>            :         {
+<span class="lineNum">     610 </span><span class="lineNoCov">          0 :           unsigned place = active[cl].lower_bound (reg, cmp_end);</span>
+<span class="lineNum">     611 </span><span class="lineNoCov">          0 :           active[cl].quick_insert (place, reg);</span>
+<span class="lineNum">     612 </span>            :         }
+<span class="lineNum">     613 </span>            :       else
+<span class="lineNum">     614 </span><span class="lineNoCov">          0 :         spill_at_interval (reg, active);</span>
+<span class="lineNum">     615 </span>            : 
+<span class="lineNum">     616 </span>            :       /* Some interesting dumping as we go.  */
+<span class="lineNum">     617 </span><span class="lineNoCov">          0 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     618 </span>            :         {
+<span class="lineNum">     619 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;  reg%d: [%5d, %5d)-&gt;&quot;,</span>
+<span class="lineNum">     620 </span>            :                    reg-&gt;m_order, reg-&gt;m_lr_begin, reg-&gt;m_lr_end);
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :           if (reg-&gt;m_reg_class)</span>
+<span class="lineNum">     622 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;$%c%i&quot;, reg-&gt;m_reg_class, reg-&gt;m_hard_num);</span>
+<span class="lineNum">     623 </span>            :           else
+<span class="lineNum">     624 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;[%%__%s_%i]&quot;,</span>
+<span class="lineNum">     625 </span><span class="lineNoCov">          0 :                      hsa_seg_name (reg-&gt;m_spill_sym-&gt;m_segment),</span>
+<span class="lineNum">     626 </span><span class="lineNoCov">          0 :                      reg-&gt;m_spill_sym-&gt;m_name_number);</span>
+<span class="lineNum">     627 </span><span class="lineNoCov">          0 :           for (int cl = 0; cl &lt; 4; cl++)</span>
+<span class="lineNum">     628 </span>            :             {
+<span class="lineNum">     629 </span><span class="lineNoCov">          0 :               bool first = true;</span>
+<span class="lineNum">     630 </span><span class="lineNoCov">          0 :               hsa_op_reg *r;</span>
+<span class="lineNum">     631 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot; {&quot;);</span>
+<span class="lineNum">     632 </span><span class="lineNoCov">          0 :               for (int j = 0; active[cl].iterate (j, &amp;r); j++)</span>
+<span class="lineNum">     633 </span><span class="lineNoCov">          0 :                 if (first)</span>
+<span class="lineNum">     634 </span>            :                   {
+<span class="lineNum">     635 </span><span class="lineNoCov">          0 :                     fprintf (dump_file, &quot;%d&quot;, r-&gt;m_order);</span>
+<span class="lineNum">     636 </span><span class="lineNoCov">          0 :                     first = false;</span>
+<span class="lineNum">     637 </span>            :                   }
+<span class="lineNum">     638 </span>            :                 else
+<span class="lineNum">     639 </span><span class="lineNoCov">          0 :                   fprintf (dump_file, &quot;, %d&quot;, r-&gt;m_order);</span>
+<span class="lineNum">     640 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;}&quot;);</span>
+<span class="lineNum">     641 </span>            :             }
+<span class="lineNum">     642 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     643 </span>            :         }
+<span class="lineNum">     644 </span>            :     }
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span><span class="lineNoCov">          0 :   BITMAP_FREE (work);</span>
+<span class="lineNum">     647 </span><span class="lineNoCov">          0 :   free (bbs);</span>
+<span class="lineNum">     648 </span>            : 
+<span class="lineNum">     649 </span><span class="lineNoCov">          0 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     650 </span>            :     {
+<span class="lineNum">     651 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;------- After liveness: -------\n&quot;);</span>
+<span class="lineNum">     652 </span><span class="lineNoCov">          0 :       dump_hsa_cfun_regalloc (dump_file);</span>
+<span class="lineNum">     653 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;  ----- Intervals:\n&quot;);</span>
+<span class="lineNum">     654 </span><span class="lineNoCov">          0 :       for (i = 0; i &lt; hsa_cfun-&gt;m_reg_count; i++)</span>
+<span class="lineNum">     655 </span>            :         {
+<span class="lineNum">     656 </span><span class="lineNoCov">          0 :           hsa_op_reg *reg = ind2reg[i];</span>
+<span class="lineNum">     657 </span><span class="lineNoCov">          0 :           if (!reg)</span>
+<span class="lineNum">     658 </span>            :             continue;
+<span class="lineNum">     659 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;  reg%d: [%5d, %5d)-&gt;&quot;, reg-&gt;m_order,</span>
+<span class="lineNum">     660 </span>            :                    reg-&gt;m_lr_begin, reg-&gt;m_lr_end);
+<span class="lineNum">     661 </span><span class="lineNoCov">          0 :           if (reg-&gt;m_reg_class)</span>
+<span class="lineNum">     662 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;$%c%i\n&quot;, reg-&gt;m_reg_class, reg-&gt;m_hard_num);</span>
+<span class="lineNum">     663 </span>            :           else
+<span class="lineNum">     664 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;[%%__%s_%i]\n&quot;,</span>
+<span class="lineNum">     665 </span><span class="lineNoCov">          0 :                      hsa_seg_name (reg-&gt;m_spill_sym-&gt;m_segment),</span>
+<span class="lineNum">     666 </span><span class="lineNoCov">          0 :                      reg-&gt;m_spill_sym-&gt;m_name_number);</span>
+<span class="lineNum">     667 </span>            :         }
+<span class="lineNum">     668 </span>            :     }
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; 4; i++)</span>
+<span class="lineNum">     671 </span><span class="lineNoCov">          0 :     active[i].release ();</span>
+<span class="lineNum">     672 </span><span class="lineNoCov">          0 :   ind2reg.release ();</span>
+<span class="lineNum">     673 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span>            : /* Entry point for register allocation.  */
+<a name="676"><span class="lineNum">     676 </span>            : </a>
+<span class="lineNum">     677 </span>            : static void
+<span class="lineNum">     678 </span><span class="lineNoCov">          0 : regalloc (void)</span>
+<span class="lineNum">     679 </span>            : {
+<span class="lineNum">     680 </span><span class="lineNoCov">          0 :   basic_block bb;</span>
+<span class="lineNum">     681 </span><span class="lineNoCov">          0 :   m_reg_class_desc classes[4];</span>
+<span class="lineNum">     682 </span>            : 
+<span class="lineNum">     683 </span>            :   /* If there are no registers used in the function, exit right away.  */
+<span class="lineNum">     684 </span><span class="lineNoCov">          0 :   if (hsa_cfun-&gt;m_reg_count == 0)</span>
+<span class="lineNum">     685 </span><span class="lineNoCov">          0 :     return;</span>
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span><span class="lineNoCov">          0 :   memset (classes, 0, sizeof (classes));</span>
+<span class="lineNum">     688 </span><span class="lineNoCov">          0 :   classes[0].next_avail = 0;</span>
+<span class="lineNum">     689 </span><span class="lineNoCov">          0 :   classes[0].max_num = 7;</span>
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :   classes[0].cl_char = 'c';</span>
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :   classes[1].cl_char = 's';</span>
+<span class="lineNum">     692 </span><span class="lineNoCov">          0 :   classes[2].cl_char = 'd';</span>
+<span class="lineNum">     693 </span><span class="lineNoCov">          0 :   classes[3].cl_char = 'q';</span>
+<span class="lineNum">     694 </span>            : 
+<span class="lineNum">     695 </span><span class="lineNoCov">          0 :   for (int i = 1; i &lt; 4; i++)</span>
+<span class="lineNum">     696 </span>            :     {
+<span class="lineNum">     697 </span><span class="lineNoCov">          0 :       classes[i].next_avail = 0;</span>
+<span class="lineNum">     698 </span><span class="lineNoCov">          0 :       classes[i].max_num = 20;</span>
+<span class="lineNum">     699 </span>            :     }
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span><span class="lineNoCov">          0 :   linear_scan_regalloc (classes);</span>
+<span class="lineNum">     702 </span>            : 
+<span class="lineNum">     703 </span><span class="lineNoCov">          0 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     704 </span><span class="lineNoCov">          0 :     rewrite_code_bb (bb, classes);</span>
+<span class="lineNum">     705 </span>            : }
+<span class="lineNum">     706 </span>            : 
+<span class="lineNum">     707 </span>            : /* Out of SSA and register allocation on HSAIL IL.  */
+<a name="708"><span class="lineNum">     708 </span>            : </a>
+<span class="lineNum">     709 </span>            : void
+<span class="lineNum">     710 </span><span class="lineNoCov">          0 : hsa_regalloc (void)</span>
+<span class="lineNum">     711 </span>            : {
+<span class="lineNum">     712 </span><span class="lineNoCov">          0 :   hsa_cfun-&gt;update_dominance ();</span>
+<span class="lineNum">     713 </span><span class="lineNoCov">          0 :   naive_outof_ssa ();</span>
+<span class="lineNum">     714 </span>            : 
+<span class="lineNum">     715 </span><span class="lineNoCov">          0 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     716 </span>            :     {
+<span class="lineNum">     717 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;------- After out-of-SSA: -------\n&quot;);</span>
+<span class="lineNum">     718 </span><span class="lineNoCov">          0 :       dump_hsa_cfun (dump_file);</span>
+<span class="lineNum">     719 </span>            :     }
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span><span class="lineNoCov">          0 :   regalloc ();</span>
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span><span class="lineNoCov">          0 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     724 </span>            :     {
+<span class="lineNum">     725 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;------- After register allocation: -------\n&quot;);</span>
+<span class="lineNum">     726 </span><span class="lineNoCov">          0 :       dump_hsa_cfun (dump_file);</span>
+<span class="lineNum">     727 </span>            :     }
+<span class="lineNum">     728 </span><span class="lineNoCov">          0 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

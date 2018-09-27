@@ -1,0 +1,513 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ipa-comdats.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ipa-comdats.c<span style="font-size: 80%;"> (source / <a href="ipa-comdats.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">147</td>
+            <td class="headerCovTableEntry">148</td>
+            <td class="headerCovTableEntryHi">99.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Localize comdats.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2014-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* This is very simple pass that looks for static symbols that are used
+<span class="lineNum">      21 </span>            :    exlusively by symbol within one comdat group.  In this case it makes
+<span class="lineNum">      22 </span>            :    sense to bring the symbol itself into the group to avoid dead code
+<span class="lineNum">      23 </span>            :    that would arrise when the comdat group from current unit is replaced
+<span class="lineNum">      24 </span>            :    by a different copy.  Consider for example:
+<span class="lineNum">      25 </span>            : 
+<span class="lineNum">      26 </span>            :     static int q(void)
+<span class="lineNum">      27 </span>            :     {
+<span class="lineNum">      28 </span>            :       ....
+<span class="lineNum">      29 </span>            :     }
+<span class="lineNum">      30 </span>            :     inline int t(void)
+<span class="lineNum">      31 </span>            :     {
+<span class="lineNum">      32 </span>            :       return q();
+<span class="lineNum">      33 </span>            :     }
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            :    if Q is used only by T, it makes sense to put Q into T's comdat group.
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            :    The pass solve simple dataflow across the callgraph trying to prove what
+<span class="lineNum">      38 </span>            :    symbols are used exclusively from a given comdat group.
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            :    The implementation maintains a queue linked by AUX pointer terminated by
+<span class="lineNum">      41 </span>            :    pointer value 1. Lattice values are NULL for TOP, actual comdat group, or
+<span class="lineNum">      42 </span>            :    ERROR_MARK_NODE for bottom.
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            :    TODO: When symbol is used only by comdat symbols, but from different groups,
+<span class="lineNum">      45 </span>            :    it would make sense to produce a new comdat group for it with anonymous name.
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :    TODO2: We can't mix variables and functions within one group.  Currently
+<span class="lineNum">      48 </span>            :    we just give up on references of symbols of different types.  We also should
+<span class="lineNum">      49 </span>            :    handle this by anonymous comdat group section.  */
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      52 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      53 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      54 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">      55 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      56 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      57 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            : /* Main dataflow loop propagating comdat groups across
+<span class="lineNum">      60 </span>            :    the symbol table.  All references to SYMBOL are examined
+<span class="lineNum">      61 </span>            :    and NEWGROUP is updated accordingly. MAP holds current lattice
+<span class="lineNum">      62 </span>            :    values for individual symbols.  */
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : tree
+<span class="lineNum">      65 </span><span class="lineCov">      58291 : propagate_comdat_group (struct symtab_node *symbol,</span>
+<span class="lineNum">      66 </span>            :                         tree newgroup, hash_map&lt;symtab_node *, tree&gt; &amp;map)
+<span class="lineNum">      67 </span>            : {
+<span class="lineNum">      68 </span><span class="lineCov">      58291 :   int i;</span>
+<span class="lineNum">      69 </span><span class="lineCov">      58291 :   struct ipa_ref *ref;</span>
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            :   /* Walk all references to SYMBOL, recursively dive into aliases.  */
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span><span class="lineCov">      73426 :   for (i = 0;</span>
+<span class="lineNum">      74 </span><span class="lineCov">      73426 :        symbol-&gt;iterate_referring (i, ref)</span>
+<span class="lineNum">      75 </span><span class="lineCov">      49876 :        &amp;&amp; newgroup != error_mark_node; i++)</span>
+<span class="lineNum">      76 </span>            :     {
+<span class="lineNum">      77 </span><span class="lineCov">      43916 :       struct symtab_node *symbol2 = ref-&gt;referring;</span>
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span><span class="lineCov">      43916 :       if (ref-&gt;use == IPA_REF_ALIAS)</span>
+<span class="lineNum">      80 </span>            :         {
+<span class="lineNum">      81 </span><span class="lineCov">        845 :           newgroup = propagate_comdat_group (symbol2, newgroup, map);</span>
+<span class="lineNum">      82 </span><span class="lineCov">        845 :           continue;</span>
+<span class="lineNum">      83 </span>            :         }
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            :       /* One COMDAT group can not hold both variables and functions at
+<span class="lineNum">      86 </span>            :          a same time.  For now we just go to BOTTOM, in future we may
+<span class="lineNum">      87 </span>            :          invent special comdat groups for this case.  */
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span><span class="lineCov">      43071 :       if (symbol-&gt;type != symbol2-&gt;type)</span>
+<span class="lineNum">      90 </span>            :         {
+<span class="lineNum">      91 </span><span class="lineCov">      28781 :           newgroup = error_mark_node;</span>
+<span class="lineNum">      92 </span><span class="lineCov">      28781 :           break;</span>
+<span class="lineNum">      93 </span>            :         }
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :       /* If we see inline clone, its comdat group actually
+<span class="lineNum">      96 </span>            :          corresponds to the comdat group of the function it is inlined
+<span class="lineNum">      97 </span>            :          to.  */
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span><span class="lineCov">      14290 :       if (cgraph_node * cn = dyn_cast &lt;cgraph_node *&gt; (symbol2))</span>
+<span class="lineNum">     100 </span>            :         {
+<span class="lineNum">     101 </span><span class="lineCov">       7851 :           if (cn-&gt;global.inlined_to)</span>
+<span class="lineNum">     102 </span><span class="lineCov">       1235 :             symbol2 = cn-&gt;global.inlined_to;</span>
+<span class="lineNum">     103 </span>            :         }
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            :       /* The actual merge operation.  */
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span><span class="lineCov">      14290 :       tree *val2 = map.get (symbol2);</span>
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span><span class="lineCov">      13523 :       if (val2 &amp;&amp; *val2 != newgroup)</span>
+<span class="lineNum">     110 </span>            :         {
+<span class="lineNum">     111 </span><span class="lineCov">      13523 :           if (!newgroup)</span>
+<span class="lineNum">     112 </span>            :             newgroup = *val2;
+<span class="lineNum">     113 </span>            :           else
+<span class="lineNum">     114 </span><span class="lineCov">         11 :             newgroup = error_mark_node;</span>
+<span class="lineNum">     115 </span>            :         }
+<span class="lineNum">     116 </span>            :     }
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            :   /* If we analyze function, walk also callers.  */
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span><span class="lineCov">      58291 :   cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (symbol);</span>
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span><span class="lineCov">      32672 :   if (cnode)</span>
+<span class="lineNum">     123 </span><span class="lineCov">      32672 :     for (struct cgraph_edge * edge = cnode-&gt;callers;</span>
+<span class="lineNum">     124 </span><span class="lineCov">      52530 :          edge &amp;&amp; newgroup != error_mark_node; edge = edge-&gt;next_caller)</span>
+<span class="lineNum">     125 </span>            :       {
+<span class="lineNum">     126 </span><span class="lineCov">      19858 :         struct symtab_node *symbol2 = edge-&gt;caller;</span>
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span><span class="lineCov">      19858 :         if (cgraph_node * cn = dyn_cast &lt;cgraph_node *&gt; (symbol2))</span>
+<span class="lineNum">     129 </span>            :           {
+<span class="lineNum">     130 </span>            :             /* Thunks can not call across section boundary.  */
+<span class="lineNum">     131 </span><span class="lineCov">      19858 :             if (cn-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     132 </span><span class="lineCov">        430 :               newgroup = propagate_comdat_group (symbol2, newgroup, map);</span>
+<span class="lineNum">     133 </span>            :             /* If we see inline clone, its comdat group actually
+<span class="lineNum">     134 </span>            :                corresponds to the comdat group of the function it
+<span class="lineNum">     135 </span>            :                is inlined to.  */
+<span class="lineNum">     136 </span><span class="lineCov">      19858 :             if (cn-&gt;global.inlined_to)</span>
+<span class="lineNum">     137 </span><span class="lineCov">       3950 :               symbol2 = cn-&gt;global.inlined_to;</span>
+<span class="lineNum">     138 </span>            :           }
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            :         /* The actual merge operation.  */
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span><span class="lineCov">      19858 :         tree *val2 = map.get (symbol2);</span>
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span><span class="lineCov">      13963 :         if (val2 &amp;&amp; *val2 != newgroup)</span>
+<span class="lineNum">     145 </span>            :           {
+<span class="lineNum">     146 </span><span class="lineCov">      13117 :             if (!newgroup)</span>
+<span class="lineNum">     147 </span>            :               newgroup = *val2;
+<span class="lineNum">     148 </span>            :             else
+<span class="lineNum">     149 </span><span class="lineCov">       1153 :               newgroup = error_mark_node;</span>
+<span class="lineNum">     150 </span>            :           }
+<span class="lineNum">     151 </span>            :       }
+<span class="lineNum">     152 </span><span class="lineCov">      58291 :   return newgroup;</span>
+<span class="lineNum">     153 </span>            : }
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            : /* Add all references of SYMBOL that are defined into queue started by FIRST
+<span class="lineNum">     157 </span>            :    and linked by AUX pointer (unless they are already enqueued).
+<span class="lineNum">     158 </span>            :    Walk recursively inlined functions.  */
+<a name="159"><span class="lineNum">     159 </span>            : </a>
+<span class="lineNum">     160 </span>            : void
+<span class="lineNum">     161 </span><span class="lineCov">      67245 : enqueue_references (symtab_node **first,</span>
+<span class="lineNum">     162 </span>            :                     symtab_node *symbol)
+<span class="lineNum">     163 </span>            : {
+<span class="lineNum">     164 </span><span class="lineCov">      67245 :   int i;</span>
+<span class="lineNum">     165 </span><span class="lineCov">      67245 :   struct ipa_ref *ref = NULL;</span>
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span><span class="lineCov">     161573 :   for (i = 0; symbol-&gt;iterate_reference (i, ref); i++)</span>
+<span class="lineNum">     168 </span>            :     {
+<span class="lineNum">     169 </span><span class="lineCov">      94328 :       symtab_node *node = ref-&gt;referred-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     170 </span>            : 
+<span class="lineNum">     171 </span>            :       /* Always keep thunks in same sections as target function.  */
+<span class="lineNum">     172 </span><span class="lineCov">      94328 :       if (is_a &lt;cgraph_node *&gt;(node))</span>
+<span class="lineNum">     173 </span><span class="lineCov">      17038 :         node = dyn_cast &lt;cgraph_node *&gt; (node)-&gt;function_symbol ();</span>
+<span class="lineNum">     174 </span><span class="lineCov">      94328 :       if (!node-&gt;aux &amp;&amp; node-&gt;definition)</span>
+<span class="lineNum">     175 </span>            :         {
+<span class="lineNum">     176 </span><span class="lineCov">        597 :            node-&gt;aux = *first;</span>
+<span class="lineNum">     177 </span><span class="lineCov">        597 :            *first = node;</span>
+<span class="lineNum">     178 </span>            :         }
+<span class="lineNum">     179 </span>            :     }
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span><span class="lineCov">      67245 :   if (cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (symbol))</span>
+<span class="lineNum">     182 </span>            :     {
+<span class="lineNum">     183 </span><span class="lineCov">      41947 :       struct cgraph_edge *edge;</span>
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span><span class="lineCov">     243694 :       for (edge = cnode-&gt;callees; edge; edge = edge-&gt;next_callee)</span>
+<span class="lineNum">     186 </span><span class="lineCov">     201747 :         if (!edge-&gt;inline_failed)</span>
+<span class="lineNum">     187 </span><span class="lineCov">      12942 :           enqueue_references (first, edge-&gt;callee);</span>
+<span class="lineNum">     188 </span>            :         else
+<span class="lineNum">     189 </span>            :           {
+<span class="lineNum">     190 </span><span class="lineCov">     188805 :             symtab_node *node = edge-&gt;callee-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span>            :             /* Always keep thunks in same sections as target function.  */
+<span class="lineNum">     193 </span><span class="lineCov">     188805 :             if (is_a &lt;cgraph_node *&gt;(node))</span>
+<span class="lineNum">     194 </span><span class="lineCov">     377610 :               node = dyn_cast &lt;cgraph_node *&gt; (node)-&gt;function_symbol ();</span>
+<span class="lineNum">     195 </span><span class="lineCov">     188805 :             if (!node-&gt;aux &amp;&amp; node-&gt;definition)</span>
+<span class="lineNum">     196 </span>            :               {
+<span class="lineNum">     197 </span><span class="lineCov">        923 :                  node-&gt;aux = *first;</span>
+<span class="lineNum">     198 </span><span class="lineCov">        923 :                  *first = node;</span>
+<span class="lineNum">     199 </span>            :               }
+<span class="lineNum">     200 </span>            :           }
+<span class="lineNum">     201 </span>            :     }
+<span class="lineNum">     202 </span><span class="lineCov">      67245 : }</span>
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span>            : /* Set comdat group of SYMBOL to GROUP.
+<span class="lineNum">     205 </span>            :    Callback for for_node_and_aliases.  */
+<a name="206"><span class="lineNum">     206 </span>            : </a>
+<span class="lineNum">     207 </span>            : bool
+<span class="lineNum">     208 </span><span class="lineCov">        594 : set_comdat_group (symtab_node *symbol,</span>
+<span class="lineNum">     209 </span>            :                   void *head_p)
+<span class="lineNum">     210 </span>            : {
+<span class="lineNum">     211 </span><span class="lineCov">        594 :   symtab_node *head = (symtab_node *)head_p;</span>
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span><span class="lineCov">       1188 :   gcc_assert (!symbol-&gt;get_comdat_group ());</span>
+<span class="lineNum">     214 </span><span class="lineCov">        594 :   if (symbol-&gt;real_symbol_p ())</span>
+<span class="lineNum">     215 </span>            :     {
+<span class="lineNum">     216 </span><span class="lineCov">       1188 :       symbol-&gt;set_comdat_group (head-&gt;get_comdat_group ());</span>
+<span class="lineNum">     217 </span><span class="lineCov">        594 :       symbol-&gt;add_to_same_comdat_group (head);</span>
+<span class="lineNum">     218 </span>            :     }
+<span class="lineNum">     219 </span><span class="lineCov">        594 :   return false;</span>
+<span class="lineNum">     220 </span>            : }
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span>            : /* Set comdat group of SYMBOL to GROUP.
+<span class="lineNum">     223 </span>            :    Callback for for_node_thunks_and_aliases.  */
+<a name="224"><span class="lineNum">     224 </span>            : </a>
+<span class="lineNum">     225 </span>            : bool
+<span class="lineNum">     226 </span><span class="lineCov">        587 : set_comdat_group_1 (cgraph_node *symbol,</span>
+<span class="lineNum">     227 </span>            :                     void *head_p)
+<span class="lineNum">     228 </span>            : {
+<span class="lineNum">     229 </span><span class="lineCov">        587 :   return set_comdat_group (symbol, head_p);</span>
+<span class="lineNum">     230 </span>            : }
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span>            : /* The actual pass with the main dataflow loop.  */
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            : static unsigned int
+<span class="lineNum">     235 </span><span class="lineCov">     139590 : ipa_comdats (void)</span>
+<span class="lineNum">     236 </span>            : {
+<span class="lineNum">     237 </span><span class="lineCov">     139590 :   hash_map&lt;symtab_node *, tree&gt; map (251);</span>
+<span class="lineNum">     238 </span><span class="lineCov">     279180 :   hash_map&lt;tree, symtab_node *&gt; comdat_head_map (251);</span>
+<span class="lineNum">     239 </span><span class="lineCov">     139590 :   symtab_node *symbol;</span>
+<span class="lineNum">     240 </span><span class="lineCov">     139590 :   bool comdat_group_seen = false;</span>
+<span class="lineNum">     241 </span><span class="lineCov">     139590 :   symtab_node *first = (symtab_node *) (void *) 1;</span>
+<span class="lineNum">     242 </span><span class="lineCov">     139590 :   tree group;</span>
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span>            :   /* Start the dataflow by assigning comdat group to symbols that are in comdat
+<span class="lineNum">     245 </span>            :      groups already.  All other externally visible symbols must stay, we use
+<span class="lineNum">     246 </span>            :      ERROR_MARK_NODE as bottom for the propagation.  */
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">    6807850 :   FOR_EACH_DEFINED_SYMBOL (symbol)</span>
+<span class="lineNum">     249 </span><span class="lineCov">    3264335 :     if (!symbol-&gt;real_symbol_p ())</span>
+<span class="lineNum">     250 </span>            :       ;
+<span class="lineNum">     251 </span><span class="lineCov">    5878074 :     else if ((group = symbol-&gt;get_comdat_group ()) != NULL)</span>
+<span class="lineNum">     252 </span>            :       {
+<span class="lineNum">     253 </span><span class="lineCov">     380473 :         map.put (symbol, group);</span>
+<span class="lineNum">     254 </span><span class="lineCov">     380473 :         comdat_head_map.put (group, symbol);</span>
+<span class="lineNum">     255 </span><span class="lineCov">     380473 :         comdat_group_seen = true;</span>
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span>            :         /* Mark the symbol so we won't waste time visiting it for dataflow.  */
+<span class="lineNum">     258 </span><span class="lineCov">     380473 :         symbol-&gt;aux = (symtab_node *) (void *) 1;</span>
+<span class="lineNum">     259 </span>            :       }
+<span class="lineNum">     260 </span>            :     /* See symbols that can not be privatized to comdats; that is externally
+<span class="lineNum">     261 </span>            :        visible symbols or otherwise used ones.  We also do not want to mangle
+<span class="lineNum">     262 </span>            :        user section names.  */
+<span class="lineNum">     263 </span><span class="lineCov">    2558564 :     else if (symbol-&gt;externally_visible</span>
+<span class="lineNum">     264 </span>            :              || symbol-&gt;force_output
+<span class="lineNum">     265 </span><span class="lineCov">    2558564 :              || symbol-&gt;used_from_other_partition</span>
+<span class="lineNum">     266 </span><span class="lineCov">     995475 :              || TREE_THIS_VOLATILE (symbol-&gt;decl)</span>
+<span class="lineNum">     267 </span><span class="lineCov">     991823 :              || symbol-&gt;get_section ()</span>
+<span class="lineNum">     268 </span><span class="lineCov">    2808587 :              || (TREE_CODE (symbol-&gt;decl) == FUNCTION_DECL</span>
+<span class="lineNum">     269 </span><span class="lineCov">     109090 :                  &amp;&amp; (DECL_STATIC_CONSTRUCTOR (symbol-&gt;decl)</span>
+<span class="lineNum">     270 </span><span class="lineCov">     109090 :                      || DECL_STATIC_DESTRUCTOR (symbol-&gt;decl))))</span>
+<span class="lineNum">     271 </span>            :       {
+<span class="lineNum">     272 </span><span class="lineCov">    2315468 :         symtab_node *target = symbol-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span>            :         /* Always keep thunks in same sections as target function.  */
+<span class="lineNum">     275 </span><span class="lineCov">    2315468 :         if (is_a &lt;cgraph_node *&gt;(target))</span>
+<span class="lineNum">     276 </span><span class="lineCov">    1268634 :           target = dyn_cast &lt;cgraph_node *&gt; (target)-&gt;function_symbol ();</span>
+<span class="lineNum">     277 </span><span class="lineCov">    2315468 :         map.put (target, error_mark_node);</span>
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            :         /* Mark the symbol so we won't waste time visiting it for dataflow.  */
+<span class="lineNum">     280 </span><span class="lineCov">    2315468 :         symbol-&gt;aux = (symtab_node *) (void *) 1;</span>
+<span class="lineNum">     281 </span>            :       }
+<span class="lineNum">     282 </span>            :     else
+<span class="lineNum">     283 </span>            :       {
+<span class="lineNum">     284 </span>            :         /* Enqueue symbol for dataflow.  */
+<span class="lineNum">     285 </span><span class="lineCov">     243096 :         symbol-&gt;aux = first;</span>
+<span class="lineNum">     286 </span><span class="lineCov">     243096 :         first = symbol;</span>
+<span class="lineNum">     287 </span>            :       }
+<span class="lineNum">     288 </span>            : 
+<span class="lineNum">     289 </span><span class="lineCov">     139590 :   if (!comdat_group_seen)</span>
+<span class="lineNum">     290 </span>            :     {
+<span class="lineNum">     291 </span><span class="lineCov">    1774990 :       FOR_EACH_DEFINED_SYMBOL (symbol)</span>
+<span class="lineNum">     292 </span><span class="lineCov">    1529618 :         symbol-&gt;aux = NULL;</span>
+<span class="lineNum">     293 </span>            :       return 0;
+<span class="lineNum">     294 </span>            :     }
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span>            :   /* The actual dataflow.  */
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span><span class="lineCov">      73923 :   while (first != (void *) 1)</span>
+<span class="lineNum">     299 </span>            :     {
+<span class="lineNum">     300 </span><span class="lineCov">      57019 :       tree group = NULL;</span>
+<span class="lineNum">     301 </span><span class="lineCov">      57019 :       tree newgroup, *val;</span>
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span><span class="lineCov">      57019 :       symbol = first;</span>
+<span class="lineNum">     304 </span><span class="lineCov">      57019 :       first = (symtab_node *)first-&gt;aux;</span>
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span>            :       /* Get current lattice value of SYMBOL.  */
+<span class="lineNum">     307 </span><span class="lineCov">      57019 :       val = map.get (symbol);</span>
+<span class="lineNum">     308 </span><span class="lineCov">         49 :       if (val)</span>
+<span class="lineNum">     309 </span><span class="lineCov">         49 :         group = *val;</span>
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span>            :       /* If it is bottom, there is nothing to do; do not clear AUX
+<span class="lineNum">     312 </span>            :          so we won't re-queue the symbol.  */
+<span class="lineNum">     313 </span><span class="lineCov">      57019 :       if (group == error_mark_node)</span>
+<span class="lineNum">     314 </span><span class="lineCov">       2716 :         continue;</span>
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span><span class="lineCov">      57016 :       newgroup = propagate_comdat_group (symbol, group, map);</span>
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span>            :       /* If nothing changed, proceed to next symbol.  */
+<span class="lineNum">     319 </span><span class="lineCov">      57016 :       if (newgroup == group)</span>
+<span class="lineNum">     320 </span>            :         {
+<span class="lineNum">     321 </span><span class="lineCov">       2713 :           symbol-&gt;aux = NULL;</span>
+<span class="lineNum">     322 </span><span class="lineCov">       2713 :           continue;</span>
+<span class="lineNum">     323 </span>            :         }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            :       /* Update lattice value and enqueue all references for re-visiting.  */
+<span class="lineNum">     326 </span><span class="lineCov">      54303 :       gcc_assert (newgroup);</span>
+<span class="lineNum">     327 </span><span class="lineCov">      54303 :       if (val)</span>
+<span class="lineNum">     328 </span><span class="lineCov">         46 :         *val = newgroup;</span>
+<span class="lineNum">     329 </span>            :       else
+<span class="lineNum">     330 </span><span class="lineCov">      54257 :         map.put (symbol, newgroup);</span>
+<span class="lineNum">     331 </span><span class="lineCov">      54303 :       enqueue_references (&amp;first, symbol);</span>
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span>            :       /* We may need to revisit the symbol unless it is BOTTOM.  */
+<span class="lineNum">     334 </span><span class="lineCov">      54303 :       if (newgroup != error_mark_node)</span>
+<span class="lineNum">     335 </span><span class="lineCov">        872 :         symbol-&gt;aux = NULL;</span>
+<span class="lineNum">     336 </span>            :     }
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span>            :   /* Finally assign symbols to the sections.  */
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span><span class="lineCov">    3503242 :   FOR_EACH_DEFINED_SYMBOL (symbol)</span>
+<span class="lineNum">     341 </span>            :     {
+<span class="lineNum">     342 </span><span class="lineCov">    1734717 :       struct cgraph_node *fun;</span>
+<span class="lineNum">     343 </span><span class="lineCov">    1734717 :       symbol-&gt;aux = NULL; </span>
+<span class="lineNum">     344 </span><span class="lineCov">    1734717 :       if (!symbol-&gt;get_comdat_group ()</span>
+<span class="lineNum">     345 </span><span class="lineCov">    1315003 :           &amp;&amp; !symbol-&gt;alias</span>
+<span class="lineNum">     346 </span><span class="lineCov">    1307037 :           &amp;&amp; (!(fun = dyn_cast &lt;cgraph_node *&gt; (symbol))</span>
+<span class="lineNum">     347 </span><span class="lineCov">     441612 :               || !fun-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     348 </span><span class="lineCov">    3041248 :           &amp;&amp; symbol-&gt;real_symbol_p ())</span>
+<span class="lineNum">     349 </span>            :         {
+<span class="lineNum">     350 </span><span class="lineCov">    1079570 :           tree *val = map.get (symbol);</span>
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            :           /* A NULL here means that SYMBOL is unreachable in the definition
+<span class="lineNum">     353 </span>            :              of ipa-comdats. Either ipa-comdats is wrong about this or someone
+<span class="lineNum">     354 </span>            :              forgot to cleanup and remove unreachable functions earlier.  */
+<span class="lineNum">     355 </span><span class="lineNoCov">          0 :           gcc_assert (val);</span>
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span><span class="lineCov">    1079570 :           tree group = *val;</span>
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span><span class="lineCov">    1079570 :           if (group == error_mark_node)</span>
+<span class="lineNum">     360 </span><span class="lineCov">    1078976 :             continue;</span>
+<span class="lineNum">     361 </span><span class="lineCov">        594 :           if (dump_file)</span>
+<span class="lineNum">     362 </span>            :             {
+<span class="lineNum">     363 </span><span class="lineCov">          3 :               fprintf (dump_file, &quot;Localizing symbol\n&quot;);</span>
+<span class="lineNum">     364 </span><span class="lineCov">          3 :               symbol-&gt;dump (dump_file);</span>
+<span class="lineNum">     365 </span><span class="lineCov">          3 :               fprintf (dump_file, &quot;To group: %s\n&quot;, IDENTIFIER_POINTER (group));</span>
+<span class="lineNum">     366 </span>            :             }
+<span class="lineNum">     367 </span><span class="lineCov">        594 :           if (is_a &lt;cgraph_node *&gt; (symbol))</span>
+<span class="lineNum">     368 </span><span class="lineCov">        587 :            dyn_cast &lt;cgraph_node *&gt;(symbol)-&gt;call_for_symbol_thunks_and_aliases</span>
+<span class="lineNum">     369 </span><span class="lineCov">        587 :                   (set_comdat_group_1,</span>
+<span class="lineNum">     370 </span><span class="lineCov">       1174 :                    *comdat_head_map.get (group),</span>
+<span class="lineNum">     371 </span>            :                    true);
+<span class="lineNum">     372 </span>            :           else
+<span class="lineNum">     373 </span><span class="lineCov">          7 :            symbol-&gt;call_for_symbol_and_aliases</span>
+<span class="lineNum">     374 </span><span class="lineCov">         14 :                   (set_comdat_group,</span>
+<span class="lineNum">     375 </span><span class="lineCov">         14 :                    *comdat_head_map.get (group),</span>
+<span class="lineNum">     376 </span>            :                    true);
+<span class="lineNum">     377 </span>            :         }
+<span class="lineNum">     378 </span>            :     }
+<span class="lineNum">     379 </span>            :   return 0;
+<span class="lineNum">     380 </span>            : }
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            : namespace {
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : const pass_data pass_data_ipa_comdats =
+<span class="lineNum">     385 </span>            : {
+<span class="lineNum">     386 </span>            :   IPA_PASS, /* type */
+<span class="lineNum">     387 </span>            :   &quot;comdats&quot;, /* name */
+<span class="lineNum">     388 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     389 </span>            :   TV_IPA_COMDATS, /* tv_id */
+<span class="lineNum">     390 </span>            :   0, /* properties_required */
+<span class="lineNum">     391 </span>            :   0, /* properties_provided */
+<span class="lineNum">     392 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     393 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     394 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     395 </span>            : };
+<span class="lineNum">     396 </span>            : 
+<span class="lineNum">     397 </span>            : class pass_ipa_comdats : public ipa_opt_pass_d
+<span class="lineNum">     398 </span>            : {
+<span class="lineNum">     399 </span>            : public:
+<span class="lineNum">     400 </span>            :   pass_ipa_comdats (gcc::context *ctxt)
+<span class="lineNum">     401 </span>            :     : ipa_opt_pass_d (pass_data_ipa_comdats, ctxt,
+<span class="lineNum">     402 </span>            :                       NULL, /* generate_summary */
+<span class="lineNum">     403 </span>            :                       NULL, /* write_summary */
+<span class="lineNum">     404 </span>            :                       NULL, /* read_summary */
+<span class="lineNum">     405 </span>            :                       NULL, /* write_optimization_summary */
+<span class="lineNum">     406 </span>            :                       NULL, /* read_optimization_summary */
+<span class="lineNum">     407 </span>            :                       NULL, /* stmt_fixup */
+<span class="lineNum">     408 </span>            :                       0, /* function_transform_todo_flags_start */
+<span class="lineNum">     409 </span>            :                       NULL, /* function_transform */
+<span class="lineNum">     410 </span><span class="lineCov">     340624 :                       NULL) /* variable_transform */</span>
+<span class="lineNum">     411 </span>            :   {}
+<span class="lineNum">     412 </span>            : 
+<a name="413"><span class="lineNum">     413 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     414 </span>            :   virtual bool gate (function *);
+<span class="lineNum">     415 </span><span class="lineCov">     139590 :   virtual unsigned int execute (function *) { return ipa_comdats (); }</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            : }; // class pass_ipa_comdats
+<a name="418"><span class="lineNum">     418 </span>            : </a>
+<span class="lineNum">     419 </span>            : bool
+<span class="lineNum">     420 </span><span class="lineCov">     361641 : pass_ipa_comdats::gate (function *)</span>
+<span class="lineNum">     421 </span>            : {
+<span class="lineNum">     422 </span><span class="lineCov">     361641 :   return HAVE_COMDAT_GROUP;</span>
+<span class="lineNum">     423 </span>            : }
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span>            : } // anon namespace
+<a name="426"><span class="lineNum">     426 </span>            : </a>
+<span class="lineNum">     427 </span>            : ipa_opt_pass_d *
+<span class="lineNum">     428 </span><span class="lineCov">     170312 : make_pass_ipa_comdats (gcc::context *ctxt)</span>
+<span class="lineNum">     429 </span>            : {
+<span class="lineNum">     430 </span><span class="lineCov">     170312 :   return new pass_ipa_comdats (ctxt);</span>
+<span class="lineNum">     431 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

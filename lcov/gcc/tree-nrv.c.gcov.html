@@ -1,0 +1,488 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-nrv.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-nrv.c<span style="font-size: 80%;"> (source / <a href="tree-nrv.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">109</td>
+            <td class="headerCovTableEntry">115</td>
+            <td class="headerCovTableEntryHi">94.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Language independent return value optimizations</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-walk.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;internal-fn.h&quot;
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            : /* This file implements return value optimizations for functions which
+<span class="lineNum">      34 </span>            :    return aggregate types.
+<span class="lineNum">      35 </span>            : 
+<span class="lineNum">      36 </span>            :    Basically this pass searches the function for return statements which
+<span class="lineNum">      37 </span>            :    return a local aggregate.  When converted to RTL such statements will
+<span class="lineNum">      38 </span>            :    generate a copy from the local aggregate to final return value destination
+<span class="lineNum">      39 </span>            :    mandated by the target's ABI.
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            :    That copy can often be avoided by directly constructing the return value
+<span class="lineNum">      42 </span>            :    into the final destination mandated by the target's ABI.
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            :    This is basically a generic equivalent to the C++ front-end's
+<span class="lineNum">      45 </span>            :    Named Return Value optimization.  */
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            : struct nrv_data_t
+<span class="lineNum">      48 </span>            : {
+<span class="lineNum">      49 </span>            :   /* This is the temporary (a VAR_DECL) which appears in all of
+<span class="lineNum">      50 </span>            :      this function's RETURN_EXPR statements.  */
+<span class="lineNum">      51 </span>            :   tree var;
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            :   /* This is the function's RESULT_DECL.  We will replace all occurrences
+<span class="lineNum">      54 </span>            :      of VAR with RESULT_DECL when we apply this optimization.  */
+<span class="lineNum">      55 </span>            :   tree result;
+<span class="lineNum">      56 </span>            :   int modified;
+<span class="lineNum">      57 </span>            : };
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            : static tree finalize_nrv_r (tree *, int *, void *);
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : /* Callback for the tree walker.
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :    If TP refers to a RETURN_EXPR, then set the expression being returned
+<span class="lineNum">      64 </span>            :    to nrv_data-&gt;result.
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :    If TP refers to nrv_data-&gt;var, then replace nrv_data-&gt;var with
+<span class="lineNum">      67 </span>            :    nrv_data-&gt;result.
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :    If we reach a node where we know all the subtrees are uninteresting,
+<span class="lineNum">      70 </span>            :    then set *WALK_SUBTREES to zero.  */
+<a name="71"><span class="lineNum">      71 </span>            : </a>
+<span class="lineNum">      72 </span>            : static tree
+<span class="lineNum">      73 </span><span class="lineCov">     110622 : finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)</span>
+<span class="lineNum">      74 </span>            : {
+<span class="lineNum">      75 </span><span class="lineCov">     110622 :   struct walk_stmt_info *wi = (struct walk_stmt_info *) data;</span>
+<span class="lineNum">      76 </span><span class="lineCov">     110622 :   struct nrv_data_t *dp = (struct nrv_data_t *) wi-&gt;info;</span>
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            :   /* No need to walk into types.  */
+<span class="lineNum">      79 </span><span class="lineCov">     110622 :   if (TYPE_P (*tp))</span>
+<span class="lineNum">      80 </span><span class="lineNoCov">          0 :     *walk_subtrees = 0;</span>
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            :   /* Otherwise replace all occurrences of VAR with RESULT.  */
+<span class="lineNum">      83 </span><span class="lineCov">     110622 :   else if (*tp == dp-&gt;var)</span>
+<span class="lineNum">      84 </span>            :     {
+<span class="lineNum">      85 </span><span class="lineCov">       1806 :       *tp = dp-&gt;result;</span>
+<span class="lineNum">      86 </span><span class="lineCov">       1806 :       dp-&gt;modified = 1;</span>
+<span class="lineNum">      87 </span>            :     }
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            :   /* Keep iterating.  */
+<span class="lineNum">      90 </span><span class="lineCov">     110622 :   return NULL_TREE;</span>
+<span class="lineNum">      91 </span>            : }
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : /* Main entry point for return value optimizations.
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :    If this function always returns the same local variable, and that
+<span class="lineNum">      96 </span>            :    local variable is an aggregate type, then replace the variable with
+<span class="lineNum">      97 </span>            :    the function's DECL_RESULT.
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            :    This is the equivalent of the C++ named return value optimization
+<span class="lineNum">     100 </span>            :    applied to optimized trees in a language independent form.  If we
+<span class="lineNum">     101 </span>            :    ever encounter languages which prevent this kind of optimization,
+<span class="lineNum">     102 </span>            :    then we could either have the languages register the optimization or
+<span class="lineNum">     103 </span>            :    we could change the gating function to check the current language.  */
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            : namespace {
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            : const pass_data pass_data_nrv =
+<span class="lineNum">     108 </span>            : {
+<span class="lineNum">     109 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     110 </span>            :   &quot;nrv&quot;, /* name */
+<span class="lineNum">     111 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     112 </span>            :   TV_TREE_NRV, /* tv_id */
+<span class="lineNum">     113 </span>            :   ( PROP_ssa | PROP_cfg ), /* properties_required */
+<span class="lineNum">     114 </span>            :   0, /* properties_provided */
+<span class="lineNum">     115 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     116 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     117 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     118 </span>            : };
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span>            : class pass_nrv : public gimple_opt_pass
+<span class="lineNum">     121 </span>            : {
+<span class="lineNum">     122 </span>            : public:
+<span class="lineNum">     123 </span>            :   pass_nrv (gcc::context *ctxt)
+<span class="lineNum">     124 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_nrv, ctxt)</span>
+<span class="lineNum">     125 </span>            :   {}
+<a name="126"><span class="lineNum">     126 </span>            : </a>
+<span class="lineNum">     127 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     128 </span><span class="lineCov">     832898 :   virtual bool gate (function *) { return optimize &gt; 0; }</span>
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : }; // class pass_nrv
+<a name="133"><span class="lineNum">     133 </span>            : </a>
+<span class="lineNum">     134 </span>            : unsigned int
+<span class="lineNum">     135 </span><span class="lineCov">     622598 : pass_nrv::execute (function *fun)</span>
+<span class="lineNum">     136 </span>            : {
+<span class="lineNum">     137 </span><span class="lineCov">     622598 :   tree result = DECL_RESULT (current_function_decl);</span>
+<span class="lineNum">     138 </span><span class="lineCov">     622598 :   tree result_type = TREE_TYPE (result);</span>
+<span class="lineNum">     139 </span><span class="lineCov">     622598 :   tree found = NULL;</span>
+<span class="lineNum">     140 </span><span class="lineCov">     622598 :   basic_block bb;</span>
+<span class="lineNum">     141 </span><span class="lineCov">     622598 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     142 </span><span class="lineCov">     622598 :   struct nrv_data_t data;</span>
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            :   /* If this function does not return an aggregate type in memory, then
+<span class="lineNum">     145 </span>            :      there is nothing to do.  */
+<span class="lineNum">     146 </span><span class="lineCov">     622598 :   if (!aggregate_value_p (result, current_function_decl))</span>
+<span class="lineNum">     147 </span>            :     return 0;
+<span class="lineNum">     148 </span>            : 
+<span class="lineNum">     149 </span>            :   /* If a GIMPLE type is returned in memory, finalize_nrv_r might create
+<span class="lineNum">     150 </span>            :      non-GIMPLE.  */
+<span class="lineNum">     151 </span><span class="lineCov">      68720 :   if (is_gimple_reg_type (result_type))</span>
+<span class="lineNum">     152 </span>            :     return 0;
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span>            :   /* If the front end already did something like this, don't do it here.  */
+<span class="lineNum">     155 </span><span class="lineCov">      29552 :   if (DECL_NAME (result))</span>
+<span class="lineNum">     156 </span>            :     return 0;
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            :   /* If the result has its address taken then it might be modified
+<span class="lineNum">     159 </span>            :      by means not detected in the following loop.  Bail out in this
+<span class="lineNum">     160 </span>            :      case.  */
+<span class="lineNum">     161 </span><span class="lineCov">      29166 :   if (TREE_ADDRESSABLE (result))</span>
+<span class="lineNum">     162 </span>            :     return 0;
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            :   /* Look through each block for assignments to the RESULT_DECL.  */
+<span class="lineNum">     165 </span><span class="lineCov">     197244 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">     166 </span>            :     {
+<span class="lineNum">     167 </span><span class="lineCov">    1513576 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     168 </span>            :         {
+<span class="lineNum">     169 </span><span class="lineCov">    1148208 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     170 </span><span class="lineCov">    1148208 :           tree ret_val;</span>
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span><span class="lineCov">    1148208 :           if (greturn *return_stmt = dyn_cast &lt;greturn *&gt; (stmt))</span>
+<span class="lineNum">     173 </span>            :             {
+<span class="lineNum">     174 </span>            :               /* In a function with an aggregate return value, the
+<span class="lineNum">     175 </span>            :                  gimplifier has changed all non-empty RETURN_EXPRs to
+<span class="lineNum">     176 </span>            :                  return the RESULT_DECL.  */
+<span class="lineNum">     177 </span><span class="lineCov">        636 :               ret_val = gimple_return_retval (return_stmt);</span>
+<span class="lineNum">     178 </span><span class="lineCov">        636 :               if (ret_val)</span>
+<span class="lineNum">     179 </span><span class="lineCov">        634 :                 gcc_assert (ret_val == result);</span>
+<span class="lineNum">     180 </span>            :             }
+<span class="lineNum">     181 </span><span class="lineCov">    1147572 :           else if (gimple_has_lhs (stmt)</span>
+<span class="lineNum">     182 </span><span class="lineCov">     557719 :                    &amp;&amp; gimple_get_lhs (stmt) == result)</span>
+<span class="lineNum">     183 </span>            :             {
+<span class="lineNum">     184 </span><span class="lineCov">       1941 :               tree rhs;</span>
+<span class="lineNum">     185 </span>            : 
+<span class="lineNum">     186 </span><span class="lineCov">       1941 :               if (!gimple_assign_copy_p (stmt))</span>
+<span class="lineNum">     187 </span>            :                 return 0;
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span><span class="lineCov">       1447 :               rhs = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     190 </span>            : 
+<span class="lineNum">     191 </span>            :               /* Now verify that this return statement uses the same value
+<span class="lineNum">     192 </span>            :                  as any previously encountered return statement.  */
+<span class="lineNum">     193 </span><span class="lineCov">       1447 :               if (found != NULL)</span>
+<span class="lineNum">     194 </span>            :                 {
+<span class="lineNum">     195 </span>            :                   /* If we found a return statement using a different variable
+<span class="lineNum">     196 </span>            :                      than previous return statements, then we can not perform
+<span class="lineNum">     197 </span>            :                      NRV optimizations.  */
+<span class="lineNum">     198 </span><span class="lineCov">        216 :                   if (found != rhs)</span>
+<span class="lineNum">     199 </span>            :                     return 0;
+<span class="lineNum">     200 </span>            :                 }
+<span class="lineNum">     201 </span>            :               else
+<span class="lineNum">     202 </span>            :                 found = rhs;
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span>            :               /* The returned value must be a local automatic variable of the
+<span class="lineNum">     205 </span>            :                  same type and alignment as the function's result.  */
+<span class="lineNum">     206 </span><span class="lineCov">       1428 :               if (!VAR_P (found)</span>
+<span class="lineNum">     207 </span><span class="lineCov">       1428 :                   || TREE_THIS_VOLATILE (found)</span>
+<span class="lineNum">     208 </span><span class="lineCov">       1108 :                   || !auto_var_in_fn_p (found, current_function_decl)</span>
+<span class="lineNum">     209 </span><span class="lineCov">       1095 :                   || TREE_ADDRESSABLE (found)</span>
+<span class="lineNum">     210 </span><span class="lineCov">        961 :                   || DECL_ALIGN (found) &gt; DECL_ALIGN (result)</span>
+<span class="lineNum">     211 </span><span class="lineCov">       2271 :                   || !useless_type_conversion_p (result_type,</span>
+<span class="lineNum">     212 </span><span class="lineCov">        843 :                                                  TREE_TYPE (found)))</span>
+<span class="lineNum">     213 </span><span class="lineCov">        585 :                 return 0;</span>
+<span class="lineNum">     214 </span>            :             }
+<span class="lineNum">     215 </span><span class="lineCov">    1250655 :           else if (gimple_has_lhs (stmt))</span>
+<span class="lineNum">     216 </span>            :             {
+<span class="lineNum">     217 </span><span class="lineCov">     513001 :               tree addr = get_base_address (gimple_get_lhs (stmt));</span>
+<span class="lineNum">     218 </span>            :                /* If there's any MODIFY of component of RESULT,
+<span class="lineNum">     219 </span>            :                   then bail out.  */
+<span class="lineNum">     220 </span><span class="lineCov">     513001 :               if (addr &amp;&amp; addr == result)</span>
+<span class="lineNum">     221 </span>            :                 return 0;
+<span class="lineNum">     222 </span>            :             }
+<span class="lineNum">     223 </span>            :         }
+<span class="lineNum">     224 </span>            :     }
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span><span class="lineCov">        710 :   if (!found)</span>
+<span class="lineNum">     227 </span>            :     return 0;
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span>            :   /* If dumping details, then note once and only the NRV replacement.  */
+<span class="lineNum">     230 </span><span class="lineCov">        627 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     231 </span>            :     {
+<span class="lineNum">     232 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;NRV Replaced: &quot;);</span>
+<span class="lineNum">     233 </span><span class="lineNoCov">          0 :       print_generic_expr (dump_file, found, dump_flags);</span>
+<span class="lineNum">     234 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;  with: &quot;);</span>
+<span class="lineNum">     235 </span><span class="lineNoCov">          0 :       print_generic_expr (dump_file, result, dump_flags);</span>
+<span class="lineNum">     236 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     237 </span>            :     }
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span>            :   /* At this point we know that all the return statements return the
+<span class="lineNum">     240 </span>            :      same local which has suitable attributes for NRV.   Copy debugging
+<span class="lineNum">     241 </span>            :      information from FOUND to RESULT if it will be useful.  But don't set
+<span class="lineNum">     242 </span>            :      DECL_ABSTRACT_ORIGIN to point at another function.  */
+<span class="lineNum">     243 </span><span class="lineCov">        627 :   if (!DECL_IGNORED_P (found)</span>
+<span class="lineNum">     244 </span><span class="lineCov">        627 :       &amp;&amp; !(DECL_ABSTRACT_ORIGIN (found)</span>
+<span class="lineNum">     245 </span><span class="lineCov">         14 :            &amp;&amp; DECL_CONTEXT (DECL_ABSTRACT_ORIGIN (found)) != current_function_decl))</span>
+<span class="lineNum">     246 </span>            :     {
+<span class="lineNum">     247 </span><span class="lineCov">        609 :       DECL_NAME (result) = DECL_NAME (found);</span>
+<span class="lineNum">     248 </span><span class="lineCov">        609 :       DECL_SOURCE_LOCATION (result) = DECL_SOURCE_LOCATION (found);</span>
+<span class="lineNum">     249 </span><span class="lineCov">        609 :       DECL_ABSTRACT_ORIGIN (result) = DECL_ABSTRACT_ORIGIN (found);</span>
+<span class="lineNum">     250 </span>            :     }
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span><span class="lineCov">        627 :   TREE_ADDRESSABLE (result) |= TREE_ADDRESSABLE (found);</span>
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            :   /* Now walk through the function changing all references to VAR to be
+<span class="lineNum">     255 </span>            :      RESULT.  */
+<span class="lineNum">     256 </span><span class="lineCov">        627 :   data.var = found;</span>
+<span class="lineNum">     257 </span><span class="lineCov">        627 :   data.result = result;</span>
+<span class="lineNum">     258 </span><span class="lineCov">       6396 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">     259 </span>            :     {
+<span class="lineNum">     260 </span><span class="lineCov">      75154 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )</span>
+<span class="lineNum">     261 </span>            :         {
+<span class="lineNum">     262 </span><span class="lineCov">      31808 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     263 </span>            :           /* If this is a copy from VAR to RESULT, remove it.  */
+<span class="lineNum">     264 </span><span class="lineCov">      31808 :           if (gimple_assign_copy_p (stmt)</span>
+<span class="lineNum">     265 </span><span class="lineCov">       8502 :               &amp;&amp; gimple_assign_lhs (stmt) == result</span>
+<span class="lineNum">     266 </span><span class="lineCov">      33456 :               &amp;&amp; gimple_assign_rhs1 (stmt) == found)</span>
+<span class="lineNum">     267 </span>            :             {
+<span class="lineNum">     268 </span><span class="lineCov">        824 :               unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     269 </span><span class="lineCov">        824 :               gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     270 </span><span class="lineCov">        824 :               release_defs (stmt);</span>
+<span class="lineNum">     271 </span>            :             }
+<span class="lineNum">     272 </span>            :           else
+<span class="lineNum">     273 </span>            :             {
+<span class="lineNum">     274 </span><span class="lineCov">      30984 :               struct walk_stmt_info wi;</span>
+<span class="lineNum">     275 </span><span class="lineCov">      30984 :               memset (&amp;wi, 0, sizeof (wi));</span>
+<span class="lineNum">     276 </span><span class="lineCov">      30984 :               wi.info = &amp;data;</span>
+<span class="lineNum">     277 </span><span class="lineCov">      30984 :               data.modified = 0;</span>
+<span class="lineNum">     278 </span><span class="lineCov">      30984 :               walk_gimple_op (stmt, finalize_nrv_r, &amp;wi);</span>
+<span class="lineNum">     279 </span><span class="lineCov">      30984 :               if (data.modified)</span>
+<span class="lineNum">     280 </span><span class="lineCov">       1806 :                 update_stmt (stmt);</span>
+<span class="lineNum">     281 </span><span class="lineCov">      30984 :               gsi_next (&amp;gsi);</span>
+<span class="lineNum">     282 </span>            :             }
+<span class="lineNum">     283 </span>            :         }
+<span class="lineNum">     284 </span>            :     }
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span><span class="lineCov">        627 :   SET_DECL_VALUE_EXPR (found, result);</span>
+<span class="lineNum">     287 </span><span class="lineCov">        627 :   DECL_HAS_VALUE_EXPR_P (found) = 1;</span>
+<span class="lineNum">     288 </span>            : 
+<span class="lineNum">     289 </span><span class="lineCov">        627 :   return 0;</span>
+<span class="lineNum">     290 </span>            : }
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span>            : } // anon namespace
+<a name="293"><span class="lineNum">     293 </span>            : </a>
+<span class="lineNum">     294 </span>            : gimple_opt_pass *
+<span class="lineNum">     295 </span><span class="lineCov">     170312 : make_pass_nrv (gcc::context *ctxt)</span>
+<span class="lineNum">     296 </span>            : {
+<span class="lineNum">     297 </span><span class="lineCov">     170312 :   return new pass_nrv (ctxt);</span>
+<span class="lineNum">     298 </span>            : }
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span>            : /* Determine (pessimistically) whether DEST is available for NRV
+<span class="lineNum">     301 </span>            :    optimization, where DEST is expected to be the LHS of a modify
+<span class="lineNum">     302 </span>            :    expression where the RHS is a function returning an aggregate.
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span>            :    DEST is available if it is not clobbered or used by the call.  */
+<a name="305"><span class="lineNum">     305 </span>            : </a>
+<span class="lineNum">     306 </span>            : static bool
+<span class="lineNum">     307 </span><span class="lineCov">       2917 : dest_safe_for_nrv_p (gcall *call)</span>
+<span class="lineNum">     308 </span>            : {
+<span class="lineNum">     309 </span><span class="lineCov">       2917 :   tree dest = gimple_call_lhs (call);</span>
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span><span class="lineCov">       2917 :   dest = get_base_address (dest);</span>
+<span class="lineNum">     312 </span><span class="lineCov">       2917 :   if (! dest)</span>
+<span class="lineNum">     313 </span>            :     return false;
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span><span class="lineCov">       2917 :   if (TREE_CODE (dest) == SSA_NAME)</span>
+<span class="lineNum">     316 </span>            :     return true;
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span><span class="lineCov">       1726 :   if (call_may_clobber_ref_p (call, dest)</span>
+<span class="lineNum">     319 </span><span class="lineCov">       1726 :       || ref_maybe_used_by_stmt_p (call, dest))</span>
+<span class="lineNum">     320 </span><span class="lineCov">       1004 :     return false;</span>
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span>            :   return true;
+<span class="lineNum">     323 </span>            : }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            : /* Walk through the function looking for GIMPLE_ASSIGNs with calls that
+<span class="lineNum">     326 </span>            :    return in memory on the RHS.  For each of these, determine whether it is
+<span class="lineNum">     327 </span>            :    safe to pass the address of the LHS as the return slot, and mark the
+<span class="lineNum">     328 </span>            :    call appropriately if so.
+<span class="lineNum">     329 </span>            : 
+<span class="lineNum">     330 </span>            :    The NRV shares the return slot with a local variable in the callee; this
+<span class="lineNum">     331 </span>            :    optimization shares the return slot with the target of the call within
+<span class="lineNum">     332 </span>            :    the caller.  If the NRV is performed (which we can't know in general),
+<span class="lineNum">     333 </span>            :    this optimization is safe if the address of the target has not
+<span class="lineNum">     334 </span>            :    escaped prior to the call.  If it has, modifications to the local
+<span class="lineNum">     335 </span>            :    variable will produce visible changes elsewhere, as in PR c++/19317.  */
+<span class="lineNum">     336 </span>            : 
+<span class="lineNum">     337 </span>            : namespace {
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : const pass_data pass_data_return_slot =
+<span class="lineNum">     340 </span>            : {
+<span class="lineNum">     341 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     342 </span>            :   &quot;retslot&quot;, /* name */
+<span class="lineNum">     343 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     344 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     345 </span>            :   PROP_ssa, /* properties_required */
+<span class="lineNum">     346 </span>            :   0, /* properties_provided */
+<span class="lineNum">     347 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     348 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     349 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     350 </span>            : };
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            : class pass_return_slot : public gimple_opt_pass
+<span class="lineNum">     353 </span>            : {
+<span class="lineNum">     354 </span>            : public:
+<span class="lineNum">     355 </span>            :   pass_return_slot (gcc::context *ctxt)
+<span class="lineNum">     356 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_return_slot, ctxt)</span>
+<span class="lineNum">     357 </span>            :   {}
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     360 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span>            : }; // class pass_return_slot
+<a name="363"><span class="lineNum">     363 </span>            : </a>
+<span class="lineNum">     364 </span>            : unsigned int
+<span class="lineNum">     365 </span><span class="lineCov">     620934 : pass_return_slot::execute (function *fun)</span>
+<span class="lineNum">     366 </span>            : {
+<span class="lineNum">     367 </span><span class="lineCov">     620934 :   basic_block bb;</span>
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">    6704711 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">     370 </span>            :     {
+<span class="lineNum">     371 </span><span class="lineCov">    6083777 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     372 </span><span class="lineCov">   61440059 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     373 </span>            :         {
+<span class="lineNum">     374 </span><span class="lineCov">   49272505 :           gcall *stmt;</span>
+<span class="lineNum">     375 </span><span class="lineCov">   49272505 :           bool slot_opt_p;</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">   98545010 :           stmt = dyn_cast &lt;gcall *&gt; (gsi_stmt (gsi));</span>
+<span class="lineNum">     378 </span><span class="lineCov">    3399811 :           if (stmt</span>
+<span class="lineNum">     379 </span><span class="lineCov">    6799622 :               &amp;&amp; gimple_call_lhs (stmt)</span>
+<span class="lineNum">     380 </span><span class="lineCov">    2654766 :               &amp;&amp; !gimple_call_return_slot_opt_p (stmt)</span>
+<span class="lineNum">     381 </span>            :               /* Ignore internal functions without direct optabs,
+<span class="lineNum">     382 </span>            :                  those are expanded specially and aggregate_value_p
+<span class="lineNum">     383 </span>            :                  on their result might result in undesirable warnings
+<span class="lineNum">     384 </span>            :                  with some backends.  */
+<span class="lineNum">     385 </span><span class="lineCov">    2373038 :               &amp;&amp; (!gimple_call_internal_p (stmt)</span>
+<span class="lineNum">     386 </span><span class="lineCov">     182529 :                   || direct_internal_fn_p (gimple_call_internal_fn (stmt)))</span>
+<span class="lineNum">     387 </span><span class="lineCov">    1125677 :               &amp;&amp; aggregate_value_p (TREE_TYPE (gimple_call_lhs (stmt)),</span>
+<span class="lineNum">     388 </span><span class="lineCov">    1125677 :                                     gimple_call_fndecl (stmt)))</span>
+<span class="lineNum">     389 </span>            :             {
+<span class="lineNum">     390 </span>            :               /* Check if the location being assigned to is
+<span class="lineNum">     391 </span>            :                  clobbered by the call.  */
+<span class="lineNum">     392 </span><span class="lineCov">       2917 :               slot_opt_p = dest_safe_for_nrv_p (stmt);</span>
+<span class="lineNum">     393 </span><span class="lineCov">       2917 :               gimple_call_set_return_slot_opt (stmt, slot_opt_p);</span>
+<span class="lineNum">     394 </span>            :             }
+<span class="lineNum">     395 </span>            :         }
+<span class="lineNum">     396 </span>            :     }
+<span class="lineNum">     397 </span><span class="lineCov">     620934 :   return 0;</span>
+<span class="lineNum">     398 </span>            : }
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span>            : } // anon namespace
+<a name="401"><span class="lineNum">     401 </span>            : </a>
+<span class="lineNum">     402 </span>            : gimple_opt_pass *
+<span class="lineNum">     403 </span><span class="lineCov">     170312 : make_pass_return_slot (gcc::context *ctxt)</span>
+<span class="lineNum">     404 </span>            : {
+<span class="lineNum">     405 </span><span class="lineCov">     170312 :   return new pass_return_slot (ctxt);</span>
+<span class="lineNum">     406 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

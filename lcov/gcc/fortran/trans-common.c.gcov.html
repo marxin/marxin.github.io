@@ -1,0 +1,1384 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/fortran/trans-common.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/fortran</a> - trans-common.c<span style="font-size: 80%;"> (source / <a href="trans-common.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">522</td>
+            <td class="headerCovTableEntry">548</td>
+            <td class="headerCovTableEntryHi">95.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">24</td>
+            <td class="headerCovTableEntryMed">87.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Common block and equivalence list handling</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2000-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Canqun Yang &lt;canqun@nudt.edu.cn&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */     
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : /* The core algorithm is based on Andy Vaught's g95 tree.  Also the
+<span class="lineNum">      22 </span>            :    way to build UNION_TYPE is borrowed from Richard Henderson.
+<span class="lineNum">      23 </span>            :  
+<span class="lineNum">      24 </span>            :    Transform common blocks.  An integral part of this is processing
+<span class="lineNum">      25 </span>            :    equivalence variables.  Equivalenced variables that are not in a
+<span class="lineNum">      26 </span>            :    common block end up in a private block of their own.
+<span class="lineNum">      27 </span>            : 
+<span class="lineNum">      28 </span>            :    Each common block or local equivalence list is declared as a union.
+<span class="lineNum">      29 </span>            :    Variables within the block are represented as a field within the
+<span class="lineNum">      30 </span>            :    block with the proper offset. 
+<span class="lineNum">      31 </span>            :  
+<span class="lineNum">      32 </span>            :    So if two variables are equivalenced, they just point to a common
+<span class="lineNum">      33 </span>            :    area in memory.
+<span class="lineNum">      34 </span>            :  
+<span class="lineNum">      35 </span>            :    Mathematically, laying out an equivalence block is equivalent to
+<span class="lineNum">      36 </span>            :    solving a linear system of equations.  The matrix is usually a
+<span class="lineNum">      37 </span>            :    sparse matrix in which each row contains all zero elements except
+<span class="lineNum">      38 </span>            :    for a +1 and a -1, a sort of a generalized Vandermonde matrix.  The
+<span class="lineNum">      39 </span>            :    matrix is usually block diagonal.  The system can be
+<span class="lineNum">      40 </span>            :    overdetermined, underdetermined or have a unique solution.  If the
+<span class="lineNum">      41 </span>            :    system is inconsistent, the program is not standard conforming.
+<span class="lineNum">      42 </span>            :    The solution vector is integral, since all of the pivots are +1 or -1.
+<span class="lineNum">      43 </span>            :  
+<span class="lineNum">      44 </span>            :    How we lay out an equivalence block is a little less complicated.
+<span class="lineNum">      45 </span>            :    In an equivalence list with n elements, there are n-1 conditions to
+<span class="lineNum">      46 </span>            :    be satisfied.  The conditions partition the variables into what we
+<span class="lineNum">      47 </span>            :    will call segments.  If A and B are equivalenced then A and B are
+<span class="lineNum">      48 </span>            :    in the same segment.  If B and C are equivalenced as well, then A,
+<span class="lineNum">      49 </span>            :    B and C are in a segment and so on.  Each segment is a block of
+<span class="lineNum">      50 </span>            :    memory that has one or more variables equivalenced in some way.  A
+<span class="lineNum">      51 </span>            :    common block is made up of a series of segments that are joined one
+<span class="lineNum">      52 </span>            :    after the other.  In the linear system, a segment is a block
+<span class="lineNum">      53 </span>            :    diagonal.
+<span class="lineNum">      54 </span>            :  
+<span class="lineNum">      55 </span>            :    To lay out a segment we first start with some variable and
+<span class="lineNum">      56 </span>            :    determine its length.  The first variable is assumed to start at
+<span class="lineNum">      57 </span>            :    offset one and extends to however long it is.  We then traverse the
+<span class="lineNum">      58 </span>            :    list of equivalences to find an unused condition that involves at
+<span class="lineNum">      59 </span>            :    least one of the variables currently in the segment.
+<span class="lineNum">      60 </span>            :  
+<span class="lineNum">      61 </span>            :    Each equivalence condition amounts to the condition B+b=C+c where B
+<span class="lineNum">      62 </span>            :    and C are the offsets of the B and C variables, and b and c are
+<span class="lineNum">      63 </span>            :    constants which are nonzero for array elements, substrings or
+<span class="lineNum">      64 </span>            :    structure components.  So for
+<span class="lineNum">      65 </span>            :  
+<span class="lineNum">      66 </span>            :      EQUIVALENCE(B(2), C(3))
+<span class="lineNum">      67 </span>            :    we have
+<span class="lineNum">      68 </span>            :      B + 2*size of B's elements = C + 3*size of C's elements.
+<span class="lineNum">      69 </span>            :  
+<span class="lineNum">      70 </span>            :    If B and C are known we check to see if the condition already
+<span class="lineNum">      71 </span>            :    holds.  If B is known we can solve for C.  Since we know the length
+<span class="lineNum">      72 </span>            :    of C, we can see if the minimum and maximum extents of the segment
+<span class="lineNum">      73 </span>            :    are affected.  Eventually, we make a full pass through the
+<span class="lineNum">      74 </span>            :    equivalence list without finding any new conditions and the segment
+<span class="lineNum">      75 </span>            :    is fully specified.
+<span class="lineNum">      76 </span>            :  
+<span class="lineNum">      77 </span>            :    At this point, the segment is added to the current common block.
+<span class="lineNum">      78 </span>            :    Since we know the minimum extent of the segment, everything in the
+<span class="lineNum">      79 </span>            :    segment is translated to its position in the common block.  The
+<span class="lineNum">      80 </span>            :    usual case here is that there are no equivalence statements and the
+<span class="lineNum">      81 </span>            :    common block is series of segments with one variable each, which is
+<span class="lineNum">      82 </span>            :    a diagonal matrix in the matrix formulation.
+<span class="lineNum">      83 </span>            :  
+<span class="lineNum">      84 </span>            :    Each segment is described by a chain of segment_info structures.  Each
+<span class="lineNum">      85 </span>            :    segment_info structure describes the extents of a single variable within
+<span class="lineNum">      86 </span>            :    the segment.  This list is maintained in the order the elements are
+<span class="lineNum">      87 </span>            :    positioned within the segment.  If two elements have the same starting
+<span class="lineNum">      88 </span>            :    offset the smaller will come first.  If they also have the same size their
+<span class="lineNum">      89 </span>            :    ordering is undefined. 
+<span class="lineNum">      90 </span>            :    
+<span class="lineNum">      91 </span>            :    Once all common blocks have been created, the list of equivalences
+<span class="lineNum">      92 </span>            :    is examined for still-unused equivalence conditions.  We create a
+<span class="lineNum">      93 </span>            :    block for each merged equivalence list.  */
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      96 </span>            : #define INCLUDE_MAP
+<span class="lineNum">      97 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      98 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      99 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">     100 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">     101 </span>            : #include &quot;gfortran.h&quot;
+<span class="lineNum">     102 </span>            : #include &quot;trans.h&quot;
+<span class="lineNum">     103 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">     104 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">     105 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">     106 </span>            : #include &quot;varasm.h&quot;
+<span class="lineNum">     107 </span>            : #include &quot;trans-types.h&quot;
+<span class="lineNum">     108 </span>            : #include &quot;trans-const.h&quot;
+<span class="lineNum">     109 </span>            : #include &quot;target-memory.h&quot;
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : 
+<span class="lineNum">     112 </span>            : /* Holds a single variable in an equivalence set.  */
+<span class="lineNum">     113 </span>            : typedef struct segment_info
+<span class="lineNum">     114 </span>            : {
+<span class="lineNum">     115 </span>            :   gfc_symbol *sym;
+<span class="lineNum">     116 </span>            :   HOST_WIDE_INT offset;
+<span class="lineNum">     117 </span>            :   HOST_WIDE_INT length;
+<span class="lineNum">     118 </span>            :   /* This will contain the field type until the field is created.  */
+<span class="lineNum">     119 </span>            :   tree field;
+<span class="lineNum">     120 </span>            :   struct segment_info *next;
+<span class="lineNum">     121 </span>            : } segment_info;
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span>            : static segment_info * current_segment;
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            : /* Store decl of all common blocks in this translation unit; the first
+<span class="lineNum">     126 </span>            :    tree is the identifier.  */
+<span class="lineNum">     127 </span>            : static std::map&lt;tree, tree&gt; gfc_map_of_all_commons;
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            : /* Make a segment_info based on a symbol.  */
+<a name="131"><span class="lineNum">     131 </span>            : </a>
+<span class="lineNum">     132 </span>            : static segment_info *
+<span class="lineNum">     133 </span><span class="lineCov">       7389 : get_segment_info (gfc_symbol * sym, HOST_WIDE_INT offset)</span>
+<span class="lineNum">     134 </span>            : {
+<span class="lineNum">     135 </span><span class="lineCov">       7389 :   segment_info *s;</span>
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span>            :   /* Make sure we've got the character length.  */
+<span class="lineNum">     138 </span><span class="lineCov">       7389 :   if (sym-&gt;ts.type == BT_CHARACTER)</span>
+<span class="lineNum">     139 </span><span class="lineCov">        641 :     gfc_conv_const_charlen (sym-&gt;ts.u.cl);</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span>            :   /* Create the segment_info and fill it in.  */
+<span class="lineNum">     142 </span><span class="lineCov">       7389 :   s = XCNEW (segment_info);</span>
+<span class="lineNum">     143 </span><span class="lineCov">       7389 :   s-&gt;sym = sym;</span>
+<span class="lineNum">     144 </span>            :   /* We will use this type when building the segment aggregate type.  */
+<span class="lineNum">     145 </span><span class="lineCov">       7389 :   s-&gt;field = gfc_sym_type (sym);</span>
+<span class="lineNum">     146 </span><span class="lineCov">       7389 :   s-&gt;length = int_size_in_bytes (s-&gt;field);</span>
+<span class="lineNum">     147 </span><span class="lineCov">       7389 :   s-&gt;offset = offset;</span>
+<span class="lineNum">     148 </span>            : 
+<span class="lineNum">     149 </span><span class="lineCov">       7389 :   return s;</span>
+<span class="lineNum">     150 </span>            : }
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            : /* Add a copy of a segment list to the namespace.  This is specifically for
+<span class="lineNum">     154 </span>            :    equivalence segments, so that dependency checking can be done on
+<span class="lineNum">     155 </span>            :    equivalence group members.  */
+<a name="156"><span class="lineNum">     156 </span>            : </a>
+<span class="lineNum">     157 </span>            : static void
+<span class="lineNum">     158 </span><span class="lineCov">       5837 : copy_equiv_list_to_ns (segment_info *c)</span>
+<span class="lineNum">     159 </span>            : {
+<span class="lineNum">     160 </span><span class="lineCov">       5837 :   segment_info *f;</span>
+<span class="lineNum">     161 </span><span class="lineCov">       5837 :   gfc_equiv_info *s;</span>
+<span class="lineNum">     162 </span><span class="lineCov">       5837 :   gfc_equiv_list *l;</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">       5837 :   l = XCNEW (gfc_equiv_list);</span>
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span><span class="lineCov">       5837 :   l-&gt;next = c-&gt;sym-&gt;ns-&gt;equiv_lists;</span>
+<span class="lineNum">     167 </span><span class="lineCov">       5837 :   c-&gt;sym-&gt;ns-&gt;equiv_lists = l;</span>
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineCov">      13226 :   for (f = c; f; f = f-&gt;next)</span>
+<span class="lineNum">     170 </span>            :     {
+<span class="lineNum">     171 </span><span class="lineCov">       7389 :       s = XCNEW (gfc_equiv_info);</span>
+<span class="lineNum">     172 </span><span class="lineCov">       7389 :       s-&gt;next = l-&gt;equiv;</span>
+<span class="lineNum">     173 </span><span class="lineCov">       7389 :       l-&gt;equiv = s;</span>
+<span class="lineNum">     174 </span><span class="lineCov">       7389 :       s-&gt;sym = f-&gt;sym;</span>
+<span class="lineNum">     175 </span><span class="lineCov">       7389 :       s-&gt;offset = f-&gt;offset;</span>
+<span class="lineNum">     176 </span><span class="lineCov">       7389 :       s-&gt;length = f-&gt;length;</span>
+<span class="lineNum">     177 </span>            :     }
+<span class="lineNum">     178 </span><span class="lineCov">       5837 : }</span>
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            : /* Add combine segment V and segment LIST.  */
+<a name="182"><span class="lineNum">     182 </span>            : </a>
+<span class="lineNum">     183 </span>            : static segment_info *
+<span class="lineNum">     184 </span><span class="lineCov">       6607 : add_segments (segment_info *list, segment_info *v)</span>
+<span class="lineNum">     185 </span>            : {
+<span class="lineNum">     186 </span><span class="lineCov">       6607 :   segment_info *s;</span>
+<span class="lineNum">     187 </span><span class="lineCov">       6607 :   segment_info *p;</span>
+<span class="lineNum">     188 </span><span class="lineCov">       6607 :   segment_info *next;</span>
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span><span class="lineCov">       6607 :   p = NULL;</span>
+<span class="lineNum">     191 </span><span class="lineCov">       6607 :   s = list;</span>
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span><span class="lineCov">      13558 :   while (v)</span>
+<span class="lineNum">     194 </span>            :     {
+<span class="lineNum">     195 </span>            :       /* Find the location of the new element.  */
+<span class="lineNum">     196 </span><span class="lineCov">      38529 :       while (s)</span>
+<span class="lineNum">     197 </span>            :         {
+<span class="lineNum">     198 </span><span class="lineCov">      32683 :           if (v-&gt;offset &lt; s-&gt;offset)</span>
+<span class="lineNum">     199 </span>            :             break;
+<span class="lineNum">     200 </span><span class="lineCov">      32251 :           if (v-&gt;offset == s-&gt;offset</span>
+<span class="lineNum">     201 </span><span class="lineCov">        713 :               &amp;&amp; v-&gt;length &lt;= s-&gt;length)</span>
+<span class="lineNum">     202 </span>            :             break;
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span><span class="lineCov">      31578 :           p = s;</span>
+<span class="lineNum">     205 </span><span class="lineCov">      31578 :           s = s-&gt;next;</span>
+<span class="lineNum">     206 </span>            :         }
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            :       /* Insert the new element in between p and s.  */
+<span class="lineNum">     209 </span><span class="lineCov">       6951 :       next = v-&gt;next;</span>
+<span class="lineNum">     210 </span><span class="lineCov">       6951 :       v-&gt;next = s;</span>
+<span class="lineNum">     211 </span><span class="lineCov">       6951 :       if (p == NULL)</span>
+<span class="lineNum">     212 </span>            :         list = v;
+<span class="lineNum">     213 </span>            :       else
+<span class="lineNum">     214 </span><span class="lineCov">       4302 :         p-&gt;next = v;</span>
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :       p = v;
+<span class="lineNum">     217 </span>            :       v = next;
+<span class="lineNum">     218 </span>            :     }
+<span class="lineNum">     219 </span>            : 
+<span class="lineNum">     220 </span><span class="lineCov">       6607 :   return list;</span>
+<span class="lineNum">     221 </span>            : }
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            : 
+<span class="lineNum">     224 </span>            : /* Construct mangled common block name from symbol name.  */
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            : /* We need the bind(c) flag to tell us how/if we should mangle the symbol
+<span class="lineNum">     227 </span>            :    name.  There are few calls to this function, so few places that this
+<span class="lineNum">     228 </span>            :    would need to be added.  At the moment, there is only one call, in
+<span class="lineNum">     229 </span>            :    build_common_decl().  We can't attempt to look up the common block
+<span class="lineNum">     230 </span>            :    because we may be building it for the first time and therefore, it won't
+<span class="lineNum">     231 </span>            :    be in the common_root.  We also need the binding label, if it's bind(c).
+<span class="lineNum">     232 </span>            :    Therefore, send in the pointer to the common block, so whatever info we
+<span class="lineNum">     233 </span>            :    have so far can be used.  All of the necessary info should be available
+<span class="lineNum">     234 </span>            :    in the gfc_common_head by now, so it should be accurate to test the
+<span class="lineNum">     235 </span>            :    isBindC flag and use the binding label given if it is bind(c).
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span>            :    We may NOT know yet if it's bind(c) or not, but we can try at least.
+<span class="lineNum">     238 </span>            :    Will have to figure out what to do later if it's labeled bind(c)
+<span class="lineNum">     239 </span>            :    after this is called.  */
+<a name="240"><span class="lineNum">     240 </span>            : </a>
+<span class="lineNum">     241 </span>            : static tree
+<span class="lineNum">     242 </span><span class="lineCov">       1810 : gfc_sym_mangled_common_id (gfc_common_head *com)</span>
+<span class="lineNum">     243 </span>            : {
+<span class="lineNum">     244 </span><span class="lineCov">       1810 :   int has_underscore;</span>
+<span class="lineNum">     245 </span><span class="lineCov">       1810 :   char mangled_name[GFC_MAX_MANGLED_SYMBOL_LEN + 1];</span>
+<span class="lineNum">     246 </span><span class="lineCov">       1810 :   char name[GFC_MAX_SYMBOL_LEN + 1];</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            :   /* Get the name out of the common block pointer.  */
+<span class="lineNum">     249 </span><span class="lineCov">       1810 :   strcpy (name, com-&gt;name);</span>
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            :   /* If we're suppose to do a bind(c).  */
+<span class="lineNum">     252 </span><span class="lineCov">       1810 :   if (com-&gt;is_bind_c == 1 &amp;&amp; com-&gt;binding_label)</span>
+<span class="lineNum">     253 </span><span class="lineCov">         69 :     return get_identifier (com-&gt;binding_label);</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">       1741 :   if (strcmp (name, BLANK_COMMON_NAME) == 0)</span>
+<span class="lineNum">     256 </span><span class="lineCov">        220 :     return get_identifier (name);</span>
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span><span class="lineCov">       1521 :   if (flag_underscoring)</span>
+<span class="lineNum">     259 </span>            :     {
+<span class="lineNum">     260 </span><span class="lineCov">       1521 :       has_underscore = strchr (name, '_') != 0;</span>
+<span class="lineNum">     261 </span><span class="lineCov">       1521 :       if (flag_second_underscore &amp;&amp; has_underscore)</span>
+<span class="lineNum">     262 </span><span class="lineNoCov">          0 :         snprintf (mangled_name, sizeof mangled_name, &quot;%s__&quot;, name);</span>
+<span class="lineNum">     263 </span>            :       else
+<span class="lineNum">     264 </span><span class="lineCov">       1521 :         snprintf (mangled_name, sizeof mangled_name, &quot;%s_&quot;, name);</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span><span class="lineCov">       1521 :       return get_identifier (mangled_name);</span>
+<span class="lineNum">     267 </span>            :     }
+<span class="lineNum">     268 </span>            :   else
+<span class="lineNum">     269 </span><span class="lineNoCov">          0 :     return get_identifier (name);</span>
+<span class="lineNum">     270 </span>            : }
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : 
+<span class="lineNum">     273 </span>            : /* Build a field declaration for a common variable or a local equivalence
+<span class="lineNum">     274 </span>            :    object.  */
+<a name="275"><span class="lineNum">     275 </span>            : </a>
+<span class="lineNum">     276 </span>            : static void
+<span class="lineNum">     277 </span><span class="lineCov">       7389 : build_field (segment_info *h, tree union_type, record_layout_info rli)</span>
+<span class="lineNum">     278 </span>            : {
+<span class="lineNum">     279 </span><span class="lineCov">       7389 :   tree field;</span>
+<span class="lineNum">     280 </span><span class="lineCov">       7389 :   tree name;</span>
+<span class="lineNum">     281 </span><span class="lineCov">       7389 :   HOST_WIDE_INT offset = h-&gt;offset;</span>
+<span class="lineNum">     282 </span><span class="lineCov">       7389 :   unsigned HOST_WIDE_INT desired_align, known_align;</span>
+<span class="lineNum">     283 </span>            : 
+<span class="lineNum">     284 </span><span class="lineCov">       7389 :   name = get_identifier (h-&gt;sym-&gt;name);</span>
+<span class="lineNum">     285 </span><span class="lineCov">       7389 :   field = build_decl (h-&gt;sym-&gt;declared_at.lb-&gt;location,</span>
+<span class="lineNum">     286 </span>            :                       FIELD_DECL, name, h-&gt;field);
+<span class="lineNum">     287 </span><span class="lineCov">       7389 :   known_align = (offset &amp; -offset) * BITS_PER_UNIT;</span>
+<span class="lineNum">     288 </span><span class="lineCov">      11886 :   if (known_align == 0 || known_align &gt; BIGGEST_ALIGNMENT)</span>
+<span class="lineNum">     289 </span><span class="lineCov">       4599 :     known_align = BIGGEST_ALIGNMENT;</span>
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span><span class="lineCov">       7389 :   desired_align = update_alignment_for_field (rli, field, known_align);</span>
+<span class="lineNum">     292 </span><span class="lineCov">       7389 :   if (desired_align &gt; known_align)</span>
+<span class="lineNum">     293 </span><span class="lineCov">          7 :     DECL_PACKED (field) = 1;</span>
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">       7389 :   DECL_FIELD_CONTEXT (field) = union_type;</span>
+<span class="lineNum">     296 </span><span class="lineCov">      22167 :   DECL_FIELD_OFFSET (field) = size_int (offset);</span>
+<span class="lineNum">     297 </span><span class="lineCov">       7389 :   DECL_FIELD_BIT_OFFSET (field) = bitsize_zero_node;</span>
+<span class="lineNum">     298 </span><span class="lineCov">      14778 :   SET_DECL_OFFSET_ALIGN (field, known_align);</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span><span class="lineCov">       7389 :   rli-&gt;offset = size_binop (MAX_EXPR, rli-&gt;offset,</span>
+<span class="lineNum">     301 </span>            :                             size_binop (PLUS_EXPR,
+<span class="lineNum">     302 </span>            :                                         DECL_FIELD_OFFSET (field),
+<span class="lineNum">     303 </span>            :                                         DECL_SIZE_UNIT (field)));
+<span class="lineNum">     304 </span>            :   /* If this field is assigned to a label, we create another two variables.
+<span class="lineNum">     305 </span>            :      One will hold the address of target label or format label. The other will
+<span class="lineNum">     306 </span>            :      hold the length of format label string.  */
+<span class="lineNum">     307 </span><span class="lineCov">       7389 :   if (h-&gt;sym-&gt;attr.assign)</span>
+<span class="lineNum">     308 </span>            :     {
+<span class="lineNum">     309 </span><span class="lineCov">         14 :       tree len;</span>
+<span class="lineNum">     310 </span><span class="lineCov">         14 :       tree addr;</span>
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span><span class="lineCov">         14 :       gfc_allocate_lang_decl (field);</span>
+<span class="lineNum">     313 </span><span class="lineCov">         14 :       GFC_DECL_ASSIGN (field) = 1;</span>
+<span class="lineNum">     314 </span><span class="lineCov">         14 :       len = gfc_create_var_np (gfc_charlen_type_node,h-&gt;sym-&gt;name);</span>
+<span class="lineNum">     315 </span><span class="lineCov">         14 :       addr = gfc_create_var_np (pvoid_type_node, h-&gt;sym-&gt;name);</span>
+<span class="lineNum">     316 </span><span class="lineCov">         14 :       TREE_STATIC (len) = 1;</span>
+<span class="lineNum">     317 </span><span class="lineCov">         14 :       TREE_STATIC (addr) = 1;</span>
+<span class="lineNum">     318 </span><span class="lineCov">         28 :       DECL_INITIAL (len) = build_int_cst (gfc_charlen_type_node, -2);</span>
+<span class="lineNum">     319 </span><span class="lineCov">         14 :       gfc_set_decl_location (len, &amp;h-&gt;sym-&gt;declared_at);</span>
+<span class="lineNum">     320 </span><span class="lineCov">         14 :       gfc_set_decl_location (addr, &amp;h-&gt;sym-&gt;declared_at);</span>
+<span class="lineNum">     321 </span><span class="lineCov">         14 :       GFC_DECL_STRING_LEN (field) = pushdecl_top_level (len);</span>
+<span class="lineNum">     322 </span><span class="lineCov">         14 :       GFC_DECL_ASSIGN_ADDR (field) = pushdecl_top_level (addr);</span>
+<span class="lineNum">     323 </span>            :     }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            :   /* If this field is volatile, mark it.  */
+<span class="lineNum">     326 </span><span class="lineCov">       7389 :   if (h-&gt;sym-&gt;attr.volatile_)</span>
+<span class="lineNum">     327 </span>            :     {
+<span class="lineNum">     328 </span><span class="lineCov">          3 :       tree new_type;</span>
+<span class="lineNum">     329 </span><span class="lineCov">          3 :       TREE_THIS_VOLATILE (field) = 1;</span>
+<span class="lineNum">     330 </span><span class="lineCov">          3 :       TREE_SIDE_EFFECTS (field) = 1;</span>
+<span class="lineNum">     331 </span><span class="lineCov">          3 :       new_type = build_qualified_type (TREE_TYPE (field), TYPE_QUAL_VOLATILE);</span>
+<span class="lineNum">     332 </span><span class="lineCov">          3 :       TREE_TYPE (field) = new_type;</span>
+<span class="lineNum">     333 </span>            :     }
+<span class="lineNum">     334 </span>            : 
+<span class="lineNum">     335 </span><span class="lineCov">       7389 :   h-&gt;field = field;</span>
+<span class="lineNum">     336 </span><span class="lineCov">       7389 : }</span>
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : /* Get storage for local equivalence.  */
+<a name="340"><span class="lineNum">     340 </span>            : </a>
+<span class="lineNum">     341 </span>            : static tree
+<span class="lineNum">     342 </span><span class="lineCov">        681 : build_equiv_decl (tree union_type, bool is_init, bool is_saved)</span>
+<span class="lineNum">     343 </span>            : {
+<span class="lineNum">     344 </span><span class="lineCov">        681 :   tree decl;</span>
+<span class="lineNum">     345 </span><span class="lineCov">        681 :   char name[18];</span>
+<span class="lineNum">     346 </span><span class="lineCov">        681 :   static int serial = 0;</span>
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span><span class="lineCov">        681 :   if (is_init)</span>
+<span class="lineNum">     349 </span>            :     {
+<span class="lineNum">     350 </span><span class="lineCov">        146 :       decl = gfc_create_var (union_type, &quot;equiv&quot;);</span>
+<span class="lineNum">     351 </span><span class="lineCov">        146 :       TREE_STATIC (decl) = 1;</span>
+<span class="lineNum">     352 </span><span class="lineCov">        146 :       GFC_DECL_COMMON_OR_EQUIV (decl) = 1;</span>
+<span class="lineNum">     353 </span><span class="lineCov">        146 :       return decl;</span>
+<span class="lineNum">     354 </span>            :     }
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span><span class="lineCov">        535 :   snprintf (name, sizeof (name), &quot;equiv.%d&quot;, serial++);</span>
+<span class="lineNum">     357 </span><span class="lineCov">        535 :   decl = build_decl (input_location,</span>
+<span class="lineNum">     358 </span>            :                      VAR_DECL, get_identifier (name), union_type);
+<span class="lineNum">     359 </span><span class="lineCov">        535 :   DECL_ARTIFICIAL (decl) = 1;</span>
+<span class="lineNum">     360 </span><span class="lineCov">        535 :   DECL_IGNORED_P (decl) = 1;</span>
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span><span class="lineCov">        535 :   if (!gfc_can_put_var_on_stack (DECL_SIZE_UNIT (decl))</span>
+<span class="lineNum">     363 </span><span class="lineCov">        535 :       || is_saved)</span>
+<span class="lineNum">     364 </span><span class="lineCov">         96 :     TREE_STATIC (decl) = 1;</span>
+<span class="lineNum">     365 </span>            : 
+<span class="lineNum">     366 </span><span class="lineCov">        535 :   TREE_ADDRESSABLE (decl) = 1;</span>
+<span class="lineNum">     367 </span><span class="lineCov">        535 :   TREE_USED (decl) = 1;</span>
+<span class="lineNum">     368 </span><span class="lineCov">        535 :   GFC_DECL_COMMON_OR_EQUIV (decl) = 1;</span>
+<span class="lineNum">     369 </span>            : 
+<span class="lineNum">     370 </span>            :   /* The source location has been lost, and doesn't really matter.
+<span class="lineNum">     371 </span>            :      We need to set it to something though.  */
+<span class="lineNum">     372 </span><span class="lineCov">        535 :   gfc_set_decl_location (decl, &amp;gfc_current_locus);</span>
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span><span class="lineCov">        535 :   gfc_add_decl_to_function (decl);</span>
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span><span class="lineCov">        535 :   return decl;</span>
+<span class="lineNum">     377 </span>            : }
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            : /* Get storage for common block.  */
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            : static tree
+<span class="lineNum">     383 </span><span class="lineCov">       1810 : build_common_decl (gfc_common_head *com, tree union_type, bool is_init)</span>
+<span class="lineNum">     384 </span>            : {
+<span class="lineNum">     385 </span><span class="lineCov">       1810 :   tree decl, identifier;</span>
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span><span class="lineCov">       1810 :   identifier = gfc_sym_mangled_common_id (com);</span>
+<span class="lineNum">     388 </span><span class="lineCov">       2820 :   decl = gfc_map_of_all_commons.count(identifier)</span>
+<span class="lineNum">     389 </span><span class="lineCov">        800 :          ? gfc_map_of_all_commons[identifier] : NULL_TREE;</span>
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span>            :   /* Update the size of this common block as needed.  */
+<span class="lineNum">     392 </span><span class="lineCov">       1810 :   if (decl != NULL_TREE)</span>
+<span class="lineNum">     393 </span>            :     {
+<span class="lineNum">     394 </span><span class="lineCov">        800 :       tree size = TYPE_SIZE_UNIT (union_type);</span>
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            :       /* Named common blocks of the same name shall be of the same size
+<span class="lineNum">     397 </span>            :          in all scoping units of a program in which they appear, but
+<span class="lineNum">     398 </span>            :          blank common blocks may be of different sizes.  */
+<span class="lineNum">     399 </span><span class="lineCov">        800 :       if (!tree_int_cst_equal (DECL_SIZE_UNIT (decl), size)</span>
+<span class="lineNum">     400 </span><span class="lineCov">        800 :           &amp;&amp; strcmp (com-&gt;name, BLANK_COMMON_NAME))</span>
+<span class="lineNum">     401 </span><span class="lineCov">         45 :         gfc_warning (0, &quot;Named COMMON block %qs at %L shall be of the &quot;</span>
+<span class="lineNum">     402 </span>            :                      &quot;same size as elsewhere (%lu vs %lu bytes)&quot;, com-&gt;name,
+<span class="lineNum">     403 </span>            :                      &amp;com-&gt;where,
+<span class="lineNum">     404 </span><span class="lineCov">         15 :                      (unsigned long) TREE_INT_CST_LOW (size),</span>
+<span class="lineNum">     405 </span><span class="lineCov">         15 :                      (unsigned long) TREE_INT_CST_LOW (DECL_SIZE_UNIT (decl)));</span>
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span><span class="lineCov">        800 :       if (tree_int_cst_lt (DECL_SIZE_UNIT (decl), size))</span>
+<span class="lineNum">     408 </span>            :         {
+<span class="lineNum">     409 </span><span class="lineCov">         17 :           DECL_SIZE (decl) = TYPE_SIZE (union_type);</span>
+<span class="lineNum">     410 </span><span class="lineCov">         17 :           DECL_SIZE_UNIT (decl) = size;</span>
+<span class="lineNum">     411 </span><span class="lineCov">         17 :           SET_DECL_MODE (decl, TYPE_MODE (union_type));</span>
+<span class="lineNum">     412 </span><span class="lineCov">         17 :           TREE_TYPE (decl) = union_type;</span>
+<span class="lineNum">     413 </span><span class="lineCov">         17 :           layout_decl (decl, 0);</span>
+<span class="lineNum">     414 </span>            :         }
+<span class="lineNum">     415 </span>            :      }
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            :   /* If this common block has been declared in a previous program unit,
+<span class="lineNum">     418 </span>            :      and either it is already initialized or there is no new initialization
+<span class="lineNum">     419 </span>            :      for it, just return.  */
+<span class="lineNum">     420 </span><span class="lineCov">       1810 :   if ((decl != NULL_TREE) &amp;&amp; (!is_init || DECL_INITIAL (decl)))</span>
+<span class="lineNum">     421 </span>            :     return decl;
+<span class="lineNum">     422 </span>            : 
+<span class="lineNum">     423 </span>            :   /* If there is no backend_decl for the common block, build it.  */
+<span class="lineNum">     424 </span><span class="lineCov">       1028 :   if (decl == NULL_TREE)</span>
+<span class="lineNum">     425 </span>            :     {
+<span class="lineNum">     426 </span><span class="lineCov">       1010 :       if (com-&gt;is_bind_c == 1 &amp;&amp; com-&gt;binding_label)</span>
+<span class="lineNum">     427 </span><span class="lineCov">         51 :         decl = build_decl (input_location, VAR_DECL, identifier, union_type);</span>
+<span class="lineNum">     428 </span>            :       else
+<span class="lineNum">     429 </span>            :         {
+<span class="lineNum">     430 </span><span class="lineCov">        959 :           decl = build_decl (input_location, VAR_DECL, get_identifier (com-&gt;name),</span>
+<span class="lineNum">     431 </span>            :                              union_type);
+<span class="lineNum">     432 </span><span class="lineCov">        959 :           gfc_set_decl_assembler_name (decl, identifier);</span>
+<span class="lineNum">     433 </span>            :         }
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span><span class="lineCov">       1010 :       TREE_PUBLIC (decl) = 1;</span>
+<span class="lineNum">     436 </span><span class="lineCov">       1010 :       TREE_STATIC (decl) = 1;</span>
+<span class="lineNum">     437 </span><span class="lineCov">       1010 :       DECL_IGNORED_P (decl) = 1;</span>
+<span class="lineNum">     438 </span><span class="lineCov">       1010 :       if (!com-&gt;is_bind_c)</span>
+<span class="lineNum">     439 </span><span class="lineCov">       2851 :         SET_DECL_ALIGN (decl, BIGGEST_ALIGNMENT);</span>
+<span class="lineNum">     440 </span>            :       else
+<span class="lineNum">     441 </span>            :         {
+<span class="lineNum">     442 </span>            :           /* Do not set the alignment for bind(c) common blocks to
+<span class="lineNum">     443 </span>            :              BIGGEST_ALIGNMENT because that won't match what C does.  Also,
+<span class="lineNum">     444 </span>            :              for common blocks with one element, the alignment must be
+<span class="lineNum">     445 </span>            :              that of the field within the common block in order to match
+<span class="lineNum">     446 </span>            :              what C will do.  */
+<span class="lineNum">     447 </span><span class="lineCov">         59 :           tree field = NULL_TREE;</span>
+<span class="lineNum">     448 </span><span class="lineCov">         59 :           field = TYPE_FIELDS (TREE_TYPE (decl));</span>
+<span class="lineNum">     449 </span><span class="lineCov">         59 :           if (DECL_CHAIN (field) == NULL_TREE)</span>
+<span class="lineNum">     450 </span><span class="lineCov">         23 :             SET_DECL_ALIGN (decl, TYPE_ALIGN (TREE_TYPE (field)));</span>
+<span class="lineNum">     451 </span>            :         }
+<span class="lineNum">     452 </span><span class="lineCov">       1010 :       DECL_USER_ALIGN (decl) = 0;</span>
+<span class="lineNum">     453 </span><span class="lineCov">       1010 :       GFC_DECL_COMMON_OR_EQUIV (decl) = 1;</span>
+<span class="lineNum">     454 </span>            : 
+<span class="lineNum">     455 </span><span class="lineCov">       1010 :       gfc_set_decl_location (decl, &amp;com-&gt;where);</span>
+<span class="lineNum">     456 </span>            : 
+<span class="lineNum">     457 </span><span class="lineCov">       1010 :       if (com-&gt;threadprivate)</span>
+<span class="lineNum">     458 </span><span class="lineCov">         42 :         set_decl_tls_model (decl, decl_default_tls_model (decl));</span>
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span><span class="lineCov">       1010 :       if (com-&gt;omp_declare_target_link)</span>
+<span class="lineNum">     461 </span><span class="lineCov">          1 :         DECL_ATTRIBUTES (decl)</span>
+<span class="lineNum">     462 </span><span class="lineCov">          1 :           = tree_cons (get_identifier (&quot;omp declare target link&quot;),</span>
+<span class="lineNum">     463 </span><span class="lineCov">          1 :                        NULL_TREE, DECL_ATTRIBUTES (decl));</span>
+<span class="lineNum">     464 </span><span class="lineCov">       1009 :       else if (com-&gt;omp_declare_target)</span>
+<span class="lineNum">     465 </span><span class="lineCov">          2 :         DECL_ATTRIBUTES (decl)</span>
+<span class="lineNum">     466 </span><span class="lineCov">          2 :           = tree_cons (get_identifier (&quot;omp declare target&quot;),</span>
+<span class="lineNum">     467 </span><span class="lineCov">          2 :                        NULL_TREE, DECL_ATTRIBUTES (decl));</span>
+<span class="lineNum">     468 </span>            : 
+<span class="lineNum">     469 </span>            :       /* Place the back end declaration for this common block in
+<span class="lineNum">     470 </span>            :          GLOBAL_BINDING_LEVEL.  */
+<span class="lineNum">     471 </span><span class="lineCov">       1010 :       gfc_map_of_all_commons[identifier] = pushdecl_top_level (decl);</span>
+<span class="lineNum">     472 </span>            :     }
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span>            :   /* Has no initial values.  */
+<span class="lineNum">     475 </span><span class="lineCov">       1028 :   if (!is_init)</span>
+<span class="lineNum">     476 </span>            :     {
+<span class="lineNum">     477 </span><span class="lineCov">        940 :       DECL_INITIAL (decl) = NULL_TREE;</span>
+<span class="lineNum">     478 </span><span class="lineCov">        940 :       DECL_COMMON (decl) = 1;</span>
+<span class="lineNum">     479 </span><span class="lineCov">        940 :       DECL_DEFER_OUTPUT (decl) = 1;</span>
+<span class="lineNum">     480 </span>            :     }
+<span class="lineNum">     481 </span>            :   else
+<span class="lineNum">     482 </span>            :     {
+<span class="lineNum">     483 </span><span class="lineCov">         88 :       DECL_INITIAL (decl) = error_mark_node;</span>
+<span class="lineNum">     484 </span><span class="lineCov">         88 :       DECL_COMMON (decl) = 0;</span>
+<span class="lineNum">     485 </span><span class="lineCov">         88 :       DECL_DEFER_OUTPUT (decl) = 0;</span>
+<span class="lineNum">     486 </span>            :     }
+<span class="lineNum">     487 </span>            :   return decl;
+<span class="lineNum">     488 </span>            : }
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span>            : /* Return a field that is the size of the union, if an equivalence has
+<span class="lineNum">     492 </span>            :    overlapping initializers.  Merge the initializers into a single
+<span class="lineNum">     493 </span>            :    initializer for this new field, then free the old ones.  */ 
+<a name="494"><span class="lineNum">     494 </span>            : </a>
+<span class="lineNum">     495 </span>            : static tree
+<span class="lineNum">     496 </span><span class="lineCov">        928 : get_init_field (segment_info *head, tree union_type, tree *field_init,</span>
+<span class="lineNum">     497 </span>            :                 record_layout_info rli)
+<span class="lineNum">     498 </span>            : {
+<span class="lineNum">     499 </span><span class="lineCov">        928 :   segment_info *s;</span>
+<span class="lineNum">     500 </span><span class="lineCov">        928 :   HOST_WIDE_INT length = 0;</span>
+<span class="lineNum">     501 </span><span class="lineCov">        928 :   HOST_WIDE_INT offset = 0;</span>
+<span class="lineNum">     502 </span><span class="lineCov">        928 :   unsigned HOST_WIDE_INT known_align, desired_align;</span>
+<span class="lineNum">     503 </span><span class="lineCov">        928 :   bool overlap = false;</span>
+<span class="lineNum">     504 </span><span class="lineCov">        928 :   tree tmp, field;</span>
+<span class="lineNum">     505 </span><span class="lineCov">        928 :   tree init;</span>
+<span class="lineNum">     506 </span><span class="lineCov">        928 :   unsigned char *data, *chk;</span>
+<span class="lineNum">     507 </span><span class="lineCov">        928 :   vec&lt;constructor_elt, va_gc&gt; *v = NULL;</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">        928 :   tree type = unsigned_char_type_node;</span>
+<span class="lineNum">     510 </span><span class="lineCov">        928 :   int i;</span>
+<span class="lineNum">     511 </span>            : 
+<span class="lineNum">     512 </span>            :   /* Obtain the size of the union and check if there are any overlapping
+<span class="lineNum">     513 </span>            :      initializers.  */
+<span class="lineNum">     514 </span><span class="lineCov">       4004 :   for (s = head; s; s = s-&gt;next)</span>
+<span class="lineNum">     515 </span>            :     {
+<span class="lineNum">     516 </span><span class="lineCov">       3076 :       HOST_WIDE_INT slen = s-&gt;offset + s-&gt;length;</span>
+<span class="lineNum">     517 </span><span class="lineCov">       3076 :       if (s-&gt;sym-&gt;value)</span>
+<span class="lineNum">     518 </span>            :         {
+<span class="lineNum">     519 </span><span class="lineCov">        234 :           if (s-&gt;offset &lt; offset)</span>
+<span class="lineNum">     520 </span><span class="lineCov">         50 :             overlap = true;</span>
+<span class="lineNum">     521 </span>            :           offset = slen;
+<span class="lineNum">     522 </span>            :         }
+<span class="lineNum">     523 </span><span class="lineCov">       4277 :       length = length &lt; slen ? slen : length;</span>
+<span class="lineNum">     524 </span>            :     }
+<span class="lineNum">     525 </span>            : 
+<span class="lineNum">     526 </span><span class="lineCov">        928 :   if (!overlap)</span>
+<span class="lineNum">     527 </span>            :     return NULL_TREE;
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span>            :   /* Now absorb all the initializer data into a single vector,
+<span class="lineNum">     530 </span>            :      whilst checking for overlapping, unequal values.  */
+<span class="lineNum">     531 </span><span class="lineCov">         46 :   data = XCNEWVEC (unsigned char, (size_t)length);</span>
+<span class="lineNum">     532 </span><span class="lineCov">         46 :   chk = XCNEWVEC (unsigned char, (size_t)length);</span>
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span>            :   /* TODO - change this when default initialization is implemented.  */
+<span class="lineNum">     535 </span><span class="lineCov">         46 :   memset (data, '\0', (size_t)length);</span>
+<span class="lineNum">     536 </span><span class="lineCov">         46 :   memset (chk, '\0', (size_t)length);</span>
+<span class="lineNum">     537 </span><span class="lineCov">        156 :   for (s = head; s; s = s-&gt;next)</span>
+<span class="lineNum">     538 </span><span class="lineCov">        110 :     if (s-&gt;sym-&gt;value)</span>
+<span class="lineNum">     539 </span>            :       {
+<span class="lineNum">     540 </span><span class="lineCov">         96 :         locus *loc = NULL;</span>
+<span class="lineNum">     541 </span><span class="lineCov">         96 :         if (s-&gt;sym-&gt;ns-&gt;equiv &amp;&amp; s-&gt;sym-&gt;ns-&gt;equiv-&gt;eq)</span>
+<span class="lineNum">     542 </span><span class="lineCov">         96 :           loc = &amp;s-&gt;sym-&gt;ns-&gt;equiv-&gt;eq-&gt;expr-&gt;where;</span>
+<span class="lineNum">     543 </span><span class="lineCov">        288 :         gfc_merge_initializers (s-&gt;sym-&gt;ts, s-&gt;sym-&gt;value, loc,</span>
+<span class="lineNum">     544 </span>            :                               &amp;data[s-&gt;offset],
+<span class="lineNum">     545 </span><span class="lineCov">         96 :                               &amp;chk[s-&gt;offset],</span>
+<span class="lineNum">     546 </span><span class="lineCov">         96 :                              (size_t)s-&gt;length);</span>
+<span class="lineNum">     547 </span>            :       }
+<span class="lineNum">     548 </span>            :   
+<span class="lineNum">     549 </span><span class="lineCov">       1142 :   for (i = 0; i &lt; length; i++)</span>
+<span class="lineNum">     550 </span><span class="lineCov">       2192 :     CONSTRUCTOR_APPEND_ELT (v, NULL, build_int_cst (type, data[i]));</span>
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span><span class="lineCov">         46 :   free (data);</span>
+<span class="lineNum">     553 </span><span class="lineCov">         46 :   free (chk);</span>
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span>            :   /* Build a char[length] array to hold the initializers.  Much of what
+<span class="lineNum">     556 </span>            :      follows is borrowed from build_field, above.  */
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span><span class="lineCov">         92 :   tmp = build_int_cst (gfc_array_index_type, length - 1);</span>
+<span class="lineNum">     559 </span><span class="lineCov">         46 :   tmp = build_range_type (gfc_array_index_type,</span>
+<span class="lineNum">     560 </span>            :                           gfc_index_zero_node, tmp);
+<span class="lineNum">     561 </span><span class="lineCov">         46 :   tmp = build_array_type (type, tmp);</span>
+<span class="lineNum">     562 </span><span class="lineCov">         46 :   field = build_decl (gfc_current_locus.lb-&gt;location,</span>
+<span class="lineNum">     563 </span>            :                       FIELD_DECL, NULL_TREE, tmp);
+<span class="lineNum">     564 </span>            : 
+<span class="lineNum">     565 </span><span class="lineCov">         46 :   known_align = BIGGEST_ALIGNMENT;</span>
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span><span class="lineCov">         46 :   desired_align = update_alignment_for_field (rli, field, known_align);</span>
+<span class="lineNum">     568 </span><span class="lineCov">         46 :   if (desired_align &gt; known_align)</span>
+<span class="lineNum">     569 </span><span class="lineNoCov">          0 :     DECL_PACKED (field) = 1;</span>
+<span class="lineNum">     570 </span>            : 
+<span class="lineNum">     571 </span><span class="lineCov">         46 :   DECL_FIELD_CONTEXT (field) = union_type;</span>
+<span class="lineNum">     572 </span><span class="lineCov">        138 :   DECL_FIELD_OFFSET (field) = size_int (0);</span>
+<span class="lineNum">     573 </span><span class="lineCov">         46 :   DECL_FIELD_BIT_OFFSET (field) = bitsize_zero_node;</span>
+<span class="lineNum">     574 </span><span class="lineCov">         92 :   SET_DECL_OFFSET_ALIGN (field, known_align);</span>
+<span class="lineNum">     575 </span>            : 
+<span class="lineNum">     576 </span><span class="lineCov">         46 :   rli-&gt;offset = size_binop (MAX_EXPR, rli-&gt;offset,</span>
+<span class="lineNum">     577 </span>            :                             size_binop (PLUS_EXPR,
+<span class="lineNum">     578 </span>            :                                         DECL_FIELD_OFFSET (field),
+<span class="lineNum">     579 </span>            :                                         DECL_SIZE_UNIT (field)));
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span><span class="lineCov">         46 :   init = build_constructor (TREE_TYPE (field), v);</span>
+<span class="lineNum">     582 </span><span class="lineCov">         46 :   TREE_CONSTANT (init) = 1;</span>
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span><span class="lineCov">         46 :   *field_init = init;</span>
+<span class="lineNum">     585 </span>            : 
+<span class="lineNum">     586 </span><span class="lineCov">        156 :   for (s = head; s; s = s-&gt;next)</span>
+<span class="lineNum">     587 </span>            :     {
+<span class="lineNum">     588 </span><span class="lineCov">        110 :       if (s-&gt;sym-&gt;value == NULL)</span>
+<span class="lineNum">     589 </span>            :         continue;
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span><span class="lineCov">         96 :       gfc_free_expr (s-&gt;sym-&gt;value);</span>
+<span class="lineNum">     592 </span><span class="lineCov">         96 :       s-&gt;sym-&gt;value = NULL;</span>
+<span class="lineNum">     593 </span>            :     }
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span>            :   return field;
+<span class="lineNum">     596 </span>            : }
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span>            : /* Declare memory for the common block or local equivalence, and create
+<span class="lineNum">     600 </span>            :    backend declarations for all of the elements.  */
+<a name="601"><span class="lineNum">     601 </span>            : </a>
+<span class="lineNum">     602 </span>            : static void
+<span class="lineNum">     603 </span><span class="lineCov">       2491 : create_common (gfc_common_head *com, segment_info *head, bool saw_equiv)</span>
+<span class="lineNum">     604 </span>            : {
+<span class="lineNum">     605 </span><span class="lineCov">       2491 :   segment_info *s, *next_s;</span>
+<span class="lineNum">     606 </span><span class="lineCov">       2491 :   tree union_type;</span>
+<span class="lineNum">     607 </span><span class="lineCov">       2491 :   tree *field_link;</span>
+<span class="lineNum">     608 </span><span class="lineCov">       2491 :   tree field;</span>
+<span class="lineNum">     609 </span><span class="lineCov">       2491 :   tree field_init = NULL_TREE;</span>
+<span class="lineNum">     610 </span><span class="lineCov">       2491 :   record_layout_info rli;</span>
+<span class="lineNum">     611 </span><span class="lineCov">       2491 :   tree decl;</span>
+<span class="lineNum">     612 </span><span class="lineCov">       2491 :   bool is_init = false;</span>
+<span class="lineNum">     613 </span><span class="lineCov">       2491 :   bool is_saved = false;</span>
+<span class="lineNum">     614 </span>            : 
+<span class="lineNum">     615 </span>            :   /* Declare the variables inside the common block.
+<span class="lineNum">     616 </span>            :      If the current common block contains any equivalence object, then
+<span class="lineNum">     617 </span>            :      make a UNION_TYPE node, otherwise RECORD_TYPE. This will let the
+<span class="lineNum">     618 </span>            :      alias analyzer work well when there is no address overlapping for
+<span class="lineNum">     619 </span>            :      common variables in the current common block.  */
+<span class="lineNum">     620 </span><span class="lineCov">       2491 :   if (saw_equiv)</span>
+<span class="lineNum">     621 </span><span class="lineCov">        928 :     union_type = make_node (UNION_TYPE);</span>
+<span class="lineNum">     622 </span>            :   else
+<span class="lineNum">     623 </span><span class="lineCov">       1563 :     union_type = make_node (RECORD_TYPE);</span>
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span><span class="lineCov">       2491 :   rli = start_record_layout (union_type);</span>
+<span class="lineNum">     626 </span><span class="lineCov">       2491 :   field_link = &amp;TYPE_FIELDS (union_type);</span>
+<span class="lineNum">     627 </span>            : 
+<span class="lineNum">     628 </span>            :   /* Check for overlapping initializers and replace them with a single,
+<span class="lineNum">     629 </span>            :      artificial field that contains all the data.  */
+<span class="lineNum">     630 </span><span class="lineCov">       2491 :   if (saw_equiv)</span>
+<span class="lineNum">     631 </span><span class="lineCov">        928 :     field = get_init_field (head, union_type, &amp;field_init, rli);</span>
+<span class="lineNum">     632 </span>            :   else
+<span class="lineNum">     633 </span>            :     field = NULL_TREE;
+<span class="lineNum">     634 </span>            : 
+<span class="lineNum">     635 </span><span class="lineCov">        928 :   if (field != NULL_TREE)</span>
+<span class="lineNum">     636 </span>            :     {
+<span class="lineNum">     637 </span><span class="lineCov">         46 :       is_init = true;</span>
+<span class="lineNum">     638 </span><span class="lineCov">         46 :       *field_link = field;</span>
+<span class="lineNum">     639 </span><span class="lineCov">         46 :       field_link = &amp;DECL_CHAIN (field);</span>
+<span class="lineNum">     640 </span>            :     }
+<span class="lineNum">     641 </span>            : 
+<span class="lineNum">     642 </span><span class="lineCov">       9880 :   for (s = head; s; s = s-&gt;next)</span>
+<span class="lineNum">     643 </span>            :     {
+<span class="lineNum">     644 </span><span class="lineCov">       7389 :       build_field (s, union_type, rli);</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span>            :       /* Link the field into the type.  */
+<span class="lineNum">     647 </span><span class="lineCov">       7389 :       *field_link = s-&gt;field;</span>
+<span class="lineNum">     648 </span><span class="lineCov">       7389 :       field_link = &amp;DECL_CHAIN (s-&gt;field);</span>
+<span class="lineNum">     649 </span>            : 
+<span class="lineNum">     650 </span>            :       /* Has initial value.  */
+<span class="lineNum">     651 </span><span class="lineCov">       7389 :       if (s-&gt;sym-&gt;value)</span>
+<span class="lineNum">     652 </span><span class="lineCov">        238 :         is_init = true;</span>
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span>            :       /* Has SAVE attribute.  */
+<span class="lineNum">     655 </span><span class="lineCov">       7389 :       if (s-&gt;sym-&gt;attr.save)</span>
+<span class="lineNum">     656 </span><span class="lineCov">        646 :         is_saved = true;</span>
+<span class="lineNum">     657 </span>            :     }
+<span class="lineNum">     658 </span>            : 
+<span class="lineNum">     659 </span><span class="lineCov">       2491 :   finish_record_layout (rli, true);</span>
+<span class="lineNum">     660 </span>            : 
+<span class="lineNum">     661 </span><span class="lineCov">       2491 :   if (com)</span>
+<span class="lineNum">     662 </span><span class="lineCov">       1810 :     decl = build_common_decl (com, union_type, is_init);</span>
+<span class="lineNum">     663 </span>            :   else
+<span class="lineNum">     664 </span><span class="lineCov">        681 :     decl = build_equiv_decl (union_type, is_init, is_saved);</span>
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span><span class="lineCov">       2491 :   if (is_init)</span>
+<span class="lineNum">     667 </span>            :     {
+<span class="lineNum">     668 </span><span class="lineCov">        234 :       tree ctor, tmp;</span>
+<span class="lineNum">     669 </span><span class="lineCov">        234 :       vec&lt;constructor_elt, va_gc&gt; *v = NULL;</span>
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span><span class="lineCov">        234 :       if (field != NULL_TREE &amp;&amp; field_init != NULL_TREE)</span>
+<span class="lineNum">     672 </span><span class="lineCov">         46 :         CONSTRUCTOR_APPEND_ELT (v, field, field_init);</span>
+<span class="lineNum">     673 </span>            :       else
+<span class="lineNum">     674 </span><span class="lineCov">        580 :         for (s = head; s; s = s-&gt;next)</span>
+<span class="lineNum">     675 </span>            :           {
+<span class="lineNum">     676 </span><span class="lineCov">        392 :             if (s-&gt;sym-&gt;value)</span>
+<span class="lineNum">     677 </span>            :               {
+<span class="lineNum">     678 </span>            :                 /* Add the initializer for this field.  */
+<span class="lineNum">     679 </span><span class="lineCov">        952 :                 tmp = gfc_conv_initializer (s-&gt;sym-&gt;value, &amp;s-&gt;sym-&gt;ts,</span>
+<span class="lineNum">     680 </span><span class="lineCov">        238 :                                             TREE_TYPE (s-&gt;field),</span>
+<span class="lineNum">     681 </span>            :                                             s-&gt;sym-&gt;attr.dimension,
+<span class="lineNum">     682 </span>            :                                             s-&gt;sym-&gt;attr.pointer
+<span class="lineNum">     683 </span><span class="lineCov">        238 :                                             || s-&gt;sym-&gt;attr.allocatable, false);</span>
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span><span class="lineCov">        238 :                 CONSTRUCTOR_APPEND_ELT (v, s-&gt;field, tmp);</span>
+<span class="lineNum">     686 </span>            :               }
+<span class="lineNum">     687 </span>            :           }
+<span class="lineNum">     688 </span>            : 
+<span class="lineNum">     689 </span><span class="lineCov">        234 :       gcc_assert (!v-&gt;is_empty ());</span>
+<span class="lineNum">     690 </span><span class="lineCov">        234 :       ctor = build_constructor (union_type, v);</span>
+<span class="lineNum">     691 </span><span class="lineCov">        234 :       TREE_CONSTANT (ctor) = 1;</span>
+<span class="lineNum">     692 </span><span class="lineCov">        234 :       TREE_STATIC (ctor) = 1;</span>
+<span class="lineNum">     693 </span><span class="lineCov">        234 :       DECL_INITIAL (decl) = ctor;</span>
+<span class="lineNum">     694 </span>            : 
+<span class="lineNum">     695 </span><span class="lineCov">        234 :       if (flag_checking)</span>
+<span class="lineNum">     696 </span>            :         {
+<span class="lineNum">     697 </span>            :           tree field, value;
+<span class="lineNum">     698 </span>            :           unsigned HOST_WIDE_INT idx;
+<span class="lineNum">     699 </span><span class="lineCov">        752 :           FOR_EACH_CONSTRUCTOR_ELT (CONSTRUCTOR_ELTS (ctor), idx, field, value)</span>
+<span class="lineNum">     700 </span><span class="lineCov">        284 :             gcc_assert (TREE_CODE (field) == FIELD_DECL);</span>
+<span class="lineNum">     701 </span>            :         }
+<span class="lineNum">     702 </span>            :     }
+<span class="lineNum">     703 </span>            : 
+<span class="lineNum">     704 </span>            :   /* Build component reference for each variable.  */
+<span class="lineNum">     705 </span><span class="lineCov">       9880 :   for (s = head; s; s = next_s)</span>
+<span class="lineNum">     706 </span>            :     {
+<span class="lineNum">     707 </span><span class="lineCov">       7389 :       tree var_decl;</span>
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span><span class="lineCov">      29556 :       var_decl = build_decl (s-&gt;sym-&gt;declared_at.lb-&gt;location,</span>
+<span class="lineNum">     710 </span><span class="lineCov">       7389 :                              VAR_DECL, DECL_NAME (s-&gt;field),</span>
+<span class="lineNum">     711 </span><span class="lineCov">       7389 :                              TREE_TYPE (s-&gt;field));</span>
+<span class="lineNum">     712 </span><span class="lineCov">       7389 :       TREE_STATIC (var_decl) = TREE_STATIC (decl);</span>
+<span class="lineNum">     713 </span>            :       /* Mark the variable as used in order to avoid warnings about
+<span class="lineNum">     714 </span>            :          unused variables.  */
+<span class="lineNum">     715 </span><span class="lineCov">       7389 :       TREE_USED (var_decl) = 1;</span>
+<span class="lineNum">     716 </span><span class="lineCov">       7389 :       if (s-&gt;sym-&gt;attr.use_assoc)</span>
+<span class="lineNum">     717 </span><span class="lineCov">        392 :         DECL_IGNORED_P (var_decl) = 1;</span>
+<span class="lineNum">     718 </span><span class="lineCov">       7389 :       if (s-&gt;sym-&gt;attr.target)</span>
+<span class="lineNum">     719 </span><span class="lineCov">         66 :         TREE_ADDRESSABLE (var_decl) = 1;</span>
+<span class="lineNum">     720 </span>            :       /* Fake variables are not visible from other translation units.  */
+<span class="lineNum">     721 </span><span class="lineCov">       7389 :       TREE_PUBLIC (var_decl) = 0;</span>
+<span class="lineNum">     722 </span><span class="lineCov">       7389 :       gfc_finish_decl_attrs (var_decl, &amp;s-&gt;sym-&gt;attr);</span>
+<span class="lineNum">     723 </span>            : 
+<span class="lineNum">     724 </span>            :       /* To preserve identifier names in COMMON, chain to procedure
+<span class="lineNum">     725 </span>            :          scope unless at top level in a module definition.  */
+<span class="lineNum">     726 </span><span class="lineCov">       7389 :       if (com</span>
+<span class="lineNum">     727 </span><span class="lineCov">       5638 :           &amp;&amp; s-&gt;sym-&gt;ns-&gt;proc_name</span>
+<span class="lineNum">     728 </span><span class="lineCov">       5579 :           &amp;&amp; s-&gt;sym-&gt;ns-&gt;proc_name-&gt;attr.flavor == FL_MODULE)</span>
+<span class="lineNum">     729 </span><span class="lineCov">        415 :         var_decl = pushdecl_top_level (var_decl);</span>
+<span class="lineNum">     730 </span>            :       else
+<span class="lineNum">     731 </span><span class="lineCov">       6974 :         gfc_add_decl_to_function (var_decl);</span>
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span><span class="lineCov">       7389 :       SET_DECL_VALUE_EXPR (var_decl,</span>
+<span class="lineNum">     734 </span>            :                            fold_build3_loc (input_location, COMPONENT_REF,
+<span class="lineNum">     735 </span>            :                                             TREE_TYPE (s-&gt;field),
+<span class="lineNum">     736 </span>            :                                             decl, s-&gt;field, NULL_TREE));
+<span class="lineNum">     737 </span><span class="lineCov">       7389 :       DECL_HAS_VALUE_EXPR_P (var_decl) = 1;</span>
+<span class="lineNum">     738 </span><span class="lineCov">       7389 :       GFC_DECL_COMMON_OR_EQUIV (var_decl) = 1;</span>
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span><span class="lineCov">       7389 :       if (s-&gt;sym-&gt;attr.assign)</span>
+<span class="lineNum">     741 </span>            :         {
+<span class="lineNum">     742 </span><span class="lineCov">         14 :           gfc_allocate_lang_decl (var_decl);</span>
+<span class="lineNum">     743 </span><span class="lineCov">         14 :           GFC_DECL_ASSIGN (var_decl) = 1;</span>
+<span class="lineNum">     744 </span><span class="lineCov">         14 :           GFC_DECL_STRING_LEN (var_decl) = GFC_DECL_STRING_LEN (s-&gt;field);</span>
+<span class="lineNum">     745 </span><span class="lineCov">         14 :           GFC_DECL_ASSIGN_ADDR (var_decl) = GFC_DECL_ASSIGN_ADDR (s-&gt;field);</span>
+<span class="lineNum">     746 </span>            :         }
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span><span class="lineCov">       7389 :       s-&gt;sym-&gt;backend_decl = var_decl;</span>
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span><span class="lineCov">       7389 :       next_s = s-&gt;next;</span>
+<span class="lineNum">     751 </span><span class="lineCov">       7389 :       free (s);</span>
+<span class="lineNum">     752 </span>            :     }
+<span class="lineNum">     753 </span><span class="lineCov">       2491 : }</span>
+<span class="lineNum">     754 </span>            : 
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span>            : /* Given a symbol, find it in the current segment list. Returns NULL if
+<span class="lineNum">     757 </span>            :    not found.  */
+<a name="758"><span class="lineNum">     758 </span>            : </a>
+<span class="lineNum">     759 </span>            : static segment_info *
+<span class="lineNum">     760 </span><span class="lineNoCov">          0 : find_segment_info (gfc_symbol *symbol)</span>
+<span class="lineNum">     761 </span>            : {
+<span class="lineNum">     762 </span><span class="lineCov">       6616 :   segment_info *n;</span>
+<span class="lineNum">     763 </span>            : 
+<span class="lineNum">     764 </span><span class="lineCov">      39783 :   for (n = current_segment; n; n = n-&gt;next)</span>
+<span class="lineNum">     765 </span>            :     {
+<span class="lineNum">     766 </span><span class="lineCov">      33176 :       if (n-&gt;sym == symbol)</span>
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :         return n;</span>
+<span class="lineNum">     768 </span>            :     }
+<span class="lineNum">     769 </span>            : 
+<span class="lineNum">     770 </span>            :   return NULL;
+<span class="lineNum">     771 </span>            : }
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span>            : 
+<span class="lineNum">     774 </span>            : /* Given an expression node, make sure it is a constant integer and return
+<span class="lineNum">     775 </span>            :    the mpz_t value.  */
+<a name="776"><span class="lineNum">     776 </span>            : </a>
+<span class="lineNum">     777 </span>            : static mpz_t *
+<span class="lineNum">     778 </span><span class="lineNoCov">          0 : get_mpz (gfc_expr *e)</span>
+<span class="lineNum">     779 </span>            : {
+<span class="lineNum">     780 </span>            : 
+<span class="lineNum">     781 </span><span class="lineNoCov">          0 :   if (e-&gt;expr_type != EXPR_CONSTANT)</span>
+<span class="lineNum">     782 </span><span class="lineNoCov">          0 :     gfc_internal_error (&quot;get_mpz(): Not an integer constant&quot;);</span>
+<span class="lineNum">     783 </span>            : 
+<span class="lineNum">     784 </span><span class="lineCov">       6062 :   return &amp;e-&gt;value.integer;</span>
+<span class="lineNum">     785 </span>            : }
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span>            : /* Given an array specification and an array reference, figure out the
+<span class="lineNum">     789 </span>            :    array element number (zero based). Bounds and elements are guaranteed
+<span class="lineNum">     790 </span>            :    to be constants.  If something goes wrong we generate an error and
+<span class="lineNum">     791 </span>            :    return zero.  */
+<a name="792"><span class="lineNum">     792 </span>            :  </a>
+<span class="lineNum">     793 </span>            : static HOST_WIDE_INT
+<span class="lineNum">     794 </span><span class="lineCov">       1423 : element_number (gfc_array_ref *ar)</span>
+<span class="lineNum">     795 </span>            : {
+<span class="lineNum">     796 </span><span class="lineCov">       1423 :   mpz_t multiplier, offset, extent, n;</span>
+<span class="lineNum">     797 </span><span class="lineCov">       1423 :   gfc_array_spec *as;</span>
+<span class="lineNum">     798 </span><span class="lineCov">       1423 :   HOST_WIDE_INT i, rank;</span>
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span><span class="lineCov">       1423 :   as = ar-&gt;as;</span>
+<span class="lineNum">     801 </span><span class="lineCov">       1423 :   rank = as-&gt;rank;</span>
+<span class="lineNum">     802 </span><span class="lineCov">       1423 :   mpz_init_set_ui (multiplier, 1);</span>
+<span class="lineNum">     803 </span><span class="lineCov">       1423 :   mpz_init_set_ui (offset, 0);</span>
+<span class="lineNum">     804 </span><span class="lineCov">       1423 :   mpz_init (extent);</span>
+<span class="lineNum">     805 </span><span class="lineCov">       1423 :   mpz_init (n);</span>
+<span class="lineNum">     806 </span>            : 
+<span class="lineNum">     807 </span><span class="lineCov">       2850 :   for (i = 0; i &lt; rank; i++)</span>
+<span class="lineNum">     808 </span>            :     { 
+<span class="lineNum">     809 </span><span class="lineCov">       1427 :       if (ar-&gt;dimen_type[i] != DIMEN_ELEMENT)</span>
+<span class="lineNum">     810 </span><span class="lineNoCov">          0 :         gfc_internal_error (&quot;element_number(): Bad dimension type&quot;);</span>
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span><span class="lineCov">       1427 :       if (as &amp;&amp; as-&gt;lower[i])</span>
+<span class="lineNum">     813 </span><span class="lineCov">       1426 :         mpz_sub (n, *get_mpz (ar-&gt;start[i]), *get_mpz (as-&gt;lower[i]));</span>
+<span class="lineNum">     814 </span>            :       else
+<span class="lineNum">     815 </span><span class="lineCov">          1 :         mpz_sub_ui (n, *get_mpz (ar-&gt;start[i]), 1);</span>
+<span class="lineNum">     816 </span>            :  
+<span class="lineNum">     817 </span><span class="lineCov">       1427 :       mpz_mul (n, n, multiplier);</span>
+<span class="lineNum">     818 </span><span class="lineCov">       1427 :       mpz_add (offset, offset, n);</span>
+<span class="lineNum">     819 </span>            :  
+<span class="lineNum">     820 </span><span class="lineCov">       1427 :       if (as &amp;&amp; as-&gt;upper[i] &amp;&amp; as-&gt;lower[i])</span>
+<span class="lineNum">     821 </span>            :         {
+<span class="lineNum">     822 </span><span class="lineCov">       1426 :           mpz_sub (extent, *get_mpz (as-&gt;upper[i]), *get_mpz (as-&gt;lower[i]));</span>
+<span class="lineNum">     823 </span><span class="lineCov">       1426 :           mpz_add_ui (extent, extent, 1);</span>
+<span class="lineNum">     824 </span>            :         }
+<span class="lineNum">     825 </span>            :       else
+<span class="lineNum">     826 </span><span class="lineCov">          1 :         mpz_set_ui (extent, 0);</span>
+<span class="lineNum">     827 </span>            :  
+<span class="lineNum">     828 </span><span class="lineCov">       1427 :       if (mpz_sgn (extent) &lt; 0)</span>
+<span class="lineNum">     829 </span><span class="lineNoCov">          0 :         mpz_set_ui (extent, 0);</span>
+<span class="lineNum">     830 </span>            :  
+<span class="lineNum">     831 </span><span class="lineCov">       1427 :       mpz_mul (multiplier, multiplier, extent);</span>
+<span class="lineNum">     832 </span>            :     } 
+<span class="lineNum">     833 </span>            :  
+<span class="lineNum">     834 </span><span class="lineCov">       1423 :   i = mpz_get_ui (offset);</span>
+<span class="lineNum">     835 </span>            :  
+<span class="lineNum">     836 </span><span class="lineCov">       1423 :   mpz_clear (multiplier);</span>
+<span class="lineNum">     837 </span><span class="lineCov">       1423 :   mpz_clear (offset);</span>
+<span class="lineNum">     838 </span><span class="lineCov">       1423 :   mpz_clear (extent);</span>
+<span class="lineNum">     839 </span><span class="lineCov">       1423 :   mpz_clear (n);</span>
+<span class="lineNum">     840 </span>            :  
+<span class="lineNum">     841 </span><span class="lineCov">       1423 :   return i;</span>
+<span class="lineNum">     842 </span>            : }
+<span class="lineNum">     843 </span>            : 
+<span class="lineNum">     844 </span>            : 
+<span class="lineNum">     845 </span>            : /* Given a single element of an equivalence list, figure out the offset
+<span class="lineNum">     846 </span>            :    from the base symbol.  For simple variables or full arrays, this is
+<span class="lineNum">     847 </span>            :    simply zero.  For an array element we have to calculate the array
+<span class="lineNum">     848 </span>            :    element number and multiply by the element size. For a substring we
+<span class="lineNum">     849 </span>            :    have to calculate the further reference.  */
+<a name="850"><span class="lineNum">     850 </span>            : </a>
+<span class="lineNum">     851 </span>            : static HOST_WIDE_INT
+<span class="lineNum">     852 </span><span class="lineCov">       3108 : calculate_offset (gfc_expr *e)</span>
+<span class="lineNum">     853 </span>            : {
+<span class="lineNum">     854 </span><span class="lineCov">       3108 :   HOST_WIDE_INT n, element_size, offset;</span>
+<span class="lineNum">     855 </span><span class="lineCov">       3108 :   gfc_typespec *element_type;</span>
+<span class="lineNum">     856 </span><span class="lineCov">       3108 :   gfc_ref *reference;</span>
+<span class="lineNum">     857 </span>            : 
+<span class="lineNum">     858 </span><span class="lineCov">       3108 :   offset = 0;</span>
+<span class="lineNum">     859 </span><span class="lineCov">       3108 :   element_type = &amp;e-&gt;symtree-&gt;n.sym-&gt;ts;</span>
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span><span class="lineCov">       5321 :   for (reference = e-&gt;ref; reference; reference = reference-&gt;next)</span>
+<span class="lineNum">     862 </span><span class="lineCov">       2213 :     switch (reference-&gt;type)</span>
+<span class="lineNum">     863 </span>            :       {
+<span class="lineNum">     864 </span><span class="lineCov">       1856 :       case REF_ARRAY:</span>
+<span class="lineNum">     865 </span><span class="lineCov">       1856 :         switch (reference-&gt;u.ar.type)</span>
+<span class="lineNum">     866 </span>            :           {
+<span class="lineNum">     867 </span>            :           case AR_FULL:
+<span class="lineNum">     868 </span>            :             break;
+<span class="lineNum">     869 </span>            : 
+<span class="lineNum">     870 </span><span class="lineCov">       1423 :           case AR_ELEMENT:</span>
+<span class="lineNum">     871 </span><span class="lineCov">       1423 :             n = element_number (&amp;reference-&gt;u.ar);</span>
+<span class="lineNum">     872 </span><span class="lineCov">       1423 :             if (element_type-&gt;type == BT_CHARACTER)</span>
+<span class="lineNum">     873 </span><span class="lineCov">        221 :               gfc_conv_const_charlen (element_type-&gt;u.cl);</span>
+<span class="lineNum">     874 </span><span class="lineCov">       1423 :             element_size =</span>
+<span class="lineNum">     875 </span><span class="lineCov">       1423 :               int_size_in_bytes (gfc_typenode_for_spec (element_type));</span>
+<span class="lineNum">     876 </span><span class="lineCov">       1423 :             offset += n * element_size;</span>
+<span class="lineNum">     877 </span><span class="lineCov">       1423 :             break;</span>
+<span class="lineNum">     878 </span>            : 
+<span class="lineNum">     879 </span><span class="lineNoCov">          0 :           default:</span>
+<span class="lineNum">     880 </span><span class="lineNoCov">          0 :             gfc_error (&quot;Bad array reference at %L&quot;, &amp;e-&gt;where);</span>
+<span class="lineNum">     881 </span>            :           }
+<span class="lineNum">     882 </span>            :         break;
+<span class="lineNum">     883 </span><span class="lineCov">        357 :       case REF_SUBSTRING:</span>
+<span class="lineNum">     884 </span><span class="lineCov">        357 :         if (reference-&gt;u.ss.start != NULL)</span>
+<span class="lineNum">     885 </span><span class="lineCov">        357 :           offset += mpz_get_ui (*get_mpz (reference-&gt;u.ss.start)) - 1;</span>
+<span class="lineNum">     886 </span>            :         break;
+<span class="lineNum">     887 </span><span class="lineNoCov">          0 :       default:</span>
+<span class="lineNum">     888 </span><span class="lineNoCov">          0 :         gfc_error (&quot;Illegal reference type at %L as EQUIVALENCE object&quot;,</span>
+<span class="lineNum">     889 </span>            :                    &amp;e-&gt;where);
+<span class="lineNum">     890 </span>            :     }
+<span class="lineNum">     891 </span><span class="lineCov">       3108 :   return offset;</span>
+<span class="lineNum">     892 </span>            : }
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span>            : 
+<span class="lineNum">     895 </span>            : /* Add a new segment_info structure to the current segment.  eq1 is already
+<span class="lineNum">     896 </span>            :    in the list, eq2 is not.  */
+<a name="897"><span class="lineNum">     897 </span>            : </a>
+<span class="lineNum">     898 </span>            : static void
+<span class="lineNum">     899 </span><span class="lineCov">       1552 : new_condition (segment_info *v, gfc_equiv *eq1, gfc_equiv *eq2)</span>
+<span class="lineNum">     900 </span>            : {
+<span class="lineNum">     901 </span><span class="lineCov">       1552 :   HOST_WIDE_INT offset1, offset2;</span>
+<span class="lineNum">     902 </span><span class="lineCov">       1552 :   segment_info *a;</span>
+<span class="lineNum">     903 </span>            : 
+<span class="lineNum">     904 </span><span class="lineCov">       1552 :   offset1 = calculate_offset (eq1-&gt;expr);</span>
+<span class="lineNum">     905 </span><span class="lineCov">       1552 :   offset2 = calculate_offset (eq2-&gt;expr);</span>
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span><span class="lineCov">       4656 :   a = get_segment_info (eq2-&gt;expr-&gt;symtree-&gt;n.sym,</span>
+<span class="lineNum">     908 </span><span class="lineCov">       1552 :                         v-&gt;offset + offset1 - offset2);</span>
+<span class="lineNum">     909 </span>            :  
+<span class="lineNum">     910 </span><span class="lineCov">       1552 :   current_segment = add_segments (current_segment, a);</span>
+<span class="lineNum">     911 </span><span class="lineCov">       1552 : }</span>
+<span class="lineNum">     912 </span>            : 
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span>            : /* Given two equivalence structures that are both already in the list, make
+<span class="lineNum">     915 </span>            :    sure that this new condition is not violated, generating an error if it
+<span class="lineNum">     916 </span>            :    is.  */
+<a name="917"><span class="lineNum">     917 </span>            : </a>
+<span class="lineNum">     918 </span>            : static void
+<span class="lineNum">     919 </span><span class="lineCov">          2 : confirm_condition (segment_info *s1, gfc_equiv *eq1, segment_info *s2,</span>
+<span class="lineNum">     920 </span>            :                    gfc_equiv *eq2)
+<span class="lineNum">     921 </span>            : {
+<span class="lineNum">     922 </span><span class="lineCov">          2 :   HOST_WIDE_INT offset1, offset2;</span>
+<span class="lineNum">     923 </span>            : 
+<span class="lineNum">     924 </span><span class="lineCov">          2 :   offset1 = calculate_offset (eq1-&gt;expr);</span>
+<span class="lineNum">     925 </span><span class="lineCov">          2 :   offset2 = calculate_offset (eq2-&gt;expr);</span>
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span><span class="lineCov">          2 :   if (s1-&gt;offset + offset1 != s2-&gt;offset + offset2)</span>
+<span class="lineNum">     928 </span><span class="lineCov">          6 :     gfc_error (&quot;Inconsistent equivalence rules involving %qs at %L and &quot;</span>
+<span class="lineNum">     929 </span><span class="lineCov">          2 :                &quot;%qs at %L&quot;, s1-&gt;sym-&gt;name, &amp;s1-&gt;sym-&gt;declared_at,</span>
+<span class="lineNum">     930 </span><span class="lineCov">          2 :                s2-&gt;sym-&gt;name, &amp;s2-&gt;sym-&gt;declared_at);</span>
+<span class="lineNum">     931 </span><span class="lineCov">          2 : }</span>
+<span class="lineNum">     932 </span>            : 
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span>            : /* Process a new equivalence condition. eq1 is know to be in segment f.
+<span class="lineNum">     935 </span>            :    If eq2 is also present then confirm that the condition holds.
+<span class="lineNum">     936 </span>            :    Otherwise add a new variable to the segment list.  */
+<a name="937"><span class="lineNum">     937 </span>            : </a>
+<span class="lineNum">     938 </span>            : static void
+<span class="lineNum">     939 </span><span class="lineCov">       1554 : add_condition (segment_info *f, gfc_equiv *eq1, gfc_equiv *eq2)</span>
+<span class="lineNum">     940 </span>            : {
+<span class="lineNum">     941 </span><span class="lineCov">       1554 :   segment_info *n;</span>
+<span class="lineNum">     942 </span>            : 
+<span class="lineNum">     943 </span><span class="lineCov">       1554 :   n = find_segment_info (eq2-&gt;expr-&gt;symtree-&gt;n.sym);</span>
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span><span class="lineCov">       1554 :   if (n == NULL)</span>
+<span class="lineNum">     946 </span><span class="lineCov">       1552 :     new_condition (f, eq1, eq2);</span>
+<span class="lineNum">     947 </span>            :   else
+<span class="lineNum">     948 </span><span class="lineCov">          2 :     confirm_condition (f, eq1, n, eq2);</span>
+<span class="lineNum">     949 </span><span class="lineCov">       1554 : }</span>
+<span class="lineNum">     950 </span>            : 
+<span class="lineNum">     951 </span>            : 
+<span class="lineNum">     952 </span>            : /* Given a segment element, search through the equivalence lists for unused
+<span class="lineNum">     953 </span>            :    conditions that involve the symbol.  Add these rules to the segment.  */
+<a name="954"><span class="lineNum">     954 </span>            : </a>
+<span class="lineNum">     955 </span>            : static bool
+<span class="lineNum">     956 </span><span class="lineCov">       7377 : find_equivalence (segment_info *n)</span>
+<span class="lineNum">     957 </span>            : {
+<span class="lineNum">     958 </span><span class="lineCov">       7377 :   gfc_equiv *e1, *e2, *eq;</span>
+<span class="lineNum">     959 </span><span class="lineCov">       7377 :   bool found;</span>
+<span class="lineNum">     960 </span>            : 
+<span class="lineNum">     961 </span><span class="lineCov">       7377 :   found = FALSE;</span>
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span><span class="lineCov">      29924 :   for (e1 = n-&gt;sym-&gt;ns-&gt;equiv; e1; e1 = e1-&gt;next)</span>
+<span class="lineNum">     964 </span>            :     {
+<span class="lineNum">     965 </span>            :       eq = NULL;
+<span class="lineNum">     966 </span>            : 
+<span class="lineNum">     967 </span>            :       /* Search the equivalence list, including the root (first) element
+<span class="lineNum">     968 </span>            :          for the symbol that owns the segment.  */
+<span class="lineNum">     969 </span><span class="lineCov">      65071 :       for (e2 = e1; e2; e2 = e2-&gt;eq)</span>
+<span class="lineNum">     970 </span>            :         {
+<span class="lineNum">     971 </span><span class="lineCov">      44031 :           if (!e2-&gt;used &amp;&amp; e2-&gt;expr-&gt;symtree-&gt;n.sym == n-&gt;sym)</span>
+<span class="lineNum">     972 </span>            :             {
+<span class="lineNum">     973 </span>            :               eq = e2;
+<span class="lineNum">     974 </span>            :               break;
+<span class="lineNum">     975 </span>            :             }
+<span class="lineNum">     976 </span>            :         }
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span>            :       /* Go to the next root element.  */
+<span class="lineNum">     979 </span><span class="lineCov">      22547 :       if (eq == NULL)</span>
+<span class="lineNum">     980 </span>            :         continue;
+<span class="lineNum">     981 </span>            : 
+<span class="lineNum">     982 </span><span class="lineCov">       1507 :       eq-&gt;used = 1;</span>
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span>            :       /* Now traverse the equivalence list matching the offsets.  */
+<span class="lineNum">     985 </span><span class="lineCov">       4568 :       for (e2 = e1; e2; e2 = e2-&gt;eq)</span>
+<span class="lineNum">     986 </span>            :         {
+<span class="lineNum">     987 </span><span class="lineCov">       3061 :           if (!e2-&gt;used &amp;&amp; e2 != eq)</span>
+<span class="lineNum">     988 </span>            :             {
+<span class="lineNum">     989 </span><span class="lineCov">       1554 :               add_condition (n, eq, e2);</span>
+<span class="lineNum">     990 </span><span class="lineCov">       1554 :               e2-&gt;used = 1;</span>
+<span class="lineNum">     991 </span><span class="lineCov">       1554 :               found = TRUE;</span>
+<span class="lineNum">     992 </span>            :             }
+<span class="lineNum">     993 </span>            :         }
+<span class="lineNum">     994 </span>            :     }
+<span class="lineNum">     995 </span><span class="lineCov">       7377 :   return found;</span>
+<span class="lineNum">     996 </span>            : }
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span>            : 
+<span class="lineNum">     999 </span>            : /* Add all symbols equivalenced within a segment.  We need to scan the
+<span class="lineNum">    1000 </span>            :    segment list multiple times to include indirect equivalences.  Since
+<span class="lineNum">    1001 </span>            :    a new segment_info can inserted at the beginning of the segment list,
+<span class="lineNum">    1002 </span>            :    depending on its offset, we have to force a final pass through the
+<span class="lineNum">    1003 </span>            :    loop by demanding that completion sees a pass with no matches; i.e.,
+<span class="lineNum">    1004 </span>            :    all symbols with equiv_built set and no new equivalences found.  */
+<a name="1005"><span class="lineNum">    1005 </span>            : </a>
+<span class="lineNum">    1006 </span>            : static void
+<span class="lineNum">    1007 </span><span class="lineCov">       5837 : add_equivalences (bool *saw_equiv)</span>
+<span class="lineNum">    1008 </span>            : {
+<span class="lineNum">    1009 </span><span class="lineCov">       5837 :   segment_info *f;</span>
+<span class="lineNum">    1010 </span><span class="lineCov">       5837 :   bool seen_one, more;</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span><span class="lineCov">       5837 :   seen_one = false;</span>
+<span class="lineNum">    1013 </span><span class="lineCov">       5837 :   more = TRUE;</span>
+<span class="lineNum">    1014 </span><span class="lineCov">      12821 :   while (more)</span>
+<span class="lineNum">    1015 </span>            :     {
+<span class="lineNum">    1016 </span><span class="lineCov">       6984 :       more = FALSE;</span>
+<span class="lineNum">    1017 </span><span class="lineCov">      16237 :       for (f = current_segment; f; f = f-&gt;next)</span>
+<span class="lineNum">    1018 </span>            :         {
+<span class="lineNum">    1019 </span><span class="lineCov">       9253 :           if (!f-&gt;sym-&gt;equiv_built)</span>
+<span class="lineNum">    1020 </span>            :             {
+<span class="lineNum">    1021 </span><span class="lineCov">       7377 :               f-&gt;sym-&gt;equiv_built = 1;</span>
+<span class="lineNum">    1022 </span><span class="lineCov">       7377 :               seen_one = find_equivalence (f);</span>
+<span class="lineNum">    1023 </span><span class="lineCov">       7377 :               if (seen_one)</span>
+<span class="lineNum">    1024 </span>            :                 {
+<span class="lineNum">    1025 </span><span class="lineCov">       1154 :                   *saw_equiv = true;</span>
+<span class="lineNum">    1026 </span><span class="lineCov">       1154 :                   more = true;</span>
+<span class="lineNum">    1027 </span>            :                 }
+<span class="lineNum">    1028 </span>            :             }
+<span class="lineNum">    1029 </span>            :         }
+<span class="lineNum">    1030 </span>            :     }
+<span class="lineNum">    1031 </span>            : 
+<span class="lineNum">    1032 </span>            :   /* Add a copy of this segment list to the namespace.  */
+<span class="lineNum">    1033 </span><span class="lineCov">       5837 :   copy_equiv_list_to_ns (current_segment);</span>
+<span class="lineNum">    1034 </span><span class="lineCov">       5837 : }</span>
+<span class="lineNum">    1035 </span>            : 
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span>            : /* Returns the offset necessary to properly align the current equivalence.
+<span class="lineNum">    1038 </span>            :    Sets *palign to the required alignment.  */
+<a name="1039"><span class="lineNum">    1039 </span>            : </a>
+<span class="lineNum">    1040 </span>            : static HOST_WIDE_INT
+<span class="lineNum">    1041 </span><span class="lineCov">       5819 : align_segment (unsigned HOST_WIDE_INT *palign)</span>
+<span class="lineNum">    1042 </span>            : {
+<span class="lineNum">    1043 </span><span class="lineCov">       5819 :   segment_info *s;</span>
+<span class="lineNum">    1044 </span><span class="lineCov">       5819 :   unsigned HOST_WIDE_INT offset;</span>
+<span class="lineNum">    1045 </span><span class="lineCov">       5819 :   unsigned HOST_WIDE_INT max_align;</span>
+<span class="lineNum">    1046 </span><span class="lineCov">       5819 :   unsigned HOST_WIDE_INT this_align;</span>
+<span class="lineNum">    1047 </span><span class="lineCov">       5819 :   unsigned HOST_WIDE_INT this_offset;</span>
+<span class="lineNum">    1048 </span>            : 
+<span class="lineNum">    1049 </span><span class="lineCov">       5819 :   max_align = 1;</span>
+<span class="lineNum">    1050 </span><span class="lineCov">       5819 :   offset = 0;</span>
+<span class="lineNum">    1051 </span><span class="lineCov">      13190 :   for (s = current_segment; s; s = s-&gt;next)</span>
+<span class="lineNum">    1052 </span>            :     {
+<span class="lineNum">    1053 </span><span class="lineCov">       7371 :       this_align = TYPE_ALIGN_UNIT (s-&gt;field);</span>
+<span class="lineNum">    1054 </span><span class="lineCov">       7371 :       if (s-&gt;offset &amp; (this_align - 1))</span>
+<span class="lineNum">    1055 </span>            :         {
+<span class="lineNum">    1056 </span>            :           /* Field is misaligned.  */
+<span class="lineNum">    1057 </span><span class="lineCov">        128 :           this_offset = this_align - ((s-&gt;offset + offset) &amp; (this_align - 1));</span>
+<span class="lineNum">    1058 </span><span class="lineCov">        128 :           if (this_offset &amp; (max_align - 1))</span>
+<span class="lineNum">    1059 </span>            :             {
+<span class="lineNum">    1060 </span>            :               /* Aligning this field would misalign a previous field.  */
+<span class="lineNum">    1061 </span><span class="lineNoCov">          0 :               gfc_error (&quot;The equivalence set for variable %qs &quot;</span>
+<span class="lineNum">    1062 </span>            :                          &quot;declared at %L violates alignment requirements&quot;,
+<span class="lineNum">    1063 </span><span class="lineNoCov">          0 :                          s-&gt;sym-&gt;name, &amp;s-&gt;sym-&gt;declared_at);</span>
+<span class="lineNum">    1064 </span>            :             }
+<span class="lineNum">    1065 </span><span class="lineCov">        128 :           offset += this_offset;</span>
+<span class="lineNum">    1066 </span>            :         }
+<span class="lineNum">    1067 </span><span class="lineCov">       7371 :       max_align = this_align;</span>
+<span class="lineNum">    1068 </span>            :     }
+<span class="lineNum">    1069 </span><span class="lineCov">       5819 :   if (palign)</span>
+<span class="lineNum">    1070 </span><span class="lineCov">       5819 :     *palign = max_align;</span>
+<span class="lineNum">    1071 </span><span class="lineCov">       5819 :   return offset;</span>
+<span class="lineNum">    1072 </span>            : }
+<span class="lineNum">    1073 </span>            : 
+<span class="lineNum">    1074 </span>            : 
+<span class="lineNum">    1075 </span>            : /* Adjust segment offsets by the given amount.  */
+<a name="1076"><span class="lineNum">    1076 </span>            : </a>
+<span class="lineNum">    1077 </span>            : static void
+<span class="lineNum">    1078 </span><span class="lineNoCov">          0 : apply_segment_offset (segment_info *s, HOST_WIDE_INT offset)</span>
+<span class="lineNum">    1079 </span>            : {
+<span class="lineNum">    1080 </span><span class="lineCov">      13226 :   for (; s; s = s-&gt;next)</span>
+<span class="lineNum">    1081 </span><span class="lineCov">       7389 :     s-&gt;offset += offset;</span>
+<span class="lineNum">    1082 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1083 </span>            : 
+<span class="lineNum">    1084 </span>            : 
+<span class="lineNum">    1085 </span>            : /* Lay out a symbol in a common block.  If the symbol has already been seen
+<span class="lineNum">    1086 </span>            :    then check the location is consistent.  Otherwise create segments
+<span class="lineNum">    1087 </span>            :    for that symbol and all the symbols equivalenced with it.  */
+<span class="lineNum">    1088 </span>            : 
+<span class="lineNum">    1089 </span>            : /* Translate a single common block.  */
+<a name="1090"><span class="lineNum">    1090 </span>            : </a>
+<span class="lineNum">    1091 </span>            : static void
+<span class="lineNum">    1092 </span><span class="lineCov">       1709 : translate_common (gfc_common_head *common, gfc_symbol *var_list)</span>
+<span class="lineNum">    1093 </span>            : {
+<span class="lineNum">    1094 </span><span class="lineCov">       1709 :   gfc_symbol *sym;</span>
+<span class="lineNum">    1095 </span><span class="lineCov">       1709 :   segment_info *s;</span>
+<span class="lineNum">    1096 </span><span class="lineCov">       1709 :   segment_info *common_segment;</span>
+<span class="lineNum">    1097 </span><span class="lineCov">       1709 :   HOST_WIDE_INT offset;</span>
+<span class="lineNum">    1098 </span><span class="lineCov">       1709 :   HOST_WIDE_INT current_offset;</span>
+<span class="lineNum">    1099 </span><span class="lineCov">       1709 :   unsigned HOST_WIDE_INT align;</span>
+<span class="lineNum">    1100 </span><span class="lineCov">       1709 :   bool saw_equiv;</span>
+<span class="lineNum">    1101 </span>            : 
+<span class="lineNum">    1102 </span><span class="lineCov">       1709 :   common_segment = NULL;</span>
+<span class="lineNum">    1103 </span><span class="lineCov">       1709 :   offset = 0;</span>
+<span class="lineNum">    1104 </span><span class="lineCov">       1709 :   current_offset = 0;</span>
+<span class="lineNum">    1105 </span><span class="lineCov">       1709 :   align = 1;</span>
+<span class="lineNum">    1106 </span><span class="lineCov">       1709 :   saw_equiv = false;</span>
+<span class="lineNum">    1107 </span>            : 
+<span class="lineNum">    1108 </span>            :   /* Add symbols to the segment.  */
+<span class="lineNum">    1109 </span><span class="lineCov">       6771 :   for (sym = var_list; sym; sym = sym-&gt;common_next)</span>
+<span class="lineNum">    1110 </span>            :     {
+<span class="lineNum">    1111 </span><span class="lineCov">       5062 :       current_segment = common_segment;</span>
+<span class="lineNum">    1112 </span><span class="lineCov">       5062 :       s = find_segment_info (sym);</span>
+<span class="lineNum">    1113 </span>            : 
+<span class="lineNum">    1114 </span>            :       /* Symbol has already been added via an equivalence.  Multiple
+<span class="lineNum">    1115 </span>            :          use associations of the same common block result in equiv_built
+<span class="lineNum">    1116 </span>            :          being set but no information about the symbol in the segment.  */
+<span class="lineNum">    1117 </span><span class="lineCov">       5062 :       if (s &amp;&amp; sym-&gt;equiv_built)</span>
+<span class="lineNum">    1118 </span>            :         {
+<span class="lineNum">    1119 </span>            :           /* Ensure the current location is properly aligned.  */
+<span class="lineNum">    1120 </span><span class="lineCov">          7 :           align = TYPE_ALIGN_UNIT (s-&gt;field);</span>
+<span class="lineNum">    1121 </span><span class="lineCov">          7 :           current_offset = (current_offset + align - 1) &amp;~ (align - 1);</span>
+<span class="lineNum">    1122 </span>            : 
+<span class="lineNum">    1123 </span>            :           /* Verify that it ended up where we expect it.  */
+<span class="lineNum">    1124 </span><span class="lineCov">          7 :           if (s-&gt;offset != current_offset)</span>
+<span class="lineNum">    1125 </span>            :             {
+<span class="lineNum">    1126 </span><span class="lineCov">          2 :               gfc_error (&quot;Equivalence for %qs does not match ordering of &quot;</span>
+<span class="lineNum">    1127 </span>            :                          &quot;COMMON %qs at %L&quot;, sym-&gt;name,
+<span class="lineNum">    1128 </span><span class="lineCov">          1 :                          common-&gt;name, &amp;common-&gt;where);</span>
+<span class="lineNum">    1129 </span>            :             }
+<span class="lineNum">    1130 </span>            :         }
+<span class="lineNum">    1131 </span>            :       else
+<span class="lineNum">    1132 </span>            :         {
+<span class="lineNum">    1133 </span>            :           /* A symbol we haven't seen before.  */
+<span class="lineNum">    1134 </span><span class="lineCov">       5055 :           s = current_segment = get_segment_info (sym, current_offset);</span>
+<span class="lineNum">    1135 </span>            : 
+<span class="lineNum">    1136 </span>            :           /* Add all objects directly or indirectly equivalenced with this
+<span class="lineNum">    1137 </span>            :              symbol.  */
+<span class="lineNum">    1138 </span><span class="lineCov">       5055 :           add_equivalences (&amp;saw_equiv);</span>
+<span class="lineNum">    1139 </span>            : 
+<span class="lineNum">    1140 </span><span class="lineCov">       5055 :           if (current_segment-&gt;offset &lt; 0)</span>
+<span class="lineNum">    1141 </span><span class="lineNoCov">          0 :             gfc_error (&quot;The equivalence set for %qs cause an invalid &quot;</span>
+<span class="lineNum">    1142 </span>            :                        &quot;extension to COMMON %qs at %L&quot;, sym-&gt;name,
+<span class="lineNum">    1143 </span><span class="lineNoCov">          0 :                        common-&gt;name, &amp;common-&gt;where);</span>
+<span class="lineNum">    1144 </span>            : 
+<span class="lineNum">    1145 </span><span class="lineCov">       5055 :           if (flag_align_commons)</span>
+<span class="lineNum">    1146 </span><span class="lineCov">       5037 :             offset = align_segment (&amp;align);</span>
+<span class="lineNum">    1147 </span>            : 
+<span class="lineNum">    1148 </span><span class="lineCov">       5055 :           if (offset)</span>
+<span class="lineNum">    1149 </span>            :             {
+<span class="lineNum">    1150 </span>            :               /* The required offset conflicts with previous alignment
+<span class="lineNum">    1151 </span>            :                  requirements.  Insert padding immediately before this
+<span class="lineNum">    1152 </span>            :                  segment.  */
+<span class="lineNum">    1153 </span><span class="lineCov">         37 :               if (warn_align_commons)</span>
+<span class="lineNum">    1154 </span>            :                 {
+<span class="lineNum">    1155 </span><span class="lineCov">         35 :                   if (strcmp (common-&gt;name, BLANK_COMMON_NAME))</span>
+<span class="lineNum">    1156 </span><span class="lineCov">         46 :                     gfc_warning (OPT_Walign_commons,</span>
+<span class="lineNum">    1157 </span>            :                                  &quot;Padding of %d bytes required before %qs in &quot;
+<span class="lineNum">    1158 </span>            :                                  &quot;COMMON %qs at %L; reorder elements or use &quot;
+<span class="lineNum">    1159 </span>            :                                  &quot;-fno-align-commons&quot;, (int)offset,
+<span class="lineNum">    1160 </span><span class="lineCov">         23 :                                  s-&gt;sym-&gt;name, common-&gt;name, &amp;common-&gt;where);</span>
+<span class="lineNum">    1161 </span>            :                   else
+<span class="lineNum">    1162 </span><span class="lineCov">         24 :                     gfc_warning (OPT_Walign_commons,</span>
+<span class="lineNum">    1163 </span>            :                                  &quot;Padding of %d bytes required before %qs in &quot;
+<span class="lineNum">    1164 </span>            :                                  &quot;COMMON at %L; reorder elements or use &quot;
+<span class="lineNum">    1165 </span>            :                                  &quot;-fno-align-commons&quot;, (int)offset,
+<span class="lineNum">    1166 </span><span class="lineCov">         12 :                                  s-&gt;sym-&gt;name, &amp;common-&gt;where);</span>
+<span class="lineNum">    1167 </span>            :                 }
+<span class="lineNum">    1168 </span>            :             }
+<span class="lineNum">    1169 </span>            : 
+<span class="lineNum">    1170 </span>            :           /* Apply the offset to the new segments.  */
+<span class="lineNum">    1171 </span><span class="lineCov">       5055 :           apply_segment_offset (current_segment, offset);</span>
+<span class="lineNum">    1172 </span><span class="lineCov">       5055 :           current_offset += offset;</span>
+<span class="lineNum">    1173 </span>            : 
+<span class="lineNum">    1174 </span>            :           /* Add the new segments to the common block.  */
+<span class="lineNum">    1175 </span><span class="lineCov">       5055 :           common_segment = add_segments (common_segment, current_segment);</span>
+<span class="lineNum">    1176 </span>            :         }
+<span class="lineNum">    1177 </span>            : 
+<span class="lineNum">    1178 </span>            :       /* The offset of the next common variable.  */
+<span class="lineNum">    1179 </span><span class="lineCov">       5062 :       current_offset += s-&gt;length;</span>
+<span class="lineNum">    1180 </span>            :     }
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span><span class="lineCov">       1709 :   if (common_segment == NULL)</span>
+<span class="lineNum">    1183 </span>            :     {
+<span class="lineNum">    1184 </span><span class="lineNoCov">          0 :       gfc_error (&quot;COMMON %qs at %L does not exist&quot;,</span>
+<span class="lineNum">    1185 </span><span class="lineNoCov">          0 :                  common-&gt;name, &amp;common-&gt;where);</span>
+<span class="lineNum">    1186 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">    1187 </span>            :     }
+<span class="lineNum">    1188 </span>            : 
+<span class="lineNum">    1189 </span><span class="lineCov">       1709 :   if (common_segment-&gt;offset != 0 &amp;&amp; warn_align_commons)</span>
+<span class="lineNum">    1190 </span>            :     {
+<span class="lineNum">    1191 </span><span class="lineNoCov">          0 :       if (strcmp (common-&gt;name, BLANK_COMMON_NAME))</span>
+<span class="lineNum">    1192 </span><span class="lineNoCov">          0 :         gfc_warning (OPT_Walign_commons,</span>
+<span class="lineNum">    1193 </span>            :                      &quot;COMMON %qs at %L requires %d bytes of padding; &quot;
+<span class="lineNum">    1194 </span>            :                      &quot;reorder elements or use %&lt;-fno-align-commons%&gt;&quot;,
+<span class="lineNum">    1195 </span>            :                      common-&gt;name, &amp;common-&gt;where, (int)common_segment-&gt;offset);
+<span class="lineNum">    1196 </span>            :       else
+<span class="lineNum">    1197 </span><span class="lineNoCov">          0 :         gfc_warning (OPT_Walign_commons,</span>
+<span class="lineNum">    1198 </span>            :                      &quot;COMMON at %L requires %d bytes of padding; &quot;
+<span class="lineNum">    1199 </span>            :                      &quot;reorder elements or use %&lt;-fno-align-commons%&gt;&quot;,
+<span class="lineNum">    1200 </span>            :                      &amp;common-&gt;where, (int)common_segment-&gt;offset);
+<span class="lineNum">    1201 </span>            :     }
+<span class="lineNum">    1202 </span>            : 
+<span class="lineNum">    1203 </span><span class="lineCov">       1709 :   create_common (common, common_segment, saw_equiv);</span>
+<span class="lineNum">    1204 </span>            : }
+<span class="lineNum">    1205 </span>            : 
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span>            : /* Create a new block for each merged equivalence list.  */
+<a name="1208"><span class="lineNum">    1208 </span>            : </a>
+<span class="lineNum">    1209 </span>            : static void
+<span class="lineNum">    1210 </span><span class="lineCov">      58983 : finish_equivalences (gfc_namespace *ns)</span>
+<span class="lineNum">    1211 </span>            : {
+<span class="lineNum">    1212 </span><span class="lineCov">      58983 :   gfc_equiv *z, *y;</span>
+<span class="lineNum">    1213 </span><span class="lineCov">      58983 :   gfc_symbol *sym;</span>
+<span class="lineNum">    1214 </span><span class="lineCov">      58983 :   gfc_common_head * c;</span>
+<span class="lineNum">    1215 </span><span class="lineCov">      58983 :   HOST_WIDE_INT offset;</span>
+<span class="lineNum">    1216 </span><span class="lineCov">      58983 :   unsigned HOST_WIDE_INT align;</span>
+<span class="lineNum">    1217 </span><span class="lineCov">      58983 :   bool dummy;</span>
+<span class="lineNum">    1218 </span>            : 
+<span class="lineNum">    1219 </span><span class="lineCov">      60490 :   for (z = ns-&gt;equiv; z; z = z-&gt;next)</span>
+<span class="lineNum">    1220 </span><span class="lineCov">       2262 :     for (y = z-&gt;eq; y; y = y-&gt;eq)</span>
+<span class="lineNum">    1221 </span>            :       {
+<span class="lineNum">    1222 </span><span class="lineCov">       1537 :         if (y-&gt;used) </span>
+<span class="lineNum">    1223 </span><span class="lineCov">        755 :           continue;</span>
+<span class="lineNum">    1224 </span><span class="lineCov">        782 :         sym = z-&gt;expr-&gt;symtree-&gt;n.sym;</span>
+<span class="lineNum">    1225 </span><span class="lineCov">        782 :         current_segment = get_segment_info (sym, 0);</span>
+<span class="lineNum">    1226 </span>            : 
+<span class="lineNum">    1227 </span>            :         /* All objects directly or indirectly equivalenced with this
+<span class="lineNum">    1228 </span>            :            symbol.  */
+<span class="lineNum">    1229 </span><span class="lineCov">        782 :         add_equivalences (&amp;dummy);</span>
+<span class="lineNum">    1230 </span>            : 
+<span class="lineNum">    1231 </span>            :         /* Align the block.  */
+<span class="lineNum">    1232 </span><span class="lineCov">        782 :         offset = align_segment (&amp;align);</span>
+<span class="lineNum">    1233 </span>            : 
+<span class="lineNum">    1234 </span>            :         /* Ensure all offsets are positive.  */
+<span class="lineNum">    1235 </span><span class="lineCov">        782 :         offset -= current_segment-&gt;offset &amp; ~(align - 1);</span>
+<span class="lineNum">    1236 </span>            : 
+<span class="lineNum">    1237 </span><span class="lineCov">        782 :         apply_segment_offset (current_segment, offset);</span>
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span>            :         /* Create the decl.  If this is a module equivalence, it has a
+<span class="lineNum">    1240 </span>            :            unique name, pointed to by z-&gt;module.  This is written to a
+<span class="lineNum">    1241 </span>            :            gfc_common_header to push create_common into using
+<span class="lineNum">    1242 </span>            :            build_common_decl, so that the equivalence appears as an
+<span class="lineNum">    1243 </span>            :            external symbol.  Otherwise, a local declaration is built using
+<span class="lineNum">    1244 </span>            :            build_equiv_decl.  */
+<span class="lineNum">    1245 </span><span class="lineCov">        782 :         if (z-&gt;module)</span>
+<span class="lineNum">    1246 </span>            :           {
+<span class="lineNum">    1247 </span><span class="lineCov">        101 :             c = gfc_get_common_head ();</span>
+<span class="lineNum">    1248 </span>            :             /* We've lost the real location, so use the location of the
+<span class="lineNum">    1249 </span>            :                enclosing procedure.  If we're in a BLOCK DATA block, then
+<span class="lineNum">    1250 </span>            :                use the location in the sym_root.  */
+<span class="lineNum">    1251 </span><span class="lineCov">        101 :             if (ns-&gt;proc_name)</span>
+<span class="lineNum">    1252 </span><span class="lineCov">        100 :               c-&gt;where = ns-&gt;proc_name-&gt;declared_at;</span>
+<span class="lineNum">    1253 </span><span class="lineCov">          1 :             else if (ns-&gt;is_block_data)</span>
+<span class="lineNum">    1254 </span><span class="lineCov">          1 :               c-&gt;where = ns-&gt;sym_root-&gt;n.sym-&gt;declared_at;</span>
+<span class="lineNum">    1255 </span><span class="lineCov">        101 :             strcpy (c-&gt;name, z-&gt;module);</span>
+<span class="lineNum">    1256 </span>            :           }
+<span class="lineNum">    1257 </span>            :         else
+<span class="lineNum">    1258 </span>            :           c = NULL;
+<span class="lineNum">    1259 </span>            : 
+<span class="lineNum">    1260 </span><span class="lineCov">        782 :         create_common (c, current_segment, true);</span>
+<span class="lineNum">    1261 </span><span class="lineCov">        782 :         break;</span>
+<span class="lineNum">    1262 </span>            :       }
+<span class="lineNum">    1263 </span><span class="lineCov">      58983 : }</span>
+<span class="lineNum">    1264 </span>            : 
+<span class="lineNum">    1265 </span>            : 
+<span class="lineNum">    1266 </span>            : /* Work function for translating a named common block.  */
+<a name="1267"><span class="lineNum">    1267 </span>            : </a>
+<span class="lineNum">    1268 </span>            : static void
+<span class="lineNum">    1269 </span><span class="lineCov">       1495 : named_common (gfc_symtree *st)</span>
+<span class="lineNum">    1270 </span>            : {
+<span class="lineNum">    1271 </span><span class="lineCov">       1495 :   translate_common (st-&gt;n.common, st-&gt;n.common-&gt;head);</span>
+<span class="lineNum">    1272 </span><span class="lineCov">       1495 : }</span>
+<span class="lineNum">    1273 </span>            : 
+<span class="lineNum">    1274 </span>            : 
+<span class="lineNum">    1275 </span>            : /* Translate the common blocks in a namespace. Unlike other variables,
+<span class="lineNum">    1276 </span>            :    these have to be created before code, because the backend_decl depends
+<span class="lineNum">    1277 </span>            :    on the rest of the common block.  */
+<a name="1278"><span class="lineNum">    1278 </span>            : </a>
+<span class="lineNum">    1279 </span>            : void
+<span class="lineNum">    1280 </span><span class="lineCov">      58983 : gfc_trans_common (gfc_namespace *ns)</span>
+<span class="lineNum">    1281 </span>            : {
+<span class="lineNum">    1282 </span><span class="lineCov">      58983 :   gfc_common_head *c;</span>
+<span class="lineNum">    1283 </span>            : 
+<span class="lineNum">    1284 </span>            :   /* Translate the blank common block.  */
+<span class="lineNum">    1285 </span><span class="lineCov">      58983 :   if (ns-&gt;blank_common.head != NULL)</span>
+<span class="lineNum">    1286 </span>            :     {
+<span class="lineNum">    1287 </span><span class="lineCov">        214 :       c = gfc_get_common_head ();</span>
+<span class="lineNum">    1288 </span><span class="lineCov">        214 :       c-&gt;where = ns-&gt;blank_common.head-&gt;common_head-&gt;where;</span>
+<span class="lineNum">    1289 </span><span class="lineCov">        214 :       strcpy (c-&gt;name, BLANK_COMMON_NAME);</span>
+<span class="lineNum">    1290 </span><span class="lineCov">        214 :       translate_common (c, ns-&gt;blank_common.head);</span>
+<span class="lineNum">    1291 </span>            :     }
+<span class="lineNum">    1292 </span>            : 
+<span class="lineNum">    1293 </span>            :   /* Translate all named common blocks.  */
+<span class="lineNum">    1294 </span><span class="lineCov">      58983 :   gfc_traverse_symtree (ns-&gt;common_root, named_common);</span>
+<span class="lineNum">    1295 </span>            : 
+<span class="lineNum">    1296 </span>            :   /* Translate local equivalence.  */
+<span class="lineNum">    1297 </span><span class="lineCov">      58983 :   finish_equivalences (ns);</span>
+<span class="lineNum">    1298 </span>            : 
+<span class="lineNum">    1299 </span>            :   /* Commit the newly created symbols for common blocks and module
+<span class="lineNum">    1300 </span>            :      equivalences.  */
+<span class="lineNum">    1301 </span><span class="lineCov">      58983 :   gfc_commit_symbols ();</span>
+<span class="lineNum">    1302 </span><span class="lineCov">      58983 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

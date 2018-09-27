@@ -1,0 +1,631 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/cgraphbuild.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - cgraphbuild.c<span style="font-size: 80%;"> (source / <a href="cgraphbuild.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">191</td>
+            <td class="headerCovTableEntry">207</td>
+            <td class="headerCovTableEntryHi">92.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntryHi">94.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Callgraph construction.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Jan Hubicka
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple-fold.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;gimple-walk.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;ipa-utils.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;except.h&quot;
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : /* Context of record_reference.  */
+<span class="lineNum">      36 </span>            : struct record_reference_ctx
+<span class="lineNum">      37 </span>            : {
+<span class="lineNum">      38 </span>            :   bool only_vars;
+<span class="lineNum">      39 </span>            :   class varpool_node *varpool_node;
+<span class="lineNum">      40 </span>            : };
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* Walk tree and record all calls and references to functions/variables.
+<span class="lineNum">      43 </span>            :    Called via walk_tree: TP is pointer to tree to be examined.
+<span class="lineNum">      44 </span>            :    When DATA is non-null, record references to callgraph.
+<span class="lineNum">      45 </span>            :    */
+<a name="46"><span class="lineNum">      46 </span>            : </a>
+<span class="lineNum">      47 </span>            : static tree
+<span class="lineNum">      48 </span><span class="lineCov">   10589973 : record_reference (tree *tp, int *walk_subtrees, void *data)</span>
+<span class="lineNum">      49 </span>            : {
+<span class="lineNum">      50 </span><span class="lineCov">   10589973 :   tree t = *tp;</span>
+<span class="lineNum">      51 </span><span class="lineCov">   10589973 :   tree decl;</span>
+<span class="lineNum">      52 </span><span class="lineCov">   10589973 :   record_reference_ctx *ctx = (record_reference_ctx *)data;</span>
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span><span class="lineCov">   10589973 :   t = canonicalize_constructor_val (t, NULL);</span>
+<span class="lineNum">      55 </span><span class="lineCov">   10589973 :   if (!t)</span>
+<span class="lineNum">      56 </span><span class="lineCov">       1877 :     t = *tp;</span>
+<span class="lineNum">      57 </span><span class="lineCov">   10588096 :   else if (t != *tp)</span>
+<span class="lineNum">      58 </span><span class="lineCov">    3294655 :     *tp = t;</span>
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span><span class="lineCov">   10589973 :   switch (TREE_CODE (t))</span>
+<span class="lineNum">      61 </span>            :     {
+<span class="lineNum">      62 </span><span class="lineNoCov">          0 :     case VAR_DECL:</span>
+<span class="lineNum">      63 </span><span class="lineNoCov">          0 :     case FUNCTION_DECL:</span>
+<span class="lineNum">      64 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">      65 </span><span class="lineCov">    3456311 :       break;</span>
+<span class="lineNum">      66 </span>            : 
+<span class="lineNum">      67 </span><span class="lineCov">    6912622 :     case FDESC_EXPR:</span>
+<span class="lineNum">      68 </span><span class="lineCov">    3456311 :     case ADDR_EXPR:</span>
+<span class="lineNum">      69 </span>            :       /* Record dereferences to the functions.  This makes the
+<span class="lineNum">      70 </span>            :          functions reachable unconditionally.  */
+<span class="lineNum">      71 </span><span class="lineCov">    3456311 :       decl = get_base_var (*tp);</span>
+<span class="lineNum">      72 </span><span class="lineCov">    3456311 :       if (TREE_CODE (decl) == FUNCTION_DECL)</span>
+<span class="lineNum">      73 </span>            :         {
+<span class="lineNum">      74 </span><span class="lineCov">    1006788 :           cgraph_node *node = cgraph_node::get_create (decl);</span>
+<span class="lineNum">      75 </span><span class="lineCov">    1006788 :           if (!ctx-&gt;only_vars)</span>
+<span class="lineNum">      76 </span><span class="lineCov">    1006788 :             node-&gt;mark_address_taken ();</span>
+<span class="lineNum">      77 </span><span class="lineCov">    1006788 :           ctx-&gt;varpool_node-&gt;create_reference (node, IPA_REF_ADDR);</span>
+<span class="lineNum">      78 </span>            :         }
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span><span class="lineCov">    3456311 :       if (VAR_P (decl))</span>
+<span class="lineNum">      81 </span>            :         {
+<span class="lineNum">      82 </span><span class="lineCov">    1826999 :           varpool_node *vnode = varpool_node::get_create (decl);</span>
+<span class="lineNum">      83 </span><span class="lineCov">    1826999 :           ctx-&gt;varpool_node-&gt;create_reference (vnode, IPA_REF_ADDR);</span>
+<span class="lineNum">      84 </span>            :         }
+<span class="lineNum">      85 </span><span class="lineCov">    3456311 :       *walk_subtrees = 0;</span>
+<span class="lineNum">      86 </span><span class="lineCov">    3456311 :       break;</span>
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span><span class="lineCov">    7133662 :     default:</span>
+<span class="lineNum">      89 </span>            :       /* Save some cycles by not walking types and declaration as we
+<span class="lineNum">      90 </span>            :          won't find anything useful there anyway.  */
+<span class="lineNum">      91 </span><span class="lineCov">    7133662 :       if (IS_TYPE_OR_DECL_P (*tp))</span>
+<span class="lineNum">      92 </span>            :         {
+<span class="lineNum">      93 </span><span class="lineNoCov">          0 :           *walk_subtrees = 0;</span>
+<span class="lineNum">      94 </span><span class="lineNoCov">          0 :           break;</span>
+<span class="lineNum">      95 </span>            :         }
+<span class="lineNum">      96 </span>            :       break;
+<span class="lineNum">      97 </span>            :     }
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span><span class="lineCov">   10589973 :   return NULL_TREE;</span>
+<span class="lineNum">     100 </span>            : }
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            : /* Record references to typeinfos in the type list LIST.  */
+<a name="103"><span class="lineNum">     103 </span>            : </a>
+<span class="lineNum">     104 </span>            : static void
+<span class="lineNum">     105 </span><span class="lineCov">     178710 : record_type_list (cgraph_node *node, tree list)</span>
+<span class="lineNum">     106 </span>            : {
+<span class="lineNum">     107 </span><span class="lineCov">     197897 :   for (; list; list = TREE_CHAIN (list))</span>
+<span class="lineNum">     108 </span>            :     {
+<span class="lineNum">     109 </span><span class="lineCov">      19187 :       tree type = TREE_VALUE (list);</span>
+<span class="lineNum">     110 </span>            :       
+<span class="lineNum">     111 </span><span class="lineCov">      19187 :       if (TYPE_P (type))</span>
+<span class="lineNum">     112 </span><span class="lineCov">      18619 :         type = lookup_type_for_runtime (type);</span>
+<span class="lineNum">     113 </span><span class="lineCov">      19187 :       STRIP_NOPS (type);</span>
+<span class="lineNum">     114 </span><span class="lineCov">      19187 :       if (TREE_CODE (type) == ADDR_EXPR)</span>
+<span class="lineNum">     115 </span>            :         {
+<span class="lineNum">     116 </span><span class="lineCov">      19187 :           type = TREE_OPERAND (type, 0);</span>
+<span class="lineNum">     117 </span><span class="lineCov">      19187 :           if (VAR_P (type))</span>
+<span class="lineNum">     118 </span>            :             {
+<span class="lineNum">     119 </span><span class="lineCov">      19187 :               varpool_node *vnode = varpool_node::get_create (type);</span>
+<span class="lineNum">     120 </span><span class="lineCov">      19187 :               node-&gt;create_reference (vnode, IPA_REF_ADDR);</span>
+<span class="lineNum">     121 </span>            :             }
+<span class="lineNum">     122 </span>            :         }
+<span class="lineNum">     123 </span>            :     }
+<span class="lineNum">     124 </span><span class="lineCov">     178710 : }</span>
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span>            : /* Record all references we will introduce by producing EH tables
+<span class="lineNum">     127 </span>            :    for NODE.  */
+<a name="128"><span class="lineNum">     128 </span>            : </a>
+<span class="lineNum">     129 </span>            : static void
+<span class="lineNum">     130 </span><span class="lineCov">    7035765 : record_eh_tables (cgraph_node *node, function *fun)</span>
+<span class="lineNum">     131 </span>            : {
+<span class="lineNum">     132 </span><span class="lineCov">    7035765 :   eh_region i;</span>
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span><span class="lineCov">    7035765 :   if (DECL_FUNCTION_PERSONALITY (node-&gt;decl))</span>
+<span class="lineNum">     135 </span>            :     {
+<span class="lineNum">     136 </span><span class="lineCov">    1436437 :       tree per_decl = DECL_FUNCTION_PERSONALITY (node-&gt;decl);</span>
+<span class="lineNum">     137 </span><span class="lineCov">    1436437 :       cgraph_node *per_node = cgraph_node::get_create (per_decl);</span>
+<span class="lineNum">     138 </span>            : 
+<span class="lineNum">     139 </span><span class="lineCov">    1436437 :       node-&gt;create_reference (per_node, IPA_REF_ADDR);</span>
+<span class="lineNum">     140 </span><span class="lineCov">    1436437 :       per_node-&gt;mark_address_taken ();</span>
+<span class="lineNum">     141 </span>            :     }
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span><span class="lineCov">    7035765 :   i = fun-&gt;eh-&gt;region_tree;</span>
+<span class="lineNum">     144 </span><span class="lineCov">    7035765 :   if (!i)</span>
+<span class="lineNum">     145 </span>            :     return;
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span><span class="lineCov">    4643059 :   while (1)</span>
+<span class="lineNum">     148 </span>            :     {
+<span class="lineNum">     149 </span><span class="lineCov">    4643059 :       switch (i-&gt;type)</span>
+<span class="lineNum">     150 </span>            :         {
+<span class="lineNum">     151 </span>            :         case ERT_CLEANUP:
+<span class="lineNum">     152 </span>            :         case ERT_MUST_NOT_THROW:
+<span class="lineNum">     153 </span>            :           break;
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span><span class="lineCov">     144492 :         case ERT_TRY:</span>
+<span class="lineNum">     156 </span><span class="lineCov">     144492 :           {</span>
+<span class="lineNum">     157 </span><span class="lineCov">     144492 :             eh_catch c;</span>
+<span class="lineNum">     158 </span><span class="lineCov">     292589 :             for (c = i-&gt;u.eh_try.first_catch; c; c = c-&gt;next_catch)</span>
+<span class="lineNum">     159 </span><span class="lineCov">     292589 :               record_type_list (node, c-&gt;type_list);</span>
+<span class="lineNum">     160 </span>            :           }
+<span class="lineNum">     161 </span>            :           break;
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span><span class="lineCov">      30613 :         case ERT_ALLOWED_EXCEPTIONS:</span>
+<span class="lineNum">     164 </span><span class="lineCov">      30613 :           record_type_list (node, i-&gt;u.allowed.type_list);</span>
+<span class="lineNum">     165 </span><span class="lineCov">      30613 :           break;</span>
+<span class="lineNum">     166 </span>            :         }
+<span class="lineNum">     167 </span>            :       /* If there are sub-regions, process them.  */
+<span class="lineNum">     168 </span><span class="lineCov">    4643059 :       if (i-&gt;inner)</span>
+<span class="lineNum">     169 </span>            :         i = i-&gt;inner;
+<span class="lineNum">     170 </span>            :       /* If there are peers, process them.  */
+<span class="lineNum">     171 </span><span class="lineCov">    3639715 :       else if (i-&gt;next_peer)</span>
+<span class="lineNum">     172 </span>            :         i = i-&gt;next_peer;
+<span class="lineNum">     173 </span>            :       /* Otherwise, step back up the tree to the next peer.  */
+<span class="lineNum">     174 </span>            :       else
+<span class="lineNum">     175 </span>            :         {
+<span class="lineNum">     176 </span><span class="lineCov">    3127480 :           do</span>
+<span class="lineNum">     177 </span>            :             {
+<span class="lineNum">     178 </span><span class="lineCov">    3127480 :               i = i-&gt;outer;</span>
+<span class="lineNum">     179 </span><span class="lineCov">    3127480 :               if (i == NULL)</span>
+<span class="lineNum">     180 </span>            :                 return;
+<span class="lineNum">     181 </span>            :             }
+<span class="lineNum">     182 </span><span class="lineCov">    1003344 :           while (i-&gt;next_peer == NULL);</span>
+<span class="lineNum">     183 </span>            :           i = i-&gt;next_peer;
+<span class="lineNum">     184 </span>            :         }
+<span class="lineNum">     185 </span>            :     }
+<span class="lineNum">     186 </span>            : }
+<span class="lineNum">     187 </span>            : 
+<span class="lineNum">     188 </span>            : /* Computes the frequency of the call statement so that it can be stored in
+<a name="189"><span class="lineNum">     189 </span>            :    cgraph_edge.  BB is the basic block of the call statement.  */</a>
+<span class="lineNum">     190 </span>            : int
+<span class="lineNum">     191 </span><span class="lineNoCov">          0 : compute_call_stmt_bb_frequency (tree decl, basic_block bb)</span>
+<span class="lineNum">     192 </span>            : {
+<span class="lineNum">     193 </span><span class="lineNoCov">          0 :   return bb-&gt;count.to_cgraph_frequency</span>
+<span class="lineNum">     194 </span><span class="lineNoCov">          0 :       (ENTRY_BLOCK_PTR_FOR_FN (DECL_STRUCT_FUNCTION (decl))-&gt;count);</span>
+<span class="lineNum">     195 </span>            : }
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span>            : /* Mark address taken in STMT.  */
+<a name="198"><span class="lineNum">     198 </span>            : </a>
+<span class="lineNum">     199 </span>            : static bool
+<span class="lineNum">     200 </span><span class="lineCov">   17046639 : mark_address (gimple *stmt, tree addr, tree, void *data)</span>
+<span class="lineNum">     201 </span>            : {
+<span class="lineNum">     202 </span><span class="lineCov">   17046639 :   addr = get_base_address (addr);</span>
+<span class="lineNum">     203 </span><span class="lineCov">   17046639 :   if (TREE_CODE (addr) == FUNCTION_DECL)</span>
+<span class="lineNum">     204 </span>            :     {
+<span class="lineNum">     205 </span><span class="lineCov">     507182 :       cgraph_node *node = cgraph_node::get_create (addr);</span>
+<span class="lineNum">     206 </span><span class="lineCov">     507182 :       node-&gt;mark_address_taken ();</span>
+<span class="lineNum">     207 </span><span class="lineCov">     507182 :       ((symtab_node *)data)-&gt;create_reference (node, IPA_REF_ADDR, stmt);</span>
+<span class="lineNum">     208 </span>            :     }
+<span class="lineNum">     209 </span><span class="lineCov">   16539457 :   else if (addr &amp;&amp; VAR_P (addr)</span>
+<span class="lineNum">     210 </span><span class="lineCov">   10785210 :            &amp;&amp; (TREE_STATIC (addr) || DECL_EXTERNAL (addr)))</span>
+<span class="lineNum">     211 </span>            :     {
+<span class="lineNum">     212 </span><span class="lineCov">    4862736 :       varpool_node *vnode = varpool_node::get_create (addr);</span>
+<span class="lineNum">     213 </span>            : 
+<span class="lineNum">     214 </span><span class="lineCov">    4862736 :       ((symtab_node *)data)-&gt;create_reference (vnode, IPA_REF_ADDR, stmt);</span>
+<span class="lineNum">     215 </span>            :     }
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span><span class="lineCov">   17046639 :   return false;</span>
+<span class="lineNum">     218 </span>            : }
+<span class="lineNum">     219 </span>            : 
+<span class="lineNum">     220 </span>            : /* Mark load of T.  */
+<a name="221"><span class="lineNum">     221 </span>            : </a>
+<span class="lineNum">     222 </span>            : static bool
+<span class="lineNum">     223 </span><span class="lineCov">   34476805 : mark_load (gimple *stmt, tree t, tree, void *data)</span>
+<span class="lineNum">     224 </span>            : {
+<span class="lineNum">     225 </span><span class="lineCov">   34476805 :   t = get_base_address (t);</span>
+<span class="lineNum">     226 </span><span class="lineCov">   34476805 :   if (t &amp;&amp; TREE_CODE (t) == FUNCTION_DECL)</span>
+<span class="lineNum">     227 </span>            :     {
+<span class="lineNum">     228 </span>            :       /* ??? This can happen on platforms with descriptors when these are
+<span class="lineNum">     229 </span>            :          directly manipulated in the code.  Pretend that it's an address.  */
+<span class="lineNum">     230 </span><span class="lineCov">         48 :       cgraph_node *node = cgraph_node::get_create (t);</span>
+<span class="lineNum">     231 </span><span class="lineCov">         48 :       node-&gt;mark_address_taken ();</span>
+<span class="lineNum">     232 </span><span class="lineCov">         48 :       ((symtab_node *)data)-&gt;create_reference (node, IPA_REF_ADDR, stmt);</span>
+<span class="lineNum">     233 </span>            :     }
+<span class="lineNum">     234 </span><span class="lineCov">   34476757 :   else if (t &amp;&amp; VAR_P (t) &amp;&amp; (TREE_STATIC (t) || DECL_EXTERNAL (t)))</span>
+<span class="lineNum">     235 </span>            :     {
+<span class="lineNum">     236 </span><span class="lineCov">    6529612 :       varpool_node *vnode = varpool_node::get_create (t);</span>
+<span class="lineNum">     237 </span>            : 
+<span class="lineNum">     238 </span><span class="lineCov">    6529612 :       ((symtab_node *)data)-&gt;create_reference (vnode, IPA_REF_LOAD, stmt);</span>
+<span class="lineNum">     239 </span>            :     }
+<span class="lineNum">     240 </span><span class="lineCov">   34476805 :   return false;</span>
+<span class="lineNum">     241 </span>            : }
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span>            : /* Mark store of T.  */
+<a name="244"><span class="lineNum">     244 </span>            : </a>
+<span class="lineNum">     245 </span>            : static bool
+<span class="lineNum">     246 </span><span class="lineCov">   35854546 : mark_store (gimple *stmt, tree t, tree, void *data)</span>
+<span class="lineNum">     247 </span>            : {
+<span class="lineNum">     248 </span><span class="lineCov">   35854546 :   t = get_base_address (t);</span>
+<span class="lineNum">     249 </span><span class="lineCov">   35854546 :   if (t &amp;&amp; VAR_P (t) &amp;&amp; (TREE_STATIC (t) || DECL_EXTERNAL (t)))</span>
+<span class="lineNum">     250 </span>            :     {
+<span class="lineNum">     251 </span><span class="lineCov">    3336800 :       varpool_node *vnode = varpool_node::get_create (t);</span>
+<span class="lineNum">     252 </span>            : 
+<span class="lineNum">     253 </span><span class="lineCov">    3336800 :       ((symtab_node *)data)-&gt;create_reference (vnode, IPA_REF_STORE, stmt);</span>
+<span class="lineNum">     254 </span>            :      }
+<span class="lineNum">     255 </span><span class="lineCov">   35854546 :   return false;</span>
+<span class="lineNum">     256 </span>            : }
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span>            : /* Record all references from cgraph_node that are taken in statement STMT.  */
+<a name="259"><span class="lineNum">     259 </span>            : </a>
+<span class="lineNum">     260 </span>            : void
+<span class="lineNum">     261 </span><span class="lineCov">  190547387 : cgraph_node::record_stmt_references (gimple *stmt)</span>
+<span class="lineNum">     262 </span>            : {
+<span class="lineNum">     263 </span><span class="lineCov">  190547387 :   walk_stmt_load_store_addr_ops (stmt, this, mark_load, mark_store,</span>
+<span class="lineNum">     264 </span>            :                                  mark_address);
+<span class="lineNum">     265 </span><span class="lineCov">  190547387 : }</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            : /* Create cgraph edges for function calls.
+<span class="lineNum">     268 </span>            :    Also look for functions and variables having addresses taken.  */
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : namespace {
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : const pass_data pass_data_build_cgraph_edges =
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     275 </span>            :   &quot;*build_cgraph_edges&quot;, /* name */
+<span class="lineNum">     276 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     277 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     278 </span>            :   PROP_cfg, /* properties_required */
+<span class="lineNum">     279 </span>            :   0, /* properties_provided */
+<span class="lineNum">     280 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     281 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     282 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     283 </span>            : };
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            : class pass_build_cgraph_edges : public gimple_opt_pass
+<span class="lineNum">     286 </span>            : {
+<span class="lineNum">     287 </span>            : public:
+<span class="lineNum">     288 </span>            :   pass_build_cgraph_edges (gcc::context *ctxt)
+<span class="lineNum">     289 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_build_cgraph_edges, ctxt)</span>
+<span class="lineNum">     290 </span>            :   {}
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     293 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span>            : }; // class pass_build_cgraph_edges
+<a name="296"><span class="lineNum">     296 </span>            : </a>
+<span class="lineNum">     297 </span>            : unsigned int
+<span class="lineNum">     298 </span><span class="lineCov">    1631514 : pass_build_cgraph_edges::execute (function *fun)</span>
+<span class="lineNum">     299 </span>            : {
+<span class="lineNum">     300 </span><span class="lineCov">    1631514 :   basic_block bb;</span>
+<span class="lineNum">     301 </span><span class="lineCov">    1631514 :   cgraph_node *node = cgraph_node::get (current_function_decl);</span>
+<span class="lineNum">     302 </span><span class="lineCov">    1631514 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     303 </span><span class="lineCov">    1631514 :   tree decl;</span>
+<span class="lineNum">     304 </span><span class="lineCov">    1631514 :   unsigned ix;</span>
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span>            :   /* Create the callgraph edges and record the nodes referenced by the function.
+<span class="lineNum">     307 </span>            :      body.  */
+<span class="lineNum">     308 </span><span class="lineCov">   11527617 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">     309 </span>            :     {
+<span class="lineNum">     310 </span><span class="lineCov">   56521120 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     311 </span>            :         {
+<span class="lineNum">     312 </span><span class="lineCov">   36728914 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     313 </span><span class="lineCov">   36728914 :           tree decl;</span>
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span><span class="lineCov">   73457828 :           if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     316 </span>            :             continue;
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span><span class="lineCov">   35160032 :           if (gcall *call_stmt = dyn_cast &lt;gcall *&gt; (stmt))</span>
+<span class="lineNum">     319 </span>            :             {
+<span class="lineNum">     320 </span><span class="lineCov">    5911683 :               decl = gimple_call_fndecl (call_stmt);</span>
+<span class="lineNum">     321 </span><span class="lineCov">    5911683 :               if (decl)</span>
+<span class="lineNum">     322 </span><span class="lineCov">    5628308 :                 node-&gt;create_edge (cgraph_node::get_create (decl), call_stmt, bb-&gt;count);</span>
+<span class="lineNum">     323 </span><span class="lineCov">     566750 :               else if (gimple_call_internal_p (call_stmt))</span>
+<span class="lineNum">     324 </span>            :                 ;
+<span class="lineNum">     325 </span>            :               else
+<span class="lineNum">     326 </span><span class="lineCov">     127034 :                 node-&gt;create_indirect_edge (call_stmt,</span>
+<span class="lineNum">     327 </span>            :                                             gimple_call_flags (call_stmt),
+<span class="lineNum">     328 </span>            :                                             bb-&gt;count);
+<span class="lineNum">     329 </span>            :             }
+<span class="lineNum">     330 </span><span class="lineCov">   35160032 :           node-&gt;record_stmt_references (stmt);</span>
+<span class="lineNum">     331 </span><span class="lineCov">   35160032 :           if (gomp_parallel *omp_par_stmt = dyn_cast &lt;gomp_parallel *&gt; (stmt))</span>
+<span class="lineNum">     332 </span>            :             {
+<span class="lineNum">     333 </span><span class="lineNoCov">          0 :               tree fn = gimple_omp_parallel_child_fn (omp_par_stmt);</span>
+<span class="lineNum">     334 </span><span class="lineNoCov">          0 :               node-&gt;create_reference (cgraph_node::get_create (fn),</span>
+<span class="lineNum">     335 </span>            :                                       IPA_REF_ADDR, stmt);
+<span class="lineNum">     336 </span>            :             }
+<span class="lineNum">     337 </span><span class="lineCov">   70320064 :           if (gimple_code (stmt) == GIMPLE_OMP_TASK)</span>
+<span class="lineNum">     338 </span>            :             {
+<span class="lineNum">     339 </span><span class="lineNoCov">          0 :               tree fn = gimple_omp_task_child_fn (stmt);</span>
+<span class="lineNum">     340 </span><span class="lineNoCov">          0 :               if (fn)</span>
+<span class="lineNum">     341 </span><span class="lineNoCov">          0 :                 node-&gt;create_reference (cgraph_node::get_create (fn),</span>
+<span class="lineNum">     342 </span>            :                                         IPA_REF_ADDR, stmt);
+<span class="lineNum">     343 </span><span class="lineNoCov">          0 :               fn = gimple_omp_task_copy_fn (stmt);</span>
+<span class="lineNum">     344 </span><span class="lineNoCov">          0 :               if (fn)</span>
+<span class="lineNum">     345 </span><span class="lineNoCov">          0 :                 node-&gt;create_reference (cgraph_node::get_create (fn),</span>
+<span class="lineNum">     346 </span>            :                                         IPA_REF_ADDR, stmt);
+<span class="lineNum">     347 </span>            :             }
+<span class="lineNum">     348 </span>            :         }
+<span class="lineNum">     349 </span><span class="lineCov">    9896107 :       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     350 </span><span class="lineCov">          8 :         node-&gt;record_stmt_references (gsi_stmt (gsi));</span>
+<span class="lineNum">     351 </span>            :    }
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span>            :   /* Look for initializers of constant variables and private statics.  */
+<span class="lineNum">     354 </span><span class="lineCov">   11787500 :   FOR_EACH_LOCAL_DECL (fun, ix, decl)</span>
+<span class="lineNum">     355 </span><span class="lineCov">    8953771 :     if (VAR_P (decl)</span>
+<span class="lineNum">     356 </span><span class="lineCov">    8953771 :         &amp;&amp; (TREE_STATIC (decl) &amp;&amp; !DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     357 </span><span class="lineCov">     338864 :         &amp;&amp; !DECL_HAS_VALUE_EXPR_P (decl)</span>
+<span class="lineNum">     358 </span><span class="lineCov">    9117410 :         &amp;&amp; TREE_TYPE (decl) != error_mark_node)</span>
+<span class="lineNum">     359 </span><span class="lineCov">     163634 :       varpool_node::finalize_decl (decl);</span>
+<span class="lineNum">     360 </span><span class="lineCov">    1631514 :   record_eh_tables (node, fun);</span>
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span><span class="lineCov">    1631514 :   return 0;</span>
+<span class="lineNum">     363 </span>            : }
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span>            : } // anon namespace
+<a name="366"><span class="lineNum">     366 </span>            : </a>
+<span class="lineNum">     367 </span>            : gimple_opt_pass *
+<span class="lineNum">     368 </span><span class="lineCov">     170312 : make_pass_build_cgraph_edges (gcc::context *ctxt)</span>
+<span class="lineNum">     369 </span>            : {
+<span class="lineNum">     370 </span><span class="lineCov">     170312 :   return new pass_build_cgraph_edges (ctxt);</span>
+<span class="lineNum">     371 </span>            : }
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            : /* Record references to functions and other variables present in the
+<span class="lineNum">     374 </span>            :    initial value of DECL, a variable.
+<span class="lineNum">     375 </span>            :    When ONLY_VARS is true, we mark needed only variables, not functions.  */
+<a name="376"><span class="lineNum">     376 </span>            : </a>
+<span class="lineNum">     377 </span>            : void
+<span class="lineNum">     378 </span><span class="lineCov">    1314940 : record_references_in_initializer (tree decl, bool only_vars)</span>
+<span class="lineNum">     379 </span>            : {
+<span class="lineNum">     380 </span><span class="lineCov">    1314940 :   varpool_node *node = varpool_node::get_create (decl);</span>
+<span class="lineNum">     381 </span><span class="lineCov">    1314940 :   hash_set&lt;tree&gt; visited_nodes;</span>
+<span class="lineNum">     382 </span><span class="lineCov">    1314940 :   record_reference_ctx ctx = {false, NULL};</span>
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span><span class="lineCov">    1314940 :   ctx.varpool_node = node;</span>
+<span class="lineNum">     385 </span><span class="lineCov">    1314940 :   ctx.only_vars = only_vars;</span>
+<span class="lineNum">     386 </span><span class="lineCov">    1314940 :   walk_tree (&amp;DECL_INITIAL (decl), record_reference,</span>
+<span class="lineNum">     387 </span>            :              &amp;ctx, &amp;visited_nodes);
+<span class="lineNum">     388 </span><span class="lineCov">    1314940 : }</span>
+<span class="lineNum">     389 </span>            : 
+<span class="lineNum">     390 </span>            : /* Rebuild cgraph edges for current function node.  This needs to be run after
+<span class="lineNum">     391 </span>            :    passes that don't update the cgraph.  */
+<a name="392"><span class="lineNum">     392 </span>            : </a>
+<span class="lineNum">     393 </span>            : unsigned int
+<span class="lineNum">     394 </span><span class="lineCov">    5131550 : cgraph_edge::rebuild_edges (void)</span>
+<span class="lineNum">     395 </span>            : {
+<span class="lineNum">     396 </span><span class="lineCov">    5131550 :   basic_block bb;</span>
+<span class="lineNum">     397 </span><span class="lineCov">    5131550 :   cgraph_node *node = cgraph_node::get (current_function_decl);</span>
+<span class="lineNum">     398 </span><span class="lineCov">    5131550 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span><span class="lineCov">    5131550 :   node-&gt;remove_callees ();</span>
+<span class="lineNum">     401 </span><span class="lineCov">    5131550 :   node-&gt;remove_all_references ();</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span><span class="lineCov">    5131550 :   node-&gt;count = ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;count;</span>
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span><span class="lineCov">   34632223 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     406 </span>            :     {
+<span class="lineNum">     407 </span><span class="lineCov">  198351624 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     408 </span>            :         {
+<span class="lineNum">     409 </span><span class="lineCov">  139350278 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     410 </span><span class="lineCov">  139350278 :           tree decl;</span>
+<span class="lineNum">     411 </span>            : 
+<span class="lineNum">     412 </span><span class="lineCov">  139350278 :           if (gcall *call_stmt = dyn_cast &lt;gcall *&gt; (stmt))</span>
+<span class="lineNum">     413 </span>            :             {
+<span class="lineNum">     414 </span><span class="lineCov">   16800137 :               decl = gimple_call_fndecl (call_stmt);</span>
+<span class="lineNum">     415 </span><span class="lineCov">   16800137 :               if (decl)</span>
+<span class="lineNum">     416 </span><span class="lineCov">   15561174 :                 node-&gt;create_edge (cgraph_node::get_create (decl), call_stmt,</span>
+<span class="lineNum">     417 </span>            :                                    bb-&gt;count);
+<span class="lineNum">     418 </span><span class="lineCov">    2477926 :               else if (gimple_call_internal_p (call_stmt))</span>
+<span class="lineNum">     419 </span>            :                 ;
+<span class="lineNum">     420 </span>            :               else
+<span class="lineNum">     421 </span><span class="lineCov">     405397 :                 node-&gt;create_indirect_edge (call_stmt,</span>
+<span class="lineNum">     422 </span>            :                                             gimple_call_flags (call_stmt),
+<span class="lineNum">     423 </span>            :                                             bb-&gt;count);
+<span class="lineNum">     424 </span>            :             }
+<span class="lineNum">     425 </span><span class="lineCov">  139350278 :           node-&gt;record_stmt_references (stmt);</span>
+<span class="lineNum">     426 </span>            :         }
+<span class="lineNum">     427 </span><span class="lineCov">   37456593 :       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     428 </span><span class="lineCov">   15911840 :         node-&gt;record_stmt_references (gsi_stmt (gsi));</span>
+<span class="lineNum">     429 </span>            :     }
+<span class="lineNum">     430 </span><span class="lineCov">    5131550 :   record_eh_tables (node, cfun);</span>
+<span class="lineNum">     431 </span><span class="lineCov">    5131550 :   gcc_assert (!node-&gt;global.inlined_to);</span>
+<span class="lineNum">     432 </span><span class="lineCov">    5131550 :   return 0;</span>
+<span class="lineNum">     433 </span>            : }
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span>            : /* Rebuild cgraph references for current function node.  This needs to be run
+<span class="lineNum">     436 </span>            :    after passes that don't update the cgraph.  */
+<a name="437"><span class="lineNum">     437 </span>            : </a>
+<span class="lineNum">     438 </span>            : void
+<span class="lineNum">     439 </span><span class="lineCov">     272701 : cgraph_edge::rebuild_references (void)</span>
+<span class="lineNum">     440 </span>            : {
+<span class="lineNum">     441 </span><span class="lineCov">     272701 :   basic_block bb;</span>
+<span class="lineNum">     442 </span><span class="lineCov">     272701 :   cgraph_node *node = cgraph_node::get (current_function_decl);</span>
+<span class="lineNum">     443 </span><span class="lineCov">     272701 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     444 </span><span class="lineCov">     272701 :   ipa_ref *ref = NULL;</span>
+<span class="lineNum">     445 </span><span class="lineCov">     272701 :   int i;</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :   /* Keep speculative references for further cgraph edge expansion.  */
+<span class="lineNum">     448 </span><span class="lineCov">     303680 :   for (i = 0; node-&gt;iterate_reference (i, ref);)</span>
+<span class="lineNum">     449 </span><span class="lineCov">      30979 :     if (!ref-&gt;speculative)</span>
+<span class="lineNum">     450 </span><span class="lineCov">      30779 :       ref-&gt;remove_reference ();</span>
+<span class="lineNum">     451 </span>            :     else
+<span class="lineNum">     452 </span><span class="lineCov">        200 :       i++;</span>
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span><span class="lineCov">    1276073 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     455 </span>            :     {
+<span class="lineNum">     456 </span><span class="lineCov">    8593524 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     457 </span><span class="lineCov">   13173560 :         node-&gt;record_stmt_references (gsi_stmt (gsi));</span>
+<span class="lineNum">     458 </span><span class="lineCov">    1119410 :       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     459 </span><span class="lineCov">     232076 :         node-&gt;record_stmt_references (gsi_stmt (gsi));</span>
+<span class="lineNum">     460 </span>            :     }
+<span class="lineNum">     461 </span><span class="lineCov">     272701 :   record_eh_tables (node, cfun);</span>
+<span class="lineNum">     462 </span><span class="lineCov">     272701 : }</span>
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span>            : namespace {
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            : const pass_data pass_data_rebuild_cgraph_edges =
+<span class="lineNum">     467 </span>            : {
+<span class="lineNum">     468 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     469 </span>            :   &quot;*rebuild_cgraph_edges&quot;, /* name */
+<span class="lineNum">     470 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     471 </span>            :   TV_CGRAPH, /* tv_id */
+<span class="lineNum">     472 </span>            :   PROP_cfg, /* properties_required */
+<span class="lineNum">     473 </span>            :   0, /* properties_provided */
+<span class="lineNum">     474 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     475 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     476 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     477 </span>            : };
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span>            : class pass_rebuild_cgraph_edges : public gimple_opt_pass
+<span class="lineNum">     480 </span>            : {
+<span class="lineNum">     481 </span>            : public:
+<span class="lineNum">     482 </span>            :   pass_rebuild_cgraph_edges (gcc::context *ctxt)
+<span class="lineNum">     483 </span><span class="lineCov">    1362496 :     : gimple_opt_pass (pass_data_rebuild_cgraph_edges, ctxt)</span>
+<span class="lineNum">     484 </span>            :   {}
+<a name="485"><span class="lineNum">     485 </span>            : </a>
+<a name="486"><span class="lineNum">     486 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     487 </span><span class="lineCov">     510936 :   opt_pass * clone () { return new pass_rebuild_cgraph_edges (m_ctxt); }</span>
+<span class="lineNum">     488 </span><span class="lineCov">    4862622 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">     489 </span>            :   {
+<span class="lineNum">     490 </span><span class="lineCov">    4862622 :     return cgraph_edge::rebuild_edges ();</span>
+<span class="lineNum">     491 </span>            :   }
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : }; // class pass_rebuild_cgraph_edges
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span>            : } // anon namespace
+<a name="496"><span class="lineNum">     496 </span>            : </a>
+<span class="lineNum">     497 </span>            : gimple_opt_pass *
+<span class="lineNum">     498 </span><span class="lineCov">     170312 : make_pass_rebuild_cgraph_edges (gcc::context *ctxt)</span>
+<span class="lineNum">     499 </span>            : {
+<span class="lineNum">     500 </span><span class="lineCov">     170312 :   return new pass_rebuild_cgraph_edges (ctxt);</span>
+<span class="lineNum">     501 </span>            : }
+<span class="lineNum">     502 </span>            : 
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span>            : namespace {
+<span class="lineNum">     505 </span>            : 
+<span class="lineNum">     506 </span>            : const pass_data pass_data_remove_cgraph_callee_edges =
+<span class="lineNum">     507 </span>            : {
+<span class="lineNum">     508 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     509 </span>            :   &quot;*remove_cgraph_callee_edges&quot;, /* name */
+<span class="lineNum">     510 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     511 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     512 </span>            :   0, /* properties_required */
+<span class="lineNum">     513 </span>            :   0, /* properties_provided */
+<span class="lineNum">     514 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     515 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     516 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     517 </span>            : };
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span>            : class pass_remove_cgraph_callee_edges : public gimple_opt_pass
+<span class="lineNum">     520 </span>            : {
+<span class="lineNum">     521 </span>            : public:
+<span class="lineNum">     522 </span>            :   pass_remove_cgraph_callee_edges (gcc::context *ctxt)
+<span class="lineNum">     523 </span><span class="lineCov">    1021872 :     : gimple_opt_pass (pass_data_remove_cgraph_callee_edges, ctxt)</span>
+<span class="lineNum">     524 </span>            :   {}
+<a name="525"><span class="lineNum">     525 </span>            : </a>
+<span class="lineNum">     526 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     527 </span><span class="lineCov">     340624 :   opt_pass * clone () {</span>
+<span class="lineNum">     528 </span><span class="lineCov">     340624 :     return new pass_remove_cgraph_callee_edges (m_ctxt);</span>
+<span class="lineNum">     529 </span>            :   }
+<span class="lineNum">     530 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     531 </span>            : 
+<span class="lineNum">     532 </span>            : }; // class pass_remove_cgraph_callee_edges
+<a name="533"><span class="lineNum">     533 </span>            : </a>
+<span class="lineNum">     534 </span>            : unsigned int
+<span class="lineNum">     535 </span><span class="lineCov">    2031928 : pass_remove_cgraph_callee_edges::execute (function *)</span>
+<span class="lineNum">     536 </span>            : {
+<span class="lineNum">     537 </span><span class="lineCov">    2031928 :   cgraph_node *node = cgraph_node::get (current_function_decl);</span>
+<span class="lineNum">     538 </span><span class="lineCov">    2031928 :   node-&gt;remove_callees ();</span>
+<span class="lineNum">     539 </span><span class="lineCov">    2031928 :   node-&gt;remove_all_references ();</span>
+<span class="lineNum">     540 </span><span class="lineCov">    2031928 :   return 0;</span>
+<span class="lineNum">     541 </span>            : }
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            : } // anon namespace
+<a name="544"><span class="lineNum">     544 </span>            : </a>
+<span class="lineNum">     545 </span>            : gimple_opt_pass *
+<span class="lineNum">     546 </span><span class="lineCov">     170312 : make_pass_remove_cgraph_callee_edges (gcc::context *ctxt)</span>
+<span class="lineNum">     547 </span>            : {
+<span class="lineNum">     548 </span><span class="lineCov">     170312 :   return new pass_remove_cgraph_callee_edges (ctxt);</span>
+<span class="lineNum">     549 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

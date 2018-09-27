@@ -1,0 +1,1317 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/graphite-sese-to-poly.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - graphite-sese-to-poly.c<span style="font-size: 80%;"> (source / <a href="graphite-sese-to-poly.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">566</td>
+            <td class="headerCovTableEntry">608</td>
+            <td class="headerCovTableEntryHi">93.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">40</td>
+            <td class="headerCovTableEntry">43</td>
+            <td class="headerCovTableEntryHi">93.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Conversion of SESE regions to Polyhedra.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2009-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Sebastian Pop &lt;sebastian.pop@amd.com&gt;.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #define USES_ISL
+<span class="lineNum">      22 </span>            : 
+<span class="lineNum">      23 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      24 </span>            : 
+<span class="lineNum">      25 </span>            : #ifdef HAVE_isl
+<span class="lineNum">      26 </span>            : 
+<span class="lineNum">      27 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-ssa-loop-manip.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;tree-ssa-loop-niter.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;tree-ssa-loop.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;tree-into-ssa.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;tree-data-ref.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;tree-scalar-evolution.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;domwalk.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;tree-ssa-propagate.h&quot;
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : #include &lt;isl/constraint.h&gt;
+<span class="lineNum">      52 </span>            : #include &lt;isl/set.h&gt;
+<span class="lineNum">      53 </span>            : #include &lt;isl/map.h&gt;
+<span class="lineNum">      54 </span>            : #include &lt;isl/union_map.h&gt;
+<span class="lineNum">      55 </span>            : #include &lt;isl/constraint.h&gt;
+<span class="lineNum">      56 </span>            : #include &lt;isl/aff.h&gt;
+<span class="lineNum">      57 </span>            : #include &lt;isl/val.h&gt;
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            : #include &quot;graphite.h&quot;
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : /* Assigns to RES the value of the INTEGER_CST T.  */
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            : static inline void
+<span class="lineNum">      64 </span>            : tree_int_to_gmp (tree t, mpz_t res)
+<span class="lineNum">      65 </span>            : {
+<span class="lineNum">      66 </span>            :   wi::to_mpz (wi::to_wide (t), res, TYPE_SIGN (TREE_TYPE (t)));
+<span class="lineNum">      67 </span>            : }
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            : /* Return an isl identifier for the polyhedral basic block PBB.  */
+<a name="70"><span class="lineNum">      70 </span>            : </a>
+<span class="lineNum">      71 </span>            : static isl_id *
+<span class="lineNum">      72 </span><span class="lineCov">        659 : isl_id_for_pbb (scop_p s, poly_bb_p pbb)</span>
+<span class="lineNum">      73 </span>            : {
+<span class="lineNum">      74 </span><span class="lineCov">        659 :   char name[14];</span>
+<span class="lineNum">      75 </span><span class="lineCov">        659 :   snprintf (name, sizeof (name), &quot;S_%d&quot;, pbb_index (pbb));</span>
+<span class="lineNum">      76 </span><span class="lineCov">        659 :   return isl_id_alloc (s-&gt;isl_context, name, pbb);</span>
+<span class="lineNum">      77 </span>            : }
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            : static isl_pw_aff *extract_affine (scop_p, tree, __isl_take isl_space *space);
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : /* Extract an affine expression from the chain of recurrence E.  */
+<a name="82"><span class="lineNum">      82 </span>            : </a>
+<span class="lineNum">      83 </span>            : static isl_pw_aff *
+<span class="lineNum">      84 </span><span class="lineCov">       1195 : extract_affine_chrec (scop_p s, tree e, __isl_take isl_space *space)</span>
+<span class="lineNum">      85 </span>            : {
+<span class="lineNum">      86 </span><span class="lineCov">       1195 :   isl_pw_aff *lhs = extract_affine (s, CHREC_LEFT (e), isl_space_copy (space));</span>
+<span class="lineNum">      87 </span><span class="lineCov">       1195 :   isl_pw_aff *rhs = extract_affine (s, CHREC_RIGHT (e), isl_space_copy (space));</span>
+<span class="lineNum">      88 </span><span class="lineCov">       1195 :   isl_local_space *ls = isl_local_space_from_space (space);</span>
+<span class="lineNum">      89 </span><span class="lineCov">       1195 :   unsigned pos = sese_loop_depth (s-&gt;scop_info-&gt;region, get_chrec_loop (e)) - 1;</span>
+<span class="lineNum">      90 </span><span class="lineCov">       1195 :   isl_aff *loop = isl_aff_set_coefficient_si</span>
+<span class="lineNum">      91 </span><span class="lineCov">       1195 :     (isl_aff_zero_on_domain (ls), isl_dim_in, pos, 1);</span>
+<span class="lineNum">      92 </span><span class="lineCov">       1195 :   isl_pw_aff *l = isl_pw_aff_from_aff (loop);</span>
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            :   /* Before multiplying, make sure that the result is affine.  */
+<span class="lineNum">      95 </span><span class="lineCov">       1195 :   gcc_assert (isl_pw_aff_is_cst (rhs)</span>
+<span class="lineNum">      96 </span>            :               || isl_pw_aff_is_cst (l));
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span><span class="lineCov">       1195 :   return isl_pw_aff_add (lhs, isl_pw_aff_mul (rhs, l));</span>
+<span class="lineNum">      99 </span>            : }
+<span class="lineNum">     100 </span>            : 
+<span class="lineNum">     101 </span>            : /* Extract an affine expression from the mult_expr E.  */
+<a name="102"><span class="lineNum">     102 </span>            : </a>
+<span class="lineNum">     103 </span>            : static isl_pw_aff *
+<span class="lineNum">     104 </span><span class="lineCov">          1 : extract_affine_mul (scop_p s, tree e, __isl_take isl_space *space)</span>
+<span class="lineNum">     105 </span>            : {
+<span class="lineNum">     106 </span><span class="lineCov">          1 :   isl_pw_aff *lhs = extract_affine (s, TREE_OPERAND (e, 0),</span>
+<span class="lineNum">     107 </span>            :                                     isl_space_copy (space));
+<span class="lineNum">     108 </span><span class="lineCov">          1 :   isl_pw_aff *rhs = extract_affine (s, TREE_OPERAND (e, 1), space);</span>
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span><span class="lineCov">          1 :   if (!isl_pw_aff_is_cst (lhs)</span>
+<span class="lineNum">     111 </span><span class="lineCov">          1 :       &amp;&amp; !isl_pw_aff_is_cst (rhs))</span>
+<span class="lineNum">     112 </span>            :     {
+<span class="lineNum">     113 </span><span class="lineNoCov">          0 :       isl_pw_aff_free (lhs);</span>
+<span class="lineNum">     114 </span><span class="lineNoCov">          0 :       isl_pw_aff_free (rhs);</span>
+<span class="lineNum">     115 </span><span class="lineNoCov">          0 :       return NULL;</span>
+<span class="lineNum">     116 </span>            :     }
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span><span class="lineCov">          1 :   return isl_pw_aff_mul (lhs, rhs);</span>
+<span class="lineNum">     119 </span>            : }
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span>            : /* Return an isl identifier from the name of the ssa_name E.  */
+<a name="122"><span class="lineNum">     122 </span>            : </a>
+<span class="lineNum">     123 </span>            : static isl_id *
+<span class="lineNum">     124 </span><span class="lineCov">        142 : isl_id_for_ssa_name (scop_p s, tree e)</span>
+<span class="lineNum">     125 </span>            : {
+<span class="lineNum">     126 </span><span class="lineCov">        142 :   char name1[14];</span>
+<span class="lineNum">     127 </span><span class="lineCov">        142 :   snprintf (name1, sizeof (name1), &quot;P_%d&quot;, SSA_NAME_VERSION (e));</span>
+<span class="lineNum">     128 </span><span class="lineCov">        142 :   return isl_id_alloc (s-&gt;isl_context, name1, e);</span>
+<span class="lineNum">     129 </span>            : }
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span>            : /* Return an isl identifier for the data reference DR.  Data references and
+<span class="lineNum">     132 </span>            :    scalar references get the same isl_id.  They need to be comparable and are
+<span class="lineNum">     133 </span>            :    distinguished through the first dimension, which contains the alias set or
+<span class="lineNum">     134 </span>            :    SSA_NAME_VERSION number.  */
+<a name="135"><span class="lineNum">     135 </span>            : </a>
+<span class="lineNum">     136 </span>            : static isl_id *
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 : isl_id_for_dr (scop_p s)</span>
+<span class="lineNum">     138 </span>            : {
+<span class="lineNum">     139 </span><span class="lineNoCov">          0 :   return isl_id_alloc (s-&gt;isl_context, &quot;&quot;, 0);</span>
+<span class="lineNum">     140 </span>            : }
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            : /* Extract an affine expression from the ssa_name E.  */
+<a name="143"><span class="lineNum">     143 </span>            : </a>
+<span class="lineNum">     144 </span>            : static isl_pw_aff *
+<span class="lineNum">     145 </span><span class="lineCov">        318 : extract_affine_name (int dimension, __isl_take isl_space *space)</span>
+<span class="lineNum">     146 </span>            : {
+<span class="lineNum">     147 </span><span class="lineCov">        318 :   isl_set *dom = isl_set_universe (isl_space_copy (space));</span>
+<span class="lineNum">     148 </span><span class="lineCov">        318 :   isl_aff *aff = isl_aff_zero_on_domain (isl_local_space_from_space (space));</span>
+<span class="lineNum">     149 </span><span class="lineCov">        318 :   aff = isl_aff_add_coefficient_si (aff, isl_dim_param, dimension, 1);</span>
+<span class="lineNum">     150 </span><span class="lineCov">        318 :   return isl_pw_aff_alloc (dom, aff);</span>
+<span class="lineNum">     151 </span>            : }
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            : /* Convert WI to a isl_val with CTX.  */
+<a name="154"><span class="lineNum">     154 </span>            : </a>
+<span class="lineNum">     155 </span>            : static __isl_give isl_val *
+<span class="lineNum">     156 </span><span class="lineCov">       4930 : isl_val_int_from_wi (isl_ctx *ctx, const widest_int &amp;wi)</span>
+<span class="lineNum">     157 </span>            : {
+<span class="lineNum">     158 </span><span class="lineCov">       4930 :   if (wi::neg_p (wi, SIGNED))</span>
+<span class="lineNum">     159 </span>            :     {
+<span class="lineNum">     160 </span><span class="lineCov">        185 :       widest_int mwi = -wi;</span>
+<span class="lineNum">     161 </span><span class="lineCov">        185 :       return isl_val_neg (isl_val_int_from_chunks (ctx, mwi.get_len (),</span>
+<span class="lineNum">     162 </span>            :                                                    sizeof (HOST_WIDE_INT),
+<span class="lineNum">     163 </span><span class="lineCov">        185 :                                                    mwi.get_val ()));</span>
+<span class="lineNum">     164 </span>            :     }
+<span class="lineNum">     165 </span><span class="lineCov">       9490 :   return isl_val_int_from_chunks (ctx, wi.get_len (), sizeof (HOST_WIDE_INT),</span>
+<span class="lineNum">     166 </span><span class="lineCov">       4745 :                                   wi.get_val ());</span>
+<span class="lineNum">     167 </span>            : }
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span>            : /* Extract an affine expression from the gmp constant G.  */
+<a name="170"><span class="lineNum">     170 </span>            : </a>
+<span class="lineNum">     171 </span>            : static isl_pw_aff *
+<span class="lineNum">     172 </span><span class="lineCov">       4120 : extract_affine_wi (const widest_int &amp;g, __isl_take isl_space *space)</span>
+<span class="lineNum">     173 </span>            : {
+<span class="lineNum">     174 </span><span class="lineCov">       4120 :   isl_local_space *ls = isl_local_space_from_space (isl_space_copy (space));</span>
+<span class="lineNum">     175 </span><span class="lineCov">       4120 :   isl_aff *aff = isl_aff_zero_on_domain (ls);</span>
+<span class="lineNum">     176 </span><span class="lineCov">       4120 :   isl_set *dom = isl_set_universe (space);</span>
+<span class="lineNum">     177 </span><span class="lineCov">       4120 :   isl_ctx *ct = isl_aff_get_ctx (aff);</span>
+<span class="lineNum">     178 </span><span class="lineCov">       4120 :   isl_val *v = isl_val_int_from_wi (ct, g);</span>
+<span class="lineNum">     179 </span><span class="lineCov">       4120 :   aff = isl_aff_add_constant_val (aff, v);</span>
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span><span class="lineCov">       4120 :   return isl_pw_aff_alloc (dom, aff);</span>
+<span class="lineNum">     182 </span>            : }
+<span class="lineNum">     183 </span>            : 
+<span class="lineNum">     184 </span>            : /* Extract an affine expression from the integer_cst E.  */
+<a name="185"><span class="lineNum">     185 </span>            : </a>
+<span class="lineNum">     186 </span>            : static isl_pw_aff *
+<span class="lineNum">     187 </span><span class="lineCov">       3988 : extract_affine_int (tree e, __isl_take isl_space *space)</span>
+<span class="lineNum">     188 </span>            : {
+<span class="lineNum">     189 </span><span class="lineCov">       3988 :   isl_pw_aff *res = extract_affine_wi (wi::to_widest (e), space);</span>
+<span class="lineNum">     190 </span><span class="lineCov">       3988 :   return res;</span>
+<span class="lineNum">     191 </span>            : }
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span>            : /* Compute pwaff mod 2^width.  */
+<a name="194"><span class="lineNum">     194 </span>            : </a>
+<span class="lineNum">     195 </span>            : static isl_pw_aff *
+<span class="lineNum">     196 </span><span class="lineCov">        311 : wrap (isl_pw_aff *pwaff, unsigned width)</span>
+<span class="lineNum">     197 </span>            : {
+<span class="lineNum">     198 </span><span class="lineCov">        311 :   isl_val *mod;</span>
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span><span class="lineCov">        311 :   mod = isl_val_int_from_ui (isl_pw_aff_get_ctx (pwaff), width);</span>
+<span class="lineNum">     201 </span><span class="lineCov">        311 :   mod = isl_val_2exp (mod);</span>
+<span class="lineNum">     202 </span><span class="lineCov">        311 :   pwaff = isl_pw_aff_mod_val (pwaff, mod);</span>
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span><span class="lineCov">        311 :   return pwaff;</span>
+<span class="lineNum">     205 </span>            : }
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span>            : /* When parameter NAME is in REGION, returns its index in SESE_PARAMS.
+<span class="lineNum">     208 </span>            :    Otherwise returns -1.  */
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span>            : static inline int
+<span class="lineNum">     211 </span>            : parameter_index_in_region (tree name, sese_info_p region)
+<span class="lineNum">     212 </span>            : {
+<span class="lineNum">     213 </span><span class="lineCov">        318 :   int i;</span>
+<span class="lineNum">     214 </span><span class="lineCov">        318 :   tree p;</span>
+<span class="lineNum">     215 </span><span class="lineCov">        537 :   FOR_EACH_VEC_ELT (region-&gt;params, i, p)</span>
+<span class="lineNum">     216 </span><span class="lineCov">        537 :     if (p == name)</span>
+<span class="lineNum">     217 </span>            :       return i;
+<span class="lineNum">     218 </span>            :   return -1;
+<span class="lineNum">     219 </span>            : }
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span>            : /* Extract an affine expression from the tree E in the scop S.  */
+<a name="222"><span class="lineNum">     222 </span>            : </a>
+<span class="lineNum">     223 </span>            : static isl_pw_aff *
+<span class="lineNum">     224 </span><span class="lineCov">       4262 : extract_affine (scop_p s, tree e, __isl_take isl_space *space)</span>
+<span class="lineNum">     225 </span>            : {
+<span class="lineNum">     226 </span><span class="lineCov">       4262 :   isl_pw_aff *lhs, *rhs, *res;</span>
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span><span class="lineCov">       4262 :   if (e == chrec_dont_know) {</span>
+<span class="lineNum">     229 </span><span class="lineNoCov">          0 :     isl_space_free (space);</span>
+<span class="lineNum">     230 </span><span class="lineNoCov">          0 :     return NULL;</span>
+<span class="lineNum">     231 </span>            :   }
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span><span class="lineCov">       4262 :   tree type = TREE_TYPE (e);</span>
+<span class="lineNum">     234 </span><span class="lineCov">       4262 :   switch (TREE_CODE (e))</span>
+<span class="lineNum">     235 </span>            :     {
+<span class="lineNum">     236 </span><span class="lineCov">       1195 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     237 </span><span class="lineCov">       1195 :       res = extract_affine_chrec (s, e, space);</span>
+<span class="lineNum">     238 </span><span class="lineCov">       1195 :       break;</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span><span class="lineCov">          1 :     case MULT_EXPR:</span>
+<span class="lineNum">     241 </span><span class="lineCov">          1 :       res = extract_affine_mul (s, e, space);</span>
+<span class="lineNum">     242 </span><span class="lineCov">          1 :       break;</span>
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span><span class="lineNoCov">          0 :     case POINTER_PLUS_EXPR:</span>
+<span class="lineNum">     245 </span><span class="lineNoCov">          0 :       {</span>
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 :         lhs = extract_affine (s, TREE_OPERAND (e, 0), isl_space_copy (space));</span>
+<span class="lineNum">     247 </span>            :         /* The RHS of a pointer-plus expression is to be interpreted
+<span class="lineNum">     248 </span>            :            as signed value.  Try to look through a sign-changing conversion
+<span class="lineNum">     249 </span>            :            first.  */
+<span class="lineNum">     250 </span><span class="lineNoCov">          0 :         tree tem = TREE_OPERAND (e, 1);</span>
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 :         STRIP_NOPS (tem);</span>
+<span class="lineNum">     252 </span><span class="lineNoCov">          0 :         rhs = extract_affine (s, tem, space);</span>
+<span class="lineNum">     253 </span><span class="lineNoCov">          0 :         if (TYPE_UNSIGNED (TREE_TYPE (tem)))</span>
+<span class="lineNum">     254 </span><span class="lineNoCov">          0 :           rhs = wrap (rhs, TYPE_PRECISION (type) - 1);</span>
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :         res = isl_pw_aff_add (lhs, rhs);</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 :         break;</span>
+<span class="lineNum">     257 </span>            :       }
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span><span class="lineCov">        165 :     case PLUS_EXPR:</span>
+<span class="lineNum">     260 </span><span class="lineCov">        165 :       lhs = extract_affine (s, TREE_OPERAND (e, 0), isl_space_copy (space));</span>
+<span class="lineNum">     261 </span><span class="lineCov">        165 :       rhs = extract_affine (s, TREE_OPERAND (e, 1), space);</span>
+<span class="lineNum">     262 </span><span class="lineCov">        165 :       res = isl_pw_aff_add (lhs, rhs);</span>
+<span class="lineNum">     263 </span><span class="lineCov">        165 :       break;</span>
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span><span class="lineCov">         12 :     case MINUS_EXPR:</span>
+<span class="lineNum">     266 </span><span class="lineCov">         12 :       lhs = extract_affine (s, TREE_OPERAND (e, 0), isl_space_copy (space));</span>
+<span class="lineNum">     267 </span><span class="lineCov">         12 :       rhs = extract_affine (s, TREE_OPERAND (e, 1), space);</span>
+<span class="lineNum">     268 </span><span class="lineCov">         12 :       res = isl_pw_aff_sub (lhs, rhs);</span>
+<span class="lineNum">     269 </span><span class="lineCov">         12 :       break;</span>
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span><span class="lineNoCov">          0 :     case BIT_NOT_EXPR:</span>
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :       lhs = extract_affine (s, integer_minus_one_node, isl_space_copy (space));</span>
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :       rhs = extract_affine (s, TREE_OPERAND (e, 0), space);</span>
+<span class="lineNum">     274 </span><span class="lineNoCov">          0 :       res = isl_pw_aff_sub (lhs, rhs);</span>
+<span class="lineNum">     275 </span>            :       /* We need to always wrap the result of a bitwise operation.  */
+<span class="lineNum">     276 </span><span class="lineNoCov">          0 :       return wrap (res, TYPE_PRECISION (type) - (TYPE_UNSIGNED (type) ? 0 : 1));</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineCov">         10 :     case NEGATE_EXPR:</span>
+<span class="lineNum">     279 </span><span class="lineCov">         10 :       lhs = extract_affine (s, TREE_OPERAND (e, 0), isl_space_copy (space));</span>
+<span class="lineNum">     280 </span><span class="lineCov">         10 :       rhs = extract_affine (s, integer_minus_one_node, space);</span>
+<span class="lineNum">     281 </span><span class="lineCov">         10 :       res = isl_pw_aff_mul (lhs, rhs);</span>
+<span class="lineNum">     282 </span><span class="lineCov">         10 :       break;</span>
+<span class="lineNum">     283 </span>            : 
+<span class="lineNum">     284 </span><span class="lineCov">        318 :     case SSA_NAME:</span>
+<span class="lineNum">     285 </span><span class="lineCov">        318 :       {</span>
+<span class="lineNum">     286 </span><span class="lineCov">        318 :         gcc_assert (! defined_in_sese_p (e, s-&gt;scop_info-&gt;region));</span>
+<span class="lineNum">     287 </span><span class="lineCov">        318 :         int dim = parameter_index_in_region (e, s-&gt;scop_info);</span>
+<span class="lineNum">     288 </span><span class="lineCov">        318 :         gcc_assert (dim != -1);</span>
+<span class="lineNum">     289 </span>            :         /* No need to wrap a parameter.  */
+<span class="lineNum">     290 </span><span class="lineCov">        318 :         return extract_affine_name (dim, space);</span>
+<span class="lineNum">     291 </span>            :       }
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span><span class="lineCov">       2414 :     case INTEGER_CST:</span>
+<span class="lineNum">     294 </span><span class="lineCov">       2414 :       res = extract_affine_int (e, space);</span>
+<span class="lineNum">     295 </span>            :       /* No need to wrap a single integer.  */
+<span class="lineNum">     296 </span><span class="lineCov">       2414 :       return res;</span>
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span><span class="lineCov">        147 :     CASE_CONVERT:</span>
+<span class="lineNum">     299 </span><span class="lineCov">        147 :       {</span>
+<span class="lineNum">     300 </span><span class="lineCov">        147 :         tree itype = TREE_TYPE (TREE_OPERAND (e, 0));</span>
+<span class="lineNum">     301 </span><span class="lineCov">        147 :         res = extract_affine (s, TREE_OPERAND (e, 0), space);</span>
+<span class="lineNum">     302 </span>            :         /* Signed values, even if overflow is undefined, get modulo-reduced.
+<span class="lineNum">     303 </span>            :            But only if not all values of the old type fit in the new.  */
+<span class="lineNum">     304 </span><span class="lineCov">        147 :         if (! TYPE_UNSIGNED (type)</span>
+<span class="lineNum">     305 </span><span class="lineCov">        147 :             &amp;&amp; ((TYPE_UNSIGNED (itype)</span>
+<span class="lineNum">     306 </span><span class="lineCov">         11 :                  &amp;&amp; TYPE_PRECISION (type) &lt;= TYPE_PRECISION (itype))</span>
+<span class="lineNum">     307 </span><span class="lineCov">         21 :                 || TYPE_PRECISION (type) &lt; TYPE_PRECISION (itype)))</span>
+<span class="lineNum">     308 </span><span class="lineCov">          8 :           res = wrap (res, TYPE_PRECISION (type) - 1);</span>
+<span class="lineNum">     309 </span><span class="lineCov">        143 :         else if (TYPE_UNSIGNED (type)</span>
+<span class="lineNum">     310 </span><span class="lineCov">        143 :                  &amp;&amp; (!TYPE_UNSIGNED (itype)</span>
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 :                      || TYPE_PRECISION (type) &lt; TYPE_PRECISION (itype)))</span>
+<span class="lineNum">     312 </span><span class="lineCov">        272 :           res = wrap (res, TYPE_PRECISION (type));</span>
+<span class="lineNum">     313 </span>            :         return res;
+<span class="lineNum">     314 </span>            :       }
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span><span class="lineNoCov">          0 :     case NON_LVALUE_EXPR:</span>
+<span class="lineNum">     317 </span><span class="lineNoCov">          0 :       res = extract_affine (s, TREE_OPERAND (e, 0), space);</span>
+<span class="lineNum">     318 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     321 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     322 </span><span class="lineCov">       1383 :       break;</span>
+<span class="lineNum">     323 </span>            :     }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            :   /* For all wrapping arithmetic wrap the result.  */
+<span class="lineNum">     326 </span><span class="lineCov">       1383 :   if (TYPE_OVERFLOW_WRAPS (type))</span>
+<span class="lineNum">     327 </span><span class="lineCov">        171 :     res = wrap (res, TYPE_PRECISION (type));</span>
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span>            :   return res;
+<span class="lineNum">     330 </span>            : }
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span>            : /* Returns a linear expression for tree T evaluated in PBB.  */
+<a name="333"><span class="lineNum">     333 </span>            : </a>
+<span class="lineNum">     334 </span>            : static isl_pw_aff *
+<span class="lineNum">     335 </span><span class="lineCov">        248 : create_pw_aff_from_tree (poly_bb_p pbb, loop_p loop, tree t)</span>
+<span class="lineNum">     336 </span>            : {
+<span class="lineNum">     337 </span><span class="lineCov">        248 :   scop_p scop = PBB_SCOP (pbb);</span>
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span><span class="lineCov">        248 :   t = scalar_evolution_in_region (scop-&gt;scop_info-&gt;region, loop, t);</span>
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineCov">        248 :   gcc_assert (!chrec_contains_undetermined (t));</span>
+<span class="lineNum">     342 </span><span class="lineCov">        248 :   gcc_assert (!automatically_generated_chrec_p (t));</span>
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span><span class="lineCov">        248 :   return extract_affine (scop, t, isl_set_get_space (pbb-&gt;domain));</span>
+<span class="lineNum">     345 </span>            : }
+<span class="lineNum">     346 </span>            : 
+<span class="lineNum">     347 </span>            : /* Add conditional statement STMT to pbb.  CODE is used as the comparison
+<span class="lineNum">     348 </span>            :    operator.  This allows us to invert the condition or to handle
+<span class="lineNum">     349 </span>            :    inequalities.  */
+<a name="350"><span class="lineNum">     350 </span>            : </a>
+<span class="lineNum">     351 </span>            : static void
+<span class="lineNum">     352 </span><span class="lineCov">        124 : add_condition_to_pbb (poly_bb_p pbb, gcond *stmt, enum tree_code code)</span>
+<span class="lineNum">     353 </span>            : {
+<span class="lineNum">     354 </span><span class="lineCov">        124 :   loop_p loop = gimple_bb (stmt)-&gt;loop_father;</span>
+<span class="lineNum">     355 </span><span class="lineCov">        248 :   isl_pw_aff *lhs = create_pw_aff_from_tree (pbb, loop, gimple_cond_lhs (stmt));</span>
+<span class="lineNum">     356 </span><span class="lineCov">        248 :   isl_pw_aff *rhs = create_pw_aff_from_tree (pbb, loop, gimple_cond_rhs (stmt));</span>
+<span class="lineNum">     357 </span>            : 
+<span class="lineNum">     358 </span><span class="lineCov">        124 :   isl_set *cond;</span>
+<span class="lineNum">     359 </span><span class="lineCov">        124 :   switch (code)</span>
+<span class="lineNum">     360 </span>            :     {
+<span class="lineNum">     361 </span><span class="lineCov">          1 :       case LT_EXPR:</span>
+<span class="lineNum">     362 </span><span class="lineCov">          1 :         cond = isl_pw_aff_lt_set (lhs, rhs);</span>
+<span class="lineNum">     363 </span><span class="lineCov">          1 :         break;</span>
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span><span class="lineCov">         36 :       case GT_EXPR:</span>
+<span class="lineNum">     366 </span><span class="lineCov">         36 :         cond = isl_pw_aff_gt_set (lhs, rhs);</span>
+<span class="lineNum">     367 </span><span class="lineCov">         36 :         break;</span>
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineCov">         31 :       case LE_EXPR:</span>
+<span class="lineNum">     370 </span><span class="lineCov">         31 :         cond = isl_pw_aff_le_set (lhs, rhs);</span>
+<span class="lineNum">     371 </span><span class="lineCov">         31 :         break;</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span><span class="lineCov">          4 :       case GE_EXPR:</span>
+<span class="lineNum">     374 </span><span class="lineCov">          4 :         cond = isl_pw_aff_ge_set (lhs, rhs);</span>
+<span class="lineNum">     375 </span><span class="lineCov">          4 :         break;</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">         16 :       case EQ_EXPR:</span>
+<span class="lineNum">     378 </span><span class="lineCov">         16 :         cond = isl_pw_aff_eq_set (lhs, rhs);</span>
+<span class="lineNum">     379 </span><span class="lineCov">         16 :         break;</span>
+<span class="lineNum">     380 </span>            : 
+<span class="lineNum">     381 </span><span class="lineCov">         36 :       case NE_EXPR:</span>
+<span class="lineNum">     382 </span><span class="lineCov">         36 :         cond = isl_pw_aff_ne_set (lhs, rhs);</span>
+<span class="lineNum">     383 </span><span class="lineCov">         36 :         break;</span>
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span><span class="lineNoCov">          0 :       default:</span>
+<span class="lineNum">     386 </span><span class="lineNoCov">          0 :         gcc_unreachable ();</span>
+<span class="lineNum">     387 </span>            :     }
+<span class="lineNum">     388 </span>            : 
+<span class="lineNum">     389 </span><span class="lineCov">        124 :   cond = isl_set_coalesce (cond);</span>
+<span class="lineNum">     390 </span><span class="lineCov">        124 :   cond = isl_set_set_tuple_id (cond, isl_set_get_tuple_id (pbb-&gt;domain));</span>
+<span class="lineNum">     391 </span><span class="lineCov">        124 :   pbb-&gt;domain = isl_set_coalesce (isl_set_intersect (pbb-&gt;domain, cond));</span>
+<span class="lineNum">     392 </span><span class="lineCov">        124 : }</span>
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            : /* Add conditions to the domain of PBB.  */
+<a name="395"><span class="lineNum">     395 </span>            : </a>
+<span class="lineNum">     396 </span>            : static void
+<span class="lineNum">     397 </span><span class="lineCov">        659 : add_conditions_to_domain (poly_bb_p pbb)</span>
+<span class="lineNum">     398 </span>            : {
+<span class="lineNum">     399 </span><span class="lineCov">        659 :   unsigned int i;</span>
+<span class="lineNum">     400 </span><span class="lineCov">        659 :   gimple *stmt;</span>
+<span class="lineNum">     401 </span><span class="lineCov">        659 :   gimple_poly_bb_p gbb = PBB_BLACK_BOX (pbb);</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span><span class="lineCov">        659 :   if (GBB_CONDITIONS (gbb).is_empty ())</span>
+<span class="lineNum">     404 </span>            :     return;
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span><span class="lineCov">        223 :   FOR_EACH_VEC_ELT (GBB_CONDITIONS (gbb), i, stmt)</span>
+<span class="lineNum">     407 </span><span class="lineCov">        248 :     switch (gimple_code (stmt))</span>
+<span class="lineNum">     408 </span>            :       {
+<span class="lineNum">     409 </span><span class="lineCov">        124 :       case GIMPLE_COND:</span>
+<span class="lineNum">     410 </span><span class="lineCov">        124 :           {</span>
+<span class="lineNum">     411 </span>            :             /* Don't constrain on anything else than INTEGER_TYPE.  */
+<span class="lineNum">     412 </span><span class="lineCov">        248 :             if (TREE_CODE (TREE_TYPE (gimple_cond_lhs (stmt))) != INTEGER_TYPE)</span>
+<span class="lineNum">     413 </span>            :               break;
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span><span class="lineCov">        124 :             gcond *cond_stmt = as_a &lt;gcond *&gt; (stmt);</span>
+<span class="lineNum">     416 </span><span class="lineCov">        124 :             enum tree_code code = gimple_cond_code (cond_stmt);</span>
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span>            :             /* The conditions for ELSE-branches are inverted.  */
+<span class="lineNum">     419 </span><span class="lineCov">        124 :             if (!GBB_CONDITION_CASES (gbb)[i])</span>
+<span class="lineNum">     420 </span><span class="lineCov">         80 :               code = invert_tree_comparison (code, false);</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span><span class="lineCov">        124 :             add_condition_to_pbb (pbb, cond_stmt, code);</span>
+<span class="lineNum">     423 </span><span class="lineCov">        124 :             break;</span>
+<span class="lineNum">     424 </span>            :           }
+<span class="lineNum">     425 </span>            : 
+<span class="lineNum">     426 </span><span class="lineNoCov">          0 :       default:</span>
+<span class="lineNum">     427 </span><span class="lineNoCov">          0 :         gcc_unreachable ();</span>
+<span class="lineNum">     428 </span><span class="lineCov">        124 :         break;</span>
+<span class="lineNum">     429 </span>            :       }
+<span class="lineNum">     430 </span>            : }
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            : /* Add constraints on the possible values of parameter P from the type
+<span class="lineNum">     433 </span>            :    of P.  */
+<a name="434"><span class="lineNum">     434 </span>            : </a>
+<span class="lineNum">     435 </span>            : static void
+<span class="lineNum">     436 </span><span class="lineCov">        142 : add_param_constraints (scop_p scop, graphite_dim_t p, tree parameter)</span>
+<span class="lineNum">     437 </span>            : {
+<span class="lineNum">     438 </span><span class="lineCov">        142 :   tree type = TREE_TYPE (parameter);</span>
+<span class="lineNum">     439 </span><span class="lineCov">        284 :   wide_int min, max;</span>
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span><span class="lineCov">        142 :   gcc_assert (INTEGRAL_TYPE_P (type) || POINTER_TYPE_P (type));</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">        142 :   if (INTEGRAL_TYPE_P (type)</span>
+<span class="lineNum">     444 </span><span class="lineCov">        142 :       &amp;&amp; get_range_info (parameter, &amp;min, &amp;max) == VR_RANGE)</span>
+<span class="lineNum">     445 </span>            :     ;
+<span class="lineNum">     446 </span>            :   else
+<span class="lineNum">     447 </span>            :     {
+<span class="lineNum">     448 </span><span class="lineCov">        107 :       min = wi::min_value (TYPE_PRECISION (type), TYPE_SIGN (type));</span>
+<span class="lineNum">     449 </span><span class="lineCov">        107 :       max = wi::max_value (TYPE_PRECISION (type), TYPE_SIGN (type));</span>
+<span class="lineNum">     450 </span>            :     }
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span><span class="lineCov">        142 :   isl_space *space = isl_set_get_space (scop-&gt;param_context);</span>
+<span class="lineNum">     453 </span><span class="lineCov">        142 :   isl_constraint *c = isl_inequality_alloc (isl_local_space_from_space (space));</span>
+<span class="lineNum">     454 </span><span class="lineCov">        426 :   isl_val *v = isl_val_int_from_wi (scop-&gt;isl_context,</span>
+<span class="lineNum">     455 </span><span class="lineCov">        142 :                                     widest_int::from (min, TYPE_SIGN (type)));</span>
+<span class="lineNum">     456 </span><span class="lineCov">        142 :   v = isl_val_neg (v);</span>
+<span class="lineNum">     457 </span><span class="lineCov">        142 :   c = isl_constraint_set_constant_val (c, v);</span>
+<span class="lineNum">     458 </span><span class="lineCov">        142 :   c = isl_constraint_set_coefficient_si (c, isl_dim_param, p, 1);</span>
+<span class="lineNum">     459 </span><span class="lineCov">        284 :   scop-&gt;param_context = isl_set_coalesce</span>
+<span class="lineNum">     460 </span><span class="lineCov">        142 :       (isl_set_add_constraint (scop-&gt;param_context, c));</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineCov">        142 :   space = isl_set_get_space (scop-&gt;param_context);</span>
+<span class="lineNum">     463 </span><span class="lineCov">        142 :   c = isl_inequality_alloc (isl_local_space_from_space (space));</span>
+<span class="lineNum">     464 </span><span class="lineCov">        426 :   v = isl_val_int_from_wi (scop-&gt;isl_context,</span>
+<span class="lineNum">     465 </span><span class="lineCov">        142 :                            widest_int::from (max, TYPE_SIGN (type)));</span>
+<span class="lineNum">     466 </span><span class="lineCov">        142 :   c = isl_constraint_set_constant_val (c, v);</span>
+<span class="lineNum">     467 </span><span class="lineCov">        142 :   c = isl_constraint_set_coefficient_si (c, isl_dim_param, p, -1);</span>
+<span class="lineNum">     468 </span><span class="lineCov">        284 :   scop-&gt;param_context = isl_set_coalesce</span>
+<span class="lineNum">     469 </span><span class="lineCov">        142 :       (isl_set_add_constraint (scop-&gt;param_context, c));</span>
+<span class="lineNum">     470 </span><span class="lineCov">        142 : }</span>
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            : /* Add a constrain to the ACCESSES polyhedron for the alias set of
+<span class="lineNum">     473 </span>            :    data reference DR.  ACCESSP_NB_DIMS is the dimension of the
+<span class="lineNum">     474 </span>            :    ACCESSES polyhedron, DOM_NB_DIMS is the dimension of the iteration
+<span class="lineNum">     475 </span>            :    domain.  */
+<a name="476"><span class="lineNum">     476 </span>            : </a>
+<span class="lineNum">     477 </span>            : static isl_map *
+<span class="lineNum">     478 </span><span class="lineCov">        710 : pdr_add_alias_set (isl_map *acc, dr_info &amp;dri)</span>
+<span class="lineNum">     479 </span>            : {
+<span class="lineNum">     480 </span><span class="lineCov">        710 :   isl_constraint *c = isl_equality_alloc</span>
+<span class="lineNum">     481 </span><span class="lineCov">        710 :       (isl_local_space_from_space (isl_map_get_space (acc)));</span>
+<span class="lineNum">     482 </span>            :   /* Positive numbers for all alias sets.  */
+<span class="lineNum">     483 </span><span class="lineCov">        710 :   c = isl_constraint_set_constant_si (c, -dri.alias_set);</span>
+<span class="lineNum">     484 </span><span class="lineCov">        710 :   c = isl_constraint_set_coefficient_si (c, isl_dim_out, 0, 1);</span>
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineCov">        710 :   return isl_map_add_constraint (acc, c);</span>
+<span class="lineNum">     487 </span>            : }
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span>            : /* Assign the affine expression INDEX to the output dimension POS of
+<span class="lineNum">     490 </span>            :    MAP and return the result.  */
+<a name="491"><span class="lineNum">     491 </span>            : </a>
+<span class="lineNum">     492 </span>            : static isl_map *
+<span class="lineNum">     493 </span><span class="lineCov">        969 : set_index (isl_map *map, int pos, isl_pw_aff *index)</span>
+<span class="lineNum">     494 </span>            : {
+<span class="lineNum">     495 </span><span class="lineCov">        969 :   isl_map *index_map;</span>
+<span class="lineNum">     496 </span><span class="lineCov">        969 :   int len = isl_map_dim (map, isl_dim_out);</span>
+<span class="lineNum">     497 </span><span class="lineCov">        969 :   isl_id *id;</span>
+<span class="lineNum">     498 </span>            : 
+<span class="lineNum">     499 </span><span class="lineCov">        969 :   index_map = isl_map_from_pw_aff (index);</span>
+<span class="lineNum">     500 </span><span class="lineCov">        969 :   index_map = isl_map_insert_dims (index_map, isl_dim_out, 0, pos);</span>
+<span class="lineNum">     501 </span><span class="lineCov">        969 :   index_map = isl_map_add_dims (index_map, isl_dim_out, len - pos - 1);</span>
+<span class="lineNum">     502 </span>            : 
+<span class="lineNum">     503 </span><span class="lineCov">        969 :   id = isl_map_get_tuple_id (map, isl_dim_out);</span>
+<span class="lineNum">     504 </span><span class="lineCov">        969 :   index_map = isl_map_set_tuple_id (index_map, isl_dim_out, id);</span>
+<span class="lineNum">     505 </span><span class="lineCov">        969 :   id = isl_map_get_tuple_id (map, isl_dim_in);</span>
+<span class="lineNum">     506 </span><span class="lineCov">        969 :   index_map = isl_map_set_tuple_id (index_map, isl_dim_in, id);</span>
+<span class="lineNum">     507 </span>            : 
+<span class="lineNum">     508 </span><span class="lineCov">        969 :   return isl_map_intersect (map, index_map);</span>
+<span class="lineNum">     509 </span>            : }
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span>            : /* Add to ACCESSES polyhedron equalities defining the access functions
+<span class="lineNum">     512 </span>            :    to the memory.  ACCESSP_NB_DIMS is the dimension of the ACCESSES
+<span class="lineNum">     513 </span>            :    polyhedron, DOM_NB_DIMS is the dimension of the iteration domain.
+<span class="lineNum">     514 </span>            :    PBB is the poly_bb_p that contains the data reference DR.  */
+<a name="515"><span class="lineNum">     515 </span>            : </a>
+<span class="lineNum">     516 </span>            : static isl_map *
+<span class="lineNum">     517 </span><span class="lineCov">        710 : pdr_add_memory_accesses (isl_map *acc, dr_info &amp;dri)</span>
+<span class="lineNum">     518 </span>            : {
+<span class="lineNum">     519 </span><span class="lineCov">        710 :   data_reference_p dr = dri.dr;</span>
+<span class="lineNum">     520 </span><span class="lineCov">        710 :   poly_bb_p pbb = dri.pbb;</span>
+<span class="lineNum">     521 </span><span class="lineCov">        710 :   int i, nb_subscripts = DR_NUM_DIMENSIONS (dr);</span>
+<span class="lineNum">     522 </span><span class="lineCov">        710 :   scop_p scop = PBB_SCOP (pbb);</span>
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span><span class="lineCov">       1679 :   for (i = 0; i &lt; nb_subscripts; i++)</span>
+<span class="lineNum">     525 </span>            :     {
+<span class="lineNum">     526 </span><span class="lineCov">        969 :       isl_pw_aff *aff;</span>
+<span class="lineNum">     527 </span><span class="lineCov">        969 :       tree afn = DR_ACCESS_FN (dr, i);</span>
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span><span class="lineCov">        969 :       aff = extract_affine (scop, afn,</span>
+<span class="lineNum">     530 </span>            :                             isl_space_domain (isl_map_get_space (acc)));
+<span class="lineNum">     531 </span><span class="lineCov">        969 :       acc = set_index (acc, nb_subscripts - i , aff);</span>
+<span class="lineNum">     532 </span>            :     }
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span><span class="lineCov">        710 :   return isl_map_coalesce (acc);</span>
+<span class="lineNum">     535 </span>            : }
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span>            : /* Return true when the LOW and HIGH bounds of an array reference REF are valid
+<span class="lineNum">     538 </span>            :    to extract constraints on accessed elements of the array.  Returning false is
+<span class="lineNum">     539 </span>            :    the conservative answer.  */
+<a name="540"><span class="lineNum">     540 </span>            : </a>
+<span class="lineNum">     541 </span>            : static bool
+<span class="lineNum">     542 </span><span class="lineCov">        868 : bounds_are_valid (tree ref, tree low, tree high)</span>
+<span class="lineNum">     543 </span>            : {
+<span class="lineNum">     544 </span><span class="lineCov">        868 :   if (!high)</span>
+<span class="lineNum">     545 </span>            :     return false;
+<span class="lineNum">     546 </span>            : 
+<span class="lineNum">     547 </span><span class="lineCov">        841 :   if (!tree_fits_shwi_p (low)</span>
+<span class="lineNum">     548 </span><span class="lineCov">        841 :       || !tree_fits_shwi_p (high))</span>
+<span class="lineNum">     549 </span>            :     return false;
+<span class="lineNum">     550 </span>            : 
+<span class="lineNum">     551 </span>            :   /* 1-element arrays at end of structures may extend over
+<span class="lineNum">     552 </span>            :      their declared size.  */
+<span class="lineNum">     553 </span><span class="lineCov">        797 :   if (array_at_struct_end_p (ref)</span>
+<span class="lineNum">     554 </span><span class="lineCov">        797 :       &amp;&amp; operand_equal_p (low, high, 0))</span>
+<span class="lineNum">     555 </span>            :     return false;
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span>            :   /* Fortran has some arrays where high bound is -1 and low is 0.  */
+<span class="lineNum">     558 </span><span class="lineCov">        797 :   if (integer_onep (fold_build2 (LT_EXPR, boolean_type_node, high, low)))</span>
+<span class="lineNum">     559 </span><span class="lineCov">         10 :     return false;</span>
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span>            :   return true;
+<span class="lineNum">     562 </span>            : }
+<span class="lineNum">     563 </span>            : 
+<span class="lineNum">     564 </span>            : /* Add constrains representing the size of the accessed data to the
+<span class="lineNum">     565 </span>            :    ACCESSES polyhedron.  ACCESSP_NB_DIMS is the dimension of the
+<span class="lineNum">     566 </span>            :    ACCESSES polyhedron, DOM_NB_DIMS is the dimension of the iteration
+<span class="lineNum">     567 </span>            :    domain.  */
+<a name="568"><span class="lineNum">     568 </span>            : </a>
+<span class="lineNum">     569 </span>            : static isl_set *
+<span class="lineNum">     570 </span><span class="lineCov">        710 : pdr_add_data_dimensions (isl_set *subscript_sizes, scop_p scop,</span>
+<span class="lineNum">     571 </span>            :                          data_reference_p dr)
+<span class="lineNum">     572 </span>            : {
+<span class="lineNum">     573 </span><span class="lineCov">        710 :   tree ref = DR_REF (dr);</span>
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span><span class="lineCov">        710 :   int nb_subscripts = DR_NUM_DIMENSIONS (dr);</span>
+<span class="lineNum">     576 </span><span class="lineCov">       1578 :   for (int i = nb_subscripts - 1; i &gt;= 0; i--, ref = TREE_OPERAND (ref, 0))</span>
+<span class="lineNum">     577 </span>            :     {
+<span class="lineNum">     578 </span><span class="lineCov">        956 :       if (TREE_CODE (ref) != ARRAY_REF)</span>
+<span class="lineNum">     579 </span><span class="lineCov">         88 :         return subscript_sizes;</span>
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span><span class="lineCov">        868 :       tree low = array_ref_low_bound (ref);</span>
+<span class="lineNum">     582 </span><span class="lineCov">        868 :       tree high = array_ref_up_bound (ref);</span>
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span><span class="lineCov">        868 :       if (!bounds_are_valid (ref, low, high))</span>
+<span class="lineNum">     585 </span>            :         continue;
+<span class="lineNum">     586 </span>            : 
+<span class="lineNum">     587 </span><span class="lineCov">        787 :       isl_space *space = isl_set_get_space (subscript_sizes);</span>
+<span class="lineNum">     588 </span><span class="lineCov">        787 :       isl_pw_aff *lb = extract_affine_int (low, isl_space_copy (space));</span>
+<span class="lineNum">     589 </span><span class="lineCov">        787 :       isl_pw_aff *ub = extract_affine_int (high, isl_space_copy (space));</span>
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            :       /* high &gt;= 0 */
+<span class="lineNum">     592 </span><span class="lineCov">        787 :       isl_set *valid = isl_pw_aff_nonneg_set (isl_pw_aff_copy (ub));</span>
+<span class="lineNum">     593 </span><span class="lineCov">        787 :       valid = isl_set_project_out (valid, isl_dim_set, 0,</span>
+<span class="lineNum">     594 </span>            :                                    isl_set_dim (valid, isl_dim_set));
+<span class="lineNum">     595 </span><span class="lineCov">       1574 :       scop-&gt;param_context = isl_set_coalesce</span>
+<span class="lineNum">     596 </span><span class="lineCov">        787 :         (isl_set_intersect (scop-&gt;param_context, valid));</span>
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span><span class="lineCov">        787 :       isl_aff *aff</span>
+<span class="lineNum">     599 </span><span class="lineCov">        787 :         = isl_aff_zero_on_domain (isl_local_space_from_space (space));</span>
+<span class="lineNum">     600 </span><span class="lineCov">        787 :       aff = isl_aff_add_coefficient_si (aff, isl_dim_in, i + 1, 1);</span>
+<span class="lineNum">     601 </span><span class="lineCov">        787 :       isl_set *univ</span>
+<span class="lineNum">     602 </span><span class="lineCov">        787 :         = isl_set_universe (isl_space_domain (isl_aff_get_space (aff)));</span>
+<span class="lineNum">     603 </span><span class="lineCov">        787 :       isl_pw_aff *index = isl_pw_aff_alloc (univ, aff);</span>
+<span class="lineNum">     604 </span>            : 
+<span class="lineNum">     605 </span><span class="lineCov">        787 :       isl_id *id = isl_set_get_tuple_id (subscript_sizes);</span>
+<span class="lineNum">     606 </span><span class="lineCov">        787 :       lb = isl_pw_aff_set_tuple_id (lb, isl_dim_in, isl_id_copy (id));</span>
+<span class="lineNum">     607 </span><span class="lineCov">        787 :       ub = isl_pw_aff_set_tuple_id (ub, isl_dim_in, id);</span>
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span>            :       /* low &lt;= sub_i &lt;= high */
+<span class="lineNum">     610 </span><span class="lineCov">        787 :       isl_set *lbs = isl_pw_aff_ge_set (isl_pw_aff_copy (index), lb);</span>
+<span class="lineNum">     611 </span><span class="lineCov">        787 :       isl_set *ubs = isl_pw_aff_le_set (index, ub);</span>
+<span class="lineNum">     612 </span><span class="lineCov">        787 :       subscript_sizes = isl_set_intersect (subscript_sizes, lbs);</span>
+<span class="lineNum">     613 </span><span class="lineCov">        787 :       subscript_sizes = isl_set_intersect (subscript_sizes, ubs);</span>
+<span class="lineNum">     614 </span>            :     }
+<span class="lineNum">     615 </span>            : 
+<span class="lineNum">     616 </span><span class="lineCov">        622 :   return isl_set_coalesce (subscript_sizes);</span>
+<span class="lineNum">     617 </span>            : }
+<span class="lineNum">     618 </span>            : 
+<span class="lineNum">     619 </span>            : /* Build data accesses for DRI.  */
+<a name="620"><span class="lineNum">     620 </span>            : </a>
+<span class="lineNum">     621 </span>            : static void
+<span class="lineNum">     622 </span><span class="lineCov">        710 : build_poly_dr (dr_info &amp;dri)</span>
+<span class="lineNum">     623 </span>            : {
+<span class="lineNum">     624 </span><span class="lineCov">        710 :   isl_map *acc;</span>
+<span class="lineNum">     625 </span><span class="lineCov">        710 :   isl_set *subscript_sizes;</span>
+<span class="lineNum">     626 </span><span class="lineCov">        710 :   poly_bb_p pbb = dri.pbb;</span>
+<span class="lineNum">     627 </span><span class="lineCov">        710 :   data_reference_p dr = dri.dr;</span>
+<span class="lineNum">     628 </span><span class="lineCov">        710 :   scop_p scop = PBB_SCOP (pbb);</span>
+<span class="lineNum">     629 </span><span class="lineCov">        710 :   isl_id *id = isl_id_for_dr (scop);</span>
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span><span class="lineCov">        710 :   {</span>
+<span class="lineNum">     632 </span><span class="lineCov">        710 :     isl_space *dc = isl_set_get_space (pbb-&gt;domain);</span>
+<span class="lineNum">     633 </span><span class="lineCov">        710 :     int nb_out = 1 + DR_NUM_DIMENSIONS (dr);</span>
+<span class="lineNum">     634 </span><span class="lineCov">        710 :     isl_space *space = isl_space_add_dims (isl_space_from_domain (dc),</span>
+<span class="lineNum">     635 </span>            :                                            isl_dim_out, nb_out);
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span><span class="lineCov">        710 :     acc = isl_map_universe (space);</span>
+<span class="lineNum">     638 </span><span class="lineCov">        710 :     acc = isl_map_set_tuple_id (acc, isl_dim_out, isl_id_copy (id));</span>
+<span class="lineNum">     639 </span>            :   }
+<span class="lineNum">     640 </span>            : 
+<span class="lineNum">     641 </span><span class="lineCov">        710 :   acc = pdr_add_alias_set (acc, dri);</span>
+<span class="lineNum">     642 </span><span class="lineCov">        710 :   acc = pdr_add_memory_accesses (acc, dri);</span>
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span><span class="lineCov">        710 :   {</span>
+<span class="lineNum">     645 </span><span class="lineCov">        710 :     int nb = 1 + DR_NUM_DIMENSIONS (dr);</span>
+<span class="lineNum">     646 </span><span class="lineCov">        710 :     isl_space *space = isl_space_set_alloc (scop-&gt;isl_context, 0, nb);</span>
+<span class="lineNum">     647 </span>            : 
+<span class="lineNum">     648 </span><span class="lineCov">        710 :     space = isl_space_set_tuple_id (space, isl_dim_set, id);</span>
+<span class="lineNum">     649 </span><span class="lineCov">        710 :     subscript_sizes = isl_set_nat_universe (space);</span>
+<span class="lineNum">     650 </span><span class="lineCov">        710 :     subscript_sizes = isl_set_fix_si (subscript_sizes, isl_dim_set, 0,</span>
+<span class="lineNum">     651 </span>            :                                       dri.alias_set);
+<span class="lineNum">     652 </span><span class="lineCov">        710 :     subscript_sizes = pdr_add_data_dimensions (subscript_sizes, scop, dr);</span>
+<span class="lineNum">     653 </span>            :   }
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span><span class="lineCov">       1073 :   new_poly_dr (pbb, DR_STMT (dr), DR_IS_READ (dr) ? PDR_READ : PDR_WRITE,</span>
+<span class="lineNum">     656 </span>            :                acc, subscript_sizes);
+<span class="lineNum">     657 </span><span class="lineCov">        710 : }</span>
+<a name="658"><span class="lineNum">     658 </span>            : </a>
+<span class="lineNum">     659 </span>            : static void
+<span class="lineNum">     660 </span><span class="lineCov">       1542 : build_poly_sr_1 (poly_bb_p pbb, gimple *stmt, tree var, enum poly_dr_type kind,</span>
+<span class="lineNum">     661 </span>            :                  isl_map *acc, isl_set *subscript_sizes)
+<span class="lineNum">     662 </span>            : {
+<span class="lineNum">     663 </span><span class="lineCov">       1542 :   scop_p scop = PBB_SCOP (pbb);</span>
+<span class="lineNum">     664 </span>            :   /* Each scalar variables has a unique alias set number starting from
+<span class="lineNum">     665 </span>            :      the maximum alias set assigned to a dr.  */
+<span class="lineNum">     666 </span><span class="lineCov">       1542 :   int alias_set = scop-&gt;max_alias_set + SSA_NAME_VERSION (var);</span>
+<span class="lineNum">     667 </span><span class="lineCov">       1542 :   subscript_sizes = isl_set_fix_si (subscript_sizes, isl_dim_set, 0,</span>
+<span class="lineNum">     668 </span>            :                                     alias_set);
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span>            :   /* Add a constrain to the ACCESSES polyhedron for the alias set of
+<span class="lineNum">     671 </span>            :      data reference DR.  */
+<span class="lineNum">     672 </span><span class="lineCov">       1542 :   isl_constraint *c</span>
+<span class="lineNum">     673 </span><span class="lineCov">       1542 :     = isl_equality_alloc (isl_local_space_from_space (isl_map_get_space (acc)));</span>
+<span class="lineNum">     674 </span><span class="lineCov">       1542 :   c = isl_constraint_set_constant_si (c, -alias_set);</span>
+<span class="lineNum">     675 </span><span class="lineCov">       1542 :   c = isl_constraint_set_coefficient_si (c, isl_dim_out, 0, 1);</span>
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span><span class="lineCov">       1542 :   new_poly_dr (pbb, stmt, kind, isl_map_add_constraint (acc, c),</span>
+<span class="lineNum">     678 </span>            :                subscript_sizes);
+<span class="lineNum">     679 </span><span class="lineCov">       1542 : }</span>
+<span class="lineNum">     680 </span>            : 
+<span class="lineNum">     681 </span>            : /* Record all cross basic block scalar variables in PBB.  */
+<a name="682"><span class="lineNum">     682 </span>            : </a>
+<span class="lineNum">     683 </span>            : static void
+<span class="lineNum">     684 </span><span class="lineCov">        659 : build_poly_sr (poly_bb_p pbb)</span>
+<span class="lineNum">     685 </span>            : {
+<span class="lineNum">     686 </span><span class="lineCov">        659 :   scop_p scop = PBB_SCOP (pbb);</span>
+<span class="lineNum">     687 </span><span class="lineCov">        659 :   gimple_poly_bb_p gbb = PBB_BLACK_BOX (pbb);</span>
+<span class="lineNum">     688 </span><span class="lineCov">        659 :   vec&lt;scalar_use&gt; &amp;reads = gbb-&gt;read_scalar_refs;</span>
+<span class="lineNum">     689 </span><span class="lineCov">        659 :   vec&lt;tree&gt; &amp;writes = gbb-&gt;write_scalar_refs;</span>
+<span class="lineNum">     690 </span>            : 
+<span class="lineNum">     691 </span><span class="lineCov">        659 :   isl_space *dc = isl_set_get_space (pbb-&gt;domain);</span>
+<span class="lineNum">     692 </span><span class="lineCov">        659 :   int nb_out = 1;</span>
+<span class="lineNum">     693 </span><span class="lineCov">        659 :   isl_space *space = isl_space_add_dims (isl_space_from_domain (dc),</span>
+<span class="lineNum">     694 </span>            :                                          isl_dim_out, nb_out);
+<span class="lineNum">     695 </span><span class="lineCov">        659 :   isl_id *id = isl_id_for_dr (scop);</span>
+<span class="lineNum">     696 </span><span class="lineCov">        659 :   space = isl_space_set_tuple_id (space, isl_dim_set, isl_id_copy (id));</span>
+<span class="lineNum">     697 </span><span class="lineCov">        659 :   isl_map *acc = isl_map_universe (isl_space_copy (space));</span>
+<span class="lineNum">     698 </span><span class="lineCov">        659 :   acc = isl_map_set_tuple_id (acc, isl_dim_out, id);</span>
+<span class="lineNum">     699 </span><span class="lineCov">        659 :   isl_set *subscript_sizes = isl_set_nat_universe (space);</span>
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span><span class="lineCov">        659 :   int i;</span>
+<span class="lineNum">     702 </span><span class="lineCov">        659 :   tree var;</span>
+<span class="lineNum">     703 </span><span class="lineCov">       1547 :   FOR_EACH_VEC_ELT (writes, i, var)</span>
+<span class="lineNum">     704 </span><span class="lineCov">        888 :     build_poly_sr_1 (pbb, SSA_NAME_DEF_STMT (var), var, PDR_WRITE,</span>
+<span class="lineNum">     705 </span>            :                      isl_map_copy (acc), isl_set_copy (subscript_sizes));
+<span class="lineNum">     706 </span>            : 
+<span class="lineNum">     707 </span>            :   scalar_use *use;
+<span class="lineNum">     708 </span><span class="lineCov">       1313 :   FOR_EACH_VEC_ELT (reads, i, use)</span>
+<span class="lineNum">     709 </span><span class="lineCov">        654 :     build_poly_sr_1 (pbb, use-&gt;first, use-&gt;second, PDR_READ, isl_map_copy (acc),</span>
+<span class="lineNum">     710 </span>            :                      isl_set_copy (subscript_sizes));
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineCov">        659 :   isl_map_free (acc);</span>
+<span class="lineNum">     713 </span><span class="lineCov">        659 :   isl_set_free (subscript_sizes);</span>
+<span class="lineNum">     714 </span><span class="lineCov">        659 : }</span>
+<span class="lineNum">     715 </span>            : 
+<span class="lineNum">     716 </span>            : /* Build data references in SCOP.  */
+<a name="717"><span class="lineNum">     717 </span>            : </a>
+<span class="lineNum">     718 </span>            : static void
+<span class="lineNum">     719 </span><span class="lineCov">        195 : build_scop_drs (scop_p scop)</span>
+<span class="lineNum">     720 </span>            : {
+<span class="lineNum">     721 </span><span class="lineCov">        195 :   int i;</span>
+<span class="lineNum">     722 </span><span class="lineCov">        195 :   dr_info *dri;</span>
+<span class="lineNum">     723 </span><span class="lineCov">        905 :   FOR_EACH_VEC_ELT (scop-&gt;drs, i, dri)</span>
+<span class="lineNum">     724 </span><span class="lineCov">        710 :     build_poly_dr (*dri);</span>
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span>            :   poly_bb_p pbb;
+<span class="lineNum">     727 </span><span class="lineCov">        854 :   FOR_EACH_VEC_ELT (scop-&gt;pbbs, i, pbb)</span>
+<span class="lineNum">     728 </span><span class="lineCov">        659 :     build_poly_sr (pbb);</span>
+<span class="lineNum">     729 </span><span class="lineCov">        195 : }</span>
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            : /* Add to the iteration DOMAIN one extra dimension for LOOP-&gt;num.  */
+<a name="732"><span class="lineNum">     732 </span>            : </a>
+<span class="lineNum">     733 </span>            : static isl_set *
+<span class="lineNum">     734 </span><span class="lineCov">        526 : add_iter_domain_dimension (__isl_take isl_set *domain, loop_p loop, scop_p scop)</span>
+<span class="lineNum">     735 </span>            : {
+<span class="lineNum">     736 </span><span class="lineCov">        526 :   int loop_index = isl_set_dim (domain, isl_dim_set);</span>
+<span class="lineNum">     737 </span><span class="lineCov">        526 :   domain = isl_set_add_dims (domain, isl_dim_set, 1);</span>
+<span class="lineNum">     738 </span><span class="lineCov">        526 :   char name[50];</span>
+<span class="lineNum">     739 </span><span class="lineCov">        526 :   snprintf (name, sizeof(name), &quot;i%d&quot;, loop-&gt;num);</span>
+<span class="lineNum">     740 </span><span class="lineCov">        526 :   isl_id *label = isl_id_alloc (scop-&gt;isl_context, name, NULL);</span>
+<span class="lineNum">     741 </span><span class="lineCov">        526 :   return isl_set_set_dim_id (domain, isl_dim_set, loop_index, label);</span>
+<span class="lineNum">     742 </span>            : }
+<span class="lineNum">     743 </span>            : 
+<span class="lineNum">     744 </span>            : /* Add constraints to DOMAIN for each loop from LOOP up to CONTEXT.  */
+<a name="745"><span class="lineNum">     745 </span>            : </a>
+<span class="lineNum">     746 </span>            : static isl_set *
+<span class="lineNum">     747 </span><span class="lineCov">        978 : add_loop_constraints (scop_p scop, __isl_take isl_set *domain, loop_p loop,</span>
+<span class="lineNum">     748 </span>            :                       loop_p context)
+<span class="lineNum">     749 </span>            : {
+<span class="lineNum">     750 </span><span class="lineCov">        978 :   if (loop == context)</span>
+<span class="lineNum">     751 </span>            :     return domain;
+<span class="lineNum">     752 </span><span class="lineCov">        853 :   const sese_l &amp;region = scop-&gt;scop_info-&gt;region;</span>
+<span class="lineNum">     753 </span><span class="lineCov">        853 :   if (!loop_in_sese_p (loop, region))</span>
+<span class="lineNum">     754 </span>            :     return domain;
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span>            :   /* Recursion all the way up to the context loop.  */
+<span class="lineNum">     757 </span><span class="lineCov">       1052 :   domain = add_loop_constraints (scop, domain, loop_outer (loop), context);</span>
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            :   /* Then, build constraints over the loop in post-order: outer to inner.  */
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span><span class="lineCov">        526 :   int loop_index = isl_set_dim (domain, isl_dim_set);</span>
+<span class="lineNum">     762 </span><span class="lineCov">        526 :   if (dump_file)</span>
+<span class="lineNum">     763 </span><span class="lineCov">        287 :     fprintf (dump_file, &quot;[sese-to-poly] adding one extra dimension to the &quot;</span>
+<span class="lineNum">     764 </span>            :              &quot;domain for loop_%d.\n&quot;, loop-&gt;num);
+<span class="lineNum">     765 </span><span class="lineCov">        526 :   domain = add_iter_domain_dimension (domain, loop, scop);</span>
+<span class="lineNum">     766 </span><span class="lineCov">        526 :   isl_space *space = isl_set_get_space (domain);</span>
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span>            :   /* 0 &lt;= loop_i */
+<span class="lineNum">     769 </span><span class="lineCov">        526 :   isl_local_space *ls = isl_local_space_from_space (isl_space_copy (space));</span>
+<span class="lineNum">     770 </span><span class="lineCov">        526 :   isl_constraint *c = isl_inequality_alloc (ls);</span>
+<span class="lineNum">     771 </span><span class="lineCov">        526 :   c = isl_constraint_set_coefficient_si (c, isl_dim_set, loop_index, 1);</span>
+<span class="lineNum">     772 </span><span class="lineCov">        526 :   if (dump_file)</span>
+<span class="lineNum">     773 </span>            :     {
+<span class="lineNum">     774 </span><span class="lineCov">        287 :       fprintf (dump_file, &quot;[sese-to-poly] adding constraint to the domain: &quot;);</span>
+<span class="lineNum">     775 </span><span class="lineCov">        287 :       print_isl_constraint (dump_file, c);</span>
+<span class="lineNum">     776 </span>            :     }
+<span class="lineNum">     777 </span><span class="lineCov">        526 :   domain = isl_set_add_constraint (domain, c);</span>
+<span class="lineNum">     778 </span>            : 
+<span class="lineNum">     779 </span><span class="lineCov">        526 :   tree nb_iters = number_of_latch_executions (loop);</span>
+<span class="lineNum">     780 </span><span class="lineCov">        526 :   if (TREE_CODE (nb_iters) == INTEGER_CST)</span>
+<span class="lineNum">     781 </span>            :     {
+<span class="lineNum">     782 </span>            :       /* loop_i &lt;= cst_nb_iters */
+<span class="lineNum">     783 </span><span class="lineCov">        394 :       isl_local_space *ls = isl_local_space_from_space (space);</span>
+<span class="lineNum">     784 </span><span class="lineCov">        394 :       isl_constraint *c = isl_inequality_alloc (ls);</span>
+<span class="lineNum">     785 </span><span class="lineCov">        394 :       c = isl_constraint_set_coefficient_si (c, isl_dim_set, loop_index, -1);</span>
+<span class="lineNum">     786 </span><span class="lineCov">        394 :       isl_val *v</span>
+<span class="lineNum">     787 </span><span class="lineCov">        394 :         = isl_val_int_from_wi (scop-&gt;isl_context, wi::to_widest (nb_iters));</span>
+<span class="lineNum">     788 </span><span class="lineCov">        394 :       c = isl_constraint_set_constant_val (c, v);</span>
+<span class="lineNum">     789 </span><span class="lineCov">        394 :       return isl_set_add_constraint (domain, c);</span>
+<span class="lineNum">     790 </span>            :     }
+<span class="lineNum">     791 </span>            :   /* loop_i &lt;= expr_nb_iters */
+<span class="lineNum">     792 </span><span class="lineCov">        132 :   gcc_assert (!chrec_contains_undetermined (nb_iters));</span>
+<span class="lineNum">     793 </span><span class="lineCov">        132 :   nb_iters = scalar_evolution_in_region (region, loop, nb_iters);</span>
+<span class="lineNum">     794 </span><span class="lineCov">        132 :   gcc_assert (!chrec_contains_undetermined (nb_iters));</span>
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span><span class="lineCov">        132 :   isl_pw_aff *aff_nb_iters = extract_affine (scop, nb_iters,</span>
+<span class="lineNum">     797 </span>            :                                              isl_space_copy (space));
+<span class="lineNum">     798 </span><span class="lineCov">        132 :   isl_set *valid = isl_pw_aff_nonneg_set (isl_pw_aff_copy (aff_nb_iters));</span>
+<span class="lineNum">     799 </span><span class="lineCov">        132 :   valid = isl_set_project_out (valid, isl_dim_set, 0,</span>
+<span class="lineNum">     800 </span>            :                                isl_set_dim (valid, isl_dim_set));
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span><span class="lineCov">        132 :   if (valid)</span>
+<span class="lineNum">     803 </span><span class="lineCov">        132 :     scop-&gt;param_context = isl_set_intersect (scop-&gt;param_context, valid);</span>
+<span class="lineNum">     804 </span>            : 
+<span class="lineNum">     805 </span><span class="lineCov">        132 :   ls = isl_local_space_from_space (isl_space_copy (space));</span>
+<span class="lineNum">     806 </span><span class="lineCov">        132 :   isl_aff *loop_i = isl_aff_set_coefficient_si (isl_aff_zero_on_domain (ls),</span>
+<span class="lineNum">     807 </span>            :                                                 isl_dim_in, loop_index, 1);
+<span class="lineNum">     808 </span><span class="lineCov">        132 :   isl_set *le = isl_pw_aff_le_set (isl_pw_aff_from_aff (loop_i),</span>
+<span class="lineNum">     809 </span>            :                                    isl_pw_aff_copy (aff_nb_iters));
+<span class="lineNum">     810 </span><span class="lineCov">        132 :   if (dump_file)</span>
+<span class="lineNum">     811 </span>            :     {
+<span class="lineNum">     812 </span><span class="lineCov">         39 :       fprintf (dump_file, &quot;[sese-to-poly] adding constraint to the domain: &quot;);</span>
+<span class="lineNum">     813 </span><span class="lineCov">         39 :       print_isl_set (dump_file, le);</span>
+<span class="lineNum">     814 </span>            :     }
+<span class="lineNum">     815 </span><span class="lineCov">        132 :   domain = isl_set_intersect (domain, le);</span>
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span><span class="lineCov">        132 :   widest_int nit;</span>
+<span class="lineNum">     818 </span><span class="lineCov">        132 :   if (!max_stmt_executions (loop, &amp;nit))</span>
+<span class="lineNum">     819 </span>            :     {
+<span class="lineNum">     820 </span><span class="lineNoCov">          0 :       isl_pw_aff_free (aff_nb_iters);</span>
+<span class="lineNum">     821 </span><span class="lineNoCov">          0 :       isl_space_free (space);</span>
+<span class="lineNum">     822 </span><span class="lineNoCov">          0 :       return domain;</span>
+<span class="lineNum">     823 </span>            :     }
+<span class="lineNum">     824 </span>            : 
+<span class="lineNum">     825 </span>            :   /* NIT is an upper bound to NB_ITERS: &quot;NIT &gt;= NB_ITERS&quot;, although we
+<span class="lineNum">     826 </span>            :      do not know whether the loop executes at least once.  */
+<span class="lineNum">     827 </span><span class="lineCov">        132 :   --nit;</span>
+<span class="lineNum">     828 </span>            : 
+<span class="lineNum">     829 </span><span class="lineCov">        132 :   isl_pw_aff *approx = extract_affine_wi (nit, isl_space_copy (space));</span>
+<span class="lineNum">     830 </span><span class="lineCov">        132 :   isl_set *x = isl_pw_aff_ge_set (approx, aff_nb_iters);</span>
+<span class="lineNum">     831 </span><span class="lineCov">        132 :   x = isl_set_project_out (x, isl_dim_set, 0,</span>
+<span class="lineNum">     832 </span>            :                            isl_set_dim (x, isl_dim_set));
+<span class="lineNum">     833 </span><span class="lineCov">        132 :   scop-&gt;param_context = isl_set_intersect (scop-&gt;param_context, x);</span>
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span><span class="lineCov">        132 :   ls = isl_local_space_from_space (space);</span>
+<span class="lineNum">     836 </span><span class="lineCov">        132 :   c = isl_inequality_alloc (ls);</span>
+<span class="lineNum">     837 </span><span class="lineCov">        132 :   c = isl_constraint_set_coefficient_si (c, isl_dim_set, loop_index, -1);</span>
+<span class="lineNum">     838 </span><span class="lineCov">        132 :   isl_val *v = isl_val_int_from_wi (scop-&gt;isl_context, nit);</span>
+<span class="lineNum">     839 </span><span class="lineCov">        132 :   c = isl_constraint_set_constant_val (c, v);</span>
+<span class="lineNum">     840 </span>            : 
+<span class="lineNum">     841 </span><span class="lineCov">        132 :   if (dump_file)</span>
+<span class="lineNum">     842 </span>            :     {
+<span class="lineNum">     843 </span><span class="lineCov">         39 :       fprintf (dump_file, &quot;[sese-to-poly] adding constraint to the domain: &quot;);</span>
+<span class="lineNum">     844 </span><span class="lineCov">         39 :       print_isl_constraint (dump_file, c);</span>
+<span class="lineNum">     845 </span>            :     }
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span><span class="lineCov">        132 :   return isl_set_add_constraint (domain, c);</span>
+<span class="lineNum">     848 </span>            : }
+<span class="lineNum">     849 </span>            : 
+<span class="lineNum">     850 </span>            : /* Builds the original iteration domains for each pbb in the SCOP.  */
+<a name="851"><span class="lineNum">     851 </span>            : </a>
+<span class="lineNum">     852 </span>            : static int
+<span class="lineNum">     853 </span><span class="lineCov">        452 : build_iteration_domains (scop_p scop, __isl_keep isl_set *context,</span>
+<span class="lineNum">     854 </span>            :                          int index, loop_p context_loop)
+<span class="lineNum">     855 </span>            : {
+<span class="lineNum">     856 </span><span class="lineCov">        452 :   loop_p current = pbb_loop (scop-&gt;pbbs[index]);</span>
+<span class="lineNum">     857 </span><span class="lineCov">        452 :   isl_set *domain = isl_set_copy (context);</span>
+<span class="lineNum">     858 </span><span class="lineCov">        452 :   domain = add_loop_constraints (scop, domain, current, context_loop);</span>
+<span class="lineNum">     859 </span><span class="lineCov">        452 :   const sese_l &amp;region = scop-&gt;scop_info-&gt;region;</span>
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span><span class="lineCov">        452 :   int i;</span>
+<span class="lineNum">     862 </span><span class="lineCov">        452 :   poly_bb_p pbb;</span>
+<span class="lineNum">     863 </span><span class="lineCov">       1236 :   FOR_EACH_VEC_ELT_FROM (scop-&gt;pbbs, i, pbb, index)</span>
+<span class="lineNum">     864 </span>            :     {
+<span class="lineNum">     865 </span><span class="lineCov">       1015 :       loop_p loop = pbb_loop (pbb);</span>
+<span class="lineNum">     866 </span><span class="lineCov">       1015 :       if (current == loop)</span>
+<span class="lineNum">     867 </span>            :         {
+<span class="lineNum">     868 </span><span class="lineCov">        659 :           pbb-&gt;iterators = isl_set_copy (domain);</span>
+<span class="lineNum">     869 </span><span class="lineCov">        659 :           pbb-&gt;domain = isl_set_copy (domain);</span>
+<span class="lineNum">     870 </span><span class="lineCov">        659 :           pbb-&gt;domain = isl_set_set_tuple_id (pbb-&gt;domain,</span>
+<span class="lineNum">     871 </span>            :                                               isl_id_for_pbb (scop, pbb));
+<span class="lineNum">     872 </span><span class="lineCov">        659 :           add_conditions_to_domain (pbb);</span>
+<span class="lineNum">     873 </span>            : 
+<span class="lineNum">     874 </span><span class="lineCov">        659 :           if (dump_file)</span>
+<span class="lineNum">     875 </span>            :             {
+<span class="lineNum">     876 </span><span class="lineCov">        636 :               fprintf (dump_file, &quot;[sese-to-poly] set pbb_%d-&gt;domain: &quot;,</span>
+<span class="lineNum">     877 </span>            :                        pbb_index (pbb));
+<span class="lineNum">     878 </span><span class="lineCov">        318 :               print_isl_set (dump_file, domain);</span>
+<span class="lineNum">     879 </span>            :             }
+<span class="lineNum">     880 </span><span class="lineCov">        659 :           continue;</span>
+<span class="lineNum">     881 </span>            :         }
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span><span class="lineCov">        684 :       while (loop_in_sese_p (loop, region)</span>
+<span class="lineNum">     884 </span><span class="lineCov">        684 :              &amp;&amp; current != loop)</span>
+<span class="lineNum">     885 </span><span class="lineCov">        328 :         loop = loop_outer (loop);</span>
+<span class="lineNum">     886 </span>            : 
+<span class="lineNum">     887 </span><span class="lineCov">        356 :       if (current != loop)</span>
+<span class="lineNum">     888 </span>            :         {
+<span class="lineNum">     889 </span>            :           /* A statement in a different loop nest than CURRENT loop.  */
+<span class="lineNum">     890 </span><span class="lineCov">        231 :           isl_set_free (domain);</span>
+<span class="lineNum">     891 </span><span class="lineCov">        231 :           return i;</span>
+<span class="lineNum">     892 </span>            :         }
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span>            :       /* A statement nested in the CURRENT loop.  */
+<span class="lineNum">     895 </span><span class="lineCov">        125 :       i = build_iteration_domains (scop, domain, i, current);</span>
+<span class="lineNum">     896 </span><span class="lineCov">        125 :       i--;</span>
+<span class="lineNum">     897 </span>            :     }
+<span class="lineNum">     898 </span>            : 
+<span class="lineNum">     899 </span><span class="lineCov">        221 :   isl_set_free (domain);</span>
+<span class="lineNum">     900 </span><span class="lineCov">        221 :   return i;</span>
+<span class="lineNum">     901 </span>            : }
+<span class="lineNum">     902 </span>            : 
+<span class="lineNum">     903 </span>            : /* Assign dimension for each parameter in SCOP and add constraints for the
+<span class="lineNum">     904 </span>            :    parameters.  */
+<a name="905"><span class="lineNum">     905 </span>            : </a>
+<span class="lineNum">     906 </span>            : static void
+<span class="lineNum">     907 </span><span class="lineCov">        195 : build_scop_context (scop_p scop)</span>
+<span class="lineNum">     908 </span>            : {
+<span class="lineNum">     909 </span><span class="lineCov">        195 :   sese_info_p region = scop-&gt;scop_info;</span>
+<span class="lineNum">     910 </span><span class="lineCov">        195 :   unsigned nbp = sese_nb_params (region);</span>
+<span class="lineNum">     911 </span><span class="lineCov">        195 :   isl_space *space = isl_space_set_alloc (scop-&gt;isl_context, nbp, 0);</span>
+<span class="lineNum">     912 </span>            : 
+<span class="lineNum">     913 </span><span class="lineCov">        195 :   unsigned i;</span>
+<span class="lineNum">     914 </span><span class="lineCov">        195 :   tree e;</span>
+<span class="lineNum">     915 </span><span class="lineCov">        337 :   FOR_EACH_VEC_ELT (region-&gt;params, i, e)</span>
+<span class="lineNum">     916 </span><span class="lineCov">        142 :     space = isl_space_set_dim_id (space, isl_dim_param, i,</span>
+<span class="lineNum">     917 </span>            :                                   isl_id_for_ssa_name (scop, e));
+<span class="lineNum">     918 </span>            : 
+<span class="lineNum">     919 </span><span class="lineCov">        195 :   scop-&gt;param_context = isl_set_universe (space);</span>
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span><span class="lineCov">        337 :   FOR_EACH_VEC_ELT (region-&gt;params, i, e)</span>
+<span class="lineNum">     922 </span><span class="lineCov">        142 :     add_param_constraints (scop, i, e);</span>
+<span class="lineNum">     923 </span><span class="lineCov">        195 : }</span>
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span>            : /* Return true when loop A is nested in loop B.  */
+<a name="926"><span class="lineNum">     926 </span>            : </a>
+<span class="lineNum">     927 </span>            : static bool
+<span class="lineNum">     928 </span><span class="lineNoCov">          0 : nested_in (loop_p a, loop_p b)</span>
+<span class="lineNum">     929 </span>            : {
+<span class="lineNum">     930 </span><span class="lineNoCov">          0 :   return b == find_common_loop (a, b);</span>
+<span class="lineNum">     931 </span>            : }
+<span class="lineNum">     932 </span>            : 
+<a name="933"><span class="lineNum">     933 </span>            : /* Return the loop at a specific SCOP-&gt;pbbs[*INDEX].  */</a>
+<span class="lineNum">     934 </span>            : static loop_p
+<span class="lineNum">     935 </span><span class="lineCov">       2288 : loop_at (scop_p scop, int *index)</span>
+<span class="lineNum">     936 </span>            : {
+<span class="lineNum">     937 </span><span class="lineCov">       2288 :   return pbb_loop (scop-&gt;pbbs[*index]);</span>
+<span class="lineNum">     938 </span>            : }
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span>            : /* Return the index of any pbb belonging to loop or a subloop of A.  */
+<a name="941"><span class="lineNum">     941 </span>            : </a>
+<span class="lineNum">     942 </span>            : static int
+<span class="lineNum">     943 </span><span class="lineCov">        110 : index_outermost_in_loop (loop_p a, scop_p scop)</span>
+<span class="lineNum">     944 </span>            : {
+<span class="lineNum">     945 </span><span class="lineCov">        110 :   int i, outermost = -1;</span>
+<span class="lineNum">     946 </span><span class="lineCov">        110 :   int last_depth = -1;</span>
+<span class="lineNum">     947 </span><span class="lineCov">        110 :   poly_bb_p pbb;</span>
+<span class="lineNum">     948 </span><span class="lineCov">        337 :   FOR_EACH_VEC_ELT (scop-&gt;pbbs, i, pbb)</span>
+<span class="lineNum">     949 </span><span class="lineCov">        454 :     if (nested_in (pbb_loop (pbb), a)</span>
+<span class="lineNum">     950 </span><span class="lineCov">        227 :         &amp;&amp; (last_depth == -1</span>
+<span class="lineNum">     951 </span><span class="lineCov">        111 :             || last_depth &gt; (int) loop_depth (pbb_loop (pbb))))</span>
+<span class="lineNum">     952 </span>            :       {
+<span class="lineNum">     953 </span><span class="lineCov">        111 :         outermost = i;</span>
+<span class="lineNum">     954 </span><span class="lineCov">        333 :         last_depth = loop_depth (pbb_loop (pbb));</span>
+<span class="lineNum">     955 </span>            :       }
+<span class="lineNum">     956 </span><span class="lineCov">        110 :   return outermost;</span>
+<span class="lineNum">     957 </span>            : }
+<span class="lineNum">     958 </span>            : 
+<span class="lineNum">     959 </span>            : /* Return the index of any pbb belonging to loop or a subloop of A.  */
+<a name="960"><span class="lineNum">     960 </span>            : </a>
+<span class="lineNum">     961 </span>            : static int
+<span class="lineNum">     962 </span><span class="lineNoCov">          0 : index_pbb_in_loop (loop_p a, scop_p scop)</span>
+<span class="lineNum">     963 </span>            : {
+<span class="lineNum">     964 </span><span class="lineCov">        499 :   int i;</span>
+<span class="lineNum">     965 </span><span class="lineCov">        499 :   poly_bb_p pbb;</span>
+<span class="lineNum">     966 </span><span class="lineCov">       1087 :   FOR_EACH_VEC_ELT (scop-&gt;pbbs, i, pbb)</span>
+<span class="lineNum">     967 </span><span class="lineCov">       1954 :     if (pbb_loop (pbb) == a)</span>
+<span class="lineNum">     968 </span><span class="lineNoCov">          0 :       return i;</span>
+<span class="lineNum">     969 </span>            :   return -1;
+<span class="lineNum">     970 </span>            : }
+<a name="971"><span class="lineNum">     971 </span>            : </a>
+<span class="lineNum">     972 </span>            : static poly_bb_p
+<span class="lineNum">     973 </span><span class="lineCov">        499 : outermost_pbb_in (loop_p loop, scop_p scop)</span>
+<span class="lineNum">     974 </span>            : {
+<span class="lineNum">     975 </span><span class="lineCov">        499 :   int x = index_pbb_in_loop (loop, scop);</span>
+<span class="lineNum">     976 </span><span class="lineCov">        499 :   if (x == -1)</span>
+<span class="lineNum">     977 </span><span class="lineCov">        110 :     x = index_outermost_in_loop (loop, scop);</span>
+<span class="lineNum">     978 </span><span class="lineCov">        499 :   return scop-&gt;pbbs[x];</span>
+<span class="lineNum">     979 </span>            : }
+<a name="980"><span class="lineNum">     980 </span>            : </a>
+<span class="lineNum">     981 </span>            : static isl_schedule *
+<span class="lineNum">     982 </span><span class="lineCov">       1031 : add_in_sequence (__isl_take isl_schedule *a, __isl_take isl_schedule *b)</span>
+<span class="lineNum">     983 </span>            : {
+<span class="lineNum">     984 </span><span class="lineCov">       1031 :   gcc_assert (a || b);</span>
+<span class="lineNum">     985 </span>            : 
+<span class="lineNum">     986 </span><span class="lineCov">       1031 :   if (!a)</span>
+<span class="lineNum">     987 </span>            :     return b;
+<span class="lineNum">     988 </span>            : 
+<span class="lineNum">     989 </span><span class="lineCov">        464 :   if (!b)</span>
+<span class="lineNum">     990 </span>            :     return a;
+<span class="lineNum">     991 </span>            : 
+<span class="lineNum">     992 </span><span class="lineCov">        464 :   return isl_schedule_sequence (a, b);</span>
+<span class="lineNum">     993 </span>            : }
+<span class="lineNum">     994 </span>            : 
+<span class="lineNum">     995 </span>            : struct map_to_dimension_data {
+<span class="lineNum">     996 </span>            :   int n;
+<span class="lineNum">     997 </span>            :   isl_union_pw_multi_aff *res;
+<span class="lineNum">     998 </span>            : };
+<span class="lineNum">     999 </span>            : 
+<span class="lineNum">    1000 </span>            : /* Create a function that maps the elements of SET to its N-th dimension and add
+<span class="lineNum">    1001 </span>            :    it to USER-&gt;res.  */
+<a name="1002"><span class="lineNum">    1002 </span>            : </a>
+<span class="lineNum">    1003 </span>            : static isl_stat
+<span class="lineNum">    1004 </span><span class="lineCov">        890 : add_outer_projection (__isl_take isl_set *set, void *user)</span>
+<span class="lineNum">    1005 </span>            : {
+<span class="lineNum">    1006 </span><span class="lineCov">        890 :   struct map_to_dimension_data *data = (struct map_to_dimension_data *) user;</span>
+<span class="lineNum">    1007 </span><span class="lineCov">        890 :   int dim = isl_set_dim (set, isl_dim_set);</span>
+<span class="lineNum">    1008 </span><span class="lineCov">        890 :   isl_space *space = isl_set_get_space (set);</span>
+<span class="lineNum">    1009 </span>            : 
+<span class="lineNum">    1010 </span><span class="lineCov">        890 :   gcc_assert (dim &gt;= data-&gt;n);</span>
+<span class="lineNum">    1011 </span><span class="lineCov">        890 :   isl_pw_multi_aff *pma</span>
+<span class="lineNum">    1012 </span><span class="lineCov">       1780 :     = isl_pw_multi_aff_project_out_map (space, isl_dim_set, data-&gt;n,</span>
+<span class="lineNum">    1013 </span><span class="lineCov">        890 :                                         dim - data-&gt;n);</span>
+<span class="lineNum">    1014 </span><span class="lineCov">        890 :   data-&gt;res = isl_union_pw_multi_aff_add_pw_multi_aff (data-&gt;res, pma);</span>
+<span class="lineNum">    1015 </span>            : 
+<span class="lineNum">    1016 </span><span class="lineCov">        890 :   isl_set_free (set);</span>
+<span class="lineNum">    1017 </span><span class="lineCov">        890 :   return isl_stat_ok;</span>
+<span class="lineNum">    1018 </span>            : }
+<span class="lineNum">    1019 </span>            : 
+<span class="lineNum">    1020 </span>            : /* Return SET in which all inner dimensions above N are removed.  */
+<a name="1021"><span class="lineNum">    1021 </span>            : </a>
+<span class="lineNum">    1022 </span>            : static isl_multi_union_pw_aff *
+<span class="lineNum">    1023 </span><span class="lineCov">        498 : outer_projection_mupa (__isl_take isl_union_set *set, int n)</span>
+<span class="lineNum">    1024 </span>            : {
+<span class="lineNum">    1025 </span><span class="lineCov">        498 :   gcc_assert (n &gt;= 0);</span>
+<span class="lineNum">    1026 </span><span class="lineCov">        498 :   gcc_assert (set);</span>
+<span class="lineNum">    1027 </span><span class="lineCov">        498 :   gcc_assert (!isl_union_set_is_empty (set));</span>
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span><span class="lineCov">        498 :   isl_space *space = isl_union_set_get_space (set);</span>
+<span class="lineNum">    1030 </span><span class="lineCov">        498 :   isl_union_pw_multi_aff *pwaff = isl_union_pw_multi_aff_empty (space);</span>
+<span class="lineNum">    1031 </span>            : 
+<span class="lineNum">    1032 </span><span class="lineCov">        498 :   struct map_to_dimension_data data = {n, pwaff};</span>
+<span class="lineNum">    1033 </span>            : 
+<span class="lineNum">    1034 </span><span class="lineCov">        498 :   if (isl_union_set_foreach_set (set, &amp;add_outer_projection, &amp;data) &lt; 0)</span>
+<span class="lineNum">    1035 </span><span class="lineNoCov">          0 :     data.res = isl_union_pw_multi_aff_free (data.res);</span>
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span><span class="lineCov">        498 :   isl_union_set_free (set);</span>
+<span class="lineNum">    1038 </span><span class="lineCov">        498 :   return isl_multi_union_pw_aff_from_union_pw_multi_aff (data.res);</span>
+<span class="lineNum">    1039 </span>            : }
+<span class="lineNum">    1040 </span>            : 
+<span class="lineNum">    1041 </span>            : /* Embed SCHEDULE in the constraints of the LOOP domain.  */
+<a name="1042"><span class="lineNum">    1042 </span>            : </a>
+<span class="lineNum">    1043 </span>            : static isl_schedule *
+<span class="lineNum">    1044 </span><span class="lineCov">        499 : add_loop_schedule (__isl_take isl_schedule *schedule, loop_p loop,</span>
+<span class="lineNum">    1045 </span>            :                    scop_p scop)
+<span class="lineNum">    1046 </span>            : {
+<span class="lineNum">    1047 </span><span class="lineCov">        499 :   poly_bb_p pbb = outermost_pbb_in (loop, scop);</span>
+<span class="lineNum">    1048 </span><span class="lineCov">        499 :   isl_set *iterators = pbb-&gt;iterators;</span>
+<span class="lineNum">    1049 </span>            : 
+<span class="lineNum">    1050 </span><span class="lineCov">        499 :   int empty = isl_set_is_empty (iterators);</span>
+<span class="lineNum">    1051 </span><span class="lineCov">        499 :   if (empty &lt; 0 || empty)</span>
+<span class="lineNum">    1052 </span><span class="lineNoCov">          0 :     return empty &lt; 0 ? isl_schedule_free (schedule) : schedule;</span>
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span><span class="lineCov">        499 :   isl_union_set *domain = isl_schedule_get_domain (schedule);</span>
+<span class="lineNum">    1055 </span>            :   /* We cannot apply an empty domain to pbbs in this loop so return early.  */
+<span class="lineNum">    1056 </span><span class="lineCov">        499 :   if (isl_union_set_is_empty (domain))</span>
+<span class="lineNum">    1057 </span>            :     {
+<span class="lineNum">    1058 </span><span class="lineCov">          1 :       isl_union_set_free (domain);</span>
+<span class="lineNum">    1059 </span><span class="lineCov">          1 :       return schedule;</span>
+<span class="lineNum">    1060 </span>            :     }
+<span class="lineNum">    1061 </span>            : 
+<span class="lineNum">    1062 </span><span class="lineCov">        498 :   isl_space *space = isl_set_get_space (iterators);</span>
+<span class="lineNum">    1063 </span><span class="lineCov">        498 :   int loop_index = isl_space_dim (space, isl_dim_set) - 1;</span>
+<span class="lineNum">    1064 </span>            : 
+<span class="lineNum">    1065 </span><span class="lineCov">        996 :   loop_p ploop = pbb_loop (pbb);</span>
+<span class="lineNum">    1066 </span><span class="lineCov">        626 :   while (loop != ploop)</span>
+<span class="lineNum">    1067 </span>            :     {
+<span class="lineNum">    1068 </span><span class="lineCov">        128 :       --loop_index;</span>
+<span class="lineNum">    1069 </span><span class="lineCov">        128 :       ploop = loop_outer (ploop);</span>
+<span class="lineNum">    1070 </span>            :     }
+<span class="lineNum">    1071 </span>            : 
+<span class="lineNum">    1072 </span><span class="lineCov">        498 :   isl_local_space *ls = isl_local_space_from_space (space);</span>
+<span class="lineNum">    1073 </span><span class="lineCov">        498 :   isl_aff *aff = isl_aff_var_on_domain (ls, isl_dim_set, loop_index);</span>
+<span class="lineNum">    1074 </span><span class="lineCov">        498 :   isl_multi_aff *prefix = isl_multi_aff_from_aff (aff);</span>
+<span class="lineNum">    1075 </span><span class="lineCov">        498 :   char name[50];</span>
+<span class="lineNum">    1076 </span><span class="lineCov">        498 :   snprintf (name, sizeof(name), &quot;L_%d&quot;, loop-&gt;num);</span>
+<span class="lineNum">    1077 </span><span class="lineCov">        498 :   isl_id *label = isl_id_alloc (isl_schedule_get_ctx (schedule),</span>
+<span class="lineNum">    1078 </span>            :                                 name, NULL);
+<span class="lineNum">    1079 </span><span class="lineCov">        498 :   prefix = isl_multi_aff_set_tuple_id (prefix, isl_dim_out, label);</span>
+<span class="lineNum">    1080 </span>            : 
+<span class="lineNum">    1081 </span><span class="lineCov">        498 :   int n = isl_multi_aff_dim (prefix, isl_dim_in);</span>
+<span class="lineNum">    1082 </span><span class="lineCov">        498 :   isl_multi_union_pw_aff *mupa = outer_projection_mupa (domain, n);</span>
+<span class="lineNum">    1083 </span><span class="lineCov">        498 :   mupa = isl_multi_union_pw_aff_apply_multi_aff (mupa, prefix);</span>
+<span class="lineNum">    1084 </span><span class="lineCov">        498 :   return isl_schedule_insert_partial_schedule (schedule, mupa);</span>
+<span class="lineNum">    1085 </span>            : }
+<span class="lineNum">    1086 </span>            : 
+<span class="lineNum">    1087 </span>            : /* Build schedule for the pbb at INDEX.  */
+<a name="1088"><span class="lineNum">    1088 </span>            : </a>
+<span class="lineNum">    1089 </span>            : static isl_schedule *
+<span class="lineNum">    1090 </span><span class="lineCov">        659 : build_schedule_pbb (scop_p scop, int *index)</span>
+<span class="lineNum">    1091 </span>            : {
+<span class="lineNum">    1092 </span><span class="lineCov">        659 :   poly_bb_p pbb = scop-&gt;pbbs[*index];</span>
+<span class="lineNum">    1093 </span><span class="lineCov">        659 :   ++*index;</span>
+<span class="lineNum">    1094 </span><span class="lineCov">        659 :   isl_set *domain = isl_set_copy (pbb-&gt;domain);</span>
+<span class="lineNum">    1095 </span><span class="lineCov">        659 :   isl_union_set *ud = isl_union_set_from_set (domain);</span>
+<span class="lineNum">    1096 </span><span class="lineCov">        659 :   return isl_schedule_from_domain (ud);</span>
+<span class="lineNum">    1097 </span>            : }
+<span class="lineNum">    1098 </span>            : 
+<span class="lineNum">    1099 </span>            : static isl_schedule *build_schedule_loop_nest (scop_p, int *, loop_p);
+<span class="lineNum">    1100 </span>            : 
+<span class="lineNum">    1101 </span>            : /* Build the schedule of the loop containing the SCOP pbb at INDEX.  */
+<a name="1102"><span class="lineNum">    1102 </span>            : </a>
+<span class="lineNum">    1103 </span>            : static isl_schedule *
+<span class="lineNum">    1104 </span><span class="lineCov">        372 : build_schedule_loop (scop_p scop, int *index)</span>
+<span class="lineNum">    1105 </span>            : {
+<span class="lineNum">    1106 </span><span class="lineCov">        372 :   int max = scop-&gt;pbbs.length ();</span>
+<span class="lineNum">    1107 </span><span class="lineCov">        372 :   gcc_assert (*index &lt; max);</span>
+<span class="lineNum">    1108 </span><span class="lineCov">        372 :   loop_p loop = loop_at (scop, index);</span>
+<span class="lineNum">    1109 </span>            : 
+<span class="lineNum">    1110 </span><span class="lineCov">        372 :   isl_schedule *s = NULL;</span>
+<span class="lineNum">    1111 </span><span class="lineCov">        846 :   while (nested_in (loop_at (scop, index), loop))</span>
+<span class="lineNum">    1112 </span>            :     {
+<span class="lineNum">    1113 </span><span class="lineCov">        622 :       if (loop == loop_at (scop, index))</span>
+<span class="lineNum">    1114 </span><span class="lineCov">        538 :         s = add_in_sequence (s, build_schedule_pbb (scop, index));</span>
+<span class="lineNum">    1115 </span>            :       else
+<span class="lineNum">    1116 </span><span class="lineCov">         84 :         s = add_in_sequence (s, build_schedule_loop_nest (scop, index, loop));</span>
+<span class="lineNum">    1117 </span>            : 
+<span class="lineNum">    1118 </span><span class="lineCov">        622 :       if (*index == max)</span>
+<span class="lineNum">    1119 </span>            :         break;
+<span class="lineNum">    1120 </span>            :     }
+<span class="lineNum">    1121 </span>            : 
+<span class="lineNum">    1122 </span><span class="lineCov">        372 :   return add_loop_schedule (s, loop, scop);</span>
+<span class="lineNum">    1123 </span>            : }
+<span class="lineNum">    1124 </span>            : 
+<span class="lineNum">    1125 </span>            : /* S is the schedule of the loop LOOP.  Embed the schedule S in all outer loops.
+<span class="lineNum">    1126 </span>            :    When CONTEXT_LOOP is null, embed the schedule in all loops contained in the
+<span class="lineNum">    1127 </span>            :    SCOP surrounding LOOP.  When CONTEXT_LOOP is non null, only embed S in the
+<span class="lineNum">    1128 </span>            :    maximal loop nest contained within CONTEXT_LOOP.  */
+<a name="1129"><span class="lineNum">    1129 </span>            : </a>
+<span class="lineNum">    1130 </span>            : static isl_schedule *
+<span class="lineNum">    1131 </span><span class="lineCov">        484 : embed_in_surrounding_loops (__isl_take isl_schedule *s, scop_p scop,</span>
+<span class="lineNum">    1132 </span>            :                             loop_p loop, int *index, loop_p context_loop)
+<span class="lineNum">    1133 </span>            : {
+<span class="lineNum">    1134 </span><span class="lineCov">        484 :   loop_p outer = loop_outer (loop);</span>
+<span class="lineNum">    1135 </span><span class="lineCov">        484 :   sese_l region = scop-&gt;scop_info-&gt;region;</span>
+<span class="lineNum">    1136 </span><span class="lineCov">        484 :   if (context_loop == outer</span>
+<span class="lineNum">    1137 </span><span class="lineCov">        484 :       || !loop_in_sese_p (outer, region))</span>
+<span class="lineNum">    1138 </span><span class="lineCov">        357 :     return s;</span>
+<span class="lineNum">    1139 </span>            : 
+<span class="lineNum">    1140 </span><span class="lineCov">        127 :   int max = scop-&gt;pbbs.length ();</span>
+<span class="lineNum">    1141 </span><span class="lineCov">        127 :   if (*index == max</span>
+<span class="lineNum">    1142 </span><span class="lineCov">         44 :       || (context_loop &amp;&amp; !nested_in (loop_at (scop, index), context_loop))</span>
+<span class="lineNum">    1143 </span><span class="lineCov">        171 :       || (!context_loop</span>
+<span class="lineNum">    1144 </span><span class="lineCov">         44 :           &amp;&amp; !loop_in_sese_p (find_common_loop (outer, loop_at (scop, index)),</span>
+<span class="lineNum">    1145 </span>            :                               region)))
+<span class="lineNum">    1146 </span><span class="lineCov">        106 :     return embed_in_surrounding_loops (add_loop_schedule (s, outer, scop),</span>
+<span class="lineNum">    1147 </span><span class="lineCov">        106 :                                        scop, outer, index, context_loop);</span>
+<span class="lineNum">    1148 </span>            : 
+<span class="lineNum">    1149 </span><span class="lineCov">         47 :   bool a_pbb;</span>
+<span class="lineNum">    1150 </span><span class="lineCov">         47 :   while ((a_pbb = (outer == loop_at (scop, index)))</span>
+<span class="lineNum">    1151 </span><span class="lineCov">         47 :          || nested_in (loop_at (scop, index), outer))</span>
+<span class="lineNum">    1152 </span>            :     {
+<span class="lineNum">    1153 </span><span class="lineCov">         40 :       if (a_pbb)</span>
+<span class="lineNum">    1154 </span><span class="lineCov">         25 :         s = add_in_sequence (s, build_schedule_pbb (scop, index));</span>
+<span class="lineNum">    1155 </span>            :       else
+<span class="lineNum">    1156 </span><span class="lineCov">         15 :         s = add_in_sequence (s, build_schedule_loop (scop, index));</span>
+<span class="lineNum">    1157 </span>            : 
+<span class="lineNum">    1158 </span><span class="lineCov">         40 :       if (*index == max)</span>
+<span class="lineNum">    1159 </span>            :         break;
+<span class="lineNum">    1160 </span>            :     }
+<span class="lineNum">    1161 </span>            : 
+<span class="lineNum">    1162 </span>            :   /* We reached the end of the OUTER loop: embed S in OUTER.  */
+<span class="lineNum">    1163 </span><span class="lineCov">         21 :   return embed_in_surrounding_loops (add_loop_schedule (s, outer, scop), scop,</span>
+<span class="lineNum">    1164 </span><span class="lineCov">         21 :                                      outer, index, context_loop);</span>
+<span class="lineNum">    1165 </span>            : }
+<span class="lineNum">    1166 </span>            : 
+<span class="lineNum">    1167 </span>            : /* Build schedule for the full loop nest containing the pbb at INDEX.  When
+<span class="lineNum">    1168 </span>            :    CONTEXT_LOOP is null, build the schedule of all loops contained in the SCOP
+<span class="lineNum">    1169 </span>            :    surrounding the pbb.  When CONTEXT_LOOP is non null, only build the maximal loop
+<span class="lineNum">    1170 </span>            :    nest contained within CONTEXT_LOOP.  */
+<a name="1171"><span class="lineNum">    1171 </span>            : </a>
+<span class="lineNum">    1172 </span>            : static isl_schedule *
+<span class="lineNum">    1173 </span><span class="lineCov">        357 : build_schedule_loop_nest (scop_p scop, int *index, loop_p context_loop)</span>
+<span class="lineNum">    1174 </span>            : {
+<span class="lineNum">    1175 </span><span class="lineCov">        714 :   gcc_assert (*index != (int) scop-&gt;pbbs.length ());</span>
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span><span class="lineCov">        357 :   loop_p loop = loop_at (scop, index);</span>
+<span class="lineNum">    1178 </span><span class="lineCov">        357 :   isl_schedule *s = build_schedule_loop (scop, index);</span>
+<span class="lineNum">    1179 </span><span class="lineCov">        357 :   return embed_in_surrounding_loops (s, scop, loop, index, context_loop);</span>
+<span class="lineNum">    1180 </span>            : }
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span>            : /* Build the schedule of the SCOP.  */
+<a name="1183"><span class="lineNum">    1183 </span>            : </a>
+<span class="lineNum">    1184 </span>            : static void
+<span class="lineNum">    1185 </span><span class="lineCov">        195 : build_original_schedule (scop_p scop)</span>
+<span class="lineNum">    1186 </span>            : {
+<span class="lineNum">    1187 </span><span class="lineCov">        195 :   int i = 0;</span>
+<span class="lineNum">    1188 </span><span class="lineCov">        390 :   int n = scop-&gt;pbbs.length ();</span>
+<span class="lineNum">    1189 </span><span class="lineCov">        564 :   while (i &lt; n)</span>
+<span class="lineNum">    1190 </span>            :     {
+<span class="lineNum">    1191 </span><span class="lineCov">        369 :       poly_bb_p pbb = scop-&gt;pbbs[i];</span>
+<span class="lineNum">    1192 </span><span class="lineCov">        369 :       isl_schedule *s = NULL;</span>
+<span class="lineNum">    1193 </span><span class="lineCov">        738 :       if (!loop_in_sese_p (pbb_loop (pbb), scop-&gt;scop_info-&gt;region))</span>
+<span class="lineNum">    1194 </span><span class="lineCov">         96 :         s = build_schedule_pbb (scop, &amp;i);</span>
+<span class="lineNum">    1195 </span>            :       else
+<span class="lineNum">    1196 </span><span class="lineCov">        273 :         s = build_schedule_loop_nest (scop, &amp;i, NULL);</span>
+<span class="lineNum">    1197 </span>            : 
+<span class="lineNum">    1198 </span><span class="lineCov">        369 :       scop-&gt;original_schedule = add_in_sequence (scop-&gt;original_schedule, s);</span>
+<span class="lineNum">    1199 </span>            :     }
+<span class="lineNum">    1200 </span>            : 
+<span class="lineNum">    1201 </span><span class="lineCov">        195 :   if (dump_file)</span>
+<span class="lineNum">    1202 </span>            :     {
+<span class="lineNum">    1203 </span><span class="lineCov">         97 :       fprintf (dump_file, &quot;[sese-to-poly] original schedule:\n&quot;);</span>
+<span class="lineNum">    1204 </span><span class="lineCov">         97 :       print_isl_schedule (dump_file, scop-&gt;original_schedule);</span>
+<span class="lineNum">    1205 </span>            :     }
+<span class="lineNum">    1206 </span><span class="lineCov">        195 : }</span>
+<span class="lineNum">    1207 </span>            : 
+<span class="lineNum">    1208 </span>            : /* Builds the polyhedral representation for a SESE region.  */
+<a name="1209"><span class="lineNum">    1209 </span>            : </a>
+<span class="lineNum">    1210 </span>            : bool
+<span class="lineNum">    1211 </span><span class="lineCov">        195 : build_poly_scop (scop_p scop)</span>
+<span class="lineNum">    1212 </span>            : {
+<span class="lineNum">    1213 </span><span class="lineCov">        195 :   int old_err = isl_options_get_on_error (scop-&gt;isl_context);</span>
+<span class="lineNum">    1214 </span><span class="lineCov">        195 :   isl_options_set_on_error (scop-&gt;isl_context, ISL_ON_ERROR_CONTINUE);</span>
+<span class="lineNum">    1215 </span>            : 
+<span class="lineNum">    1216 </span><span class="lineCov">        195 :   build_scop_context (scop);</span>
+<span class="lineNum">    1217 </span>            : 
+<span class="lineNum">    1218 </span><span class="lineCov">        195 :   unsigned i = 0;</span>
+<span class="lineNum">    1219 </span><span class="lineCov">        390 :   unsigned n = scop-&gt;pbbs.length ();</span>
+<span class="lineNum">    1220 </span><span class="lineCov">        522 :   while (i &lt; n)</span>
+<span class="lineNum">    1221 </span><span class="lineCov">        327 :     i = build_iteration_domains (scop, scop-&gt;param_context, i, NULL);</span>
+<span class="lineNum">    1222 </span>            : 
+<span class="lineNum">    1223 </span><span class="lineCov">        195 :   build_scop_drs (scop);</span>
+<span class="lineNum">    1224 </span><span class="lineCov">        195 :   build_original_schedule (scop);</span>
+<span class="lineNum">    1225 </span>            : 
+<span class="lineNum">    1226 </span><span class="lineCov">        195 :   enum isl_error err = isl_ctx_last_error (scop-&gt;isl_context);</span>
+<span class="lineNum">    1227 </span><span class="lineCov">        195 :   isl_ctx_reset_error (scop-&gt;isl_context);</span>
+<span class="lineNum">    1228 </span><span class="lineCov">        195 :   isl_options_set_on_error (scop-&gt;isl_context, old_err);</span>
+<span class="lineNum">    1229 </span><span class="lineCov">        195 :   if (err != isl_error_none)</span>
+<span class="lineNum">    1230 </span><span class="lineNoCov">          0 :     dump_printf (MSG_MISSED_OPTIMIZATION,</span>
+<span class="lineNum">    1231 </span>            :                  &quot;ISL error while building poly scop\n&quot;);
+<span class="lineNum">    1232 </span>            : 
+<span class="lineNum">    1233 </span><span class="lineCov">        195 :   return err == isl_error_none;</span>
+<span class="lineNum">    1234 </span>            : }
+<span class="lineNum">    1235 </span>            : #endif  /* HAVE_isl */
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

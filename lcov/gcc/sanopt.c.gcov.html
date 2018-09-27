@@ -1,0 +1,1464 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/sanopt.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - sanopt.c<span style="font-size: 80%;"> (source / <a href="sanopt.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">578</td>
+            <td class="headerCovTableEntry">600</td>
+            <td class="headerCovTableEntryHi">96.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">30</td>
+            <td class="headerCovTableEntryLo">70.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Optimize and expand sanitizer functions.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2014-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Marek Polacek &lt;polacek@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tree-ssa-operands.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;asan.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;ubsan.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-hash-traits.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;gimple-ssa.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-phinodes.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;ssa-iterators.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;gimple-walk.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;varasm.h&quot;
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            : /* This is used to carry information about basic blocks.  It is
+<span class="lineNum">      51 </span>            :    attached to the AUX field of the standard CFG block.  */
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            : struct sanopt_info
+<span class="lineNum">      54 </span>            : {
+<span class="lineNum">      55 </span>            :   /* True if this BB might call (directly or indirectly) free/munmap
+<span class="lineNum">      56 </span>            :      or similar operation.  */
+<span class="lineNum">      57 </span>            :   bool has_freeing_call_p;
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :   /* True if HAS_FREEING_CALL_P flag has been computed.  */
+<span class="lineNum">      60 </span>            :   bool has_freeing_call_computed_p;
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            :   /* True if there is a block with HAS_FREEING_CALL_P flag set
+<span class="lineNum">      63 </span>            :      on any path between an immediate dominator of BB, denoted
+<span class="lineNum">      64 </span>            :      imm(BB), and BB.  */
+<span class="lineNum">      65 </span>            :   bool imm_dom_path_with_freeing_call_p;
+<span class="lineNum">      66 </span>            : 
+<span class="lineNum">      67 </span>            :   /* True if IMM_DOM_PATH_WITH_FREEING_CALL_P has been computed.  */
+<span class="lineNum">      68 </span>            :   bool imm_dom_path_with_freeing_call_computed_p;
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            :   /* Number of possibly freeing calls encountered in this bb
+<span class="lineNum">      71 </span>            :      (so far).  */
+<span class="lineNum">      72 </span>            :   uint64_t freeing_call_events;
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :   /* True if BB is currently being visited during computation
+<span class="lineNum">      75 </span>            :      of IMM_DOM_PATH_WITH_FREEING_CALL_P flag.  */
+<span class="lineNum">      76 </span>            :   bool being_visited_p;
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            :   /* True if this BB has been visited in the dominator walk.  */
+<span class="lineNum">      79 </span>            :   bool visited_p;
+<span class="lineNum">      80 </span>            : };
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            : /* If T has a single definition of form T = T2, return T2.  */
+<a name="83"><span class="lineNum">      83 </span>            : </a>
+<span class="lineNum">      84 </span>            : static tree
+<span class="lineNum">      85 </span><span class="lineCov">       4790 : maybe_get_single_definition (tree t)</span>
+<span class="lineNum">      86 </span>            : {
+<span class="lineNum">      87 </span><span class="lineCov">       4790 :   if (TREE_CODE (t) == SSA_NAME)</span>
+<span class="lineNum">      88 </span>            :     {
+<span class="lineNum">      89 </span><span class="lineCov">       2304 :       gimple *g = SSA_NAME_DEF_STMT (t);</span>
+<span class="lineNum">      90 </span><span class="lineCov">       2304 :       if (gimple_assign_single_p (g))</span>
+<span class="lineNum">      91 </span><span class="lineCov">       2986 :         return gimple_assign_rhs1 (g);</span>
+<span class="lineNum">      92 </span>            :     }
+<span class="lineNum">      93 </span>            :   return NULL_TREE;
+<span class="lineNum">      94 </span>            : }
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            : /* Tree triplet for vptr_check_map.  */
+<span class="lineNum">      97 </span>            : struct sanopt_tree_triplet
+<span class="lineNum">      98 </span>            : {
+<span class="lineNum">      99 </span>            :   tree t1, t2, t3;
+<span class="lineNum">     100 </span>            : };
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            : /* Traits class for tree triplet hash maps below.  */
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span>            : struct sanopt_tree_triplet_hash : typed_noop_remove &lt;sanopt_tree_triplet&gt;
+<span class="lineNum">     105 </span>            : {
+<span class="lineNum">     106 </span>            :   typedef sanopt_tree_triplet value_type;
+<span class="lineNum">     107 </span>            :   typedef sanopt_tree_triplet compare_type;
+<a name="108"><span class="lineNum">     108 </span>            : </a>
+<span class="lineNum">     109 </span>            :   static hashval_t
+<span class="lineNum">     110 </span><span class="lineCov">       2998 :   hash (const sanopt_tree_triplet &amp;ref)</span>
+<span class="lineNum">     111 </span>            :   {
+<span class="lineNum">     112 </span><span class="lineCov">       2998 :     inchash::hash hstate (0);</span>
+<span class="lineNum">     113 </span><span class="lineCov">       2998 :     inchash::add_expr (ref.t1, hstate);</span>
+<span class="lineNum">     114 </span><span class="lineCov">       2998 :     inchash::add_expr (ref.t2, hstate);</span>
+<span class="lineNum">     115 </span><span class="lineCov">       2998 :     inchash::add_expr (ref.t3, hstate);</span>
+<span class="lineNum">     116 </span><span class="lineCov">       5996 :     return hstate.end ();</span>
+<span class="lineNum">     117 </span>            :   }
+<a name="118"><span class="lineNum">     118 </span>            : </a>
+<span class="lineNum">     119 </span>            :   static bool
+<span class="lineNum">     120 </span><span class="lineCov">       1286 :   equal (const sanopt_tree_triplet &amp;ref1, const sanopt_tree_triplet &amp;ref2)</span>
+<span class="lineNum">     121 </span>            :   {
+<span class="lineNum">     122 </span><span class="lineCov">       1286 :     return operand_equal_p (ref1.t1, ref2.t1, 0)</span>
+<span class="lineNum">     123 </span><span class="lineCov">        630 :            &amp;&amp; operand_equal_p (ref1.t2, ref2.t2, 0)</span>
+<span class="lineNum">     124 </span><span class="lineCov">       1681 :            &amp;&amp; operand_equal_p (ref1.t3, ref2.t3, 0);</span>
+<span class="lineNum">     125 </span>            :   }
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span>            :   static void
+<span class="lineNum">     128 </span>            :   mark_deleted (sanopt_tree_triplet &amp;ref)
+<span class="lineNum">     129 </span>            :   {
+<span class="lineNum">     130 </span>            :     ref.t1 = reinterpret_cast&lt;tree&gt; (1);
+<span class="lineNum">     131 </span>            :   }
+<a name="132"><span class="lineNum">     132 </span>            : </a>
+<span class="lineNum">     133 </span>            :   static void
+<span class="lineNum">     134 </span><span class="lineNoCov">          0 :   mark_empty (sanopt_tree_triplet &amp;ref)</span>
+<span class="lineNum">     135 </span>            :   {
+<span class="lineNum">     136 </span><span class="lineCov">     102537 :     ref.t1 = NULL;</span>
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 :   }</span>
+<a name="138"><span class="lineNum">     138 </span>            : </a>
+<span class="lineNum">     139 </span>            :   static bool
+<span class="lineNum">     140 </span><span class="lineNoCov">          0 :   is_deleted (const sanopt_tree_triplet &amp;ref)</span>
+<span class="lineNum">     141 </span>            :   {
+<span class="lineNum">     142 </span><span class="lineCov">       4064 :     return ref.t1 == reinterpret_cast&lt;tree&gt; (1);</span>
+<span class="lineNum">     143 </span>            :   }
+<a name="144"><span class="lineNum">     144 </span>            : </a>
+<span class="lineNum">     145 </span>            :   static bool
+<span class="lineNum">     146 </span><span class="lineNoCov">          0 :   is_empty (const sanopt_tree_triplet &amp;ref)</span>
+<span class="lineNum">     147 </span>            :   {
+<span class="lineNum">     148 </span><span class="lineCov">     108729 :     return ref.t1 == NULL;</span>
+<span class="lineNum">     149 </span>            :   }
+<span class="lineNum">     150 </span>            : };
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span>            : /* Tree couple for ptr_check_map.  */
+<span class="lineNum">     153 </span>            : struct sanopt_tree_couple
+<span class="lineNum">     154 </span>            : {
+<span class="lineNum">     155 </span>            :   tree ptr;
+<span class="lineNum">     156 </span>            :   bool pos_p;
+<span class="lineNum">     157 </span>            : };
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span>            : /* Traits class for tree triplet hash maps below.  */
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            : struct sanopt_tree_couple_hash : typed_noop_remove &lt;sanopt_tree_couple&gt;
+<span class="lineNum">     162 </span>            : {
+<span class="lineNum">     163 </span>            :   typedef sanopt_tree_couple value_type;
+<span class="lineNum">     164 </span>            :   typedef sanopt_tree_couple compare_type;
+<a name="165"><span class="lineNum">     165 </span>            : </a>
+<span class="lineNum">     166 </span>            :   static hashval_t
+<span class="lineNum">     167 </span><span class="lineNoCov">          0 :   hash (const sanopt_tree_couple &amp;ref)</span>
+<span class="lineNum">     168 </span>            :   {
+<span class="lineNum">     169 </span><span class="lineNoCov">          0 :     inchash::hash hstate (0);</span>
+<span class="lineNum">     170 </span><span class="lineNoCov">          0 :     inchash::add_expr (ref.ptr, hstate);</span>
+<span class="lineNum">     171 </span><span class="lineNoCov">          0 :     hstate.add_int (ref.pos_p);</span>
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 :     return hstate.end ();</span>
+<span class="lineNum">     173 </span>            :   }
+<a name="174"><span class="lineNum">     174 </span>            : </a>
+<span class="lineNum">     175 </span>            :   static bool
+<span class="lineNum">     176 </span><span class="lineNoCov">          0 :   equal (const sanopt_tree_couple &amp;ref1, const sanopt_tree_couple &amp;ref2)</span>
+<span class="lineNum">     177 </span>            :   {
+<span class="lineNum">     178 </span><span class="lineCov">       3698 :     return operand_equal_p (ref1.ptr, ref2.ptr, 0)</span>
+<span class="lineNum">     179 </span><span class="lineCov">       3698 :            &amp;&amp; ref1.pos_p == ref2.pos_p;</span>
+<span class="lineNum">     180 </span>            :   }
+<span class="lineNum">     181 </span>            : 
+<span class="lineNum">     182 </span>            :   static void
+<span class="lineNum">     183 </span>            :   mark_deleted (sanopt_tree_couple &amp;ref)
+<span class="lineNum">     184 </span>            :   {
+<span class="lineNum">     185 </span>            :     ref.ptr = reinterpret_cast&lt;tree&gt; (1);
+<span class="lineNum">     186 </span>            :   }
+<a name="187"><span class="lineNum">     187 </span>            : </a>
+<span class="lineNum">     188 </span>            :   static void
+<span class="lineNum">     189 </span><span class="lineNoCov">          0 :   mark_empty (sanopt_tree_couple &amp;ref)</span>
+<span class="lineNum">     190 </span>            :   {
+<span class="lineNum">     191 </span><span class="lineCov">      99840 :     ref.ptr = NULL;</span>
+<span class="lineNum">     192 </span><span class="lineNoCov">          0 :   }</span>
+<a name="193"><span class="lineNum">     193 </span>            : </a>
+<span class="lineNum">     194 </span>            :   static bool
+<span class="lineNum">     195 </span><span class="lineNoCov">          0 :   is_deleted (const sanopt_tree_couple &amp;ref)</span>
+<span class="lineNum">     196 </span>            :   {
+<span class="lineNum">     197 </span><span class="lineCov">       4708 :     return ref.ptr == reinterpret_cast&lt;tree&gt; (1);</span>
+<span class="lineNum">     198 </span>            :   }
+<a name="199"><span class="lineNum">     199 </span>            : </a>
+<span class="lineNum">     200 </span>            :   static bool
+<span class="lineNum">     201 </span><span class="lineNoCov">          0 :   is_empty (const sanopt_tree_couple &amp;ref)</span>
+<span class="lineNum">     202 </span>            :   {
+<span class="lineNum">     203 </span><span class="lineCov">     108346 :     return ref.ptr == NULL;</span>
+<span class="lineNum">     204 </span>            :   }
+<span class="lineNum">     205 </span>            : };
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span>            : /* This is used to carry various hash maps and variables used
+<span class="lineNum">     208 </span>            :    in sanopt_optimize_walker.  */
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span>            : struct sanopt_ctx
+<span class="lineNum">     211 </span>            : {
+<span class="lineNum">     212 </span>            :   /* This map maps a pointer (the first argument of UBSAN_NULL) to
+<span class="lineNum">     213 </span>            :      a vector of UBSAN_NULL call statements that check this pointer.  */
+<span class="lineNum">     214 </span>            :   hash_map&lt;tree, auto_vec&lt;gimple *&gt; &gt; null_check_map;
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :   /* This map maps a pointer (the second argument of ASAN_CHECK) to
+<span class="lineNum">     217 </span>            :      a vector of ASAN_CHECK call statements that check the access.  */
+<span class="lineNum">     218 </span>            :   hash_map&lt;tree_operand_hash, auto_vec&lt;gimple *&gt; &gt; asan_check_map;
+<span class="lineNum">     219 </span>            : 
+<span class="lineNum">     220 </span>            :   /* This map maps a tree triplet (the first, second and fourth argument
+<span class="lineNum">     221 </span>            :      of UBSAN_VPTR) to a vector of UBSAN_VPTR call statements that check
+<span class="lineNum">     222 </span>            :      that virtual table pointer.  */
+<span class="lineNum">     223 </span>            :   hash_map&lt;sanopt_tree_triplet_hash, auto_vec&lt;gimple *&gt; &gt; vptr_check_map;
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            :   /* This map maps a couple (tree and boolean) to a vector of UBSAN_PTR
+<span class="lineNum">     226 </span>            :      call statements that check that pointer overflow.  */
+<span class="lineNum">     227 </span>            :   hash_map&lt;sanopt_tree_couple_hash, auto_vec&lt;gimple *&gt; &gt; ptr_check_map;
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span>            :   /* Number of IFN_ASAN_CHECK statements.  */
+<span class="lineNum">     230 </span>            :   int asan_num_accesses;
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span>            :   /* True when the current functions constains an ASAN_MARK.  */
+<span class="lineNum">     233 </span>            :   bool contains_asan_mark;
+<span class="lineNum">     234 </span>            : };
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span>            : /* Return true if there might be any call to free/munmap operation
+<span class="lineNum">     237 </span>            :    on any path in between DOM (which should be imm(BB)) and BB.  */
+<a name="238"><span class="lineNum">     238 </span>            : </a>
+<span class="lineNum">     239 </span>            : static bool
+<span class="lineNum">     240 </span><span class="lineCov">        816 : imm_dom_path_with_freeing_call (basic_block bb, basic_block dom)</span>
+<span class="lineNum">     241 </span>            : {
+<span class="lineNum">     242 </span><span class="lineCov">        816 :   sanopt_info *info = (sanopt_info *) bb-&gt;aux;</span>
+<span class="lineNum">     243 </span><span class="lineCov">        816 :   edge e;</span>
+<span class="lineNum">     244 </span><span class="lineCov">        816 :   edge_iterator ei;</span>
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span><span class="lineCov">        816 :   if (info-&gt;imm_dom_path_with_freeing_call_computed_p)</span>
+<span class="lineNum">     247 </span><span class="lineCov">        192 :     return info-&gt;imm_dom_path_with_freeing_call_p;</span>
+<span class="lineNum">     248 </span>            : 
+<span class="lineNum">     249 </span><span class="lineCov">        624 :   info-&gt;being_visited_p = true;</span>
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span><span class="lineCov">       2054 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     252 </span>            :     {
+<span class="lineNum">     253 </span><span class="lineCov">        807 :       sanopt_info *pred_info = (sanopt_info *) e-&gt;src-&gt;aux;</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">        807 :       if (e-&gt;src == dom)</span>
+<span class="lineNum">     256 </span>            :         continue;
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span><span class="lineCov">        319 :       if ((pred_info-&gt;imm_dom_path_with_freeing_call_computed_p</span>
+<span class="lineNum">     259 </span><span class="lineCov">          1 :           &amp;&amp; pred_info-&gt;imm_dom_path_with_freeing_call_p)</span>
+<span class="lineNum">     260 </span><span class="lineCov">        319 :           || (pred_info-&gt;has_freeing_call_computed_p</span>
+<span class="lineNum">     261 </span><span class="lineCov">         51 :               &amp;&amp; pred_info-&gt;has_freeing_call_p))</span>
+<span class="lineNum">     262 </span>            :         {
+<span class="lineNum">     263 </span><span class="lineCov">          1 :           info-&gt;imm_dom_path_with_freeing_call_computed_p = true;</span>
+<span class="lineNum">     264 </span><span class="lineCov">          1 :           info-&gt;imm_dom_path_with_freeing_call_p = true;</span>
+<span class="lineNum">     265 </span><span class="lineCov">          1 :           info-&gt;being_visited_p = false;</span>
+<span class="lineNum">     266 </span><span class="lineCov">          1 :           return true;</span>
+<span class="lineNum">     267 </span>            :         }
+<span class="lineNum">     268 </span>            :     }
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span><span class="lineCov">       1961 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     271 </span>            :     {
+<span class="lineNum">     272 </span><span class="lineCov">        758 :       sanopt_info *pred_info = (sanopt_info *) e-&gt;src-&gt;aux;</span>
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span><span class="lineCov">        758 :       if (e-&gt;src == dom)</span>
+<span class="lineNum">     275 </span><span class="lineCov">        520 :         continue;</span>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">        270 :       if (pred_info-&gt;has_freeing_call_computed_p)</span>
+<span class="lineNum">     278 </span>            :         continue;
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span><span class="lineCov">        238 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     281 </span><span class="lineCov">       2961 :       for (gsi = gsi_start_bb (e-&gt;src); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     282 </span>            :         {
+<span class="lineNum">     283 </span><span class="lineCov">       2528 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     284 </span><span class="lineCov">       2528 :           gasm *asm_stmt;</span>
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span><span class="lineCov">       2528 :           if ((is_gimple_call (stmt) &amp;&amp; !nonfreeing_call_p (stmt))</span>
+<span class="lineNum">     287 </span><span class="lineCov">       2674 :               || ((asm_stmt = dyn_cast &lt;gasm *&gt; (stmt))</span>
+<span class="lineNum">     288 </span><span class="lineCov">          6 :                   &amp;&amp; (gimple_asm_clobbers_memory_p (asm_stmt)</span>
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :                       || gimple_asm_volatile_p (asm_stmt))))</span>
+<span class="lineNum">     290 </span>            :             {
+<span class="lineNum">     291 </span><span class="lineCov">         43 :               pred_info-&gt;has_freeing_call_p = true;</span>
+<span class="lineNum">     292 </span><span class="lineCov">         43 :               break;</span>
+<span class="lineNum">     293 </span>            :             }
+<span class="lineNum">     294 </span>            :         }
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span><span class="lineCov">        238 :       pred_info-&gt;has_freeing_call_computed_p = true;</span>
+<span class="lineNum">     297 </span><span class="lineCov">        238 :       if (pred_info-&gt;has_freeing_call_p)</span>
+<span class="lineNum">     298 </span>            :         {
+<span class="lineNum">     299 </span><span class="lineCov">         43 :           info-&gt;imm_dom_path_with_freeing_call_computed_p = true;</span>
+<span class="lineNum">     300 </span><span class="lineCov">         43 :           info-&gt;imm_dom_path_with_freeing_call_p = true;</span>
+<span class="lineNum">     301 </span><span class="lineCov">         43 :           info-&gt;being_visited_p = false;</span>
+<span class="lineNum">     302 </span><span class="lineCov">         43 :           return true;</span>
+<span class="lineNum">     303 </span>            :         }
+<span class="lineNum">     304 </span>            :     }
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span><span class="lineCov">       1841 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     307 </span>            :     {
+<span class="lineNum">     308 </span><span class="lineCov">        698 :       if (e-&gt;src == dom)</span>
+<span class="lineNum">     309 </span>            :         continue;
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span>            :       basic_block src;
+<span class="lineNum">     312 </span><span class="lineCov">        658 :       for (src = e-&gt;src; src != dom; )</span>
+<span class="lineNum">     313 </span>            :         {
+<span class="lineNum">     314 </span><span class="lineCov">        487 :           sanopt_info *pred_info = (sanopt_info *) src-&gt;aux;</span>
+<span class="lineNum">     315 </span><span class="lineCov">        487 :           if (pred_info-&gt;being_visited_p)</span>
+<span class="lineNum">     316 </span>            :             break;
+<span class="lineNum">     317 </span><span class="lineCov">        465 :           basic_block imm = get_immediate_dominator (CDI_DOMINATORS, src);</span>
+<span class="lineNum">     318 </span><span class="lineCov">        465 :           if (imm_dom_path_with_freeing_call (src, imm))</span>
+<span class="lineNum">     319 </span>            :             {
+<span class="lineNum">     320 </span><span class="lineCov">         17 :               info-&gt;imm_dom_path_with_freeing_call_computed_p = true;</span>
+<span class="lineNum">     321 </span><span class="lineCov">         17 :               info-&gt;imm_dom_path_with_freeing_call_p = true;</span>
+<span class="lineNum">     322 </span><span class="lineCov">         17 :               info-&gt;being_visited_p = false;</span>
+<span class="lineNum">     323 </span><span class="lineCov">         17 :               return true;</span>
+<span class="lineNum">     324 </span>            :             }
+<span class="lineNum">     325 </span>            :           src = imm;
+<span class="lineNum">     326 </span>            :         }
+<span class="lineNum">     327 </span>            :     }
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span><span class="lineCov">        563 :   info-&gt;imm_dom_path_with_freeing_call_computed_p = true;</span>
+<span class="lineNum">     330 </span><span class="lineCov">        563 :   info-&gt;imm_dom_path_with_freeing_call_p = false;</span>
+<span class="lineNum">     331 </span><span class="lineCov">        563 :   info-&gt;being_visited_p = false;</span>
+<span class="lineNum">     332 </span><span class="lineCov">        563 :   return false;</span>
+<span class="lineNum">     333 </span>            : }
+<span class="lineNum">     334 </span>            : 
+<span class="lineNum">     335 </span>            : /* Get the first dominating check from the list of stored checks.
+<span class="lineNum">     336 </span>            :    Non-dominating checks are silently dropped.  */
+<a name="337"><span class="lineNum">     337 </span>            : </a>
+<span class="lineNum">     338 </span>            : static gimple *
+<span class="lineNum">     339 </span><span class="lineNoCov">          0 : maybe_get_dominating_check (auto_vec&lt;gimple *&gt; &amp;v)</span>
+<span class="lineNum">     340 </span>            : {
+<span class="lineNum">     341 </span><span class="lineCov">      16059 :   for (; !v.is_empty (); v.pop ())</span>
+<span class="lineNum">     342 </span>            :     {
+<span class="lineNum">     343 </span><span class="lineCov">       4624 :       gimple *g = v.last ();</span>
+<span class="lineNum">     344 </span><span class="lineCov">       4624 :       sanopt_info *si = (sanopt_info *) gimple_bb (g)-&gt;aux;</span>
+<span class="lineNum">     345 </span><span class="lineCov">       4624 :       if (!si-&gt;visited_p)</span>
+<span class="lineNum">     346 </span>            :         /* At this point we shouldn't have any statements
+<span class="lineNum">     347 </span>            :            that aren't dominating the current BB.  */
+<span class="lineNum">     348 </span><span class="lineNoCov">          0 :         return g;</span>
+<span class="lineNum">     349 </span>            :     }
+<span class="lineNum">     350 </span>            :   return NULL;
+<span class="lineNum">     351 </span>            : }
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span>            : /* Optimize away redundant UBSAN_NULL calls.  */
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span>            : static bool
+<span class="lineNum">     356 </span><span class="lineCov">       4605 : maybe_optimize_ubsan_null_ifn (struct sanopt_ctx *ctx, gimple *stmt)</span>
+<span class="lineNum">     357 </span>            : {
+<span class="lineNum">     358 </span><span class="lineCov">       4605 :   gcc_assert (gimple_call_num_args (stmt) == 3);</span>
+<span class="lineNum">     359 </span><span class="lineCov">       4605 :   tree ptr = gimple_call_arg (stmt, 0);</span>
+<span class="lineNum">     360 </span><span class="lineCov">       4605 :   tree cur_align = gimple_call_arg (stmt, 2);</span>
+<span class="lineNum">     361 </span><span class="lineCov">       4605 :   gcc_assert (TREE_CODE (cur_align) == INTEGER_CST);</span>
+<span class="lineNum">     362 </span><span class="lineCov">       4605 :   bool remove = false;</span>
+<span class="lineNum">     363 </span>            : 
+<span class="lineNum">     364 </span><span class="lineCov">       4605 :   auto_vec&lt;gimple *&gt; &amp;v = ctx-&gt;null_check_map.get_or_insert (ptr);</span>
+<span class="lineNum">     365 </span><span class="lineCov">       4605 :   gimple *g = maybe_get_dominating_check (v);</span>
+<span class="lineNum">     366 </span><span class="lineCov">       4605 :   if (!g)</span>
+<span class="lineNum">     367 </span>            :     {
+<span class="lineNum">     368 </span>            :       /* For this PTR we don't have any UBSAN_NULL stmts recorded, so there's
+<span class="lineNum">     369 </span>            :          nothing to optimize yet.  */
+<span class="lineNum">     370 </span><span class="lineCov">       2808 :       v.safe_push (stmt);</span>
+<span class="lineNum">     371 </span><span class="lineCov">       2808 :       return false;</span>
+<span class="lineNum">     372 </span>            :     }
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span>            :   /* We already have recorded a UBSAN_NULL check for this pointer. Perhaps we
+<span class="lineNum">     375 </span>            :      can drop this one.  But only if this check doesn't specify stricter
+<span class="lineNum">     376 </span>            :      alignment.  */
+<span class="lineNum">     377 </span>            : 
+<span class="lineNum">     378 </span><span class="lineCov">       1797 :   tree align = gimple_call_arg (g, 2);</span>
+<span class="lineNum">     379 </span><span class="lineCov">       1797 :   int kind = tree_to_shwi (gimple_call_arg (g, 1));</span>
+<span class="lineNum">     380 </span>            :   /* If this is a NULL pointer check where we had segv anyway, we can
+<span class="lineNum">     381 </span>            :      remove it.  */
+<span class="lineNum">     382 </span><span class="lineCov">       1797 :   if (integer_zerop (align)</span>
+<span class="lineNum">     383 </span><span class="lineCov">       1797 :       &amp;&amp; (kind == UBSAN_LOAD_OF</span>
+<span class="lineNum">     384 </span><span class="lineCov">        444 :           || kind == UBSAN_STORE_OF</span>
+<span class="lineNum">     385 </span><span class="lineCov">        444 :           || kind == UBSAN_MEMBER_ACCESS))</span>
+<span class="lineNum">     386 </span>            :     remove = true;
+<span class="lineNum">     387 </span>            :   /* Otherwise remove the check in non-recovering mode, or if the
+<span class="lineNum">     388 </span>            :      stmts have same location.  */
+<span class="lineNum">     389 </span><span class="lineCov">       1518 :   else if (integer_zerop (align))</span>
+<span class="lineNum">     390 </span><span class="lineCov">        165 :     remove = (flag_sanitize_recover &amp; SANITIZE_NULL) == 0</span>
+<span class="lineNum">     391 </span><span class="lineCov">        137 :               || flag_sanitize_undefined_trap_on_error</span>
+<span class="lineNum">     392 </span><span class="lineCov">        492 :               || gimple_location (g) == gimple_location (stmt);</span>
+<span class="lineNum">     393 </span><span class="lineCov">       1353 :   else if (tree_int_cst_le (cur_align, align))</span>
+<span class="lineNum">     394 </span><span class="lineCov">       1353 :     remove = (flag_sanitize_recover &amp; SANITIZE_ALIGNMENT) == 0</span>
+<span class="lineNum">     395 </span><span class="lineCov">        819 :               || flag_sanitize_undefined_trap_on_error</span>
+<span class="lineNum">     396 </span><span class="lineCov">       3642 :               || gimple_location (g) == gimple_location (stmt);</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span><span class="lineCov">       2196 :   if (!remove &amp;&amp; gimple_bb (g) == gimple_bb (stmt)</span>
+<span class="lineNum">     399 </span><span class="lineCov">       2431 :       &amp;&amp; tree_int_cst_compare (cur_align, align) == 0)</span>
+<span class="lineNum">     400 </span><span class="lineCov">        634 :     v.pop ();</span>
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span><span class="lineCov">       1797 :   if (!remove)</span>
+<span class="lineNum">     403 </span><span class="lineCov">        732 :     v.safe_push (stmt);</span>
+<span class="lineNum">     404 </span>            :   return remove;
+<span class="lineNum">     405 </span>            : }
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span>            : /* Return true when pointer PTR for a given CUR_OFFSET is already sanitized
+<span class="lineNum">     408 </span>            :    in a given sanitization context CTX.  */
+<a name="409"><span class="lineNum">     409 </span>            : </a>
+<span class="lineNum">     410 </span>            : static bool
+<span class="lineNum">     411 </span><span class="lineCov">       2303 : has_dominating_ubsan_ptr_check (sanopt_ctx *ctx, tree ptr,</span>
+<span class="lineNum">     412 </span>            :                                 offset_int &amp;cur_offset)
+<span class="lineNum">     413 </span>            : {
+<span class="lineNum">     414 </span><span class="lineCov">       2303 :   bool pos_p = !wi::neg_p (cur_offset);</span>
+<span class="lineNum">     415 </span><span class="lineCov">       2303 :   sanopt_tree_couple couple;</span>
+<span class="lineNum">     416 </span><span class="lineCov">       2303 :   couple.ptr = ptr;</span>
+<span class="lineNum">     417 </span><span class="lineCov">       2303 :   couple.pos_p = pos_p;</span>
+<span class="lineNum">     418 </span>            : 
+<span class="lineNum">     419 </span><span class="lineCov">       2303 :   auto_vec&lt;gimple *&gt; &amp;v = ctx-&gt;ptr_check_map.get_or_insert (couple);</span>
+<span class="lineNum">     420 </span><span class="lineCov">       2303 :   gimple *g = maybe_get_dominating_check (v);</span>
+<span class="lineNum">     421 </span><span class="lineCov">       2303 :   if (!g)</span>
+<span class="lineNum">     422 </span>            :     return false;
+<span class="lineNum">     423 </span>            : 
+<span class="lineNum">     424 </span>            :   /* We already have recorded a UBSAN_PTR check for this pointer.  Perhaps we
+<span class="lineNum">     425 </span>            :      can drop this one.  But only if this check doesn't specify larger offset.
+<span class="lineNum">     426 </span>            :      */
+<span class="lineNum">     427 </span><span class="lineCov">        911 :   tree offset = gimple_call_arg (g, 1);</span>
+<span class="lineNum">     428 </span><span class="lineCov">        911 :   gcc_assert (TREE_CODE (offset) == INTEGER_CST);</span>
+<span class="lineNum">     429 </span><span class="lineCov">        911 :   offset_int ooffset = wi::sext (wi::to_offset (offset), POINTER_SIZE);</span>
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span><span class="lineCov">        911 :   if (pos_p)</span>
+<span class="lineNum">     432 </span>            :     {
+<span class="lineNum">     433 </span><span class="lineCov">        795 :       if (wi::les_p (cur_offset, ooffset))</span>
+<span class="lineNum">     434 </span><span class="lineCov">        425 :         return true;</span>
+<span class="lineNum">     435 </span>            :     }
+<span class="lineNum">     436 </span><span class="lineCov">        116 :   else if (!pos_p &amp;&amp; wi::les_p (ooffset, cur_offset))</span>
+<span class="lineNum">     437 </span><span class="lineCov">         96 :     return true;</span>
+<span class="lineNum">     438 </span>            : 
+<span class="lineNum">     439 </span>            :   return false;
+<span class="lineNum">     440 </span>            : }
+<span class="lineNum">     441 </span>            : 
+<span class="lineNum">     442 </span>            : /* Record UBSAN_PTR check of given context CTX.  Register pointer PTR on
+<span class="lineNum">     443 </span>            :    a given OFFSET that it's handled by GIMPLE STMT.  */
+<a name="444"><span class="lineNum">     444 </span>            : </a>
+<span class="lineNum">     445 </span>            : static void
+<span class="lineNum">     446 </span><span class="lineCov">       1495 : record_ubsan_ptr_check_stmt (sanopt_ctx *ctx, gimple *stmt, tree ptr,</span>
+<span class="lineNum">     447 </span>            :                              const offset_int &amp;offset)
+<span class="lineNum">     448 </span>            : {
+<span class="lineNum">     449 </span><span class="lineCov">       1495 :   sanopt_tree_couple couple;</span>
+<span class="lineNum">     450 </span><span class="lineCov">       1495 :   couple.ptr = ptr;</span>
+<span class="lineNum">     451 </span><span class="lineCov">       1495 :   couple.pos_p = !wi::neg_p (offset);</span>
+<span class="lineNum">     452 </span>            : 
+<span class="lineNum">     453 </span><span class="lineCov">       1495 :   auto_vec&lt;gimple *&gt; &amp;v = ctx-&gt;ptr_check_map.get_or_insert (couple);</span>
+<span class="lineNum">     454 </span><span class="lineCov">       1495 :   v.safe_push (stmt);</span>
+<span class="lineNum">     455 </span><span class="lineCov">       1495 : }</span>
+<span class="lineNum">     456 </span>            : 
+<span class="lineNum">     457 </span>            : /* Optimize away redundant UBSAN_PTR calls.  */
+<a name="458"><span class="lineNum">     458 </span>            : </a>
+<span class="lineNum">     459 </span>            : static bool
+<span class="lineNum">     460 </span><span class="lineCov">       2157 : maybe_optimize_ubsan_ptr_ifn (sanopt_ctx *ctx, gimple *stmt)</span>
+<span class="lineNum">     461 </span>            : {
+<span class="lineNum">     462 </span><span class="lineCov">       4314 :   poly_int64 bitsize, pbitpos;</span>
+<span class="lineNum">     463 </span><span class="lineCov">       2157 :   machine_mode mode;</span>
+<span class="lineNum">     464 </span><span class="lineCov">       2157 :   int volatilep = 0, reversep, unsignedp = 0;</span>
+<span class="lineNum">     465 </span><span class="lineCov">       2157 :   tree offset;</span>
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span><span class="lineCov">       2157 :   gcc_assert (gimple_call_num_args (stmt) == 2);</span>
+<span class="lineNum">     468 </span><span class="lineCov">       2157 :   tree ptr = gimple_call_arg (stmt, 0);</span>
+<span class="lineNum">     469 </span><span class="lineCov">       2157 :   tree off = gimple_call_arg (stmt, 1);</span>
+<span class="lineNum">     470 </span>            : 
+<span class="lineNum">     471 </span><span class="lineCov">       2157 :   if (TREE_CODE (off) != INTEGER_CST)</span>
+<span class="lineNum">     472 </span>            :     return false;
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span><span class="lineCov">       1711 :   if (integer_zerop (off))</span>
+<span class="lineNum">     475 </span>            :     return true;
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span><span class="lineCov">       1711 :   offset_int cur_offset = wi::sext (wi::to_offset (off), POINTER_SIZE);</span>
+<span class="lineNum">     478 </span><span class="lineCov">       1711 :   if (has_dominating_ubsan_ptr_check (ctx, ptr, cur_offset))</span>
+<span class="lineNum">     479 </span>            :     return true;
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span><span class="lineCov">       1378 :   tree base = ptr;</span>
+<span class="lineNum">     482 </span><span class="lineCov">       1378 :   if (TREE_CODE (base) == ADDR_EXPR)</span>
+<span class="lineNum">     483 </span>            :     {
+<span class="lineNum">     484 </span><span class="lineCov">        656 :       base = TREE_OPERAND (base, 0);</span>
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineCov">        656 :       HOST_WIDE_INT bitpos;</span>
+<span class="lineNum">     487 </span><span class="lineCov">        656 :       base = get_inner_reference (base, &amp;bitsize, &amp;pbitpos, &amp;offset, &amp;mode,</span>
+<span class="lineNum">     488 </span>            :                                   &amp;unsignedp, &amp;reversep, &amp;volatilep);
+<span class="lineNum">     489 </span><span class="lineCov">         50 :       if ((offset == NULL_TREE || TREE_CODE (offset) == INTEGER_CST)</span>
+<span class="lineNum">     490 </span><span class="lineCov">        656 :           &amp;&amp; DECL_P (base)</span>
+<span class="lineNum">     491 </span><span class="lineCov">        656 :           &amp;&amp; !DECL_REGISTER (base)</span>
+<span class="lineNum">     492 </span><span class="lineCov">       1307 :           &amp;&amp; pbitpos.is_constant (&amp;bitpos))</span>
+<span class="lineNum">     493 </span>            :         {
+<span class="lineNum">     494 </span><span class="lineCov">        651 :           offset_int expr_offset;</span>
+<span class="lineNum">     495 </span><span class="lineCov">        651 :           if (offset)</span>
+<span class="lineNum">     496 </span><span class="lineCov">         50 :             expr_offset = wi::to_offset (offset) + bitpos / BITS_PER_UNIT;</span>
+<span class="lineNum">     497 </span>            :           else
+<span class="lineNum">     498 </span><span class="lineCov">       1202 :             expr_offset = bitpos / BITS_PER_UNIT;</span>
+<span class="lineNum">     499 </span><span class="lineCov">        651 :           expr_offset = wi::sext (expr_offset, POINTER_SIZE);</span>
+<span class="lineNum">     500 </span><span class="lineCov">        651 :           offset_int total_offset = expr_offset + cur_offset;</span>
+<span class="lineNum">     501 </span><span class="lineCov">       1292 :           if (total_offset != wi::sext (total_offset, POINTER_SIZE))</span>
+<span class="lineNum">     502 </span>            :             {
+<span class="lineNum">     503 </span><span class="lineCov">         10 :               record_ubsan_ptr_check_stmt (ctx, stmt, ptr, cur_offset);</span>
+<span class="lineNum">     504 </span><span class="lineCov">        247 :               return false;</span>
+<span class="lineNum">     505 </span>            :             }
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span>            :           /* If BASE is a fixed size automatic variable or
+<span class="lineNum">     508 </span>            :              global variable defined in the current TU, we don't have
+<span class="lineNum">     509 </span>            :              to instrument anything if offset is within address
+<span class="lineNum">     510 </span>            :              of the variable.  */
+<span class="lineNum">     511 </span><span class="lineCov">        641 :           if ((VAR_P (base)</span>
+<span class="lineNum">     512 </span><span class="lineCov">         80 :                || TREE_CODE (base) == PARM_DECL</span>
+<span class="lineNum">     513 </span><span class="lineNoCov">          0 :                || TREE_CODE (base) == RESULT_DECL)</span>
+<span class="lineNum">     514 </span><span class="lineCov">        641 :               &amp;&amp; DECL_SIZE_UNIT (base)</span>
+<span class="lineNum">     515 </span><span class="lineCov">       1282 :               &amp;&amp; TREE_CODE (DECL_SIZE_UNIT (base)) == INTEGER_CST</span>
+<span class="lineNum">     516 </span><span class="lineCov">       1282 :               &amp;&amp; (!is_global_var (base) || decl_binds_to_current_def_p (base)))</span>
+<span class="lineNum">     517 </span>            :             {
+<span class="lineNum">     518 </span><span class="lineCov">        345 :               offset_int base_size = wi::to_offset (DECL_SIZE_UNIT (base));</span>
+<span class="lineNum">     519 </span><span class="lineCov">        345 :               if (!wi::neg_p (expr_offset)</span>
+<span class="lineNum">     520 </span><span class="lineCov">        265 :                   &amp;&amp; wi::les_p (total_offset, base_size))</span>
+<span class="lineNum">     521 </span>            :                 {
+<span class="lineNum">     522 </span><span class="lineCov">        179 :                   if (!wi::neg_p (total_offset)</span>
+<span class="lineNum">     523 </span><span class="lineCov">        129 :                       &amp;&amp; wi::les_p (total_offset, base_size))</span>
+<span class="lineNum">     524 </span><span class="lineCov">        129 :                     return true;</span>
+<span class="lineNum">     525 </span>            :                 }
+<span class="lineNum">     526 </span>            :             }
+<span class="lineNum">     527 </span>            : 
+<span class="lineNum">     528 </span>            :           /* Following expression: UBSAN_PTR (&amp;MEM_REF[ptr + x], y) can be
+<span class="lineNum">     529 </span>            :              handled as follows:
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span>            :              1) sign (x) == sign (y), then check for dominating check of (x + y)
+<span class="lineNum">     532 </span>            :              2) sign (x) != sign (y), then first check if we have a dominating
+<span class="lineNum">     533 </span>            :                 check for ptr + x.  If so, then we have 2 situations:
+<span class="lineNum">     534 </span>            :                 a) sign (x) == sign (x + y), here we are done, example:
+<span class="lineNum">     535 </span>            :                    UBSAN_PTR (&amp;MEM_REF[ptr + 100], -50)
+<span class="lineNum">     536 </span>            :                 b) check for dominating check of ptr + x + y.
+<span class="lineNum">     537 </span>            :              */
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span><span class="lineCov">        512 :           bool sign_cur_offset = !wi::neg_p (cur_offset);</span>
+<span class="lineNum">     540 </span><span class="lineCov">        512 :           bool sign_expr_offset = !wi::neg_p (expr_offset);</span>
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span><span class="lineCov">        512 :           tree base_addr</span>
+<span class="lineNum">     543 </span><span class="lineCov">        512 :             = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (base)), base);</span>
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span><span class="lineCov">        512 :           bool add = false;</span>
+<span class="lineNum">     546 </span><span class="lineCov">        512 :           if (sign_cur_offset == sign_expr_offset)</span>
+<span class="lineNum">     547 </span>            :             {
+<span class="lineNum">     548 </span><span class="lineCov">        342 :               if (has_dominating_ubsan_ptr_check (ctx, base_addr, total_offset))</span>
+<span class="lineNum">     549 </span>            :                 return true;
+<span class="lineNum">     550 </span>            :               else
+<span class="lineNum">     551 </span>            :                 add = true;
+<span class="lineNum">     552 </span>            :             }
+<span class="lineNum">     553 </span>            :           else
+<span class="lineNum">     554 </span>            :             {
+<span class="lineNum">     555 </span><span class="lineCov">        170 :               if (!has_dominating_ubsan_ptr_check (ctx, base_addr, expr_offset))</span>
+<span class="lineNum">     556 </span>            :                 ; /* Don't record base_addr + expr_offset, it's not a guarding
+<span class="lineNum">     557 </span>            :                      check.  */
+<span class="lineNum">     558 </span>            :               else
+<span class="lineNum">     559 </span>            :                 {
+<span class="lineNum">     560 </span><span class="lineCov">        120 :                   bool sign_total_offset = !wi::neg_p (total_offset);</span>
+<span class="lineNum">     561 </span><span class="lineCov">        120 :                   if (sign_expr_offset == sign_total_offset)</span>
+<span class="lineNum">     562 </span>            :                     return true;
+<span class="lineNum">     563 </span>            :                   else
+<span class="lineNum">     564 </span>            :                     {
+<span class="lineNum">     565 </span><span class="lineCov">         80 :                       if (has_dominating_ubsan_ptr_check (ctx, base_addr,</span>
+<span class="lineNum">     566 </span>            :                                                           total_offset))
+<span class="lineNum">     567 </span>            :                         return true;
+<span class="lineNum">     568 </span>            :                       else
+<span class="lineNum">     569 </span>            :                         add = true;
+<span class="lineNum">     570 </span>            :                     }
+<span class="lineNum">     571 </span>            :                 }
+<span class="lineNum">     572 </span>            :             }
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span>            :           /* Record a new dominating check for base_addr + total_offset.  */
+<span class="lineNum">     575 </span><span class="lineCov">        354 :           if (add &amp;&amp; !operand_equal_p (base, base_addr, 0))</span>
+<span class="lineNum">     576 </span><span class="lineCov">        354 :             record_ubsan_ptr_check_stmt (ctx, stmt, base_addr,</span>
+<span class="lineNum">     577 </span>            :                                          total_offset);
+<span class="lineNum">     578 </span>            :         }
+<span class="lineNum">     579 </span>            :     }
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span>            :   /* For this PTR we don't have any UBSAN_PTR stmts recorded, so there's
+<span class="lineNum">     582 </span>            :      nothing to optimize yet.  */
+<span class="lineNum">     583 </span><span class="lineCov">       1131 :   record_ubsan_ptr_check_stmt (ctx, stmt, ptr, cur_offset);</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">       1131 :   return false;</span>
+<span class="lineNum">     586 </span>            : }
+<span class="lineNum">     587 </span>            : 
+<span class="lineNum">     588 </span>            : /* Optimize away redundant UBSAN_VPTR calls.  The second argument
+<span class="lineNum">     589 </span>            :    is the value loaded from the virtual table, so rely on FRE to find out
+<span class="lineNum">     590 </span>            :    when we can actually optimize.  */
+<a name="591"><span class="lineNum">     591 </span>            : </a>
+<span class="lineNum">     592 </span>            : static bool
+<span class="lineNum">     593 </span><span class="lineCov">       2128 : maybe_optimize_ubsan_vptr_ifn (struct sanopt_ctx *ctx, gimple *stmt)</span>
+<span class="lineNum">     594 </span>            : {
+<span class="lineNum">     595 </span><span class="lineCov">       2128 :   gcc_assert (gimple_call_num_args (stmt) == 5);</span>
+<span class="lineNum">     596 </span><span class="lineCov">       2128 :   sanopt_tree_triplet triplet;</span>
+<span class="lineNum">     597 </span><span class="lineCov">       2128 :   triplet.t1 = gimple_call_arg (stmt, 0);</span>
+<span class="lineNum">     598 </span><span class="lineCov">       2128 :   triplet.t2 = gimple_call_arg (stmt, 1);</span>
+<span class="lineNum">     599 </span><span class="lineCov">       2128 :   triplet.t3 = gimple_call_arg (stmt, 3);</span>
+<span class="lineNum">     600 </span>            : 
+<span class="lineNum">     601 </span><span class="lineCov">       2128 :   auto_vec&lt;gimple *&gt; &amp;v = ctx-&gt;vptr_check_map.get_or_insert (triplet);</span>
+<span class="lineNum">     602 </span><span class="lineCov">       2128 :   gimple *g = maybe_get_dominating_check (v);</span>
+<span class="lineNum">     603 </span><span class="lineCov">       2128 :   if (!g)</span>
+<span class="lineNum">     604 </span>            :     {
+<span class="lineNum">     605 </span>            :       /* For this PTR we don't have any UBSAN_VPTR stmts recorded, so there's
+<span class="lineNum">     606 </span>            :          nothing to optimize yet.  */
+<span class="lineNum">     607 </span><span class="lineCov">       1740 :       v.safe_push (stmt);</span>
+<span class="lineNum">     608 </span><span class="lineCov">       1740 :       return false;</span>
+<span class="lineNum">     609 </span>            :     }
+<span class="lineNum">     610 </span>            : 
+<span class="lineNum">     611 </span>            :   return true;
+<span class="lineNum">     612 </span>            : }
+<span class="lineNum">     613 </span>            : 
+<span class="lineNum">     614 </span>            : /* Returns TRUE if ASan check of length LEN in block BB can be removed
+<span class="lineNum">     615 </span>            :    if preceded by checks in V.  */
+<a name="616"><span class="lineNum">     616 </span>            : </a>
+<span class="lineNum">     617 </span>            : static bool
+<span class="lineNum">     618 </span><span class="lineCov">        777 : can_remove_asan_check (auto_vec&lt;gimple *&gt; &amp;v, tree len, basic_block bb)</span>
+<span class="lineNum">     619 </span>            : {
+<span class="lineNum">     620 </span><span class="lineCov">        777 :   unsigned int i;</span>
+<span class="lineNum">     621 </span><span class="lineCov">        777 :   gimple *g;</span>
+<span class="lineNum">     622 </span><span class="lineCov">        777 :   gimple *to_pop = NULL;</span>
+<span class="lineNum">     623 </span><span class="lineCov">        777 :   bool remove = false;</span>
+<span class="lineNum">     624 </span><span class="lineCov">        777 :   basic_block last_bb = bb;</span>
+<span class="lineNum">     625 </span><span class="lineCov">        777 :   bool cleanup = false;</span>
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span><span class="lineCov">       2042 :   FOR_EACH_VEC_ELT_REVERSE (v, i, g)</span>
+<span class="lineNum">     628 </span>            :     {
+<span class="lineNum">     629 </span><span class="lineCov">        782 :       basic_block gbb = gimple_bb (g);</span>
+<span class="lineNum">     630 </span><span class="lineCov">        782 :       sanopt_info *si = (sanopt_info *) gbb-&gt;aux;</span>
+<span class="lineNum">     631 </span><span class="lineCov">       1564 :       if (gimple_uid (g) &lt; si-&gt;freeing_call_events)</span>
+<span class="lineNum">     632 </span>            :         {
+<span class="lineNum">     633 </span>            :           /* If there is a potentially freeing call after g in gbb, we should
+<span class="lineNum">     634 </span>            :              remove it from the vector, can't use in optimization.  */
+<span class="lineNum">     635 </span>            :           cleanup = true;
+<span class="lineNum">     636 </span><span class="lineCov">        494 :           continue;</span>
+<span class="lineNum">     637 </span>            :         }
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span><span class="lineCov">        330 :       tree glen = gimple_call_arg (g, 2);</span>
+<span class="lineNum">     640 </span><span class="lineCov">        330 :       gcc_assert (TREE_CODE (glen) == INTEGER_CST);</span>
+<span class="lineNum">     641 </span>            : 
+<span class="lineNum">     642 </span>            :       /* If we've checked only smaller length than we want to check now,
+<span class="lineNum">     643 </span>            :          we can't remove the current stmt.  If g is in the same basic block,
+<span class="lineNum">     644 </span>            :          we want to remove it though, as the current stmt is better.  */
+<span class="lineNum">     645 </span><span class="lineCov">        330 :       if (tree_int_cst_lt (glen, len))</span>
+<span class="lineNum">     646 </span>            :         {
+<span class="lineNum">     647 </span><span class="lineCov">         42 :           if (gbb == bb)</span>
+<span class="lineNum">     648 </span>            :             {
+<span class="lineNum">     649 </span><span class="lineCov">         28 :               to_pop = g;</span>
+<span class="lineNum">     650 </span><span class="lineCov">         28 :               cleanup = true;</span>
+<span class="lineNum">     651 </span>            :             }
+<span class="lineNum">     652 </span><span class="lineCov">         42 :           continue;</span>
+<span class="lineNum">     653 </span>            :         }
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span><span class="lineCov">        565 :       while (last_bb != gbb)</span>
+<span class="lineNum">     656 </span>            :         {
+<span class="lineNum">     657 </span>            :           /* Paths from last_bb to bb have been checked before.
+<span class="lineNum">     658 </span>            :              gbb is necessarily a dominator of last_bb, but not necessarily
+<span class="lineNum">     659 </span>            :              immediate dominator.  */
+<span class="lineNum">     660 </span><span class="lineCov">        455 :           if (((sanopt_info *) last_bb-&gt;aux)-&gt;freeing_call_events)</span>
+<span class="lineNum">     661 </span>            :             break;
+<span class="lineNum">     662 </span>            : 
+<span class="lineNum">     663 </span><span class="lineCov">        351 :           basic_block imm = get_immediate_dominator (CDI_DOMINATORS, last_bb);</span>
+<span class="lineNum">     664 </span><span class="lineCov">        351 :           gcc_assert (imm);</span>
+<span class="lineNum">     665 </span><span class="lineCov">        351 :           if (imm_dom_path_with_freeing_call (last_bb, imm))</span>
+<span class="lineNum">     666 </span>            :             break;
+<span class="lineNum">     667 </span>            : 
+<span class="lineNum">     668 </span>            :           last_bb = imm;
+<span class="lineNum">     669 </span>            :         }
+<span class="lineNum">     670 </span><span class="lineCov">        288 :       if (last_bb == gbb)</span>
+<span class="lineNum">     671 </span><span class="lineCov">        110 :         remove = true;</span>
+<span class="lineNum">     672 </span>            :       break;
+<span class="lineNum">     673 </span>            :     }
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span><span class="lineCov">        777 :   if (cleanup)</span>
+<span class="lineNum">     676 </span>            :     {
+<span class="lineNum">     677 </span><span class="lineCov">        480 :       unsigned int j = 0, l = v.length ();</span>
+<span class="lineNum">     678 </span><span class="lineCov">        973 :       for (i = 0; i &lt; l; i++)</span>
+<span class="lineNum">     679 </span><span class="lineCov">        493 :         if (v[i] != to_pop</span>
+<span class="lineNum">     680 </span><span class="lineCov">        493 :             &amp;&amp; (gimple_uid (v[i])</span>
+<span class="lineNum">     681 </span>            :                 == ((sanopt_info *)
+<span class="lineNum">     682 </span><span class="lineCov">       1395 :                     gimple_bb (v[i])-&gt;aux)-&gt;freeing_call_events))</span>
+<span class="lineNum">     683 </span>            :           {
+<span class="lineNum">     684 </span><span class="lineCov">         13 :             if (i != j)</span>
+<span class="lineNum">     685 </span><span class="lineNoCov">          0 :               v[j] = v[i];</span>
+<span class="lineNum">     686 </span><span class="lineCov">         13 :             j++;</span>
+<span class="lineNum">     687 </span>            :           }
+<span class="lineNum">     688 </span><span class="lineCov">        480 :       v.truncate (j);</span>
+<span class="lineNum">     689 </span>            :     }
+<span class="lineNum">     690 </span>            : 
+<span class="lineNum">     691 </span><span class="lineCov">        777 :   return remove;</span>
+<span class="lineNum">     692 </span>            : }
+<span class="lineNum">     693 </span>            : 
+<span class="lineNum">     694 </span>            : /* Optimize away redundant ASAN_CHECK calls.  */
+<a name="695"><span class="lineNum">     695 </span>            : </a>
+<span class="lineNum">     696 </span>            : static bool
+<span class="lineNum">     697 </span><span class="lineCov">       4790 : maybe_optimize_asan_check_ifn (struct sanopt_ctx *ctx, gimple *stmt)</span>
+<span class="lineNum">     698 </span>            : {
+<span class="lineNum">     699 </span><span class="lineCov">       4790 :   gcc_assert (gimple_call_num_args (stmt) == 4);</span>
+<span class="lineNum">     700 </span><span class="lineCov">       4790 :   tree ptr = gimple_call_arg (stmt, 1);</span>
+<span class="lineNum">     701 </span><span class="lineCov">       4790 :   tree len = gimple_call_arg (stmt, 2);</span>
+<span class="lineNum">     702 </span><span class="lineCov">       4790 :   basic_block bb = gimple_bb (stmt);</span>
+<span class="lineNum">     703 </span><span class="lineCov">       4790 :   sanopt_info *info = (sanopt_info *) bb-&gt;aux;</span>
+<span class="lineNum">     704 </span>            : 
+<span class="lineNum">     705 </span><span class="lineCov">       4790 :   if (TREE_CODE (len) != INTEGER_CST)</span>
+<span class="lineNum">     706 </span>            :     return false;
+<span class="lineNum">     707 </span><span class="lineCov">       4790 :   if (integer_zerop (len))</span>
+<span class="lineNum">     708 </span>            :     return false;
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span><span class="lineCov">       4790 :   gimple_set_uid (stmt, info-&gt;freeing_call_events);</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineCov">       4790 :   auto_vec&lt;gimple *&gt; *ptr_checks = &amp;ctx-&gt;asan_check_map.get_or_insert (ptr);</span>
+<span class="lineNum">     713 </span>            : 
+<span class="lineNum">     714 </span><span class="lineCov">       4790 :   tree base_addr = maybe_get_single_definition (ptr);</span>
+<span class="lineNum">     715 </span><span class="lineCov">       4790 :   auto_vec&lt;gimple *&gt; *base_checks = NULL;</span>
+<span class="lineNum">     716 </span><span class="lineCov">       4790 :   if (base_addr)</span>
+<span class="lineNum">     717 </span>            :     {
+<span class="lineNum">     718 </span><span class="lineCov">       1493 :       base_checks = &amp;ctx-&gt;asan_check_map.get_or_insert (base_addr);</span>
+<span class="lineNum">     719 </span>            :       /* Original pointer might have been invalidated.  */
+<span class="lineNum">     720 </span><span class="lineCov">       1493 :       ptr_checks = ctx-&gt;asan_check_map.get (ptr);</span>
+<span class="lineNum">     721 </span>            :     }
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span><span class="lineCov">       4790 :   gimple *g = maybe_get_dominating_check (*ptr_checks);</span>
+<span class="lineNum">     724 </span><span class="lineCov">       4790 :   gimple *g2 = NULL;</span>
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span><span class="lineCov">       4790 :   if (base_checks)</span>
+<span class="lineNum">     727 </span>            :     /* Try with base address as well.  */
+<span class="lineNum">     728 </span>            :     g2 = maybe_get_dominating_check (*base_checks);
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span><span class="lineCov">       4790 :   if (g == NULL &amp;&amp; g2 == NULL)</span>
+<span class="lineNum">     731 </span>            :     {
+<span class="lineNum">     732 </span>            :       /* For this PTR we don't have any ASAN_CHECK stmts recorded, so there's
+<span class="lineNum">     733 </span>            :          nothing to optimize yet.  */
+<span class="lineNum">     734 </span><span class="lineCov">       4086 :       ptr_checks-&gt;safe_push (stmt);</span>
+<span class="lineNum">     735 </span><span class="lineCov">       4086 :       if (base_checks)</span>
+<span class="lineNum">     736 </span><span class="lineCov">       1403 :         base_checks-&gt;safe_push (stmt);</span>
+<span class="lineNum">     737 </span><span class="lineCov">       4086 :       return false;</span>
+<span class="lineNum">     738 </span>            :     }
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span><span class="lineCov">        704 :   bool remove = false;</span>
+<span class="lineNum">     741 </span>            : 
+<span class="lineNum">     742 </span><span class="lineCov">        704 :   if (ptr_checks)</span>
+<span class="lineNum">     743 </span><span class="lineCov">        704 :     remove = can_remove_asan_check (*ptr_checks, len, bb);</span>
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineCov">        704 :   if (!remove &amp;&amp; base_checks)</span>
+<span class="lineNum">     746 </span>            :     /* Try with base address as well.  */
+<span class="lineNum">     747 </span><span class="lineCov">         73 :     remove = can_remove_asan_check (*base_checks, len, bb);</span>
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span><span class="lineCov">        704 :   if (!remove)</span>
+<span class="lineNum">     750 </span>            :     {
+<span class="lineNum">     751 </span><span class="lineCov">        594 :       ptr_checks-&gt;safe_push (stmt);</span>
+<span class="lineNum">     752 </span><span class="lineCov">        594 :       if (base_checks)</span>
+<span class="lineNum">     753 </span><span class="lineCov">         73 :         base_checks-&gt;safe_push (stmt);</span>
+<span class="lineNum">     754 </span>            :     }
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span>            :   return remove;
+<span class="lineNum">     757 </span>            : }
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            : /* Try to optimize away redundant UBSAN_NULL and ASAN_CHECK calls.
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span>            :    We walk blocks in the CFG via a depth first search of the dominator
+<span class="lineNum">     762 </span>            :    tree; we push unique UBSAN_NULL or ASAN_CHECK statements into a vector
+<span class="lineNum">     763 </span>            :    in the NULL_CHECK_MAP or ASAN_CHECK_MAP hash maps as we enter the
+<span class="lineNum">     764 </span>            :    blocks.  When leaving a block, we mark the block as visited; then
+<span class="lineNum">     765 </span>            :    when checking the statements in the vector, we ignore statements that
+<span class="lineNum">     766 </span>            :    are coming from already visited blocks, because these cannot dominate
+<span class="lineNum">     767 </span>            :    anything anymore.  CTX is a sanopt context.  */
+<a name="768"><span class="lineNum">     768 </span>            : </a>
+<span class="lineNum">     769 </span>            : static void
+<span class="lineNum">     770 </span><span class="lineCov">      32832 : sanopt_optimize_walker (basic_block bb, struct sanopt_ctx *ctx)</span>
+<span class="lineNum">     771 </span>            : {
+<span class="lineNum">     772 </span><span class="lineCov">      32832 :   basic_block son;</span>
+<span class="lineNum">     773 </span><span class="lineCov">      32832 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     774 </span><span class="lineCov">      32832 :   sanopt_info *info = (sanopt_info *) bb-&gt;aux;</span>
+<span class="lineNum">     775 </span><span class="lineCov">      32832 :   bool asan_check_optimize = (flag_sanitize &amp; SANITIZE_ADDRESS) != 0;</span>
+<span class="lineNum">     776 </span>            : 
+<span class="lineNum">     777 </span><span class="lineCov">     413312 :   for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)</span>
+<span class="lineNum">     778 </span>            :     {
+<span class="lineNum">     779 </span><span class="lineCov">     173824 :       gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     780 </span><span class="lineCov">     173824 :       bool remove = false;</span>
+<span class="lineNum">     781 </span>            : 
+<span class="lineNum">     782 </span><span class="lineCov">     347648 :       if (!is_gimple_call (stmt))</span>
+<span class="lineNum">     783 </span>            :         {
+<span class="lineNum">     784 </span>            :           /* Handle asm volatile or asm with &quot;memory&quot; clobber
+<span class="lineNum">     785 </span>            :              the same as potentionally freeing call.  */
+<span class="lineNum">     786 </span><span class="lineCov">     139400 :           gasm *asm_stmt = dyn_cast &lt;gasm *&gt; (stmt);</span>
+<span class="lineNum">     787 </span><span class="lineCov">     139400 :           if (asm_stmt</span>
+<span class="lineNum">     788 </span><span class="lineCov">     139400 :               &amp;&amp; asan_check_optimize</span>
+<span class="lineNum">     789 </span><span class="lineCov">     139400 :               &amp;&amp; (gimple_asm_clobbers_memory_p (asm_stmt)</span>
+<span class="lineNum">     790 </span><span class="lineCov">        160 :                   || gimple_asm_volatile_p (asm_stmt)))</span>
+<span class="lineNum">     791 </span><span class="lineCov">        196 :             info-&gt;freeing_call_events++;</span>
+<span class="lineNum">     792 </span><span class="lineCov">     139400 :           gsi_next (&amp;gsi);</span>
+<span class="lineNum">     793 </span><span class="lineCov">     139400 :           continue;</span>
+<span class="lineNum">     794 </span>            :         }
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span><span class="lineCov">      34424 :       if (asan_check_optimize &amp;&amp; !nonfreeing_call_p (stmt))</span>
+<span class="lineNum">     797 </span><span class="lineCov">       9327 :         info-&gt;freeing_call_events++;</span>
+<span class="lineNum">     798 </span>            : 
+<span class="lineNum">     799 </span>            :       /* If __asan_before_dynamic_init (&quot;module&quot;); is followed by
+<span class="lineNum">     800 </span>            :          __asan_after_dynamic_init (); without intervening memory loads/stores,
+<span class="lineNum">     801 </span>            :          there is nothing to guard, so optimize both away.  */
+<span class="lineNum">     802 </span><span class="lineCov">      34424 :       if (asan_check_optimize</span>
+<span class="lineNum">     803 </span><span class="lineCov">      34424 :           &amp;&amp; gimple_call_builtin_p (stmt, BUILT_IN_ASAN_BEFORE_DYNAMIC_INIT))</span>
+<span class="lineNum">     804 </span>            :         {
+<span class="lineNum">     805 </span><span class="lineCov">         14 :           use_operand_p use;</span>
+<span class="lineNum">     806 </span><span class="lineCov">         14 :           gimple *use_stmt;</span>
+<span class="lineNum">     807 </span><span class="lineCov">         28 :           if (single_imm_use (gimple_vdef (stmt), &amp;use, &amp;use_stmt))</span>
+<span class="lineNum">     808 </span>            :             {
+<span class="lineNum">     809 </span><span class="lineCov">         14 :               if (is_gimple_call (use_stmt)</span>
+<span class="lineNum">     810 </span><span class="lineCov">         14 :                   &amp;&amp; gimple_call_builtin_p (use_stmt,</span>
+<span class="lineNum">     811 </span>            :                                             BUILT_IN_ASAN_AFTER_DYNAMIC_INIT))
+<span class="lineNum">     812 </span>            :                 {
+<span class="lineNum">     813 </span><span class="lineCov">          7 :                   unlink_stmt_vdef (use_stmt);</span>
+<span class="lineNum">     814 </span><span class="lineCov">          7 :                   gimple_stmt_iterator gsi2 = gsi_for_stmt (use_stmt);</span>
+<span class="lineNum">     815 </span><span class="lineCov">          7 :                   gsi_remove (&amp;gsi2, true);</span>
+<span class="lineNum">     816 </span><span class="lineCov">          7 :                   remove = true;</span>
+<span class="lineNum">     817 </span>            :                 }
+<span class="lineNum">     818 </span>            :             }
+<span class="lineNum">     819 </span>            :         }
+<span class="lineNum">     820 </span>            : 
+<span class="lineNum">     821 </span><span class="lineCov">      34424 :       if (gimple_call_internal_p (stmt))</span>
+<span class="lineNum">     822 </span><span class="lineCov">      20214 :         switch (gimple_call_internal_fn (stmt))</span>
+<span class="lineNum">     823 </span>            :           {
+<span class="lineNum">     824 </span><span class="lineCov">       4605 :           case IFN_UBSAN_NULL:</span>
+<span class="lineNum">     825 </span><span class="lineCov">       4605 :             remove = maybe_optimize_ubsan_null_ifn (ctx, stmt);</span>
+<span class="lineNum">     826 </span><span class="lineCov">       4605 :             break;</span>
+<span class="lineNum">     827 </span><span class="lineCov">       2128 :           case IFN_UBSAN_VPTR:</span>
+<span class="lineNum">     828 </span><span class="lineCov">       2128 :             remove = maybe_optimize_ubsan_vptr_ifn (ctx, stmt);</span>
+<span class="lineNum">     829 </span><span class="lineCov">       2128 :             break;</span>
+<span class="lineNum">     830 </span><span class="lineCov">       2157 :           case IFN_UBSAN_PTR:</span>
+<span class="lineNum">     831 </span><span class="lineCov">       2157 :             remove = maybe_optimize_ubsan_ptr_ifn (ctx, stmt);</span>
+<span class="lineNum">     832 </span><span class="lineCov">       2157 :             break;</span>
+<span class="lineNum">     833 </span><span class="lineCov">       4790 :           case IFN_ASAN_CHECK:</span>
+<span class="lineNum">     834 </span><span class="lineCov">       4790 :             if (asan_check_optimize)</span>
+<span class="lineNum">     835 </span><span class="lineCov">       4790 :               remove = maybe_optimize_asan_check_ifn (ctx, stmt);</span>
+<span class="lineNum">     836 </span><span class="lineCov">       4790 :             if (!remove)</span>
+<span class="lineNum">     837 </span><span class="lineCov">       4680 :               ctx-&gt;asan_num_accesses++;</span>
+<span class="lineNum">     838 </span>            :             break;
+<span class="lineNum">     839 </span><span class="lineCov">       4203 :           case IFN_ASAN_MARK:</span>
+<span class="lineNum">     840 </span><span class="lineCov">       4203 :             ctx-&gt;contains_asan_mark = true;</span>
+<span class="lineNum">     841 </span><span class="lineCov">       4203 :             break;</span>
+<span class="lineNum">     842 </span>            :           default:
+<span class="lineNum">     843 </span>            :             break;
+<span class="lineNum">     844 </span>            :           }
+<span class="lineNum">     845 </span>            : 
+<span class="lineNum">     846 </span><span class="lineCov">      34424 :       if (remove)</span>
+<span class="lineNum">     847 </span>            :         {
+<span class="lineNum">     848 </span>            :           /* Drop this check.  */
+<span class="lineNum">     849 </span><span class="lineCov">       2140 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     850 </span>            :             {
+<span class="lineNum">     851 </span><span class="lineCov">        168 :               fprintf (dump_file, &quot;Optimizing out: &quot;);</span>
+<span class="lineNum">     852 </span><span class="lineCov">        168 :               print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     853 </span>            :             }
+<span class="lineNum">     854 </span><span class="lineCov">       2140 :           unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     855 </span><span class="lineCov">       2140 :           gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     856 </span>            :         }
+<span class="lineNum">     857 </span>            :       else
+<span class="lineNum">     858 </span>            :         {
+<span class="lineNum">     859 </span><span class="lineCov">      32284 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     860 </span>            :             {
+<span class="lineNum">     861 </span><span class="lineCov">        146 :               fprintf (dump_file, &quot;Leaving: &quot;);</span>
+<span class="lineNum">     862 </span><span class="lineCov">        146 :               print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     863 </span>            :             }
+<span class="lineNum">     864 </span>            : 
+<span class="lineNum">     865 </span><span class="lineCov">      32284 :           gsi_next (&amp;gsi);</span>
+<span class="lineNum">     866 </span>            :         }
+<span class="lineNum">     867 </span>            :     }
+<span class="lineNum">     868 </span>            : 
+<span class="lineNum">     869 </span><span class="lineCov">      32832 :   if (asan_check_optimize)</span>
+<span class="lineNum">     870 </span>            :     {
+<span class="lineNum">     871 </span><span class="lineCov">      16640 :       info-&gt;has_freeing_call_p = info-&gt;freeing_call_events != 0;</span>
+<span class="lineNum">     872 </span><span class="lineCov">      16640 :       info-&gt;has_freeing_call_computed_p = true;</span>
+<span class="lineNum">     873 </span>            :     }
+<span class="lineNum">     874 </span>            : 
+<span class="lineNum">     875 </span><span class="lineCov">      57984 :   for (son = first_dom_son (CDI_DOMINATORS, bb);</span>
+<span class="lineNum">     876 </span><span class="lineCov">      57984 :        son;</span>
+<span class="lineNum">     877 </span><span class="lineCov">      25152 :        son = next_dom_son (CDI_DOMINATORS, son))</span>
+<span class="lineNum">     878 </span><span class="lineCov">      25152 :     sanopt_optimize_walker (son, ctx);</span>
+<span class="lineNum">     879 </span>            : 
+<span class="lineNum">     880 </span>            :   /* We're leaving this BB, so mark it to that effect.  */
+<span class="lineNum">     881 </span><span class="lineCov">      32832 :   info-&gt;visited_p = true;</span>
+<span class="lineNum">     882 </span><span class="lineCov">      32832 : }</span>
+<span class="lineNum">     883 </span>            : 
+<span class="lineNum">     884 </span>            : /* Try to remove redundant sanitizer checks in function FUN.  */
+<a name="885"><span class="lineNum">     885 </span>            : </a>
+<span class="lineNum">     886 </span>            : static int
+<span class="lineNum">     887 </span><span class="lineCov">       7680 : sanopt_optimize (function *fun, bool *contains_asan_mark)</span>
+<span class="lineNum">     888 </span>            : {
+<span class="lineNum">     889 </span><span class="lineCov">       7680 :   struct sanopt_ctx ctx;</span>
+<span class="lineNum">     890 </span><span class="lineCov">       7680 :   ctx.asan_num_accesses = 0;</span>
+<span class="lineNum">     891 </span><span class="lineCov">       7680 :   ctx.contains_asan_mark = false;</span>
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span>            :   /* Set up block info for each basic block.  */
+<span class="lineNum">     894 </span><span class="lineCov">       7680 :   alloc_aux_for_blocks (sizeof (sanopt_info));</span>
+<span class="lineNum">     895 </span>            : 
+<span class="lineNum">     896 </span>            :   /* We're going to do a dominator walk, so ensure that we have
+<span class="lineNum">     897 </span>            :      dominance information.  */
+<span class="lineNum">     898 </span><span class="lineCov">       7680 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     899 </span>            : 
+<span class="lineNum">     900 </span>            :   /* Recursively walk the dominator tree optimizing away
+<span class="lineNum">     901 </span>            :      redundant checks.  */
+<span class="lineNum">     902 </span><span class="lineCov">       7680 :   sanopt_optimize_walker (ENTRY_BLOCK_PTR_FOR_FN (fun), &amp;ctx);</span>
+<span class="lineNum">     903 </span>            : 
+<span class="lineNum">     904 </span><span class="lineCov">       7680 :   free_aux_for_blocks ();</span>
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span><span class="lineCov">       7680 :   *contains_asan_mark = ctx.contains_asan_mark;</span>
+<span class="lineNum">     907 </span><span class="lineCov">       7680 :   return ctx.asan_num_accesses;</span>
+<span class="lineNum">     908 </span>            : }
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span>            : /* Perform optimization of sanitize functions.  */
+<span class="lineNum">     911 </span>            : 
+<span class="lineNum">     912 </span>            : namespace {
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span>            : const pass_data pass_data_sanopt =
+<span class="lineNum">     915 </span>            : {
+<span class="lineNum">     916 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     917 </span>            :   &quot;sanopt&quot;, /* name */
+<span class="lineNum">     918 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     919 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     920 </span>            :   ( PROP_ssa | PROP_cfg | PROP_gimple_leh ), /* properties_required */
+<span class="lineNum">     921 </span>            :   0, /* properties_provided */
+<span class="lineNum">     922 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     923 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     924 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     925 </span>            : };
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span>            : class pass_sanopt : public gimple_opt_pass
+<span class="lineNum">     928 </span>            : {
+<span class="lineNum">     929 </span>            : public:
+<span class="lineNum">     930 </span>            :   pass_sanopt (gcc::context *ctxt)
+<span class="lineNum">     931 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_sanopt, ctxt)</span>
+<span class="lineNum">     932 </span>            :   {}
+<a name="933"><span class="lineNum">     933 </span>            : </a>
+<span class="lineNum">     934 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     935 </span><span class="lineCov">     832898 :   virtual bool gate (function *) { return flag_sanitize; }</span>
+<span class="lineNum">     936 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     937 </span>            : 
+<span class="lineNum">     938 </span>            : }; // class pass_sanopt
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span>            : /* Sanitize all ASAN_MARK unpoison calls that are not reachable by a BB
+<span class="lineNum">     941 </span>            :    that contains an ASAN_MARK poison.  All these ASAN_MARK unpoison call
+<span class="lineNum">     942 </span>            :    can be removed as all variables are unpoisoned in a function prologue.  */
+<a name="943"><span class="lineNum">     943 </span>            : </a>
+<span class="lineNum">     944 </span>            : static void
+<span class="lineNum">     945 </span><span class="lineCov">       1008 : sanitize_asan_mark_unpoison (void)</span>
+<span class="lineNum">     946 </span>            : {
+<span class="lineNum">     947 </span>            :   /* 1) Find all BBs that contain an ASAN_MARK poison call.  */
+<span class="lineNum">     948 </span><span class="lineCov">       1008 :   auto_sbitmap with_poison (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">     949 </span><span class="lineCov">       2016 :   bitmap_clear (with_poison);</span>
+<span class="lineNum">     950 </span><span class="lineCov">       1008 :   basic_block bb;</span>
+<span class="lineNum">     951 </span>            : 
+<span class="lineNum">     952 </span><span class="lineCov">       9721 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     953 </span>            :     {
+<span class="lineNum">     954 </span><span class="lineCov">      17426 :       if (bitmap_bit_p (with_poison, bb-&gt;index))</span>
+<span class="lineNum">     955 </span>            :         continue;
+<span class="lineNum">     956 </span>            : 
+<span class="lineNum">     957 </span><span class="lineCov">       8713 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     958 </span><span class="lineCov">     202757 :       for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&amp;gsi))</span>
+<span class="lineNum">     959 </span>            :         {
+<span class="lineNum">     960 </span><span class="lineCov">      63730 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     961 </span><span class="lineCov">      63730 :           if (asan_mark_p (stmt, ASAN_MARK_POISON))</span>
+<span class="lineNum">     962 </span>            :             {
+<span class="lineNum">     963 </span><span class="lineCov">       3906 :               bitmap_set_bit (with_poison, bb-&gt;index);</span>
+<span class="lineNum">     964 </span>            :               break;
+<span class="lineNum">     965 </span>            :             }
+<span class="lineNum">     966 </span>            :         }
+<span class="lineNum">     967 </span>            :     }
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span><span class="lineCov">       1008 :   auto_sbitmap poisoned (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">     970 </span><span class="lineCov">       2016 :   bitmap_clear (poisoned);</span>
+<span class="lineNum">     971 </span><span class="lineCov">       1008 :   auto_sbitmap worklist (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">     972 </span><span class="lineCov">       3024 :   bitmap_copy (worklist, with_poison);</span>
+<span class="lineNum">     973 </span>            : 
+<span class="lineNum">     974 </span>            :   /* 2) Propagate the information to all reachable blocks.  */
+<span class="lineNum">     975 </span><span class="lineCov">       8786 :   while (!bitmap_empty_p (worklist))</span>
+<span class="lineNum">     976 </span>            :     {
+<span class="lineNum">     977 </span><span class="lineCov">      13540 :       unsigned i = bitmap_first_set_bit (worklist);</span>
+<span class="lineNum">     978 </span><span class="lineCov">      13540 :       bitmap_clear_bit (worklist, i);</span>
+<span class="lineNum">     979 </span><span class="lineCov">       6770 :       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);</span>
+<span class="lineNum">     980 </span><span class="lineCov">       6770 :       gcc_assert (bb);</span>
+<span class="lineNum">     981 </span>            : 
+<span class="lineNum">     982 </span><span class="lineCov">       6770 :       edge e;</span>
+<span class="lineNum">     983 </span><span class="lineCov">       6770 :       edge_iterator ei;</span>
+<span class="lineNum">     984 </span><span class="lineCov">      20374 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     985 </span><span class="lineCov">      13668 :         if (!bitmap_bit_p (poisoned, e-&gt;dest-&gt;index))</span>
+<span class="lineNum">     986 </span>            :           {
+<span class="lineNum">     987 </span><span class="lineCov">      11058 :             bitmap_set_bit (poisoned, e-&gt;dest-&gt;index);</span>
+<span class="lineNum">     988 </span><span class="lineCov">      11058 :             bitmap_set_bit (worklist, e-&gt;dest-&gt;index);</span>
+<span class="lineNum">     989 </span>            :           }
+<span class="lineNum">     990 </span>            :     }
+<span class="lineNum">     991 </span>            : 
+<span class="lineNum">     992 </span>            :   /* 3) Iterate all BBs not included in POISONED BBs and remove unpoison
+<span class="lineNum">     993 </span>            :         ASAN_MARK preceding an ASAN_MARK poison (which can still happen).  */
+<span class="lineNum">     994 </span><span class="lineCov">       9721 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     995 </span>            :     {
+<span class="lineNum">     996 </span><span class="lineCov">      17426 :       if (bitmap_bit_p (poisoned, bb-&gt;index))</span>
+<span class="lineNum">     997 </span><span class="lineCov">       4547 :         continue;</span>
+<span class="lineNum">     998 </span>            : 
+<span class="lineNum">     999 </span><span class="lineCov">       4166 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1000 </span><span class="lineCov">      70530 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)</span>
+<span class="lineNum">    1001 </span>            :         {
+<span class="lineNum">    1002 </span><span class="lineCov">      32268 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1003 </span><span class="lineCov">      32268 :           if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))</span>
+<span class="lineNum">    1004 </span>            :             {
+<span class="lineNum">    1005 </span><span class="lineCov">       2596 :               if (asan_mark_p (stmt, ASAN_MARK_POISON))</span>
+<span class="lineNum">    1006 </span>            :                 break;
+<span class="lineNum">    1007 </span>            :               else
+<span class="lineNum">    1008 </span>            :                 {
+<span class="lineNum">    1009 </span><span class="lineCov">       1427 :                   if (dump_file)</span>
+<span class="lineNum">    1010 </span><span class="lineCov">          2 :                     fprintf (dump_file, &quot;Removing ASAN_MARK unpoison\n&quot;);</span>
+<span class="lineNum">    1011 </span><span class="lineCov">       1427 :                   unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">    1012 </span><span class="lineCov">       1427 :                   release_defs (stmt);</span>
+<span class="lineNum">    1013 </span><span class="lineCov">       1427 :                   gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">    1014 </span><span class="lineCov">       1427 :                   continue;</span>
+<span class="lineNum">    1015 </span>            :                 }
+<span class="lineNum">    1016 </span>            :             }
+<span class="lineNum">    1017 </span>            : 
+<span class="lineNum">    1018 </span><span class="lineCov">      29672 :           gsi_next (&amp;gsi);</span>
+<span class="lineNum">    1019 </span>            :         }
+<span class="lineNum">    1020 </span>            :     }
+<span class="lineNum">    1021 </span><span class="lineCov">       1008 : }</span>
+<span class="lineNum">    1022 </span>            : 
+<span class="lineNum">    1023 </span>            : /* Return true when STMT is either ASAN_CHECK call or a call of a function
+<span class="lineNum">    1024 </span>            :    that can contain an ASAN_CHECK.  */
+<a name="1025"><span class="lineNum">    1025 </span>            : </a>
+<span class="lineNum">    1026 </span>            : static bool
+<span class="lineNum">    1027 </span><span class="lineCov">      49518 : maybe_contains_asan_check (gimple *stmt)</span>
+<span class="lineNum">    1028 </span>            : {
+<span class="lineNum">    1029 </span><span class="lineCov">      99036 :   if (is_gimple_call (stmt))</span>
+<span class="lineNum">    1030 </span>            :     {
+<span class="lineNum">    1031 </span><span class="lineCov">       8938 :       if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))</span>
+<span class="lineNum">    1032 </span>            :         return false;
+<span class="lineNum">    1033 </span>            :       else
+<span class="lineNum">    1034 </span><span class="lineCov">       4980 :         return !(gimple_call_flags (stmt) &amp; ECF_CONST);</span>
+<span class="lineNum">    1035 </span>            :     }
+<span class="lineNum">    1036 </span><span class="lineCov">      81160 :   else if (is_a&lt;gasm *&gt; (stmt))</span>
+<span class="lineNum">    1037 </span><span class="lineCov">         79 :     return true;</span>
+<span class="lineNum">    1038 </span>            : 
+<span class="lineNum">    1039 </span>            :   return false;
+<span class="lineNum">    1040 </span>            : }
+<span class="lineNum">    1041 </span>            : 
+<span class="lineNum">    1042 </span>            : /* Sanitize all ASAN_MARK poison calls that are not followed by an ASAN_CHECK
+<span class="lineNum">    1043 </span>            :    call.  These calls can be removed.  */
+<a name="1044"><span class="lineNum">    1044 </span>            : </a>
+<span class="lineNum">    1045 </span>            : static void
+<span class="lineNum">    1046 </span><span class="lineCov">       1008 : sanitize_asan_mark_poison (void)</span>
+<span class="lineNum">    1047 </span>            : {
+<span class="lineNum">    1048 </span>            :   /* 1) Find all BBs that possibly contain an ASAN_CHECK.  */
+<span class="lineNum">    1049 </span><span class="lineCov">       1008 :   auto_sbitmap with_check (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">    1050 </span><span class="lineCov">       2016 :   bitmap_clear (with_check);</span>
+<span class="lineNum">    1051 </span><span class="lineCov">       1008 :   basic_block bb;</span>
+<span class="lineNum">    1052 </span>            : 
+<span class="lineNum">    1053 </span><span class="lineCov">       9721 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1054 </span>            :     {
+<span class="lineNum">    1055 </span><span class="lineCov">       8713 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1056 </span><span class="lineCov">     120962 :       for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&amp;gsi))</span>
+<span class="lineNum">    1057 </span>            :         {
+<span class="lineNum">    1058 </span><span class="lineCov">      38279 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1059 </span><span class="lineCov">      38279 :           if (maybe_contains_asan_check (stmt))</span>
+<span class="lineNum">    1060 </span>            :             {
+<span class="lineNum">    1061 </span><span class="lineCov">       7534 :               bitmap_set_bit (with_check, bb-&gt;index);</span>
+<span class="lineNum">    1062 </span>            :               break;
+<span class="lineNum">    1063 </span>            :             }
+<span class="lineNum">    1064 </span>            :         }
+<span class="lineNum">    1065 </span>            :     }
+<span class="lineNum">    1066 </span>            : 
+<span class="lineNum">    1067 </span><span class="lineCov">       1008 :   auto_sbitmap can_reach_check (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">    1068 </span><span class="lineCov">       2016 :   bitmap_clear (can_reach_check);</span>
+<span class="lineNum">    1069 </span><span class="lineCov">       1008 :   auto_sbitmap worklist (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">    1070 </span><span class="lineCov">       3024 :   bitmap_copy (worklist, with_check);</span>
+<span class="lineNum">    1071 </span>            : 
+<span class="lineNum">    1072 </span>            :   /* 2) Propagate the information to all definitions blocks.  */
+<span class="lineNum">    1073 </span><span class="lineCov">      12116 :   while (!bitmap_empty_p (worklist))</span>
+<span class="lineNum">    1074 </span>            :     {
+<span class="lineNum">    1075 </span><span class="lineCov">      20200 :       unsigned i = bitmap_first_set_bit (worklist);</span>
+<span class="lineNum">    1076 </span><span class="lineCov">      20200 :       bitmap_clear_bit (worklist, i);</span>
+<span class="lineNum">    1077 </span><span class="lineCov">      10100 :       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);</span>
+<span class="lineNum">    1078 </span><span class="lineCov">      10100 :       gcc_assert (bb);</span>
+<span class="lineNum">    1079 </span>            : 
+<span class="lineNum">    1080 </span><span class="lineCov">      10100 :       edge e;</span>
+<span class="lineNum">    1081 </span><span class="lineCov">      10100 :       edge_iterator ei;</span>
+<span class="lineNum">    1082 </span><span class="lineCov">      31275 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1083 </span><span class="lineCov">      22150 :         if (!bitmap_bit_p (can_reach_check, e-&gt;src-&gt;index))</span>
+<span class="lineNum">    1084 </span>            :           {
+<span class="lineNum">    1085 </span><span class="lineCov">      12780 :             bitmap_set_bit (can_reach_check, e-&gt;src-&gt;index);</span>
+<span class="lineNum">    1086 </span><span class="lineCov">      12780 :             bitmap_set_bit (worklist, e-&gt;src-&gt;index);</span>
+<span class="lineNum">    1087 </span>            :           }
+<span class="lineNum">    1088 </span>            :     }
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span>            :   /* 3) Iterate all BBs not included in CAN_REACH_CHECK BBs and remove poison
+<span class="lineNum">    1091 </span>            :         ASAN_MARK not followed by a call to function having an ASAN_CHECK.  */
+<span class="lineNum">    1092 </span><span class="lineCov">       9721 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1093 </span>            :     {
+<span class="lineNum">    1094 </span><span class="lineCov">      17426 :       if (bitmap_bit_p (can_reach_check, bb-&gt;index))</span>
+<span class="lineNum">    1095 </span>            :         continue;
+<span class="lineNum">    1096 </span>            : 
+<span class="lineNum">    1097 </span><span class="lineCov">       3268 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1098 </span><span class="lineCov">      29758 :       for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi);)</span>
+<span class="lineNum">    1099 </span>            :         {
+<span class="lineNum">    1100 </span><span class="lineCov">      11239 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1101 </span><span class="lineCov">      11239 :           if (maybe_contains_asan_check (stmt))</span>
+<span class="lineNum">    1102 </span>            :             break;
+<span class="lineNum">    1103 </span><span class="lineCov">       9977 :           else if (asan_mark_p (stmt, ASAN_MARK_POISON))</span>
+<span class="lineNum">    1104 </span>            :             {
+<span class="lineNum">    1105 </span><span class="lineCov">       1680 :               if (dump_file)</span>
+<span class="lineNum">    1106 </span><span class="lineCov">          2 :                 fprintf (dump_file, &quot;Removing ASAN_MARK poison\n&quot;);</span>
+<span class="lineNum">    1107 </span><span class="lineCov">       1680 :               unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">    1108 </span><span class="lineCov">       1680 :               release_defs (stmt);</span>
+<span class="lineNum">    1109 </span><span class="lineCov">       1680 :               gimple_stmt_iterator gsi2 = gsi;</span>
+<span class="lineNum">    1110 </span><span class="lineCov">       1680 :               gsi_prev (&amp;gsi);</span>
+<span class="lineNum">    1111 </span><span class="lineCov">       1680 :               gsi_remove (&amp;gsi2, true);</span>
+<span class="lineNum">    1112 </span><span class="lineCov">       1680 :               continue;</span>
+<span class="lineNum">    1113 </span>            :             }
+<span class="lineNum">    1114 </span>            : 
+<span class="lineNum">    1115 </span><span class="lineCov">       8297 :           gsi_prev (&amp;gsi);</span>
+<span class="lineNum">    1116 </span>            :         }
+<span class="lineNum">    1117 </span>            :     }
+<span class="lineNum">    1118 </span><span class="lineCov">       1008 : }</span>
+<span class="lineNum">    1119 </span>            : 
+<span class="lineNum">    1120 </span>            : /* Rewrite all usages of tree OP which is a PARM_DECL with a VAR_DECL
+<span class="lineNum">    1121 </span>            :    that is it's DECL_VALUE_EXPR.  */
+<a name="1122"><span class="lineNum">    1122 </span>            : </a>
+<span class="lineNum">    1123 </span>            : static tree
+<span class="lineNum">    1124 </span><span class="lineCov">       5956 : rewrite_usage_of_param (tree *op, int *walk_subtrees, void *)</span>
+<span class="lineNum">    1125 </span>            : {
+<span class="lineNum">    1126 </span><span class="lineCov">       5956 :   if (TREE_CODE (*op) == PARM_DECL &amp;&amp; DECL_HAS_VALUE_EXPR_P (*op))</span>
+<span class="lineNum">    1127 </span>            :     {
+<span class="lineNum">    1128 </span><span class="lineCov">         94 :       *op = DECL_VALUE_EXPR (*op);</span>
+<span class="lineNum">    1129 </span><span class="lineCov">         94 :       *walk_subtrees = 0;</span>
+<span class="lineNum">    1130 </span>            :     }
+<span class="lineNum">    1131 </span>            : 
+<span class="lineNum">    1132 </span><span class="lineCov">       5956 :   return NULL;</span>
+<span class="lineNum">    1133 </span>            : }
+<span class="lineNum">    1134 </span>            : 
+<span class="lineNum">    1135 </span>            : /* For a given function FUN, rewrite all addressable parameters so that
+<span class="lineNum">    1136 </span>            :    a new automatic variable is introduced.  Right after function entry
+<span class="lineNum">    1137 </span>            :    a parameter is assigned to the variable.  */
+<a name="1138"><span class="lineNum">    1138 </span>            : </a>
+<span class="lineNum">    1139 </span>            : static void
+<span class="lineNum">    1140 </span><span class="lineCov">       4216 : sanitize_rewrite_addressable_params (function *fun)</span>
+<span class="lineNum">    1141 </span>            : {
+<span class="lineNum">    1142 </span><span class="lineCov">       4216 :   gimple *g;</span>
+<span class="lineNum">    1143 </span><span class="lineCov">       4216 :   gimple_seq stmts = NULL;</span>
+<span class="lineNum">    1144 </span><span class="lineCov">       4216 :   bool has_any_addressable_param = false;</span>
+<span class="lineNum">    1145 </span><span class="lineCov">       4259 :   auto_vec&lt;tree&gt; clear_value_expr_list;</span>
+<span class="lineNum">    1146 </span>            : 
+<span class="lineNum">    1147 </span><span class="lineCov">       4216 :   for (tree arg = DECL_ARGUMENTS (current_function_decl);</span>
+<span class="lineNum">    1148 </span><span class="lineCov">       8045 :        arg; arg = DECL_CHAIN (arg))</span>
+<span class="lineNum">    1149 </span>            :     {
+<span class="lineNum">    1150 </span><span class="lineCov">       3829 :       tree type = TREE_TYPE (arg);</span>
+<span class="lineNum">    1151 </span><span class="lineCov">       3829 :       if (TREE_ADDRESSABLE (arg)</span>
+<span class="lineNum">    1152 </span><span class="lineCov">         57 :           &amp;&amp; !TREE_ADDRESSABLE (type)</span>
+<span class="lineNum">    1153 </span><span class="lineCov">         57 :           &amp;&amp; !TREE_THIS_VOLATILE (arg)</span>
+<span class="lineNum">    1154 </span><span class="lineCov">       3880 :           &amp;&amp; TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST)</span>
+<span class="lineNum">    1155 </span>            :         {
+<span class="lineNum">    1156 </span><span class="lineCov">         45 :           TREE_ADDRESSABLE (arg) = 0;</span>
+<span class="lineNum">    1157 </span>            :           /* The parameter is no longer addressable.  */
+<span class="lineNum">    1158 </span><span class="lineCov">         45 :           has_any_addressable_param = true;</span>
+<span class="lineNum">    1159 </span>            : 
+<span class="lineNum">    1160 </span>            :           /* Create a new automatic variable.  */
+<span class="lineNum">    1161 </span><span class="lineCov">         45 :           tree var = build_decl (DECL_SOURCE_LOCATION (arg),</span>
+<span class="lineNum">    1162 </span><span class="lineCov">         45 :                                  VAR_DECL, DECL_NAME (arg), type);</span>
+<span class="lineNum">    1163 </span><span class="lineCov">         45 :           TREE_ADDRESSABLE (var) = 1;</span>
+<span class="lineNum">    1164 </span><span class="lineCov">         45 :           DECL_IGNORED_P (var) = 1;</span>
+<span class="lineNum">    1165 </span>            : 
+<span class="lineNum">    1166 </span><span class="lineCov">         45 :           gimple_add_tmp_var (var);</span>
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            :           /* We skip parameters that have a DECL_VALUE_EXPR.  */
+<span class="lineNum">    1169 </span><span class="lineCov">         90 :           if (DECL_HAS_VALUE_EXPR_P (arg))</span>
+<span class="lineNum">    1170 </span>            :             continue;
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span><span class="lineCov">         44 :           if (dump_file)</span>
+<span class="lineNum">    1173 </span><span class="lineNoCov">          0 :             fprintf (dump_file,</span>
+<span class="lineNum">    1174 </span>            :                      &quot;Rewriting parameter whose address is taken: %s\n&quot;,
+<span class="lineNum">    1175 </span><span class="lineNoCov">          0 :                      IDENTIFIER_POINTER (DECL_NAME (arg)));</span>
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span><span class="lineCov">         44 :           SET_DECL_PT_UID (var, DECL_PT_UID (arg));</span>
+<span class="lineNum">    1178 </span>            : 
+<span class="lineNum">    1179 </span>            :           /* Assign value of parameter to newly created variable.  */
+<span class="lineNum">    1180 </span><span class="lineCov">         88 :           if ((TREE_CODE (type) == COMPLEX_TYPE</span>
+<span class="lineNum">    1181 </span><span class="lineCov">         44 :                || TREE_CODE (type) == VECTOR_TYPE))</span>
+<span class="lineNum">    1182 </span>            :             {
+<span class="lineNum">    1183 </span>            :               /* We need to create a SSA name that will be used for the
+<span class="lineNum">    1184 </span>            :                  assignment.  */
+<span class="lineNum">    1185 </span><span class="lineCov">          7 :               DECL_GIMPLE_REG_P (arg) = 1;</span>
+<span class="lineNum">    1186 </span><span class="lineCov">          7 :               tree tmp = get_or_create_ssa_default_def (cfun, arg);</span>
+<span class="lineNum">    1187 </span><span class="lineCov">          7 :               g = gimple_build_assign (var, tmp);</span>
+<span class="lineNum">    1188 </span><span class="lineCov">          7 :               gimple_set_location (g, DECL_SOURCE_LOCATION (arg));</span>
+<span class="lineNum">    1189 </span><span class="lineCov">          7 :               gimple_seq_add_stmt (&amp;stmts, g);</span>
+<span class="lineNum">    1190 </span>            :             }
+<span class="lineNum">    1191 </span>            :           else
+<span class="lineNum">    1192 </span>            :             {
+<span class="lineNum">    1193 </span><span class="lineCov">         37 :               g = gimple_build_assign (var, arg);</span>
+<span class="lineNum">    1194 </span><span class="lineCov">         37 :               gimple_set_location (g, DECL_SOURCE_LOCATION (arg));</span>
+<span class="lineNum">    1195 </span><span class="lineCov">         37 :               gimple_seq_add_stmt (&amp;stmts, g);</span>
+<span class="lineNum">    1196 </span>            :             }
+<span class="lineNum">    1197 </span>            : 
+<span class="lineNum">    1198 </span><span class="lineCov">         44 :           if (target_for_debug_bind (arg))</span>
+<span class="lineNum">    1199 </span>            :             {
+<span class="lineNum">    1200 </span><span class="lineCov">         18 :               g = gimple_build_debug_bind (arg, var, NULL);</span>
+<span class="lineNum">    1201 </span><span class="lineCov">         18 :               gimple_seq_add_stmt (&amp;stmts, g);</span>
+<span class="lineNum">    1202 </span><span class="lineCov">         18 :               clear_value_expr_list.safe_push (arg);</span>
+<span class="lineNum">    1203 </span>            :             }
+<span class="lineNum">    1204 </span>            : 
+<span class="lineNum">    1205 </span><span class="lineCov">         44 :           DECL_HAS_VALUE_EXPR_P (arg) = 1;</span>
+<span class="lineNum">    1206 </span><span class="lineCov">         44 :           SET_DECL_VALUE_EXPR (arg, var);</span>
+<span class="lineNum">    1207 </span>            :         }
+<span class="lineNum">    1208 </span>            :     }
+<span class="lineNum">    1209 </span>            : 
+<span class="lineNum">    1210 </span><span class="lineCov">       4216 :   if (!has_any_addressable_param)</span>
+<span class="lineNum">    1211 </span><span class="lineCov">       4173 :     return;</span>
+<span class="lineNum">    1212 </span>            : 
+<span class="lineNum">    1213 </span>            :   /* Replace all usages of PARM_DECLs with the newly
+<span class="lineNum">    1214 </span>            :      created variable VAR.  */
+<span class="lineNum">    1215 </span><span class="lineCov">         43 :   basic_block bb;</span>
+<span class="lineNum">    1216 </span><span class="lineCov">        230 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">    1217 </span>            :     {
+<span class="lineNum">    1218 </span><span class="lineCov">        187 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1219 </span><span class="lineCov">       2952 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1220 </span>            :         {
+<span class="lineNum">    1221 </span><span class="lineCov">       2578 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1222 </span><span class="lineCov">       2578 :           gimple_stmt_iterator it = gsi_for_stmt (stmt);</span>
+<span class="lineNum">    1223 </span><span class="lineCov">       2578 :           walk_gimple_stmt (&amp;it, NULL, rewrite_usage_of_param, NULL);</span>
+<span class="lineNum">    1224 </span>            :         }
+<span class="lineNum">    1225 </span><span class="lineCov">        255 :       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1226 </span>            :         {
+<span class="lineNum">    1227 </span><span class="lineCov">        136 :           gphi *phi = dyn_cast&lt;gphi *&gt; (gsi_stmt (gsi));</span>
+<span class="lineNum">    1228 </span><span class="lineCov">        215 :           for (unsigned i = 0; i &lt; gimple_phi_num_args (phi); ++i)</span>
+<span class="lineNum">    1229 </span>            :             {
+<span class="lineNum">    1230 </span><span class="lineCov">        294 :               hash_set&lt;tree&gt; visited_nodes;</span>
+<span class="lineNum">    1231 </span><span class="lineCov">        147 :               walk_tree (gimple_phi_arg_def_ptr (phi, i),</span>
+<span class="lineNum">    1232 </span>            :                          rewrite_usage_of_param, NULL, &amp;visited_nodes);
+<span class="lineNum">    1233 </span>            :             }
+<span class="lineNum">    1234 </span>            :         }
+<span class="lineNum">    1235 </span>            :     }
+<span class="lineNum">    1236 </span>            : 
+<span class="lineNum">    1237 </span>            :   /* Unset value expr for parameters for which we created debug bind
+<span class="lineNum">    1238 </span>            :      expressions.  */
+<span class="lineNum">    1239 </span>            :   unsigned i;
+<span class="lineNum">    1240 </span>            :   tree arg;
+<span class="lineNum">    1241 </span><span class="lineCov">         61 :   FOR_EACH_VEC_ELT (clear_value_expr_list, i, arg)</span>
+<span class="lineNum">    1242 </span>            :     {
+<span class="lineNum">    1243 </span><span class="lineCov">         18 :       DECL_HAS_VALUE_EXPR_P (arg) = 0;</span>
+<span class="lineNum">    1244 </span><span class="lineCov">         18 :       SET_DECL_VALUE_EXPR (arg, NULL_TREE);</span>
+<span class="lineNum">    1245 </span>            :     }
+<span class="lineNum">    1246 </span>            : 
+<span class="lineNum">    1247 </span>            :   /* Insert default assignments at the beginning of a function.  */
+<span class="lineNum">    1248 </span><span class="lineCov">         43 :   basic_block entry_bb = ENTRY_BLOCK_PTR_FOR_FN (fun);</span>
+<span class="lineNum">    1249 </span><span class="lineCov">         43 :   entry_bb = split_edge (single_succ_edge (entry_bb));</span>
+<span class="lineNum">    1250 </span>            : 
+<span class="lineNum">    1251 </span><span class="lineCov">         43 :   gimple_stmt_iterator gsi = gsi_start_bb (entry_bb);</span>
+<span class="lineNum">    1252 </span><span class="lineCov">         43 :   gsi_insert_seq_before (&amp;gsi, stmts, GSI_NEW_STMT);</span>
+<span class="lineNum">    1253 </span>            : }
+<a name="1254"><span class="lineNum">    1254 </span>            : </a>
+<span class="lineNum">    1255 </span>            : unsigned int
+<span class="lineNum">    1256 </span><span class="lineCov">      16988 : pass_sanopt::execute (function *fun)</span>
+<span class="lineNum">    1257 </span>            : {
+<span class="lineNum">    1258 </span><span class="lineCov">      16988 :   basic_block bb;</span>
+<span class="lineNum">    1259 </span><span class="lineCov">      16988 :   int asan_num_accesses = 0;</span>
+<span class="lineNum">    1260 </span><span class="lineCov">      16988 :   bool contains_asan_mark = false;</span>
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span>            :   /* Try to remove redundant checks.  */
+<span class="lineNum">    1263 </span><span class="lineCov">      16988 :   if (optimize</span>
+<span class="lineNum">    1264 </span><span class="lineCov">      28762 :       &amp;&amp; (flag_sanitize</span>
+<span class="lineNum">    1265 </span><span class="lineCov">      14381 :           &amp; (SANITIZE_NULL | SANITIZE_ALIGNMENT</span>
+<span class="lineNum">    1266 </span>            :              | SANITIZE_ADDRESS | SANITIZE_VPTR | SANITIZE_POINTER_OVERFLOW)))
+<span class="lineNum">    1267 </span><span class="lineCov">       7680 :     asan_num_accesses = sanopt_optimize (fun, &amp;contains_asan_mark);</span>
+<span class="lineNum">    1268 </span><span class="lineCov">       9308 :   else if (flag_sanitize &amp; SANITIZE_ADDRESS)</span>
+<span class="lineNum">    1269 </span>            :     {
+<span class="lineNum">    1270 </span><span class="lineCov">        778 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1271 </span><span class="lineCov">       2420 :       FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">    1272 </span><span class="lineCov">       9827 :         for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1273 </span>            :           {
+<span class="lineNum">    1274 </span><span class="lineCov">       6543 :             gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1275 </span><span class="lineCov">       6543 :             if (gimple_call_internal_p (stmt, IFN_ASAN_CHECK))</span>
+<span class="lineNum">    1276 </span><span class="lineCov">        483 :               ++asan_num_accesses;</span>
+<span class="lineNum">    1277 </span><span class="lineCov">       6060 :             else if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))</span>
+<span class="lineNum">    1278 </span><span class="lineCov">        433 :               contains_asan_mark = true;</span>
+<span class="lineNum">    1279 </span>            :           }
+<span class="lineNum">    1280 </span>            :     }
+<span class="lineNum">    1281 </span>            : 
+<span class="lineNum">    1282 </span><span class="lineCov">      16988 :   if (contains_asan_mark)</span>
+<span class="lineNum">    1283 </span>            :     {
+<span class="lineNum">    1284 </span><span class="lineCov">       1008 :       sanitize_asan_mark_unpoison ();</span>
+<span class="lineNum">    1285 </span><span class="lineCov">       1008 :       sanitize_asan_mark_poison ();</span>
+<span class="lineNum">    1286 </span>            :     }
+<span class="lineNum">    1287 </span>            : 
+<span class="lineNum">    1288 </span><span class="lineCov">      16988 :   if (asan_sanitize_stack_p ())</span>
+<span class="lineNum">    1289 </span><span class="lineCov">       4216 :     sanitize_rewrite_addressable_params (fun);</span>
+<span class="lineNum">    1290 </span>            : 
+<span class="lineNum">    1291 </span><span class="lineCov">      33976 :   bool use_calls = ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD &lt; INT_MAX</span>
+<span class="lineNum">    1292 </span><span class="lineCov">      16988 :     &amp;&amp; asan_num_accesses &gt;= ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD;</span>
+<span class="lineNum">    1293 </span>            : 
+<span class="lineNum">    1294 </span><span class="lineCov">      16988 :   hash_map&lt;tree, tree&gt; shadow_vars_mapping;</span>
+<span class="lineNum">    1295 </span><span class="lineCov">      16988 :   bool need_commit_edge_insert = false;</span>
+<span class="lineNum">    1296 </span><span class="lineCov">     197206 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">    1297 </span>            :     {
+<span class="lineNum">    1298 </span><span class="lineCov">     180218 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1299 </span><span class="lineCov">    1660760 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )</span>
+<span class="lineNum">    1300 </span>            :         {
+<span class="lineNum">    1301 </span><span class="lineCov">     650162 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1302 </span><span class="lineCov">     650162 :           bool no_next = false;</span>
+<span class="lineNum">    1303 </span>            : 
+<span class="lineNum">    1304 </span><span class="lineCov">    1300324 :           if (!is_gimple_call (stmt))</span>
+<span class="lineNum">    1305 </span>            :             {
+<span class="lineNum">    1306 </span><span class="lineCov">     521719 :               gsi_next (&amp;gsi);</span>
+<span class="lineNum">    1307 </span><span class="lineCov">     521719 :               continue;</span>
+<span class="lineNum">    1308 </span>            :             }
+<span class="lineNum">    1309 </span>            : 
+<span class="lineNum">    1310 </span><span class="lineCov">     128443 :           if (gimple_call_internal_p (stmt))</span>
+<span class="lineNum">    1311 </span>            :             {
+<span class="lineNum">    1312 </span><span class="lineCov">      24840 :               enum internal_fn ifn = gimple_call_internal_fn (stmt);</span>
+<span class="lineNum">    1313 </span><span class="lineCov">      24840 :               switch (ifn)</span>
+<span class="lineNum">    1314 </span>            :                 {
+<span class="lineNum">    1315 </span><span class="lineCov">       3993 :                 case IFN_UBSAN_NULL:</span>
+<span class="lineNum">    1316 </span><span class="lineCov">       3993 :                   no_next = ubsan_expand_null_ifn (&amp;gsi);</span>
+<span class="lineNum">    1317 </span><span class="lineCov">       3993 :                   break;</span>
+<span class="lineNum">    1318 </span><span class="lineCov">       1203 :                 case IFN_UBSAN_BOUNDS:</span>
+<span class="lineNum">    1319 </span><span class="lineCov">       1203 :                   no_next = ubsan_expand_bounds_ifn (&amp;gsi);</span>
+<span class="lineNum">    1320 </span><span class="lineCov">       1203 :                   break;</span>
+<span class="lineNum">    1321 </span><span class="lineCov">       1583 :                 case IFN_UBSAN_OBJECT_SIZE:</span>
+<span class="lineNum">    1322 </span><span class="lineCov">       1583 :                   no_next = ubsan_expand_objsize_ifn (&amp;gsi);</span>
+<span class="lineNum">    1323 </span><span class="lineCov">       1583 :                   break;</span>
+<span class="lineNum">    1324 </span><span class="lineCov">       1745 :                 case IFN_UBSAN_PTR:</span>
+<span class="lineNum">    1325 </span><span class="lineCov">       1745 :                   no_next = ubsan_expand_ptr_ifn (&amp;gsi);</span>
+<span class="lineNum">    1326 </span><span class="lineCov">       1745 :                   break;</span>
+<span class="lineNum">    1327 </span><span class="lineCov">       1901 :                 case IFN_UBSAN_VPTR:</span>
+<span class="lineNum">    1328 </span><span class="lineCov">       1901 :                   no_next = ubsan_expand_vptr_ifn (&amp;gsi);</span>
+<span class="lineNum">    1329 </span><span class="lineCov">       1901 :                   break;</span>
+<span class="lineNum">    1330 </span><span class="lineCov">       5163 :                 case IFN_ASAN_CHECK:</span>
+<span class="lineNum">    1331 </span><span class="lineCov">       5163 :                   no_next = asan_expand_check_ifn (&amp;gsi, use_calls);</span>
+<span class="lineNum">    1332 </span><span class="lineCov">       5163 :                   break;</span>
+<span class="lineNum">    1333 </span><span class="lineCov">       1560 :                 case IFN_ASAN_MARK:</span>
+<span class="lineNum">    1334 </span><span class="lineCov">       1560 :                   no_next = asan_expand_mark_ifn (&amp;gsi);</span>
+<span class="lineNum">    1335 </span><span class="lineCov">       1560 :                   break;</span>
+<span class="lineNum">    1336 </span><span class="lineCov">         36 :                 case IFN_ASAN_POISON:</span>
+<span class="lineNum">    1337 </span><span class="lineCov">         36 :                   no_next = asan_expand_poison_ifn (&amp;gsi,</span>
+<span class="lineNum">    1338 </span>            :                                                     &amp;need_commit_edge_insert,
+<span class="lineNum">    1339 </span>            :                                                     shadow_vars_mapping);
+<span class="lineNum">    1340 </span><span class="lineCov">         36 :                   break;</span>
+<span class="lineNum">    1341 </span>            :                 default:
+<span class="lineNum">    1342 </span>            :                   break;
+<span class="lineNum">    1343 </span>            :                 }
+<span class="lineNum">    1344 </span>            :             }
+<span class="lineNum">    1345 </span><span class="lineCov">     103603 :           else if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))</span>
+<span class="lineNum">    1346 </span>            :             {
+<span class="lineNum">    1347 </span><span class="lineCov">      30302 :               tree callee = gimple_call_fndecl (stmt);</span>
+<span class="lineNum">    1348 </span><span class="lineCov">      30302 :               switch (DECL_FUNCTION_CODE (callee))</span>
+<span class="lineNum">    1349 </span>            :                 {
+<span class="lineNum">    1350 </span><span class="lineCov">        110 :                 case BUILT_IN_UNREACHABLE:</span>
+<span class="lineNum">    1351 </span><span class="lineCov">        110 :                   if (sanitize_flags_p (SANITIZE_UNREACHABLE))</span>
+<span class="lineNum">    1352 </span><span class="lineCov">         84 :                     no_next = ubsan_instrument_unreachable (&amp;gsi);</span>
+<span class="lineNum">    1353 </span>            :                   break;
+<span class="lineNum">    1354 </span>            :                 default:
+<span class="lineNum">    1355 </span>            :                   break;
+<span class="lineNum">    1356 </span>            :                 }
+<span class="lineNum">    1357 </span>            :             }
+<span class="lineNum">    1358 </span>            : 
+<span class="lineNum">    1359 </span><span class="lineCov">     128443 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1360 </span>            :             {
+<span class="lineNum">    1361 </span><span class="lineCov">        237 :               fprintf (dump_file, &quot;Expanded: &quot;);</span>
+<span class="lineNum">    1362 </span><span class="lineCov">        237 :               print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">    1363 </span>            :             }
+<span class="lineNum">    1364 </span>            : 
+<span class="lineNum">    1365 </span><span class="lineCov">     128443 :           if (!no_next)</span>
+<span class="lineNum">    1366 </span><span class="lineCov">     118576 :             gsi_next (&amp;gsi);</span>
+<span class="lineNum">    1367 </span>            :         }
+<span class="lineNum">    1368 </span>            :     }
+<span class="lineNum">    1369 </span>            : 
+<span class="lineNum">    1370 </span><span class="lineCov">      16988 :   if (need_commit_edge_insert)</span>
+<span class="lineNum">    1371 </span><span class="lineNoCov">          0 :     gsi_commit_edge_inserts ();</span>
+<span class="lineNum">    1372 </span>            : 
+<span class="lineNum">    1373 </span><span class="lineCov">      16988 :   return 0;</span>
+<span class="lineNum">    1374 </span>            : }
+<span class="lineNum">    1375 </span>            : 
+<span class="lineNum">    1376 </span>            : } // anon namespace
+<a name="1377"><span class="lineNum">    1377 </span>            : </a>
+<span class="lineNum">    1378 </span>            : gimple_opt_pass *
+<span class="lineNum">    1379 </span><span class="lineCov">     170312 : make_pass_sanopt (gcc::context *ctxt)</span>
+<span class="lineNum">    1380 </span>            : {
+<span class="lineNum">    1381 </span><span class="lineCov">     170312 :   return new pass_sanopt (ctxt);</span>
+<span class="lineNum">    1382 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

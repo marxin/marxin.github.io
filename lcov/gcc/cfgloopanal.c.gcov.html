@@ -1,0 +1,610 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/cfgloopanal.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - cfgloopanal.c<span style="font-size: 80%;"> (source / <a href="cfgloopanal.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">211</td>
+            <td class="headerCovTableEntry">225</td>
+            <td class="headerCovTableEntryHi">93.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntryHi">91.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Natural loop analysis code for GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2002-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;explow.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;expr.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;graphds.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;sreal.h&quot;
+<span class="lineNum">      35 </span>            : 
+<span class="lineNum">      36 </span>            : struct target_cfgloop default_target_cfgloop;
+<span class="lineNum">      37 </span>            : #if SWITCHABLE_TARGET
+<span class="lineNum">      38 </span>            : struct target_cfgloop *this_target_cfgloop = &amp;default_target_cfgloop;
+<span class="lineNum">      39 </span>            : #endif
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : /* Checks whether BB is executed exactly once in each LOOP iteration.  */
+<a name="42"><span class="lineNum">      42 </span>            : </a>
+<span class="lineNum">      43 </span>            : bool
+<span class="lineNum">      44 </span><span class="lineCov">     991485 : just_once_each_iteration_p (const struct loop *loop, const_basic_block bb)</span>
+<span class="lineNum">      45 </span>            : {
+<span class="lineNum">      46 </span>            :   /* It must be executed at least once each iteration.  */
+<span class="lineNum">      47 </span><span class="lineCov">     991485 :   if (!dominated_by_p (CDI_DOMINATORS, loop-&gt;latch, bb))</span>
+<span class="lineNum">      48 </span>            :     return false;
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :   /* And just once.  */
+<span class="lineNum">      51 </span><span class="lineCov">     843003 :   if (bb-&gt;loop_father != loop)</span>
+<span class="lineNum">      52 </span>            :     return false;
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :   /* But this was not enough.  We might have some irreducible loop here.  */
+<span class="lineNum">      55 </span><span class="lineCov">     828912 :   if (bb-&gt;flags &amp; BB_IRREDUCIBLE_LOOP)</span>
+<span class="lineNum">      56 </span><span class="lineCov">         52 :     return false;</span>
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            :   return true;
+<span class="lineNum">      59 </span>            : }
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : /* Marks blocks and edges that are part of non-recognized loops; i.e. we
+<span class="lineNum">      62 </span>            :    throw away all latch edges and mark blocks inside any remaining cycle.
+<span class="lineNum">      63 </span>            :    Everything is a bit complicated due to fact we do not want to do this
+<span class="lineNum">      64 </span>            :    for parts of cycles that only &quot;pass&quot; through some loop -- i.e. for
+<span class="lineNum">      65 </span>            :    each cycle, we want to mark blocks that belong directly to innermost
+<span class="lineNum">      66 </span>            :    loop containing the whole cycle.
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            :    LOOPS is the loop tree.  */
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            : #define LOOP_REPR(LOOP) ((LOOP)-&gt;num + last_basic_block_for_fn (cfun))
+<span class="lineNum">      71 </span>            : #define BB_REPR(BB) ((BB)-&gt;index + 1)
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            : bool
+<span class="lineNum">      74 </span><span class="lineCov">   28903312 : mark_irreducible_loops (void)</span>
+<span class="lineNum">      75 </span>            : {
+<span class="lineNum">      76 </span><span class="lineCov">   28903312 :   basic_block act;</span>
+<span class="lineNum">      77 </span><span class="lineCov">   28903312 :   struct graph_edge *ge;</span>
+<span class="lineNum">      78 </span><span class="lineCov">   28903312 :   edge e;</span>
+<span class="lineNum">      79 </span><span class="lineCov">   28903312 :   edge_iterator ei;</span>
+<span class="lineNum">      80 </span><span class="lineCov">   28903312 :   int src, dest;</span>
+<span class="lineNum">      81 </span><span class="lineCov">   28903312 :   unsigned depth;</span>
+<span class="lineNum">      82 </span><span class="lineCov">   28903312 :   struct graph *g;</span>
+<span class="lineNum">      83 </span><span class="lineCov">   28903312 :   int num = number_of_loops (cfun);</span>
+<span class="lineNum">      84 </span><span class="lineCov">   28903312 :   struct loop *cloop;</span>
+<span class="lineNum">      85 </span><span class="lineCov">   28903312 :   bool irred_loop_found = false;</span>
+<span class="lineNum">      86 </span><span class="lineCov">   28903312 :   int i;</span>
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span><span class="lineCov">   28903312 :   gcc_assert (current_loops != NULL);</span>
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            :   /* Reset the flags.  */
+<span class="lineNum">      91 </span><span class="lineCov">  325796689 :   FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">      92 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">      93 </span>            :     {
+<span class="lineNum">      94 </span><span class="lineCov">  296893377 :       act-&gt;flags &amp;= ~BB_IRREDUCIBLE_LOOP;</span>
+<span class="lineNum">      95 </span><span class="lineCov"> 1000391817 :       FOR_EACH_EDGE (e, ei, act-&gt;succs)</span>
+<span class="lineNum">      96 </span><span class="lineCov">  406605063 :         e-&gt;flags &amp;= ~EDGE_IRREDUCIBLE_LOOP;</span>
+<span class="lineNum">      97 </span>            :     }
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            :   /* Create the edge lists.  */
+<span class="lineNum">     100 </span><span class="lineCov">   28903312 :   g = new_graph (last_basic_block_for_fn (cfun) + num);</span>
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span><span class="lineCov">  325796689 :   FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     103 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     104 </span><span class="lineCov"> 1000391817 :     FOR_EACH_EDGE (e, ei, act-&gt;succs)</span>
+<span class="lineNum">     105 </span>            :       {
+<span class="lineNum">     106 </span>            :         /* Ignore edges to exit.  */
+<span class="lineNum">     107 </span><span class="lineCov">  406605063 :         if (e-&gt;dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     108 </span>            :           continue;
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span><span class="lineCov">  377976165 :         src = BB_REPR (act);</span>
+<span class="lineNum">     111 </span><span class="lineCov">  377976165 :         dest = BB_REPR (e-&gt;dest);</span>
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span>            :         /* Ignore latch edges.  */
+<span class="lineNum">     114 </span><span class="lineCov">  377976165 :         if (e-&gt;dest-&gt;loop_father-&gt;header == e-&gt;dest</span>
+<span class="lineNum">     115 </span><span class="lineCov">   32408557 :             &amp;&amp; e-&gt;dest-&gt;loop_father-&gt;latch == act)</span>
+<span class="lineNum">     116 </span>            :           continue;
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            :         /* Edges inside a single loop should be left where they are.  Edges
+<span class="lineNum">     119 </span>            :            to subloop headers should lead to representative of the subloop,
+<span class="lineNum">     120 </span>            :            but from the same place.
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            :            Edges exiting loops should lead from representative
+<span class="lineNum">     123 </span>            :            of the son of nearest common ancestor of the loops in that
+<span class="lineNum">     124 </span>            :            act lays.  */
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span><span class="lineCov">  361772667 :         if (e-&gt;dest-&gt;loop_father-&gt;header == e-&gt;dest)</span>
+<span class="lineNum">     127 </span><span class="lineCov">   16205059 :           dest = LOOP_REPR (e-&gt;dest-&gt;loop_father);</span>
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span><span class="lineCov">  361772667 :         if (!flow_bb_inside_loop_p (act-&gt;loop_father, e-&gt;dest))</span>
+<span class="lineNum">     130 </span>            :           {
+<span class="lineNum">     131 </span><span class="lineCov">   30305024 :             depth = 1 + loop_depth (find_common_loop (act-&gt;loop_father,</span>
+<span class="lineNum">     132 </span><span class="lineCov">   30305024 :                                                       e-&gt;dest-&gt;loop_father));</span>
+<span class="lineNum">     133 </span><span class="lineCov">   60610048 :             if (depth == loop_depth (act-&gt;loop_father))</span>
+<span class="lineNum">     134 </span>            :               cloop = act-&gt;loop_father;
+<span class="lineNum">     135 </span>            :             else
+<span class="lineNum">     136 </span><span class="lineCov">    2317275 :               cloop = (*act-&gt;loop_father-&gt;superloops)[depth];</span>
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span><span class="lineCov">   30305024 :             src = LOOP_REPR (cloop);</span>
+<span class="lineNum">     139 </span>            :           }
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineCov">  361772667 :         add_edge (g, src, dest)-&gt;data = e;</span>
+<span class="lineNum">     142 </span>            :       }
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            :   /* Find the strongly connected components.  */
+<span class="lineNum">     145 </span><span class="lineCov">   28903312 :   graphds_scc (g, NULL);</span>
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span>            :   /* Mark the irreducible loops.  */
+<span class="lineNum">     148 </span><span class="lineCov">  420820408 :   for (i = 0; i &lt; g-&gt;n_vertices; i++)</span>
+<span class="lineNum">     149 </span><span class="lineCov">  753689763 :     for (ge = g-&gt;vertices[i].succ; ge; ge = ge-&gt;succ_next)</span>
+<span class="lineNum">     150 </span>            :       {
+<span class="lineNum">     151 </span><span class="lineCov">  361772667 :         edge real = (edge) ge-&gt;data;</span>
+<span class="lineNum">     152 </span>            :         /* edge E in graph G is irreducible if it connects two vertices in the
+<span class="lineNum">     153 </span>            :            same scc.  */
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span>            :         /* All edges should lead from a component with higher number to the
+<span class="lineNum">     156 </span>            :            one with lower one.  */
+<span class="lineNum">     157 </span><span class="lineCov">  361772667 :         gcc_assert (g-&gt;vertices[ge-&gt;src].component &gt;= g-&gt;vertices[ge-&gt;dest].component);</span>
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineCov">  361772667 :         if (g-&gt;vertices[ge-&gt;src].component != g-&gt;vertices[ge-&gt;dest].component)</span>
+<span class="lineNum">     160 </span>            :           continue;
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span><span class="lineCov">     659348 :         real-&gt;flags |= EDGE_IRREDUCIBLE_LOOP;</span>
+<span class="lineNum">     163 </span><span class="lineCov">     659348 :         irred_loop_found = true;</span>
+<span class="lineNum">     164 </span><span class="lineCov">     659348 :         if (flow_bb_inside_loop_p (real-&gt;src-&gt;loop_father, real-&gt;dest))</span>
+<span class="lineNum">     165 </span><span class="lineCov">     634899 :           real-&gt;src-&gt;flags |= BB_IRREDUCIBLE_LOOP;</span>
+<span class="lineNum">     166 </span>            :       }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span><span class="lineCov">   28903312 :   free_graph (g);</span>
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span><span class="lineCov">   57806624 :   loops_state_set (LOOPS_HAVE_MARKED_IRREDUCIBLE_REGIONS);</span>
+<span class="lineNum">     171 </span><span class="lineCov">   28903312 :   return irred_loop_found;</span>
+<span class="lineNum">     172 </span>            : }
+<span class="lineNum">     173 </span>            : 
+<a name="174"><span class="lineNum">     174 </span>            : /* Counts number of insns inside LOOP.  */</a>
+<span class="lineNum">     175 </span>            : int
+<span class="lineNum">     176 </span><span class="lineCov">      13980 : num_loop_insns (const struct loop *loop)</span>
+<span class="lineNum">     177 </span>            : {
+<span class="lineNum">     178 </span><span class="lineCov">      13980 :   basic_block *bbs, bb;</span>
+<span class="lineNum">     179 </span><span class="lineCov">      13980 :   unsigned i, ninsns = 0;</span>
+<span class="lineNum">     180 </span><span class="lineCov">      13980 :   rtx_insn *insn;</span>
+<span class="lineNum">     181 </span>            : 
+<span class="lineNum">     182 </span><span class="lineCov">      13980 :   bbs = get_loop_body (loop);</span>
+<span class="lineNum">     183 </span><span class="lineCov">      60639 :   for (i = 0; i &lt; loop-&gt;num_nodes; i++)</span>
+<span class="lineNum">     184 </span>            :     {
+<span class="lineNum">     185 </span><span class="lineCov">      46659 :       bb = bbs[i];</span>
+<span class="lineNum">     186 </span><span class="lineCov">     981819 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     187 </span><span class="lineCov">     467580 :         if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     188 </span><span class="lineCov">     301400 :           ninsns++;</span>
+<span class="lineNum">     189 </span>            :     }
+<span class="lineNum">     190 </span><span class="lineCov">      13980 :   free (bbs);</span>
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span><span class="lineCov">      13980 :   if (!ninsns)</span>
+<span class="lineNum">     193 </span><span class="lineCov">        317 :     ninsns = 1; /* To avoid division by zero.  */</span>
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span><span class="lineCov">      13980 :   return ninsns;</span>
+<span class="lineNum">     196 </span>            : }
+<span class="lineNum">     197 </span>            : 
+<a name="198"><span class="lineNum">     198 </span>            : /* Counts number of insns executed on average per iteration LOOP.  */</a>
+<span class="lineNum">     199 </span>            : int
+<span class="lineNum">     200 </span><span class="lineCov">      13864 : average_num_loop_insns (const struct loop *loop)</span>
+<span class="lineNum">     201 </span>            : {
+<span class="lineNum">     202 </span><span class="lineCov">      13864 :   basic_block *bbs, bb;</span>
+<span class="lineNum">     203 </span><span class="lineCov">      13864 :   unsigned i, binsns;</span>
+<span class="lineNum">     204 </span><span class="lineCov">      13864 :   sreal ninsns;</span>
+<span class="lineNum">     205 </span><span class="lineCov">      13864 :   rtx_insn *insn;</span>
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span><span class="lineCov">      13864 :   ninsns = 0;</span>
+<span class="lineNum">     208 </span><span class="lineCov">      13864 :   bbs = get_loop_body (loop);</span>
+<span class="lineNum">     209 </span><span class="lineCov">      59344 :   for (i = 0; i &lt; loop-&gt;num_nodes; i++)</span>
+<span class="lineNum">     210 </span>            :     {
+<span class="lineNum">     211 </span><span class="lineCov">      45480 :       bb = bbs[i];</span>
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span><span class="lineCov">      45480 :       binsns = 0;</span>
+<span class="lineNum">     214 </span><span class="lineCov">     969200 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     215 </span><span class="lineCov">     461860 :         if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     216 </span><span class="lineCov">     297712 :           binsns++;</span>
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span><span class="lineCov">      45480 :       ninsns += (sreal)binsns * bb-&gt;count.to_sreal_scale (loop-&gt;header-&gt;count);</span>
+<span class="lineNum">     219 </span>            :       /* Avoid overflows.   */
+<span class="lineNum">     220 </span><span class="lineCov">      45480 :       if (ninsns &gt; 1000000)</span>
+<span class="lineNum">     221 </span>            :         return 100000;
+<span class="lineNum">     222 </span>            :     }
+<span class="lineNum">     223 </span><span class="lineCov">      13864 :   free (bbs);</span>
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span><span class="lineCov">      13864 :   int64_t ret = ninsns.to_int ();</span>
+<span class="lineNum">     226 </span><span class="lineCov">      13864 :   if (!ret)</span>
+<span class="lineNum">     227 </span><span class="lineCov">        317 :     ret = 1; /* To avoid division by zero.  */</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">      13864 :   return ret;</span>
+<span class="lineNum">     230 </span>            : }
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span>            : /* Returns expected number of iterations of LOOP, according to
+<span class="lineNum">     233 </span>            :    measured or guessed profile.
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span>            :    This functions attempts to return &quot;sane&quot; value even if profile
+<span class="lineNum">     236 </span>            :    information is not good enough to derive osmething.
+<span class="lineNum">     237 </span>            :    If BY_PROFILE_ONLY is set, this logic is bypassed and function
+<span class="lineNum">     238 </span>            :    return -1 in those scenarios.  */
+<a name="239"><span class="lineNum">     239 </span>            : </a>
+<span class="lineNum">     240 </span>            : gcov_type
+<span class="lineNum">     241 </span><span class="lineCov">      31976 : expected_loop_iterations_unbounded (const struct loop *loop,</span>
+<span class="lineNum">     242 </span>            :                                     bool *read_profile_p,
+<span class="lineNum">     243 </span>            :                                     bool by_profile_only)
+<span class="lineNum">     244 </span>            : {
+<span class="lineNum">     245 </span><span class="lineCov">      31976 :   edge e;</span>
+<span class="lineNum">     246 </span><span class="lineCov">      31976 :   edge_iterator ei;</span>
+<span class="lineNum">     247 </span><span class="lineCov">      31976 :   gcov_type expected = -1;</span>
+<span class="lineNum">     248 </span>            :   
+<span class="lineNum">     249 </span><span class="lineCov">      31976 :   if (read_profile_p)</span>
+<span class="lineNum">     250 </span><span class="lineCov">      21298 :     *read_profile_p = false;</span>
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span>            :   /* If we have no profile at all, use AVG_LOOP_NITER.  */
+<span class="lineNum">     253 </span><span class="lineCov">      31976 :   if (profile_status_for_fn (cfun) == PROFILE_ABSENT)</span>
+<span class="lineNum">     254 </span>            :     {
+<span class="lineNum">     255 </span><span class="lineCov">        894 :       if (by_profile_only)</span>
+<span class="lineNum">     256 </span>            :         return -1;
+<span class="lineNum">     257 </span><span class="lineCov">        894 :       expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);</span>
+<span class="lineNum">     258 </span>            :     }
+<span class="lineNum">     259 </span><span class="lineCov">      31082 :   else if (loop-&gt;latch &amp;&amp; (loop-&gt;latch-&gt;count.initialized_p ()</span>
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 :                            || loop-&gt;header-&gt;count.initialized_p ()))</span>
+<span class="lineNum">     261 </span>            :     {
+<span class="lineNum">     262 </span><span class="lineCov">      31082 :       profile_count count_in = profile_count::zero (),</span>
+<span class="lineNum">     263 </span><span class="lineCov">      31082 :                     count_latch = profile_count::zero ();</span>
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span><span class="lineCov">     118156 :       FOR_EACH_EDGE (e, ei, loop-&gt;header-&gt;preds)</span>
+<span class="lineNum">     266 </span><span class="lineCov">      55992 :         if (e-&gt;src == loop-&gt;latch)</span>
+<span class="lineNum">     267 </span><span class="lineCov">      27973 :           count_latch = e-&gt;count ();</span>
+<span class="lineNum">     268 </span>            :         else
+<span class="lineNum">     269 </span><span class="lineCov">      28019 :           count_in += e-&gt;count ();</span>
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span><span class="lineCov">      62164 :       if (!count_latch.initialized_p ())</span>
+<span class="lineNum">     272 </span>            :         {
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :           if (by_profile_only)</span>
+<span class="lineNum">     274 </span><span class="lineNoCov">          0 :             return -1;</span>
+<span class="lineNum">     275 </span><span class="lineNoCov">          0 :           expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);</span>
+<span class="lineNum">     276 </span>            :         }
+<span class="lineNum">     277 </span><span class="lineCov">      31082 :       else if (!count_in.nonzero_p ())</span>
+<span class="lineNum">     278 </span>            :         {
+<span class="lineNum">     279 </span><span class="lineCov">      13006 :           if (by_profile_only)</span>
+<span class="lineNum">     280 </span>            :             return -1;
+<span class="lineNum">     281 </span><span class="lineCov">      13006 :           expected = count_latch.to_gcov_type () * 2;</span>
+<span class="lineNum">     282 </span>            :         }
+<span class="lineNum">     283 </span>            :       else
+<span class="lineNum">     284 </span>            :         {
+<span class="lineNum">     285 </span><span class="lineCov">      18076 :           expected = (count_latch.to_gcov_type () + count_in.to_gcov_type ()</span>
+<span class="lineNum">     286 </span><span class="lineCov">      18076 :                       - 1) / count_in.to_gcov_type ();</span>
+<span class="lineNum">     287 </span><span class="lineCov">      18076 :           if (read_profile_p</span>
+<span class="lineNum">     288 </span><span class="lineCov">      18076 :               &amp;&amp; count_latch.reliable_p () &amp;&amp; count_in.reliable_p ())</span>
+<span class="lineNum">     289 </span><span class="lineCov">         21 :             *read_profile_p = true;</span>
+<span class="lineNum">     290 </span>            :         }
+<span class="lineNum">     291 </span>            :     }
+<span class="lineNum">     292 </span>            :   else
+<span class="lineNum">     293 </span>            :     {
+<span class="lineNum">     294 </span><span class="lineNoCov">          0 :       if (by_profile_only)</span>
+<span class="lineNum">     295 </span>            :         return -1;
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 :       expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);</span>
+<span class="lineNum">     297 </span>            :     }
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span><span class="lineCov">      31976 :   if (!by_profile_only)</span>
+<span class="lineNum">     300 </span>            :     {
+<span class="lineNum">     301 </span><span class="lineCov">      31604 :       HOST_WIDE_INT max = get_max_loop_iterations_int (loop);</span>
+<span class="lineNum">     302 </span><span class="lineCov">      31604 :       if (max != -1 &amp;&amp; max &lt; expected)</span>
+<span class="lineNum">     303 </span><span class="lineCov">       3207 :         return max;</span>
+<span class="lineNum">     304 </span>            :     }
+<span class="lineNum">     305 </span>            :  
+<span class="lineNum">     306 </span>            :   return expected;
+<span class="lineNum">     307 </span>            : }
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span>            : /* Returns expected number of LOOP iterations.  The returned value is bounded
+<span class="lineNum">     310 </span>            :    by REG_BR_PROB_BASE.  */
+<a name="311"><span class="lineNum">     311 </span>            : </a>
+<span class="lineNum">     312 </span>            : unsigned
+<span class="lineNum">     313 </span><span class="lineCov">         26 : expected_loop_iterations (struct loop *loop)</span>
+<span class="lineNum">     314 </span>            : {
+<span class="lineNum">     315 </span><span class="lineCov">         26 :   gcov_type expected = expected_loop_iterations_unbounded (loop);</span>
+<span class="lineNum">     316 </span><span class="lineCov">         26 :   return (expected &gt; REG_BR_PROB_BASE ? REG_BR_PROB_BASE : expected);</span>
+<span class="lineNum">     317 </span>            : }
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span>            : /* Returns the maximum level of nesting of subloops of LOOP.  */
+<a name="320"><span class="lineNum">     320 </span>            : </a>
+<span class="lineNum">     321 </span>            : unsigned
+<span class="lineNum">     322 </span><span class="lineNoCov">          0 : get_loop_level (const struct loop *loop)</span>
+<span class="lineNum">     323 </span>            : {
+<span class="lineNum">     324 </span><span class="lineNoCov">          0 :   const struct loop *ploop;</span>
+<span class="lineNum">     325 </span><span class="lineNoCov">          0 :   unsigned mx = 0, l;</span>
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span><span class="lineNoCov">          0 :   for (ploop = loop-&gt;inner; ploop; ploop = ploop-&gt;next)</span>
+<span class="lineNum">     328 </span>            :     {
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :       l = get_loop_level (ploop);</span>
+<span class="lineNum">     330 </span><span class="lineNoCov">          0 :       if (l &gt;= mx)</span>
+<span class="lineNum">     331 </span><span class="lineNoCov">          0 :         mx = l + 1;</span>
+<span class="lineNum">     332 </span>            :     }
+<span class="lineNum">     333 </span><span class="lineNoCov">          0 :   return mx;</span>
+<span class="lineNum">     334 </span>            : }
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span>            : /* Initialize the constants for computing set costs.  */
+<a name="337"><span class="lineNum">     337 </span>            : </a>
+<span class="lineNum">     338 </span>            : void
+<span class="lineNum">     339 </span><span class="lineCov">     130945 : init_set_costs (void)</span>
+<span class="lineNum">     340 </span>            : {
+<span class="lineNum">     341 </span><span class="lineCov">     130945 :   int speed;</span>
+<span class="lineNum">     342 </span><span class="lineCov">     130945 :   rtx_insn *seq;</span>
+<span class="lineNum">     343 </span><span class="lineCov">     261890 :   rtx reg1 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 1);</span>
+<span class="lineNum">     344 </span><span class="lineCov">     261890 :   rtx reg2 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 2);</span>
+<span class="lineNum">     345 </span><span class="lineCov">     130945 :   rtx addr = gen_raw_REG (Pmode, LAST_VIRTUAL_REGISTER + 3);</span>
+<span class="lineNum">     346 </span><span class="lineCov">     261890 :   rtx mem = validize_mem (gen_rtx_MEM (SImode, addr));</span>
+<span class="lineNum">     347 </span><span class="lineCov">     130945 :   unsigned i;</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span><span class="lineCov">     130945 :   target_avail_regs = 0;</span>
+<span class="lineNum">     350 </span><span class="lineCov">     130945 :   target_clobbered_regs = 0;</span>
+<span class="lineNum">     351 </span><span class="lineCov">   10213710 :   for (i = 0; i &lt; FIRST_PSEUDO_REGISTER; i++)</span>
+<span class="lineNum">     352 </span><span class="lineCov">   10082765 :     if (TEST_HARD_REG_BIT (reg_class_contents[GENERAL_REGS], i)</span>
+<span class="lineNum">     353 </span><span class="lineCov">    2357010 :         &amp;&amp; !fixed_regs[i])</span>
+<span class="lineNum">     354 </span>            :       {
+<span class="lineNum">     355 </span><span class="lineCov">    1929492 :         target_avail_regs++;</span>
+<span class="lineNum">     356 </span><span class="lineCov">    1929492 :         if (call_used_regs[i])</span>
+<span class="lineNum">     357 </span><span class="lineCov">    1152098 :           target_clobbered_regs++;</span>
+<span class="lineNum">     358 </span>            :       }
+<span class="lineNum">     359 </span>            : 
+<span class="lineNum">     360 </span><span class="lineCov">     130945 :   target_res_regs = 3;</span>
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span><span class="lineCov">     392835 :   for (speed = 0; speed &lt; 2; speed++)</span>
+<span class="lineNum">     363 </span>            :      {
+<span class="lineNum">     364 </span><span class="lineCov">     261890 :       crtl-&gt;maybe_hot_insn_p = speed;</span>
+<span class="lineNum">     365 </span>            :       /* Set up the costs for using extra registers:
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            :          1) If not many free registers remain, we should prefer having an
+<span class="lineNum">     368 </span>            :             additional move to decreasing the number of available registers.
+<span class="lineNum">     369 </span>            :             (TARGET_REG_COST).
+<span class="lineNum">     370 </span>            :          2) If no registers are available, we need to spill, which may require
+<span class="lineNum">     371 </span>            :             storing the old value to memory and loading it back
+<span class="lineNum">     372 </span>            :             (TARGET_SPILL_COST).  */
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span><span class="lineCov">     261890 :       start_sequence ();</span>
+<span class="lineNum">     375 </span><span class="lineCov">     261890 :       emit_move_insn (reg1, reg2);</span>
+<span class="lineNum">     376 </span><span class="lineCov">     261890 :       seq = get_insns ();</span>
+<span class="lineNum">     377 </span><span class="lineCov">     261890 :       end_sequence ();</span>
+<span class="lineNum">     378 </span><span class="lineCov">     261890 :       target_reg_cost [speed] = seq_cost (seq, speed);</span>
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span><span class="lineCov">     261890 :       start_sequence ();</span>
+<span class="lineNum">     381 </span><span class="lineCov">     261890 :       emit_move_insn (mem, reg1);</span>
+<span class="lineNum">     382 </span><span class="lineCov">     261890 :       emit_move_insn (reg2, mem);</span>
+<span class="lineNum">     383 </span><span class="lineCov">     261890 :       seq = get_insns ();</span>
+<span class="lineNum">     384 </span><span class="lineCov">     261890 :       end_sequence ();</span>
+<span class="lineNum">     385 </span><span class="lineCov">     261890 :       target_spill_cost [speed] = seq_cost (seq, speed);</span>
+<span class="lineNum">     386 </span>            :     }
+<span class="lineNum">     387 </span><span class="lineCov">     130945 :   default_rtl_profile ();</span>
+<span class="lineNum">     388 </span><span class="lineCov">     130945 : }</span>
+<span class="lineNum">     389 </span>            : 
+<span class="lineNum">     390 </span>            : /* Estimates cost of increased register pressure caused by making N_NEW new
+<span class="lineNum">     391 </span>            :    registers live around the loop.  N_OLD is the number of registers live
+<span class="lineNum">     392 </span>            :    around the loop.  If CALL_P is true, also take into account that
+<span class="lineNum">     393 </span>            :    call-used registers may be clobbered in the loop body, reducing the
+<span class="lineNum">     394 </span>            :    number of available registers before we spill.  */
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            : unsigned
+<span class="lineNum">     397 </span><span class="lineCov">    2826976 : estimate_reg_pressure_cost (unsigned n_new, unsigned n_old, bool speed,</span>
+<span class="lineNum">     398 </span>            :                             bool call_p)
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">    2826976 :   unsigned cost;</span>
+<span class="lineNum">     401 </span><span class="lineCov">    2826976 :   unsigned regs_needed = n_new + n_old;</span>
+<span class="lineNum">     402 </span><span class="lineCov">    2826976 :   unsigned available_regs = target_avail_regs;</span>
+<span class="lineNum">     403 </span>            : 
+<span class="lineNum">     404 </span>            :   /* If there is a call in the loop body, the call-clobbered registers
+<span class="lineNum">     405 </span>            :      are not available for loop invariants.  */
+<span class="lineNum">     406 </span><span class="lineCov">    2826976 :   if (call_p)</span>
+<span class="lineNum">     407 </span><span class="lineCov">    2101224 :     available_regs = available_regs - target_clobbered_regs;</span>
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span>            :   /* If we have enough registers, we should use them and not restrict
+<span class="lineNum">     410 </span>            :      the transformations unnecessarily.  */
+<span class="lineNum">     411 </span><span class="lineCov">    2826976 :   if (regs_needed + target_res_regs &lt;= available_regs)</span>
+<span class="lineNum">     412 </span>            :     return 0;
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span><span class="lineCov">    1213964 :   if (regs_needed &lt;= available_regs)</span>
+<span class="lineNum">     415 </span>            :     /* If we are close to running out of registers, try to preserve
+<span class="lineNum">     416 </span>            :        them.  */
+<span class="lineNum">     417 </span><span class="lineCov">     850302 :     cost = target_reg_cost [speed] * n_new;</span>
+<span class="lineNum">     418 </span>            :   else
+<span class="lineNum">     419 </span>            :     /* If we run out of registers, it is very expensive to add another
+<span class="lineNum">     420 </span>            :        one.  */
+<span class="lineNum">     421 </span><span class="lineCov">     363662 :     cost = target_spill_cost [speed] * n_new;</span>
+<span class="lineNum">     422 </span>            : 
+<span class="lineNum">     423 </span><span class="lineCov">    3641892 :   if (optimize &amp;&amp; (flag_ira_region == IRA_REGION_ALL</span>
+<span class="lineNum">     424 </span><span class="lineCov">    1213964 :                    || flag_ira_region == IRA_REGION_MIXED)</span>
+<span class="lineNum">     425 </span><span class="lineCov">    3617034 :       &amp;&amp; number_of_loops (cfun) &lt;= (unsigned) IRA_MAX_LOOPS_NUM)</span>
+<span class="lineNum">     426 </span>            :     /* IRA regional allocation deals with high register pressure
+<span class="lineNum">     427 </span>            :        better.  So decrease the cost (to do more accurate the cost
+<span class="lineNum">     428 </span>            :        calculation for IRA, we need to know how many registers lives
+<span class="lineNum">     429 </span>            :        through the loop transparently).  */
+<span class="lineNum">     430 </span><span class="lineCov">    1197307 :     cost /= 2;</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            :   return cost;
+<span class="lineNum">     433 </span>            : }
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span>            : /* Sets EDGE_LOOP_EXIT flag for all loop exits.  */
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            : void
+<span class="lineNum">     438 </span><span class="lineCov">    1862527 : mark_loop_exit_edges (void)</span>
+<span class="lineNum">     439 </span>            : {
+<span class="lineNum">     440 </span><span class="lineCov">    1862527 :   basic_block bb;</span>
+<span class="lineNum">     441 </span><span class="lineCov">    1862527 :   edge e;</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">    3725054 :   if (number_of_loops (cfun) &lt;= 1)</span>
+<span class="lineNum">     444 </span><span class="lineCov">    1497629 :     return;</span>
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span><span class="lineCov">   10566725 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     447 </span>            :     {
+<span class="lineNum">     448 </span><span class="lineCov">   10201827 :       edge_iterator ei;</span>
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span><span class="lineCov">   35780420 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     451 </span>            :         {
+<span class="lineNum">     452 </span><span class="lineCov">   15376766 :           if (loop_outer (bb-&gt;loop_father)</span>
+<span class="lineNum">     453 </span><span class="lineCov">    6647093 :               &amp;&amp; loop_exit_edge_p (bb-&gt;loop_father, e))</span>
+<span class="lineNum">     454 </span><span class="lineCov">    1729092 :             e-&gt;flags |= EDGE_LOOP_EXIT;</span>
+<span class="lineNum">     455 </span>            :           else
+<span class="lineNum">     456 </span><span class="lineCov">   13647674 :             e-&gt;flags &amp;= ~EDGE_LOOP_EXIT;</span>
+<span class="lineNum">     457 </span>            :         }
+<span class="lineNum">     458 </span>            :     }
+<span class="lineNum">     459 </span>            : }
+<span class="lineNum">     460 </span>            : 
+<span class="lineNum">     461 </span>            : /* Return exit edge if loop has only one exit that is likely
+<span class="lineNum">     462 </span>            :    to be executed on runtime (i.e. it is not EH or leading
+<span class="lineNum">     463 </span>            :    to noreturn call.  */
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span>            : edge
+<span class="lineNum">     466 </span><span class="lineCov">    3288989 : single_likely_exit (struct loop *loop)</span>
+<span class="lineNum">     467 </span>            : {
+<span class="lineNum">     468 </span><span class="lineCov">    3288989 :   edge found = single_exit (loop);</span>
+<span class="lineNum">     469 </span><span class="lineCov">    3288989 :   vec&lt;edge&gt; exits;</span>
+<span class="lineNum">     470 </span><span class="lineCov">    3288989 :   unsigned i;</span>
+<span class="lineNum">     471 </span><span class="lineCov">    3288989 :   edge ex;</span>
+<span class="lineNum">     472 </span>            : 
+<span class="lineNum">     473 </span><span class="lineCov">    3288989 :   if (found)</span>
+<span class="lineNum">     474 </span>            :     return found;
+<span class="lineNum">     475 </span><span class="lineCov">    1112901 :   exits = get_loop_exit_edges (loop);</span>
+<span class="lineNum">     476 </span><span class="lineCov">    3826222 :   FOR_EACH_VEC_ELT (exits, i, ex)</span>
+<span class="lineNum">     477 </span>            :     {
+<span class="lineNum">     478 </span><span class="lineCov">    3432092 :       if (probably_never_executed_edge_p (cfun, ex)</span>
+<span class="lineNum">     479 </span>            :           /* We want to rule out paths to noreturns but not low probabilities
+<span class="lineNum">     480 </span>            :              resulting from adjustments or combining.
+<span class="lineNum">     481 </span>            :              FIXME: once we have better quality tracking, make this more
+<span class="lineNum">     482 </span>            :              robust.  */
+<span class="lineNum">     483 </span><span class="lineCov">    3432092 :           || ex-&gt;probability &lt;= profile_probability::very_unlikely ())</span>
+<span class="lineNum">     484 </span><span class="lineCov">    1625791 :         continue;</span>
+<span class="lineNum">     485 </span><span class="lineCov">    1806301 :       if (!found)</span>
+<span class="lineNum">     486 </span>            :         found = ex;
+<span class="lineNum">     487 </span>            :       else
+<span class="lineNum">     488 </span>            :         {
+<span class="lineNum">     489 </span><span class="lineCov">     718771 :           exits.release ();</span>
+<span class="lineNum">     490 </span><span class="lineCov">     718771 :           return NULL;</span>
+<span class="lineNum">     491 </span>            :         }
+<span class="lineNum">     492 </span>            :     }
+<span class="lineNum">     493 </span><span class="lineCov">     394130 :   exits.release ();</span>
+<span class="lineNum">     494 </span>            :   return found;
+<span class="lineNum">     495 </span>            : }
+<span class="lineNum">     496 </span>            : 
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span>            : /* Gets basic blocks of a LOOP.  Header is the 0-th block, rest is in dfs
+<span class="lineNum">     499 </span>            :    order against direction of edges from latch.  Specially, if
+<span class="lineNum">     500 </span>            :    header != latch, latch is the 1-st block.  */
+<a name="501"><span class="lineNum">     501 </span>            : </a>
+<span class="lineNum">     502 </span>            : vec&lt;basic_block&gt;
+<span class="lineNum">     503 </span><span class="lineCov">     250384 : get_loop_hot_path (const struct loop *loop)</span>
+<span class="lineNum">     504 </span>            : {
+<span class="lineNum">     505 </span><span class="lineCov">     250384 :   basic_block bb = loop-&gt;header;</span>
+<span class="lineNum">     506 </span><span class="lineCov">     250384 :   vec&lt;basic_block&gt; path = vNULL;</span>
+<span class="lineNum">     507 </span><span class="lineCov">     250384 :   bitmap visited = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">     910296 :   while (true)</span>
+<span class="lineNum">     510 </span>            :     {
+<span class="lineNum">     511 </span><span class="lineCov">     910296 :       edge_iterator ei;</span>
+<span class="lineNum">     512 </span><span class="lineCov">     910296 :       edge e;</span>
+<span class="lineNum">     513 </span><span class="lineCov">     910296 :       edge best = NULL;</span>
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span><span class="lineCov">     910296 :       path.safe_push (bb);</span>
+<span class="lineNum">     516 </span><span class="lineCov">     910296 :       bitmap_set_bit (visited, bb-&gt;index);</span>
+<span class="lineNum">     517 </span><span class="lineCov">    3285626 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     518 </span><span class="lineCov">     278082 :         if ((!best || e-&gt;probability &gt; best-&gt;probability)</span>
+<span class="lineNum">     519 </span><span class="lineCov">    1259282 :             &amp;&amp; !loop_exit_edge_p (loop, e)</span>
+<span class="lineNum">     520 </span><span class="lineCov">    2446976 :             &amp;&amp; !bitmap_bit_p (visited, e-&gt;dest-&gt;index))</span>
+<span class="lineNum">     521 </span><span class="lineCov">     731289 :           best = e;</span>
+<span class="lineNum">     522 </span><span class="lineCov">     910296 :       if (!best || best-&gt;dest == loop-&gt;header)</span>
+<span class="lineNum">     523 </span>            :         break;
+<span class="lineNum">     524 </span><span class="lineCov">     659912 :       bb = best-&gt;dest;</span>
+<span class="lineNum">     525 </span><span class="lineCov">     659912 :     }</span>
+<span class="lineNum">     526 </span><span class="lineCov">     250384 :   BITMAP_FREE (visited);</span>
+<span class="lineNum">     527 </span><span class="lineCov">     250384 :   return path;</span>
+<span class="lineNum">     528 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

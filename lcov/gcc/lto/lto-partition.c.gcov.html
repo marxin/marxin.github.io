@@ -1,0 +1,1286 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/lto/lto-partition.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/lto</a> - lto-partition.c<span style="font-size: 80%;"> (source / <a href="lto-partition.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">456</td>
+            <td class="headerCovTableEntry">519</td>
+            <td class="headerCovTableEntryMed">87.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntry">26</td>
+            <td class="headerCovTableEntryMed">84.6 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* LTO partitioning logic routines.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2009-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;function.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;basic-block.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;alloc-pool.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;lto-streamer.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;symbol-summary.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-vrp.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;ipa-prop.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;ipa-fnsummary.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;lto-partition.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;sreal.h&quot;
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : vec&lt;ltrans_partition&gt; ltrans_partitions;
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : static void add_symbol_to_partition (ltrans_partition part, symtab_node *node);
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : /* Helper for qsort; compare partitions and return one with smaller order.  */
+<a name="46"><span class="lineNum">      46 </span>            : </a>
+<span class="lineNum">      47 </span>            : static int
+<span class="lineNum">      48 </span><span class="lineCov">        722 : cmp_partitions_order (const void *a, const void *b)</span>
+<span class="lineNum">      49 </span>            : {
+<span class="lineNum">      50 </span><span class="lineCov">        722 :   const struct ltrans_partition_def *pa</span>
+<span class="lineNum">      51 </span>            :      = *(struct ltrans_partition_def *const *)a;
+<span class="lineNum">      52 </span><span class="lineCov">        722 :   const struct ltrans_partition_def *pb</span>
+<span class="lineNum">      53 </span>            :      = *(struct ltrans_partition_def *const *)b;
+<span class="lineNum">      54 </span><span class="lineCov">        722 :   int ordera = -1, orderb = -1;</span>
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span><span class="lineCov">        722 :   if (lto_symtab_encoder_size (pa-&gt;encoder))</span>
+<span class="lineNum">      57 </span><span class="lineCov">       1444 :     ordera = lto_symtab_encoder_deref (pa-&gt;encoder, 0)-&gt;order;</span>
+<span class="lineNum">      58 </span><span class="lineCov">        722 :   if (lto_symtab_encoder_size (pb-&gt;encoder))</span>
+<span class="lineNum">      59 </span><span class="lineCov">       1444 :     orderb = lto_symtab_encoder_deref (pb-&gt;encoder, 0)-&gt;order;</span>
+<span class="lineNum">      60 </span><span class="lineCov">        722 :   return orderb - ordera;</span>
+<span class="lineNum">      61 </span>            : }
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            : /* Create new partition with name NAME.  */
+<a name="64"><span class="lineNum">      64 </span>            : </a>
+<span class="lineNum">      65 </span>            : static ltrans_partition
+<span class="lineNum">      66 </span><span class="lineCov">       4869 : new_partition (const char *name)</span>
+<span class="lineNum">      67 </span>            : {
+<span class="lineNum">      68 </span><span class="lineCov">       4869 :   ltrans_partition part = XCNEW (struct ltrans_partition_def);</span>
+<span class="lineNum">      69 </span><span class="lineCov">       4869 :   part-&gt;encoder = lto_symtab_encoder_new (false);</span>
+<span class="lineNum">      70 </span><span class="lineCov">       4869 :   part-&gt;name = name;</span>
+<span class="lineNum">      71 </span><span class="lineCov">       4869 :   part-&gt;insns = 0;</span>
+<span class="lineNum">      72 </span><span class="lineCov">       4869 :   part-&gt;symbols = 0;</span>
+<span class="lineNum">      73 </span><span class="lineCov">       4869 :   ltrans_partitions.safe_push (part);</span>
+<span class="lineNum">      74 </span><span class="lineCov">       4869 :   return part;</span>
+<span class="lineNum">      75 </span>            : }
+<span class="lineNum">      76 </span>            : 
+<span class="lineNum">      77 </span>            : /* Free memory used by ltrans datastructures.  */
+<a name="78"><span class="lineNum">      78 </span>            : </a>
+<span class="lineNum">      79 </span>            : void
+<span class="lineNum">      80 </span><span class="lineCov">       4550 : free_ltrans_partitions (void)</span>
+<span class="lineNum">      81 </span>            : {
+<span class="lineNum">      82 </span><span class="lineCov">       4550 :   unsigned int idx;</span>
+<span class="lineNum">      83 </span><span class="lineCov">       4550 :   ltrans_partition part;</span>
+<span class="lineNum">      84 </span><span class="lineCov">       9419 :   for (idx = 0; ltrans_partitions.iterate (idx, &amp;part); idx++)</span>
+<span class="lineNum">      85 </span>            :     {
+<span class="lineNum">      86 </span><span class="lineCov">       4869 :       if (part-&gt;initializers_visited)</span>
+<span class="lineNum">      87 </span><span class="lineCov">        895 :         delete part-&gt;initializers_visited;</span>
+<span class="lineNum">      88 </span>            :       /* Symtab encoder is freed after streaming.  */
+<span class="lineNum">      89 </span><span class="lineCov">       4869 :       free (part);</span>
+<span class="lineNum">      90 </span>            :     }
+<span class="lineNum">      91 </span><span class="lineCov">       4550 :   ltrans_partitions.release ();</span>
+<span class="lineNum">      92 </span><span class="lineCov">       4550 : }</span>
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            : /* Return true if symbol is already in some partition.  */
+<a name="95"><span class="lineNum">      95 </span>            : </a>
+<span class="lineNum">      96 </span>            : static inline bool
+<span class="lineNum">      97 </span><span class="lineNoCov">          0 : symbol_partitioned_p (symtab_node *node)</span>
+<span class="lineNum">      98 </span>            : {
+<span class="lineNum">      99 </span><span class="lineCov">     384201 :   return node-&gt;aux;</span>
+<span class="lineNum">     100 </span>            : }
+<span class="lineNum">     101 </span>            : 
+<a name="102"><span class="lineNum">     102 </span>            : /* Add references into the partition.  */</a>
+<span class="lineNum">     103 </span>            : static void
+<span class="lineNum">     104 </span><span class="lineCov">      55401 : add_references_to_partition (ltrans_partition part, symtab_node *node)</span>
+<span class="lineNum">     105 </span>            : {
+<span class="lineNum">     106 </span><span class="lineCov">      55401 :   int i;</span>
+<span class="lineNum">     107 </span><span class="lineCov">      55401 :   struct ipa_ref *ref = NULL;</span>
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            :   /* Add all duplicated references to the partition.  */
+<span class="lineNum">     110 </span><span class="lineCov">     139314 :   for (i = 0; node-&gt;iterate_reference (i, ref); i++)</span>
+<span class="lineNum">     111 </span><span class="lineCov">      83913 :     if (ref-&gt;referred-&gt;get_partitioning_class () == SYMBOL_DUPLICATE)</span>
+<span class="lineNum">     112 </span><span class="lineCov">        174 :       add_symbol_to_partition (part, ref-&gt;referred);</span>
+<span class="lineNum">     113 </span>            :     /* References to a readonly variable may be constant foled into its value.
+<span class="lineNum">     114 </span>            :        Recursively look into the initializers of the constant variable and add
+<span class="lineNum">     115 </span>            :        references, too.  */
+<span class="lineNum">     116 </span><span class="lineCov">      83739 :     else if (is_a &lt;varpool_node *&gt; (ref-&gt;referred)</span>
+<span class="lineNum">     117 </span><span class="lineCov">      70346 :              &amp;&amp; (dyn_cast &lt;varpool_node *&gt; (ref-&gt;referred)</span>
+<span class="lineNum">     118 </span><span class="lineCov">     140692 :                  -&gt;ctor_useable_for_folding_p ())</span>
+<span class="lineNum">     119 </span><span class="lineCov">       5650 :              &amp;&amp; !lto_symtab_encoder_in_partition_p (part-&gt;encoder, ref-&gt;referred))</span>
+<span class="lineNum">     120 </span>            :       {
+<span class="lineNum">     121 </span><span class="lineCov">       4611 :         if (!part-&gt;initializers_visited)</span>
+<span class="lineNum">     122 </span><span class="lineCov">        895 :           part-&gt;initializers_visited = new hash_set&lt;symtab_node *&gt;;</span>
+<span class="lineNum">     123 </span><span class="lineCov">       4611 :         if (!part-&gt;initializers_visited-&gt;add (ref-&gt;referred))</span>
+<span class="lineNum">     124 </span><span class="lineCov">       2323 :           add_references_to_partition (part, ref-&gt;referred);</span>
+<span class="lineNum">     125 </span>            :       }
+<span class="lineNum">     126 </span><span class="lineCov">      55401 : }</span>
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span>            : /* Helper function for add_symbol_to_partition doing the actual dirty work
+<span class="lineNum">     129 </span>            :    of adding NODE to PART.  */
+<a name="130"><span class="lineNum">     130 </span>            : </a>
+<span class="lineNum">     131 </span>            : static bool
+<span class="lineNum">     132 </span><span class="lineCov">      53173 : add_symbol_to_partition_1 (ltrans_partition part, symtab_node *node)</span>
+<span class="lineNum">     133 </span>            : {
+<span class="lineNum">     134 </span><span class="lineCov">      53173 :   enum symbol_partitioning_class c = node-&gt;get_partitioning_class ();</span>
+<span class="lineNum">     135 </span><span class="lineCov">      53173 :   struct ipa_ref *ref;</span>
+<span class="lineNum">     136 </span><span class="lineCov">      53173 :   symtab_node *node1;</span>
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span>            :   /* If NODE is already there, we have nothing to do.  */
+<span class="lineNum">     139 </span><span class="lineCov">      53173 :   if (lto_symtab_encoder_in_partition_p (part-&gt;encoder, node))</span>
+<span class="lineNum">     140 </span>            :     return true;
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            :   /* non-duplicated aliases or tunks of a duplicated symbol needs to be output
+<span class="lineNum">     143 </span>            :      just once.
+<span class="lineNum">     144 </span>            : 
+<span class="lineNum">     145 </span>            :      Be lax about comdats; they may or may not be duplicated and we may
+<span class="lineNum">     146 </span>            :      end up in need to duplicate keyed comdat because it has unkeyed alias.  */
+<span class="lineNum">     147 </span><span class="lineCov">      51679 :   if (c == SYMBOL_PARTITION &amp;&amp; !DECL_COMDAT (node-&gt;decl)</span>
+<span class="lineNum">     148 </span><span class="lineCov">     104660 :       &amp;&amp; symbol_partitioned_p (node))</span>
+<span class="lineNum">     149 </span>            :     return false;
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span>            :   /* Be sure that we never try to duplicate partitioned symbol
+<span class="lineNum">     152 </span>            :      or add external symbol.  */
+<span class="lineNum">     153 </span><span class="lineCov">      53078 :   gcc_assert (c != SYMBOL_EXTERNAL</span>
+<span class="lineNum">     154 </span>            :               &amp;&amp; (c == SYMBOL_DUPLICATE || !symbol_partitioned_p (node)));
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span><span class="lineCov">      53078 :   part-&gt;symbols++;</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span><span class="lineCov">      53078 :   lto_set_symtab_encoder_in_partition (part-&gt;encoder, node);</span>
+<span class="lineNum">     159 </span>            : 
+<span class="lineNum">     160 </span><span class="lineCov">      53078 :   if (symbol_partitioned_p (node))</span>
+<span class="lineNum">     161 </span>            :     {
+<span class="lineNum">     162 </span><span class="lineCov">         16 :       node-&gt;in_other_partition = 1;</span>
+<span class="lineNum">     163 </span><span class="lineCov">         16 :       if (dump_file)</span>
+<span class="lineNum">     164 </span><span class="lineNoCov">          0 :         fprintf (dump_file,</span>
+<span class="lineNum">     165 </span>            :                  &quot;Symbol node %s now used in multiple partitions\n&quot;,
+<span class="lineNum">     166 </span>            :                  node-&gt;name ());
+<span class="lineNum">     167 </span>            :     }
+<span class="lineNum">     168 </span><span class="lineCov">      53078 :   node-&gt;aux = (void *)((size_t)node-&gt;aux + 1);</span>
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span><span class="lineCov">      53078 :   if (cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (node))</span>
+<span class="lineNum">     171 </span>            :     {
+<span class="lineNum">     172 </span><span class="lineCov">      34464 :       struct cgraph_edge *e;</span>
+<span class="lineNum">     173 </span><span class="lineCov">      34464 :       if (!node-&gt;alias &amp;&amp; c == SYMBOL_PARTITION)</span>
+<span class="lineNum">     174 </span><span class="lineCov">      47388 :         part-&gt;insns += ipa_fn_summaries-&gt;get (cnode)-&gt;size;</span>
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            :       /* Add all inline clones and callees that are duplicated.  */
+<span class="lineNum">     177 </span><span class="lineCov">     125484 :       for (e = cnode-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     178 </span><span class="lineCov">      91020 :         if (!e-&gt;inline_failed)</span>
+<span class="lineNum">     179 </span><span class="lineCov">       1243 :           add_symbol_to_partition_1 (part, e-&gt;callee);</span>
+<span class="lineNum">     180 </span><span class="lineCov">      89777 :         else if (e-&gt;callee-&gt;get_partitioning_class () == SYMBOL_DUPLICATE)</span>
+<span class="lineNum">     181 </span><span class="lineCov">         29 :           add_symbol_to_partition (part, e-&gt;callee);</span>
+<span class="lineNum">     182 </span>            : 
+<span class="lineNum">     183 </span>            :       /* Add all thunks associated with the function.  */
+<span class="lineNum">     184 </span><span class="lineCov">      76517 :       for (e = cnode-&gt;callers; e; e = e-&gt;next_caller)</span>
+<span class="lineNum">     185 </span><span class="lineCov">      42053 :         if (e-&gt;caller-&gt;thunk.thunk_p &amp;&amp; !e-&gt;caller-&gt;global.inlined_to)</span>
+<span class="lineNum">     186 </span><span class="lineCov">         20 :           add_symbol_to_partition_1 (part, e-&gt;caller);</span>
+<span class="lineNum">     187 </span>            :     }
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span><span class="lineCov">      53078 :   add_references_to_partition (part, node);</span>
+<span class="lineNum">     190 </span>            : 
+<span class="lineNum">     191 </span>            :   /* Add all aliases associated with the symbol.  */
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span><span class="lineCov">      78750 :   FOR_EACH_ALIAS (node, ref)</span>
+<span class="lineNum">     194 </span><span class="lineCov">       9683 :     if (!ref-&gt;referring-&gt;transparent_alias)</span>
+<span class="lineNum">     195 </span><span class="lineCov">       9680 :       add_symbol_to_partition_1 (part, ref-&gt;referring);</span>
+<span class="lineNum">     196 </span>            :     else
+<span class="lineNum">     197 </span>            :       {
+<span class="lineNum">     198 </span>            :         struct ipa_ref *ref2;
+<span class="lineNum">     199 </span>            :         /* We do not need to add transparent aliases if they are not used.
+<span class="lineNum">     200 </span>            :            However we must add aliases of transparent aliases if they exist.  */
+<span class="lineNum">     201 </span><span class="lineCov">          3 :         FOR_EACH_ALIAS (ref-&gt;referring, ref2)</span>
+<span class="lineNum">     202 </span>            :           {
+<span class="lineNum">     203 </span>            :             /* Nested transparent aliases are not permitted.  */
+<span class="lineNum">     204 </span><span class="lineNoCov">          0 :             gcc_checking_assert (!ref2-&gt;referring-&gt;transparent_alias);</span>
+<span class="lineNum">     205 </span><span class="lineNoCov">          0 :             add_symbol_to_partition_1 (part, ref2-&gt;referring);</span>
+<span class="lineNum">     206 </span>            :           }
+<span class="lineNum">     207 </span>            :       }
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span>            :   /* Ensure that SAME_COMDAT_GROUP lists all allways added in a group.  */
+<span class="lineNum">     210 </span><span class="lineCov">      53078 :   if (node-&gt;same_comdat_group)</span>
+<span class="lineNum">     211 </span><span class="lineCov">         56 :     for (node1 = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     212 </span><span class="lineCov">         91 :          node1 != node; node1 = node1-&gt;same_comdat_group)</span>
+<span class="lineNum">     213 </span><span class="lineCov">         56 :       if (!node-&gt;alias)</span>
+<span class="lineNum">     214 </span>            :         {
+<span class="lineNum">     215 </span><span class="lineCov">         38 :           bool added = add_symbol_to_partition_1 (part, node1);</span>
+<span class="lineNum">     216 </span><span class="lineCov">         38 :           gcc_assert (added);</span>
+<span class="lineNum">     217 </span>            :         }
+<span class="lineNum">     218 </span>            :   return true;
+<span class="lineNum">     219 </span>            : }
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span>            : /* If symbol NODE is really part of other symbol's definition (i.e. it is
+<span class="lineNum">     222 </span>            :    internal label, thunk, alias or so), return the outer symbol. 
+<span class="lineNum">     223 </span>            :    When add_symbol_to_partition_1 is called on the outer symbol it must
+<a name="224"><span class="lineNum">     224 </span>            :    eventually add NODE, too.  */</a>
+<span class="lineNum">     225 </span>            : static symtab_node *
+<span class="lineNum">     226 </span><span class="lineCov">     253396 : contained_in_symbol (symtab_node *node)</span>
+<span class="lineNum">     227 </span>            : {
+<span class="lineNum">     228 </span>            :   /* There is no need to consider transparent aliases to be part of the
+<span class="lineNum">     229 </span>            :      definition: they are only useful insite the partition they are output
+<span class="lineNum">     230 </span>            :      and thus we will always see an explicit reference to it.  */
+<span class="lineNum">     231 </span><span class="lineCov">     253396 :   if (node-&gt;transparent_alias)</span>
+<span class="lineNum">     232 </span>            :     return node;
+<span class="lineNum">     233 </span><span class="lineCov">     253388 :   if (cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (node))</span>
+<span class="lineNum">     234 </span>            :     {
+<span class="lineNum">     235 </span><span class="lineCov">     224799 :       cnode = cnode-&gt;function_symbol ();</span>
+<span class="lineNum">     236 </span><span class="lineCov">     224799 :       if (cnode-&gt;global.inlined_to)</span>
+<span class="lineNum">     237 </span><span class="lineCov">      13922 :         cnode = cnode-&gt;global.inlined_to;</span>
+<span class="lineNum">     238 </span><span class="lineCov">     224799 :       return cnode;</span>
+<span class="lineNum">     239 </span>            :     }
+<span class="lineNum">     240 </span><span class="lineCov">      28589 :   else if (varpool_node *vnode = dyn_cast &lt;varpool_node *&gt; (node))</span>
+<span class="lineNum">     241 </span><span class="lineCov">      28589 :     return vnode-&gt;ultimate_alias_target ();</span>
+<span class="lineNum">     242 </span>            :   return node;
+<span class="lineNum">     243 </span>            : }
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            : /* Add symbol NODE to partition.  When definition of NODE is part
+<span class="lineNum">     246 </span>            :    of other symbol definition, add the other symbol, too.  */
+<a name="247"><span class="lineNum">     247 </span>            : </a>
+<span class="lineNum">     248 </span>            : static void
+<span class="lineNum">     249 </span><span class="lineCov">      42192 : add_symbol_to_partition (ltrans_partition part, symtab_node *node)</span>
+<span class="lineNum">     250 </span>            : {
+<span class="lineNum">     251 </span><span class="lineCov">      42192 :   symtab_node *node1;</span>
+<span class="lineNum">     252 </span>            : 
+<span class="lineNum">     253 </span>            :   /* Verify that we do not try to duplicate something that can not be.  */
+<span class="lineNum">     254 </span><span class="lineCov">      42192 :   gcc_checking_assert (node-&gt;get_partitioning_class () == SYMBOL_DUPLICATE</span>
+<span class="lineNum">     255 </span>            :                        || !symbol_partitioned_p (node));
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineCov">      47961 :   while ((node1 = contained_in_symbol (node)) != node)</span>
+<span class="lineNum">     258 </span>            :     node = node1;
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            :   /* If we have duplicated symbol contained in something we can not duplicate,
+<span class="lineNum">     261 </span>            :      we are very badly screwed.  The other way is possible, so we do not
+<span class="lineNum">     262 </span>            :      assert this in add_symbol_to_partition_1. 
+<span class="lineNum">     263 </span>            : 
+<span class="lineNum">     264 </span>            :      Be lax about comdats; they may or may not be duplicated and we may
+<span class="lineNum">     265 </span>            :      end up in need to duplicate keyed comdat because it has unkeyed alias.  */
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span><span class="lineCov">      42192 :   gcc_assert (node-&gt;get_partitioning_class () == SYMBOL_DUPLICATE</span>
+<span class="lineNum">     268 </span>            :               || DECL_COMDAT (node-&gt;decl)
+<span class="lineNum">     269 </span>            :               || !symbol_partitioned_p (node));
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span><span class="lineCov">      42192 :   add_symbol_to_partition_1 (part, node);</span>
+<span class="lineNum">     272 </span><span class="lineCov">      42192 : }</span>
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span>            : /* Undo all additions until number of cgraph nodes in PARITION is N_CGRAPH_NODES
+<span class="lineNum">     275 </span>            :    and number of varpool nodes is N_VARPOOL_NODES.  */
+<a name="276"><span class="lineNum">     276 </span>            : </a>
+<span class="lineNum">     277 </span>            : static void
+<span class="lineNum">     278 </span><span class="lineNoCov">          0 : undo_partition (ltrans_partition partition, unsigned int n_nodes)</span>
+<span class="lineNum">     279 </span>            : {
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :   while (lto_symtab_encoder_size (partition-&gt;encoder) &gt; (int)n_nodes)</span>
+<span class="lineNum">     281 </span>            :     {
+<span class="lineNum">     282 </span><span class="lineNoCov">          0 :       symtab_node *node = lto_symtab_encoder_deref (partition-&gt;encoder,</span>
+<span class="lineNum">     283 </span>            :                                                    n_nodes);
+<span class="lineNum">     284 </span><span class="lineNoCov">          0 :       partition-&gt;symbols--;</span>
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :       cgraph_node *cnode;</span>
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            :       /* After UNDO we no longer know what was visited.  */
+<span class="lineNum">     288 </span><span class="lineNoCov">          0 :       if (partition-&gt;initializers_visited)</span>
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :         delete partition-&gt;initializers_visited;</span>
+<span class="lineNum">     290 </span><span class="lineNoCov">          0 :       partition-&gt;initializers_visited = NULL;</span>
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span><span class="lineNoCov">          0 :       if (!node-&gt;alias &amp;&amp; (cnode = dyn_cast &lt;cgraph_node *&gt; (node))</span>
+<span class="lineNum">     293 </span><span class="lineNoCov">          0 :           &amp;&amp; node-&gt;get_partitioning_class () == SYMBOL_PARTITION)</span>
+<span class="lineNum">     294 </span><span class="lineNoCov">          0 :         partition-&gt;insns -= ipa_fn_summaries-&gt;get (cnode)-&gt;size;</span>
+<span class="lineNum">     295 </span><span class="lineNoCov">          0 :       lto_symtab_encoder_delete_node (partition-&gt;encoder, node);</span>
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 :       node-&gt;aux = (void *)((size_t)node-&gt;aux - 1);</span>
+<span class="lineNum">     297 </span>            :     }
+<span class="lineNum">     298 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span>            : /* Group cgrah nodes by input files.  This is used mainly for testing
+<span class="lineNum">     301 </span>            :    right now.  */
+<a name="302"><span class="lineNum">     302 </span>            : </a>
+<span class="lineNum">     303 </span>            : void
+<span class="lineNum">     304 </span><span class="lineCov">        265 : lto_1_to_1_map (void)</span>
+<span class="lineNum">     305 </span>            : {
+<span class="lineNum">     306 </span><span class="lineCov">        265 :   symtab_node *node;</span>
+<span class="lineNum">     307 </span><span class="lineCov">        265 :   struct lto_file_decl_data *file_data;</span>
+<span class="lineNum">     308 </span><span class="lineCov">        265 :   hash_map&lt;lto_file_decl_data *, ltrans_partition&gt; pmap;</span>
+<span class="lineNum">     309 </span><span class="lineCov">        265 :   ltrans_partition partition;</span>
+<span class="lineNum">     310 </span><span class="lineCov">        265 :   int npartitions = 0;</span>
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span><span class="lineCov">       2108 :   FOR_EACH_SYMBOL (node)</span>
+<span class="lineNum">     313 </span>            :     {
+<span class="lineNum">     314 </span><span class="lineCov">       1578 :       if (node-&gt;get_partitioning_class () != SYMBOL_PARTITION</span>
+<span class="lineNum">     315 </span><span class="lineCov">       1578 :           || symbol_partitioned_p (node))</span>
+<span class="lineNum">     316 </span>            :         continue;
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span><span class="lineCov">        947 :       file_data = node-&gt;lto_file_data;</span>
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span><span class="lineCov">        947 :       if (file_data)</span>
+<span class="lineNum">     321 </span>            :         {
+<span class="lineNum">     322 </span><span class="lineCov">        920 :           ltrans_partition *slot = &amp;pmap.get_or_insert (file_data);</span>
+<span class="lineNum">     323 </span><span class="lineCov">        920 :           if (*slot)</span>
+<span class="lineNum">     324 </span><span class="lineCov">        498 :             partition = *slot;</span>
+<span class="lineNum">     325 </span>            :           else
+<span class="lineNum">     326 </span>            :             {
+<span class="lineNum">     327 </span><span class="lineCov">        422 :               partition = new_partition (file_data-&gt;file_name);</span>
+<span class="lineNum">     328 </span><span class="lineCov">        422 :               *slot = partition;</span>
+<span class="lineNum">     329 </span><span class="lineCov">        422 :               npartitions++;</span>
+<span class="lineNum">     330 </span>            :             }
+<span class="lineNum">     331 </span>            :         }
+<span class="lineNum">     332 </span><span class="lineCov">         27 :       else if (!file_data &amp;&amp; ltrans_partitions.length ())</span>
+<span class="lineNum">     333 </span><span class="lineCov">         36 :         partition = ltrans_partitions[0];</span>
+<span class="lineNum">     334 </span>            :       else
+<span class="lineNum">     335 </span>            :         {
+<span class="lineNum">     336 </span><span class="lineCov">          9 :           partition = new_partition (&quot;&quot;);</span>
+<span class="lineNum">     337 </span><span class="lineCov">          9 :           pmap.put (NULL, partition);</span>
+<span class="lineNum">     338 </span><span class="lineCov">          9 :           npartitions++;</span>
+<span class="lineNum">     339 </span>            :         }
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineCov">        947 :       add_symbol_to_partition (partition, node);</span>
+<span class="lineNum">     342 </span>            :     }
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            :   /* If the cgraph is empty, create one cgraph node set so that there is still
+<span class="lineNum">     345 </span>            :      an output file for any variables that need to be exported in a DSO.  */
+<span class="lineNum">     346 </span><span class="lineCov">        265 :   if (!npartitions)</span>
+<span class="lineNum">     347 </span><span class="lineCov">          2 :     new_partition (&quot;empty&quot;);</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span>            :   /* Order partitions by order of symbols because they are linked into binary
+<span class="lineNum">     350 </span>            :      that way.  */
+<span class="lineNum">     351 </span><span class="lineCov">        530 :   ltrans_partitions.qsort (cmp_partitions_order);</span>
+<span class="lineNum">     352 </span><span class="lineCov">        265 : }</span>
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            : /* Maximal partitioning.  Put every new symbol into new partition if possible.  */
+<a name="355"><span class="lineNum">     355 </span>            : </a>
+<span class="lineNum">     356 </span>            : void
+<span class="lineNum">     357 </span><span class="lineCov">          7 : lto_max_map (void)</span>
+<span class="lineNum">     358 </span>            : {
+<span class="lineNum">     359 </span><span class="lineCov">          7 :   symtab_node *node;</span>
+<span class="lineNum">     360 </span><span class="lineCov">          7 :   ltrans_partition partition;</span>
+<span class="lineNum">     361 </span><span class="lineCov">          7 :   int npartitions = 0;</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span><span class="lineCov">        194 :   FOR_EACH_SYMBOL (node)</span>
+<span class="lineNum">     364 </span>            :     {
+<span class="lineNum">     365 </span><span class="lineCov">        180 :       if (node-&gt;get_partitioning_class () != SYMBOL_PARTITION</span>
+<span class="lineNum">     366 </span><span class="lineCov">        180 :           || symbol_partitioned_p (node))</span>
+<span class="lineNum">     367 </span>            :         continue;
+<span class="lineNum">     368 </span><span class="lineCov">        155 :       partition = new_partition (node-&gt;asm_name ());</span>
+<span class="lineNum">     369 </span><span class="lineCov">        155 :       add_symbol_to_partition (partition, node);</span>
+<span class="lineNum">     370 </span><span class="lineCov">        155 :       npartitions++;</span>
+<span class="lineNum">     371 </span>            :     }
+<span class="lineNum">     372 </span><span class="lineCov">          7 :   if (!npartitions)</span>
+<span class="lineNum">     373 </span><span class="lineNoCov">          0 :     new_partition (&quot;empty&quot;);</span>
+<span class="lineNum">     374 </span><span class="lineCov">          7 : }</span>
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span>            : /* Helper function for qsort; sort nodes by order. noreorder functions must have
+<a name="377"><span class="lineNum">     377 </span>            :    been removed earlier.  */</a>
+<span class="lineNum">     378 </span>            : static int
+<span class="lineNum">     379 </span><span class="lineCov">     934572 : node_cmp (const void *pa, const void *pb)</span>
+<span class="lineNum">     380 </span>            : {
+<span class="lineNum">     381 </span><span class="lineCov">     934572 :   const struct cgraph_node *a = *(const struct cgraph_node * const *) pa;</span>
+<span class="lineNum">     382 </span><span class="lineCov">     934572 :   const struct cgraph_node *b = *(const struct cgraph_node * const *) pb;</span>
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            :   /* Profile reorder flag enables function reordering based on first execution
+<span class="lineNum">     385 </span>            :      of a function. All functions with profile are placed in ascending
+<span class="lineNum">     386 </span>            :      order at the beginning.  */
+<span class="lineNum">     387 </span>            : 
+<span class="lineNum">     388 </span><span class="lineCov">     934572 :   if (flag_profile_reorder_functions)</span>
+<span class="lineNum">     389 </span>            :   {
+<span class="lineNum">     390 </span>            :     /* Functions with time profile are sorted in ascending order.  */
+<span class="lineNum">     391 </span><span class="lineCov">         15 :     if (a-&gt;tp_first_run &amp;&amp; b-&gt;tp_first_run)</span>
+<span class="lineNum">     392 </span><span class="lineCov">         15 :       return a-&gt;tp_first_run != b-&gt;tp_first_run</span>
+<span class="lineNum">     393 </span><span class="lineCov">         15 :         ? a-&gt;tp_first_run - b-&gt;tp_first_run</span>
+<span class="lineNum">     394 </span><span class="lineCov">         15 :         : a-&gt;order - b-&gt;order;</span>
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            :     /* Functions with time profile are sorted before the functions
+<span class="lineNum">     397 </span>            :        that do not have the profile.  */
+<span class="lineNum">     398 </span><span class="lineNoCov">          0 :     if (a-&gt;tp_first_run || b-&gt;tp_first_run)</span>
+<span class="lineNum">     399 </span><span class="lineNoCov">          0 :       return b-&gt;tp_first_run - a-&gt;tp_first_run;</span>
+<span class="lineNum">     400 </span>            :   }
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span><span class="lineCov">     934557 :   return b-&gt;order - a-&gt;order;</span>
+<span class="lineNum">     403 </span>            : }
+<span class="lineNum">     404 </span>            : 
+<a name="405"><span class="lineNum">     405 </span>            : /* Helper function for qsort; sort nodes by order.  */</a>
+<span class="lineNum">     406 </span>            : static int
+<span class="lineNum">     407 </span><span class="lineCov">     239873 : varpool_node_cmp (const void *pa, const void *pb)</span>
+<span class="lineNum">     408 </span>            : {
+<span class="lineNum">     409 </span><span class="lineCov">     239873 :   const symtab_node *a = *static_cast&lt;const symtab_node * const *&gt; (pa);</span>
+<span class="lineNum">     410 </span><span class="lineCov">     239873 :   const symtab_node *b = *static_cast&lt;const symtab_node * const *&gt; (pb);</span>
+<span class="lineNum">     411 </span><span class="lineCov">     239873 :   return b-&gt;order - a-&gt;order;</span>
+<span class="lineNum">     412 </span>            : }
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span>            : /* Add all symtab nodes from NEXT_NODE to PARTITION in order.  */
+<a name="415"><span class="lineNum">     415 </span>            : </a>
+<span class="lineNum">     416 </span>            : static void
+<span class="lineNum">     417 </span><span class="lineCov">      23111 : add_sorted_nodes (vec&lt;symtab_node *&gt; &amp;next_nodes, ltrans_partition partition)</span>
+<span class="lineNum">     418 </span>            : {
+<span class="lineNum">     419 </span><span class="lineCov">      23111 :   unsigned i;</span>
+<span class="lineNum">     420 </span><span class="lineCov">      23111 :   symtab_node *node;</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span><span class="lineCov">      23111 :   next_nodes.qsort (varpool_node_cmp);</span>
+<span class="lineNum">     423 </span><span class="lineCov">      29361 :   FOR_EACH_VEC_ELT (next_nodes, i, node)</span>
+<span class="lineNum">     424 </span><span class="lineCov">       6250 :     if (!symbol_partitioned_p (node))</span>
+<span class="lineNum">     425 </span><span class="lineCov">       4855 :       add_symbol_to_partition (partition, node);</span>
+<span class="lineNum">     426 </span><span class="lineCov">      23111 : }</span>
+<span class="lineNum">     427 </span>            : 
+<span class="lineNum">     428 </span>            : /* Return true if we should account reference from N1 to N2 in cost
+<span class="lineNum">     429 </span>            :    of partition boundary.  */
+<a name="430"><span class="lineNum">     430 </span>            : </a>
+<span class="lineNum">     431 </span>            : bool
+<span class="lineNum">     432 </span><span class="lineCov">     272583 : account_reference_p (symtab_node *n1, symtab_node *n2)</span>
+<span class="lineNum">     433 </span>            : {
+<span class="lineNum">     434 </span><span class="lineCov">     272583 :   if (cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (n1))</span>
+<span class="lineNum">     435 </span>            :     n1 = cnode;
+<span class="lineNum">     436 </span>            :   /* Do not account references from aliases - they are never split across
+<span class="lineNum">     437 </span>            :      partitions.  */
+<span class="lineNum">     438 </span><span class="lineCov">     272583 :   if (n1-&gt;alias)</span>
+<span class="lineNum">     439 </span>            :     return false;
+<span class="lineNum">     440 </span>            :   /* Do not account recursion - the code below will handle it incorrectly
+<span class="lineNum">     441 </span>            :      otherwise.  Do not account references to external symbols: they will
+<span class="lineNum">     442 </span>            :      never become local.  Finally do not account references to duplicated
+<span class="lineNum">     443 </span>            :      symbols: they will be always local.  */
+<span class="lineNum">     444 </span><span class="lineCov">     253381 :   if (n1 == n2 </span>
+<span class="lineNum">     445 </span><span class="lineCov">     253289 :       || !n2-&gt;definition</span>
+<span class="lineNum">     446 </span><span class="lineCov">     458897 :       || n2-&gt;get_partitioning_class () != SYMBOL_PARTITION)</span>
+<span class="lineNum">     447 </span><span class="lineCov">      47946 :     return false;</span>
+<span class="lineNum">     448 </span>            :   /* If referring node is external symbol do not account it to boundary
+<span class="lineNum">     449 </span>            :      cost. Those are added into units only to enable possible constant
+<span class="lineNum">     450 </span>            :      folding and devirtulization.
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span>            :      Here we do not know if it will ever be added to some partition
+<span class="lineNum">     453 </span>            :      (this is decided by compute_ltrans_boundary) and second it is not
+<span class="lineNum">     454 </span>            :      that likely that constant folding will actually use the reference.  */
+<span class="lineNum">     455 </span><span class="lineCov">     205435 :   if (contained_in_symbol (n1)</span>
+<span class="lineNum">     456 </span><span class="lineCov">     205435 :         -&gt;get_partitioning_class () == SYMBOL_EXTERNAL)</span>
+<span class="lineNum">     457 </span><span class="lineNoCov">          0 :     return false;</span>
+<span class="lineNum">     458 </span>            :   return true;
+<span class="lineNum">     459 </span>            : }
+<span class="lineNum">     460 </span>            : 
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span>            : /* Group cgraph nodes into equally-sized partitions.
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span>            :    The partitioning algorithm is simple: nodes are taken in predefined order.
+<span class="lineNum">     465 </span>            :    The order corresponds to the order we want functions to have in the final
+<span class="lineNum">     466 </span>            :    output.  In the future this will be given by function reordering pass, but
+<span class="lineNum">     467 </span>            :    at the moment we use the topological order, which is a good approximation.
+<span class="lineNum">     468 </span>            : 
+<span class="lineNum">     469 </span>            :    The goal is to partition this linear order into intervals (partitions) so
+<span class="lineNum">     470 </span>            :    that all the partitions have approximately the same size and the number of
+<span class="lineNum">     471 </span>            :    callgraph or IPA reference edges crossing boundaries is minimal.
+<span class="lineNum">     472 </span>            : 
+<span class="lineNum">     473 </span>            :    This is a lot faster (O(n) in size of callgraph) than algorithms doing
+<span class="lineNum">     474 </span>            :    priority-based graph clustering that are generally O(n^2) and, since
+<span class="lineNum">     475 </span>            :    WHOPR is designed to make things go well across partitions, it leads
+<span class="lineNum">     476 </span>            :    to good results.
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span>            :    We compute the expected size of a partition as:
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            :      max (total_size / lto_partitions, min_partition_size)
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            :    We use dynamic expected size of partition so small programs are partitioned
+<span class="lineNum">     483 </span>            :    into enough partitions to allow use of multiple CPUs, while large programs
+<span class="lineNum">     484 </span>            :    are not partitioned too much.  Creating too many partitions significantly
+<span class="lineNum">     485 </span>            :    increases the streaming overhead.
+<span class="lineNum">     486 </span>            : 
+<span class="lineNum">     487 </span>            :    In the future, we would like to bound the maximal size of partitions so as
+<span class="lineNum">     488 </span>            :    to prevent the LTRANS stage from consuming too much memory.  At the moment,
+<span class="lineNum">     489 </span>            :    however, the WPA stage is the most memory intensive for large benchmarks,
+<span class="lineNum">     490 </span>            :    since too many types and declarations are read into memory.
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span>            :    The function implements a simple greedy algorithm.  Nodes are being added
+<span class="lineNum">     493 </span>            :    to the current partition until after 3/4 of the expected partition size is
+<span class="lineNum">     494 </span>            :    reached.  Past this threshold, we keep track of boundary size (number of
+<span class="lineNum">     495 </span>            :    edges going to other partitions) and continue adding functions until after
+<span class="lineNum">     496 </span>            :    the current partition has grown to twice the expected partition size.  Then
+<span class="lineNum">     497 </span>            :    the process is undone to the point where the minimal ratio of boundary size
+<span class="lineNum">     498 </span>            :    and in-partition calls was reached.  */
+<a name="499"><span class="lineNum">     499 </span>            : </a>
+<span class="lineNum">     500 </span>            : void
+<span class="lineNum">     501 </span><span class="lineCov">       4278 : lto_balanced_map (int n_lto_partitions, int max_partition_size)</span>
+<span class="lineNum">     502 </span>            : {
+<span class="lineNum">     503 </span><span class="lineCov">       4278 :   int n_varpool_nodes = 0, varpool_pos = 0, best_varpool_pos = 0;</span>
+<span class="lineNum">     504 </span><span class="lineCov">       4278 :   auto_vec &lt;cgraph_node *&gt; order (symtab-&gt;cgraph_count);</span>
+<span class="lineNum">     505 </span><span class="lineCov">       8556 :   auto_vec&lt;cgraph_node *&gt; noreorder;</span>
+<span class="lineNum">     506 </span><span class="lineCov">       8556 :   auto_vec&lt;varpool_node *&gt; varpool_order;</span>
+<span class="lineNum">     507 </span><span class="lineCov">       4278 :   struct cgraph_node *node;</span>
+<span class="lineNum">     508 </span><span class="lineCov">       4278 :   int64_t original_total_size, total_size = 0;</span>
+<span class="lineNum">     509 </span><span class="lineCov">       4278 :   int64_t partition_size;</span>
+<span class="lineNum">     510 </span><span class="lineCov">       4278 :   ltrans_partition partition;</span>
+<span class="lineNum">     511 </span><span class="lineCov">       4278 :   int last_visited_node = 0;</span>
+<span class="lineNum">     512 </span><span class="lineCov">       4278 :   varpool_node *vnode;</span>
+<span class="lineNum">     513 </span><span class="lineCov">       4278 :   int64_t cost = 0, internal = 0;</span>
+<span class="lineNum">     514 </span><span class="lineCov">       4278 :   unsigned int best_n_nodes = 0, best_i = 0;</span>
+<span class="lineNum">     515 </span><span class="lineCov">       4278 :   int64_t best_cost = -1, best_internal = 0, best_size = 0;</span>
+<span class="lineNum">     516 </span><span class="lineCov">       4278 :   int npartitions;</span>
+<span class="lineNum">     517 </span><span class="lineCov">       4278 :   int current_order = -1;</span>
+<span class="lineNum">     518 </span><span class="lineCov">       4278 :   int noreorder_pos = 0;</span>
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span><span class="lineCov">      45360 :   FOR_EACH_VARIABLE (vnode)</span>
+<span class="lineNum">     521 </span><span class="lineCov">      18402 :     gcc_assert (!vnode-&gt;aux);</span>
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span><span class="lineCov">      71458 :   FOR_EACH_DEFINED_FUNCTION (node)</span>
+<span class="lineNum">     524 </span><span class="lineCov">      33590 :     if (node-&gt;get_partitioning_class () == SYMBOL_PARTITION)</span>
+<span class="lineNum">     525 </span>            :       {
+<span class="lineNum">     526 </span><span class="lineCov">      32370 :         if (node-&gt;no_reorder)</span>
+<span class="lineNum">     527 </span><span class="lineCov">       4857 :           noreorder.safe_push (node);</span>
+<span class="lineNum">     528 </span>            :         else
+<span class="lineNum">     529 </span><span class="lineCov">      27513 :           order.safe_push (node);</span>
+<span class="lineNum">     530 </span><span class="lineCov">      32370 :         if (!node-&gt;alias)</span>
+<span class="lineNum">     531 </span><span class="lineCov">      45912 :           total_size += ipa_fn_summaries-&gt;get (node)-&gt;size;</span>
+<span class="lineNum">     532 </span>            :       }
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span><span class="lineCov">       4278 :   original_total_size = total_size;</span>
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span>            :   /* Streaming works best when the source units do not cross partition
+<span class="lineNum">     537 </span>            :      boundaries much.  This is because importing function from a source
+<span class="lineNum">     538 </span>            :      unit tends to import a lot of global trees defined there.  We should
+<span class="lineNum">     539 </span>            :      get better about minimizing the function bounday, but until that
+<span class="lineNum">     540 </span>            :      things works smoother if we order in source order.  */
+<span class="lineNum">     541 </span><span class="lineCov">       4278 :   order.qsort (node_cmp);</span>
+<span class="lineNum">     542 </span><span class="lineCov">       4278 :   noreorder.qsort (node_cmp);</span>
+<span class="lineNum">     543 </span>            : 
+<span class="lineNum">     544 </span><span class="lineCov">       4278 :   if (dump_file)</span>
+<span class="lineNum">     545 </span>            :     {
+<span class="lineNum">     546 </span><span class="lineNoCov">          0 :       for (unsigned i = 0; i &lt; order.length (); i++)</span>
+<span class="lineNum">     547 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Balanced map symbol order:%s:%u\n&quot;,</span>
+<span class="lineNum">     548 </span><span class="lineNoCov">          0 :                  order[i]-&gt;name (), order[i]-&gt;tp_first_run);</span>
+<span class="lineNum">     549 </span><span class="lineNoCov">          0 :       for (unsigned i = 0; i &lt; noreorder.length (); i++)</span>
+<span class="lineNum">     550 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Balanced map symbol no_reorder:%s:%u\n&quot;,</span>
+<span class="lineNum">     551 </span><span class="lineNoCov">          0 :                  noreorder[i]-&gt;name (), noreorder[i]-&gt;tp_first_run);</span>
+<span class="lineNum">     552 </span>            :     }
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span>            :   /* Collect all variables that should not be reordered.  */
+<span class="lineNum">     555 </span><span class="lineCov">      45360 :   FOR_EACH_VARIABLE (vnode)</span>
+<span class="lineNum">     556 </span><span class="lineCov">      18402 :     if (vnode-&gt;get_partitioning_class () == SYMBOL_PARTITION</span>
+<span class="lineNum">     557 </span><span class="lineCov">      18402 :         &amp;&amp; vnode-&gt;no_reorder)</span>
+<span class="lineNum">     558 </span><span class="lineCov">        690 :       varpool_order.safe_push (vnode);</span>
+<span class="lineNum">     559 </span><span class="lineCov">       4278 :   n_varpool_nodes = varpool_order.length ();</span>
+<span class="lineNum">     560 </span><span class="lineCov">       4278 :   varpool_order.qsort (varpool_node_cmp);</span>
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span>            :   /* Compute partition size and create the first partition.  */
+<span class="lineNum">     563 </span><span class="lineCov">       4278 :   if (PARAM_VALUE (MIN_PARTITION_SIZE) &gt; max_partition_size)</span>
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;min partition size cannot be greater &quot;</span>
+<span class="lineNum">     565 </span>            :                  &quot;than max partition size&quot;);
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span><span class="lineCov">       4278 :   partition_size = total_size / n_lto_partitions;</span>
+<span class="lineNum">     568 </span><span class="lineCov">       4278 :   if (partition_size &lt; PARAM_VALUE (MIN_PARTITION_SIZE))</span>
+<span class="lineNum">     569 </span><span class="lineCov">       4278 :     partition_size = PARAM_VALUE (MIN_PARTITION_SIZE);</span>
+<span class="lineNum">     570 </span><span class="lineCov">       4278 :   npartitions = 1;</span>
+<span class="lineNum">     571 </span><span class="lineCov">       4278 :   partition = new_partition (&quot;&quot;);</span>
+<span class="lineNum">     572 </span><span class="lineCov">       4278 :   if (dump_file)</span>
+<span class="lineNum">     573 </span><span class="lineNoCov">          0 :     fprintf (dump_file, &quot;Total unit size: %&quot; PRId64 &quot;, partition size: %&quot; PRId64 &quot;\n&quot;,</span>
+<span class="lineNum">     574 </span>            :              total_size, partition_size);
+<span class="lineNum">     575 </span>            : 
+<span class="lineNum">     576 </span><span class="lineCov">       8828 :   auto_vec&lt;symtab_node *&gt; next_nodes;</span>
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span><span class="lineCov">      63569 :   for (unsigned i = 0; i &lt; order.length (); i++)</span>
+<span class="lineNum">     579 </span>            :     {
+<span class="lineNum">     580 </span><span class="lineCov">      27513 :       if (symbol_partitioned_p (order[i]))</span>
+<span class="lineNum">     581 </span>            :         continue;
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span><span class="lineCov">      18833 :       current_order = order[i]-&gt;order;</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span>            :       /* Output noreorder and varpool in program order first.  */
+<span class="lineNum">     586 </span><span class="lineCov">      18833 :       next_nodes.truncate (0);</span>
+<span class="lineNum">     587 </span><span class="lineCov">      18911 :       while (varpool_pos &lt; n_varpool_nodes</span>
+<span class="lineNum">     588 </span><span class="lineCov">      18872 :              &amp;&amp; varpool_order[varpool_pos]-&gt;order &lt; current_order)</span>
+<span class="lineNum">     589 </span><span class="lineCov">         78 :         next_nodes.safe_push (varpool_order[varpool_pos++]);</span>
+<span class="lineNum">     590 </span><span class="lineCov">      18854 :       while (noreorder_pos &lt; (int)noreorder.length ()</span>
+<span class="lineNum">     591 </span><span class="lineCov">      18854 :              &amp;&amp; noreorder[noreorder_pos]-&gt;order &lt; current_order)</span>
+<span class="lineNum">     592 </span><span class="lineCov">         42 :         next_nodes.safe_push (noreorder[noreorder_pos++]);</span>
+<span class="lineNum">     593 </span><span class="lineCov">      18833 :       add_sorted_nodes (next_nodes, partition);</span>
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span><span class="lineCov">      18833 :       if (!symbol_partitioned_p (order[i]))</span>
+<span class="lineNum">     596 </span><span class="lineCov">      37658 :         add_symbol_to_partition (partition, order[i]);</span>
+<span class="lineNum">     597 </span>            :           
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span>            :       /* Once we added a new node to the partition, we also want to add
+<span class="lineNum">     600 </span>            :          all referenced variables unless they was already added into some
+<span class="lineNum">     601 </span>            :          earlier partition.
+<span class="lineNum">     602 </span>            :          add_symbol_to_partition adds possibly multiple nodes and
+<span class="lineNum">     603 </span>            :          variables that are needed to satisfy needs of ORDER[i].
+<span class="lineNum">     604 </span>            :          We remember last visited cgraph and varpool node from last iteration
+<span class="lineNum">     605 </span>            :          of outer loop that allows us to process every new addition. 
+<span class="lineNum">     606 </span>            : 
+<span class="lineNum">     607 </span>            :          At the same time we compute size of the boundary into COST.  Every
+<span class="lineNum">     608 </span>            :          callgraph or IPA reference edge leaving the partition contributes into
+<span class="lineNum">     609 </span>            :          COST.  Every edge inside partition was earlier computed as one leaving
+<span class="lineNum">     610 </span>            :          it and thus we need to subtract it from COST.  */
+<span class="lineNum">     611 </span><span class="lineCov">     131444 :       while (last_visited_node &lt; lto_symtab_encoder_size (partition-&gt;encoder))</span>
+<span class="lineNum">     612 </span>            :         {
+<span class="lineNum">     613 </span><span class="lineCov">      46889 :           int j;</span>
+<span class="lineNum">     614 </span><span class="lineCov">      46889 :           struct ipa_ref *ref = NULL;</span>
+<span class="lineNum">     615 </span><span class="lineCov">      46889 :           symtab_node *snode = lto_symtab_encoder_deref (partition-&gt;encoder,</span>
+<span class="lineNum">     616 </span>            :                                                         last_visited_node);
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span><span class="lineCov">      46889 :           if (cgraph_node *node = dyn_cast &lt;cgraph_node *&gt; (snode))</span>
+<span class="lineNum">     619 </span>            :             {
+<span class="lineNum">     620 </span><span class="lineCov">      29450 :               struct cgraph_edge *edge;</span>
+<span class="lineNum">     621 </span>            : 
+<span class="lineNum">     622 </span>            : 
+<span class="lineNum">     623 </span><span class="lineCov">      29450 :               last_visited_node++;</span>
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span><span class="lineCov">      29450 :               gcc_assert (node-&gt;definition || node-&gt;weakref);</span>
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            :               /* Compute boundary cost of callgraph edges.  */
+<span class="lineNum">     628 </span><span class="lineCov">     111980 :               for (edge = node-&gt;callees; edge; edge = edge-&gt;next_callee)</span>
+<span class="lineNum">     629 </span>            :                 /* Inline edges will always end up local.  */
+<span class="lineNum">     630 </span><span class="lineCov">      82530 :                 if (edge-&gt;inline_failed</span>
+<span class="lineNum">     631 </span><span class="lineCov">      82530 :                     &amp;&amp; account_reference_p (node, edge-&gt;callee))</span>
+<span class="lineNum">     632 </span>            :                   {
+<span class="lineNum">     633 </span><span class="lineCov">      34303 :                     int edge_cost = edge-&gt;frequency ();</span>
+<span class="lineNum">     634 </span><span class="lineCov">      34303 :                     int index;</span>
+<span class="lineNum">     635 </span>            : 
+<span class="lineNum">     636 </span><span class="lineCov">      34303 :                     if (!edge_cost)</span>
+<span class="lineNum">     637 </span>            :                       edge_cost = 1;
+<span class="lineNum">     638 </span><span class="lineCov">      34022 :                     gcc_assert (edge_cost &gt; 0);</span>
+<span class="lineNum">     639 </span><span class="lineCov">     102909 :                     index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     640 </span><span class="lineCov">      34303 :                                                        edge-&gt;callee);</span>
+<span class="lineNum">     641 </span><span class="lineCov">      34303 :                     if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     642 </span><span class="lineCov">       5938 :                         &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     643 </span><span class="lineCov">       5928 :                       cost -= edge_cost, internal += edge_cost;</span>
+<span class="lineNum">     644 </span>            :                     else
+<span class="lineNum">     645 </span><span class="lineCov">      28375 :                       cost += edge_cost;</span>
+<span class="lineNum">     646 </span>            :                   }
+<span class="lineNum">     647 </span><span class="lineCov">      65322 :               for (edge = node-&gt;callers; edge; edge = edge-&gt;next_caller)</span>
+<span class="lineNum">     648 </span><span class="lineCov">      35872 :                 if (edge-&gt;inline_failed</span>
+<span class="lineNum">     649 </span><span class="lineCov">      35872 :                     &amp;&amp; account_reference_p (edge-&gt;caller, node))</span>
+<span class="lineNum">     650 </span>            :                 {
+<span class="lineNum">     651 </span><span class="lineCov">      34677 :                   int edge_cost = edge-&gt;frequency ();</span>
+<span class="lineNum">     652 </span><span class="lineCov">      34677 :                   int index;</span>
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span><span class="lineCov">      34677 :                   gcc_assert (edge-&gt;caller-&gt;definition);</span>
+<span class="lineNum">     655 </span><span class="lineCov">      34677 :                   if (!edge_cost)</span>
+<span class="lineNum">     656 </span>            :                     edge_cost = 1;
+<span class="lineNum">     657 </span><span class="lineCov">      34396 :                   gcc_assert (edge_cost &gt; 0);</span>
+<span class="lineNum">     658 </span><span class="lineCov">      34677 :                   index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     659 </span>            :                                                      edge-&gt;caller);
+<span class="lineNum">     660 </span><span class="lineCov">      34677 :                   if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     661 </span><span class="lineCov">      27500 :                       &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     662 </span><span class="lineCov">      27479 :                     cost -= edge_cost, internal += edge_cost;</span>
+<span class="lineNum">     663 </span>            :                   else
+<span class="lineNum">     664 </span><span class="lineCov">       7198 :                     cost += edge_cost;</span>
+<span class="lineNum">     665 </span>            :                 }
+<span class="lineNum">     666 </span>            :             }
+<span class="lineNum">     667 </span>            :           else
+<span class="lineNum">     668 </span><span class="lineCov">      17439 :             last_visited_node++;</span>
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span>            :           /* Compute boundary cost of IPA REF edges and at the same time look into
+<span class="lineNum">     671 </span>            :              variables referenced from current partition and try to add them.  */
+<span class="lineNum">     672 </span><span class="lineCov">     125555 :           for (j = 0; snode-&gt;iterate_reference (j, ref); j++)</span>
+<span class="lineNum">     673 </span><span class="lineCov">      78666 :             if (!account_reference_p (snode, ref-&gt;referred))</span>
+<span class="lineNum">     674 </span>            :               ;
+<span class="lineNum">     675 </span><span class="lineCov">      68243 :             else if (is_a &lt;varpool_node *&gt; (ref-&gt;referred))</span>
+<span class="lineNum">     676 </span>            :               {
+<span class="lineNum">     677 </span><span class="lineCov">      67001 :                 int index;</span>
+<span class="lineNum">     678 </span>            : 
+<span class="lineNum">     679 </span><span class="lineCov">      67001 :                 vnode = dyn_cast &lt;varpool_node *&gt; (ref-&gt;referred);</span>
+<span class="lineNum">     680 </span><span class="lineCov">      67001 :                 if (!symbol_partitioned_p (vnode)</span>
+<span class="lineNum">     681 </span><span class="lineCov">      17280 :                     &amp;&amp; !vnode-&gt;no_reorder</span>
+<span class="lineNum">     682 </span><span class="lineCov">      84201 :                     &amp;&amp; vnode-&gt;get_partitioning_class () == SYMBOL_PARTITION)</span>
+<span class="lineNum">     683 </span><span class="lineCov">      17200 :                   add_symbol_to_partition (partition, vnode);</span>
+<span class="lineNum">     684 </span><span class="lineCov">      67001 :                 index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     685 </span>            :                                                    vnode);
+<span class="lineNum">     686 </span><span class="lineCov">      67001 :                 if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     687 </span><span class="lineCov">      66867 :                     &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     688 </span><span class="lineCov">      13772 :                   cost--, internal++;</span>
+<span class="lineNum">     689 </span>            :                 else
+<span class="lineNum">     690 </span><span class="lineCov">      53229 :                   cost++;</span>
+<span class="lineNum">     691 </span>            :               }
+<span class="lineNum">     692 </span>            :             else
+<span class="lineNum">     693 </span>            :               {
+<span class="lineNum">     694 </span><span class="lineCov">       1242 :                 int index;</span>
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span><span class="lineCov">       1242 :                 node = dyn_cast &lt;cgraph_node *&gt; (ref-&gt;referred);</span>
+<span class="lineNum">     697 </span><span class="lineCov">       1242 :                 index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     698 </span>            :                                                    node);
+<span class="lineNum">     699 </span><span class="lineCov">       1242 :                 if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     700 </span><span class="lineCov">         34 :                     &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     701 </span><span class="lineCov">         32 :                   cost--, internal++;</span>
+<span class="lineNum">     702 </span>            :                 else
+<span class="lineNum">     703 </span><span class="lineCov">       1210 :                   cost++;</span>
+<span class="lineNum">     704 </span>            :               }
+<span class="lineNum">     705 </span><span class="lineCov">     202595 :           for (j = 0; snode-&gt;iterate_referring (j, ref); j++)</span>
+<span class="lineNum">     706 </span><span class="lineCov">      77853 :             if (!account_reference_p (ref-&gt;referring, snode))</span>
+<span class="lineNum">     707 </span>            :               ;
+<span class="lineNum">     708 </span><span class="lineCov">      68212 :             else if (is_a &lt;varpool_node *&gt; (ref-&gt;referring))</span>
+<span class="lineNum">     709 </span>            :               {
+<span class="lineNum">     710 </span><span class="lineCov">       5071 :                 int index;</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineCov">       5071 :                 vnode = dyn_cast &lt;varpool_node *&gt; (ref-&gt;referring);</span>
+<span class="lineNum">     713 </span><span class="lineCov">       5071 :                 gcc_assert (vnode-&gt;definition);</span>
+<span class="lineNum">     714 </span>            :                 /* It is better to couple variables with their users,
+<span class="lineNum">     715 </span>            :                    because it allows them to be removed.  Coupling
+<span class="lineNum">     716 </span>            :                    with objects they refer to only helps to reduce
+<span class="lineNum">     717 </span>            :                    number of symbols promoted to hidden.  */
+<span class="lineNum">     718 </span><span class="lineCov">       5071 :                 if (!symbol_partitioned_p (vnode)</span>
+<span class="lineNum">     719 </span><span class="lineCov">        751 :                     &amp;&amp; !vnode-&gt;no_reorder</span>
+<span class="lineNum">     720 </span><span class="lineCov">        720 :                     &amp;&amp; !vnode-&gt;can_remove_if_no_refs_p ()</span>
+<span class="lineNum">     721 </span><span class="lineCov">       5074 :                     &amp;&amp; vnode-&gt;get_partitioning_class () == SYMBOL_PARTITION)</span>
+<span class="lineNum">     722 </span><span class="lineCov">          3 :                   add_symbol_to_partition (partition, vnode);</span>
+<span class="lineNum">     723 </span><span class="lineCov">       5071 :                 index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     724 </span>            :                                                    vnode);
+<span class="lineNum">     725 </span><span class="lineCov">       5071 :                 if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     726 </span><span class="lineCov">       4323 :                     &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     727 </span><span class="lineCov">       4246 :                   cost--, internal++;</span>
+<span class="lineNum">     728 </span>            :                 else
+<span class="lineNum">     729 </span><span class="lineCov">        825 :                   cost++;</span>
+<span class="lineNum">     730 </span>            :               }
+<span class="lineNum">     731 </span>            :             else
+<span class="lineNum">     732 </span>            :               {
+<span class="lineNum">     733 </span><span class="lineCov">      63141 :                 int index;</span>
+<span class="lineNum">     734 </span>            : 
+<span class="lineNum">     735 </span><span class="lineCov">      63141 :                 node = dyn_cast &lt;cgraph_node *&gt; (ref-&gt;referring);</span>
+<span class="lineNum">     736 </span><span class="lineCov">      63141 :                 gcc_assert (node-&gt;definition);</span>
+<span class="lineNum">     737 </span><span class="lineCov">      63141 :                 index = lto_symtab_encoder_lookup (partition-&gt;encoder,</span>
+<span class="lineNum">     738 </span>            :                                                    node);
+<span class="lineNum">     739 </span><span class="lineCov">      63141 :                 if (index != LCC_NOT_FOUND</span>
+<span class="lineNum">     740 </span><span class="lineCov">      50051 :                     &amp;&amp; index &lt; last_visited_node - 1)</span>
+<span class="lineNum">     741 </span><span class="lineCov">      50044 :                   cost--, internal++;</span>
+<span class="lineNum">     742 </span>            :                 else
+<span class="lineNum">     743 </span><span class="lineCov">      13097 :                   cost++;</span>
+<span class="lineNum">     744 </span>            :               }
+<span class="lineNum">     745 </span>            :         }
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span><span class="lineCov">      18833 :       gcc_assert (cost &gt;= 0 &amp;&amp; internal &gt;= 0);</span>
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span>            :       /* If the partition is large enough, start looking for smallest boundary cost.
+<span class="lineNum">     750 </span>            :          If partition still seems too small (less than 7/8 of target weight) accept
+<span class="lineNum">     751 </span>            :          any cost.  If partition has right size, optimize for highest internal/cost.
+<span class="lineNum">     752 </span>            :          Later we stop building partition if its size is 9/8 of the target wight.  */
+<span class="lineNum">     753 </span><span class="lineCov">      18833 :       if (partition-&gt;insns &lt; partition_size * 7 / 8</span>
+<span class="lineNum">     754 </span><span class="lineCov">         50 :           || best_cost == -1</span>
+<span class="lineNum">     755 </span><span class="lineCov">      18881 :           || (!cost </span>
+<span class="lineNum">     756 </span><span class="lineCov">         48 :               || ((sreal)best_internal * (sreal) cost</span>
+<span class="lineNum">     757 </span><span class="lineCov">        144 :                   &lt; ((sreal) internal * (sreal)best_cost))))</span>
+<span class="lineNum">     758 </span>            :         {
+<span class="lineNum">     759 </span><span class="lineCov">      18833 :           best_cost = cost;</span>
+<span class="lineNum">     760 </span><span class="lineCov">      18833 :           best_internal = internal;</span>
+<span class="lineNum">     761 </span><span class="lineCov">      18833 :           best_size = partition-&gt;insns;</span>
+<span class="lineNum">     762 </span><span class="lineCov">      18833 :           best_i = i;</span>
+<span class="lineNum">     763 </span><span class="lineCov">      18833 :           best_n_nodes = lto_symtab_encoder_size (partition-&gt;encoder);</span>
+<span class="lineNum">     764 </span><span class="lineCov">      18833 :           best_varpool_pos = varpool_pos;</span>
+<span class="lineNum">     765 </span>            :         }
+<span class="lineNum">     766 </span><span class="lineCov">      18833 :       if (dump_file)</span>
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :         fprintf (dump_file, &quot;Step %i: added %s/%i, size %i, &quot;</span>
+<span class="lineNum">     768 </span>            :                  &quot;cost %&quot; PRId64 &quot;/%&quot; PRId64 &quot; &quot;
+<span class="lineNum">     769 </span>            :                  &quot;best %&quot; PRId64 &quot;/%&quot; PRId64&quot;, step %i\n&quot;, i,
+<span class="lineNum">     770 </span><span class="lineNoCov">          0 :                  order[i]-&gt;name (), order[i]-&gt;order,</span>
+<span class="lineNum">     771 </span>            :                  partition-&gt;insns, cost, internal,
+<span class="lineNum">     772 </span>            :                  best_cost, best_internal, best_i);
+<span class="lineNum">     773 </span>            :       /* Partition is too large, unwind into step when best cost was reached and
+<span class="lineNum">     774 </span>            :          start new partition.  */
+<span class="lineNum">     775 </span><span class="lineCov">      18833 :       if (partition-&gt;insns &gt; 9 * partition_size / 8</span>
+<span class="lineNum">     776 </span><span class="lineCov">      18829 :           || partition-&gt;insns &gt; max_partition_size)</span>
+<span class="lineNum">     777 </span>            :         {
+<span class="lineNum">     778 </span><span class="lineCov">          4 :           if (best_i != i)</span>
+<span class="lineNum">     779 </span>            :             {
+<span class="lineNum">     780 </span><span class="lineNoCov">          0 :               if (dump_file)</span>
+<span class="lineNum">     781 </span><span class="lineNoCov">          0 :                 fprintf (dump_file, &quot;Unwinding %i insertions to step %i\n&quot;,</span>
+<span class="lineNum">     782 </span>            :                          i - best_i, best_i);
+<span class="lineNum">     783 </span><span class="lineNoCov">          0 :               undo_partition (partition, best_n_nodes);</span>
+<span class="lineNum">     784 </span><span class="lineNoCov">          0 :               varpool_pos = best_varpool_pos;</span>
+<span class="lineNum">     785 </span>            :             }
+<span class="lineNum">     786 </span><span class="lineCov">          4 :           gcc_assert (best_size == partition-&gt;insns);</span>
+<span class="lineNum">     787 </span><span class="lineCov">          4 :           i = best_i;</span>
+<span class="lineNum">     788 </span><span class="lineCov">          4 :           if (dump_file)</span>
+<span class="lineNum">     789 </span><span class="lineNoCov">          0 :             fprintf (dump_file,</span>
+<span class="lineNum">     790 </span>            :                      &quot;Partition insns: %i (want %&quot; PRId64 &quot;)\n&quot;,
+<span class="lineNum">     791 </span>            :                      partition-&gt;insns, partition_size);
+<span class="lineNum">     792 </span>            :           /* When we are finished, avoid creating empty partition.  */
+<span class="lineNum">     793 </span><span class="lineCov">          8 :           while (i &lt; order.length () - 1 &amp;&amp; symbol_partitioned_p (order[i + 1]))</span>
+<span class="lineNum">     794 </span>            :             i++;
+<span class="lineNum">     795 </span><span class="lineCov">          4 :           if (i == order.length () - 1)</span>
+<span class="lineNum">     796 </span>            :             break;
+<span class="lineNum">     797 </span><span class="lineCov">          3 :           total_size -= partition-&gt;insns;</span>
+<span class="lineNum">     798 </span><span class="lineCov">          3 :           partition = new_partition (&quot;&quot;);</span>
+<span class="lineNum">     799 </span><span class="lineCov">          3 :           last_visited_node = 0;</span>
+<span class="lineNum">     800 </span><span class="lineCov">          3 :           cost = 0;</span>
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span><span class="lineCov">          3 :           if (dump_file)</span>
+<span class="lineNum">     803 </span><span class="lineNoCov">          0 :             fprintf (dump_file, &quot;New partition\n&quot;);</span>
+<span class="lineNum">     804 </span><span class="lineCov">          3 :           best_n_nodes = 0;</span>
+<span class="lineNum">     805 </span><span class="lineCov">          3 :           best_cost = -1;</span>
+<span class="lineNum">     806 </span>            : 
+<span class="lineNum">     807 </span>            :           /* Since the size of partitions is just approximate, update the size after
+<span class="lineNum">     808 </span>            :              we finished current one.  */
+<span class="lineNum">     809 </span><span class="lineCov">          3 :           if (npartitions &lt; n_lto_partitions)</span>
+<span class="lineNum">     810 </span><span class="lineCov">          3 :             partition_size = total_size / (n_lto_partitions - npartitions);</span>
+<span class="lineNum">     811 </span>            :           else
+<span class="lineNum">     812 </span>            :             /* Watch for overflow.  */
+<span class="lineNum">     813 </span>            :             partition_size = INT_MAX / 16;
+<span class="lineNum">     814 </span>            : 
+<span class="lineNum">     815 </span><span class="lineCov">          3 :           if (dump_file)</span>
+<span class="lineNum">     816 </span><span class="lineNoCov">          0 :             fprintf (dump_file,</span>
+<span class="lineNum">     817 </span>            :                      &quot;Total size: %&quot; PRId64 &quot; partition_size: %&quot; PRId64 &quot;\n&quot;,
+<span class="lineNum">     818 </span>            :                      total_size, partition_size);
+<span class="lineNum">     819 </span><span class="lineCov">          3 :           if (partition_size &lt; PARAM_VALUE (MIN_PARTITION_SIZE))</span>
+<span class="lineNum">     820 </span><span class="lineCov">          3 :             partition_size = PARAM_VALUE (MIN_PARTITION_SIZE);</span>
+<span class="lineNum">     821 </span><span class="lineCov">          3 :           npartitions ++;</span>
+<span class="lineNum">     822 </span>            :         }
+<span class="lineNum">     823 </span>            :     }
+<span class="lineNum">     824 </span>            : 
+<span class="lineNum">     825 </span><span class="lineCov">       4278 :   next_nodes.truncate (0);</span>
+<span class="lineNum">     826 </span>            : 
+<span class="lineNum">     827 </span>            :   /* Varables that are not reachable from the code go into last partition.  */
+<span class="lineNum">     828 </span><span class="lineCov">      45360 :   FOR_EACH_VARIABLE (vnode)</span>
+<span class="lineNum">     829 </span><span class="lineCov">      18402 :     if (vnode-&gt;get_partitioning_class () == SYMBOL_PARTITION</span>
+<span class="lineNum">     830 </span><span class="lineCov">      18402 :         &amp;&amp; !symbol_partitioned_p (vnode))</span>
+<span class="lineNum">     831 </span><span class="lineCov">        703 :       next_nodes.safe_push (vnode);</span>
+<span class="lineNum">     832 </span>            : 
+<span class="lineNum">     833 </span>            :   /* Output remaining ordered symbols.  */
+<span class="lineNum">     834 </span><span class="lineCov">       4929 :   while (varpool_pos &lt; n_varpool_nodes)</span>
+<span class="lineNum">     835 </span><span class="lineCov">        651 :     next_nodes.safe_push (varpool_order[varpool_pos++]);</span>
+<span class="lineNum">     836 </span><span class="lineCov">      14205 :   while (noreorder_pos &lt; (int)noreorder.length ())</span>
+<span class="lineNum">     837 </span><span class="lineCov">       4836 :     next_nodes.safe_push (noreorder[noreorder_pos++]);</span>
+<span class="lineNum">     838 </span>            :   /* For one partition the cost of boundary should be 0 unless we added final
+<span class="lineNum">     839 </span>            :      symbols here (these are not accounted) or we have accounting bug.  */
+<span class="lineNum">     840 </span><span class="lineCov">       4278 :   gcc_assert (next_nodes.length () || npartitions != 1 || !best_cost || best_cost == -1);</span>
+<span class="lineNum">     841 </span><span class="lineCov">       4278 :   add_sorted_nodes (next_nodes, partition);</span>
+<span class="lineNum">     842 </span>            : 
+<span class="lineNum">     843 </span><span class="lineCov">       4278 :   if (dump_file)</span>
+<span class="lineNum">     844 </span>            :     {
+<span class="lineNum">     845 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\nPartition sizes:\n&quot;);</span>
+<span class="lineNum">     846 </span><span class="lineNoCov">          0 :       unsigned partitions = ltrans_partitions.length ();</span>
+<span class="lineNum">     847 </span>            : 
+<span class="lineNum">     848 </span><span class="lineNoCov">          0 :       for (unsigned i = 0; i &lt; partitions ; i++)</span>
+<span class="lineNum">     849 </span>            :         {
+<span class="lineNum">     850 </span><span class="lineNoCov">          0 :           ltrans_partition p = ltrans_partitions[i];</span>
+<span class="lineNum">     851 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;partition %d contains %d (%2.2f%%)&quot;</span>
+<span class="lineNum">     852 </span>            :                    &quot; symbols and %d (%2.2f%%) insns\n&quot;, i, p-&gt;symbols,
+<span class="lineNum">     853 </span><span class="lineNoCov">          0 :                    100.0 * p-&gt;symbols / order.length (), p-&gt;insns,</span>
+<span class="lineNum">     854 </span><span class="lineNoCov">          0 :                    100.0 * p-&gt;insns / original_total_size);</span>
+<span class="lineNum">     855 </span>            :         }
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     858 </span>            :     }
+<span class="lineNum">     859 </span><span class="lineCov">       4278 : }</span>
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span>            : /* Return true if we must not change the name of the NODE.  The name as
+<span class="lineNum">     862 </span>            :    extracted from the corresponding decl should be passed in NAME.  */
+<a name="863"><span class="lineNum">     863 </span>            : </a>
+<span class="lineNum">     864 </span>            : static bool
+<span class="lineNum">     865 </span><span class="lineCov">     116297 : must_not_rename (symtab_node *node, const char *name)</span>
+<span class="lineNum">     866 </span>            : {
+<span class="lineNum">     867 </span>            :   /* Our renaming machinery do not handle more than one change of assembler name.
+<span class="lineNum">     868 </span>            :      We should not need more than one anyway.  */
+<span class="lineNum">     869 </span><span class="lineCov">     116297 :   if (node-&gt;lto_file_data</span>
+<span class="lineNum">     870 </span><span class="lineCov">     116297 :       &amp;&amp; lto_get_decl_name_mapping (node-&gt;lto_file_data, name) != name)</span>
+<span class="lineNum">     871 </span>            :     {
+<span class="lineNum">     872 </span><span class="lineCov">        170 :       if (dump_file)</span>
+<span class="lineNum">     873 </span><span class="lineNoCov">          0 :         fprintf (dump_file,</span>
+<span class="lineNum">     874 </span>            :                  &quot;Not privatizing symbol name: %s. It privatized already.\n&quot;,
+<span class="lineNum">     875 </span>            :                  name);
+<span class="lineNum">     876 </span><span class="lineCov">        170 :       return true;</span>
+<span class="lineNum">     877 </span>            :     }
+<span class="lineNum">     878 </span>            :   /* Avoid mangling of already mangled clones. 
+<span class="lineNum">     879 </span>            :      ???  should have a flag whether a symbol has a 'private' name already,
+<span class="lineNum">     880 </span>            :      since we produce some symbols like that i.e. for global constructors
+<span class="lineNum">     881 </span>            :      that are not really clones.  */
+<span class="lineNum">     882 </span><span class="lineCov">     116127 :   if (node-&gt;unique_name)</span>
+<span class="lineNum">     883 </span>            :     {
+<span class="lineNum">     884 </span><span class="lineCov">      31404 :       if (dump_file)</span>
+<span class="lineNum">     885 </span><span class="lineNoCov">          0 :         fprintf (dump_file,</span>
+<span class="lineNum">     886 </span>            :                  &quot;Not privatizing symbol name: %s. Has unique name.\n&quot;,
+<span class="lineNum">     887 </span>            :                  name);
+<span class="lineNum">     888 </span><span class="lineCov">      31404 :       return true;</span>
+<span class="lineNum">     889 </span>            :     }
+<span class="lineNum">     890 </span>            :   return false;
+<span class="lineNum">     891 </span>            : }
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span>            : /* If we are an offload compiler, we may have to rewrite symbols to be
+<span class="lineNum">     894 </span>            :    valid on this target.  Return either PTR or a modified version of it.  */
+<a name="895"><span class="lineNum">     895 </span>            : </a>
+<span class="lineNum">     896 </span>            : static const char *
+<span class="lineNum">     897 </span><span class="lineNoCov">          0 : maybe_rewrite_identifier (const char *ptr)</span>
+<span class="lineNum">     898 </span>            : {
+<span class="lineNum">     899 </span>            : #if defined ACCEL_COMPILER &amp;&amp; (defined NO_DOT_IN_LABEL || defined NO_DOLLAR_IN_LABEL)
+<span class="lineNum">     900 </span>            : #ifndef NO_DOT_IN_LABEL
+<span class="lineNum">     901 </span>            :   char valid = '.';
+<span class="lineNum">     902 </span>            :   const char reject[] = &quot;$&quot;;
+<span class="lineNum">     903 </span>            : #elif !defined NO_DOLLAR_IN_LABEL
+<span class="lineNum">     904 </span>            :   char valid = '$';
+<span class="lineNum">     905 </span>            :   const char reject[] = &quot;.&quot;;
+<span class="lineNum">     906 </span>            : #else
+<span class="lineNum">     907 </span>            :   char valid = '_';
+<span class="lineNum">     908 </span>            :   const char reject[] = &quot;.$&quot;;
+<span class="lineNum">     909 </span>            : #endif
+<span class="lineNum">     910 </span>            : 
+<span class="lineNum">     911 </span>            :   char *copy = NULL;
+<span class="lineNum">     912 </span>            :   const char *match = ptr;
+<span class="lineNum">     913 </span>            :   for (;;)
+<span class="lineNum">     914 </span>            :     {
+<span class="lineNum">     915 </span>            :       size_t off = strcspn (match, reject);
+<span class="lineNum">     916 </span>            :       if (match[off] == '\0')
+<span class="lineNum">     917 </span>            :         break;
+<span class="lineNum">     918 </span>            :       if (copy == NULL)
+<span class="lineNum">     919 </span>            :         {
+<span class="lineNum">     920 </span>            :           copy = xstrdup (ptr);
+<span class="lineNum">     921 </span>            :           match = copy;
+<span class="lineNum">     922 </span>            :         }
+<span class="lineNum">     923 </span>            :       copy[off] = valid;
+<span class="lineNum">     924 </span>            :     }
+<span class="lineNum">     925 </span>            :   return match;
+<span class="lineNum">     926 </span>            : #else
+<span class="lineNum">     927 </span><span class="lineCov">        274 :   return ptr;</span>
+<span class="lineNum">     928 </span>            : #endif
+<span class="lineNum">     929 </span>            : }
+<span class="lineNum">     930 </span>            : 
+<span class="lineNum">     931 </span>            : /* Ensure that the symbol in NODE is valid for the target, and if not,
+<span class="lineNum">     932 </span>            :    rewrite it.  */
+<a name="933"><span class="lineNum">     933 </span>            : </a>
+<span class="lineNum">     934 </span>            : static void
+<span class="lineNum">     935 </span><span class="lineCov">     115989 : validize_symbol_for_target (symtab_node *node)</span>
+<span class="lineNum">     936 </span>            : {
+<span class="lineNum">     937 </span><span class="lineCov">     115989 :   tree decl = node-&gt;decl;</span>
+<span class="lineNum">     938 </span><span class="lineCov">     115989 :   const char *name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl));</span>
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span><span class="lineCov">     115989 :   if (must_not_rename (node, name))</span>
+<span class="lineNum">     941 </span>            :     return;
+<span class="lineNum">     942 </span>            : 
+<span class="lineNum">     943 </span>            :   const char *name2 = maybe_rewrite_identifier (name);
+<span class="lineNum">     944 </span>            :   if (name2 != name)
+<span class="lineNum">     945 </span>            :     {
+<span class="lineNum">     946 </span>            :       symtab-&gt;change_decl_assembler_name (decl, get_identifier (name2));
+<span class="lineNum">     947 </span>            :       if (node-&gt;lto_file_data)
+<span class="lineNum">     948 </span>            :         lto_record_renamed_decl (node-&gt;lto_file_data, name,
+<span class="lineNum">     949 </span>            :                                  IDENTIFIER_POINTER
+<span class="lineNum">     950 </span>            :                                  (DECL_ASSEMBLER_NAME (decl)));
+<span class="lineNum">     951 </span>            :     }
+<span class="lineNum">     952 </span>            : }
+<span class="lineNum">     953 </span>            : 
+<span class="lineNum">     954 </span>            : /* Helper for privatize_symbol_name.  Mangle NODE symbol name
+<span class="lineNum">     955 </span>            :    represented by DECL.  */
+<a name="956"><span class="lineNum">     956 </span>            : </a>
+<span class="lineNum">     957 </span>            : static bool
+<span class="lineNum">     958 </span><span class="lineCov">        308 : privatize_symbol_name_1 (symtab_node *node, tree decl)</span>
+<span class="lineNum">     959 </span>            : {
+<span class="lineNum">     960 </span><span class="lineCov">        308 :   const char *name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl));</span>
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span><span class="lineCov">        308 :   if (must_not_rename (node, name))</span>
+<span class="lineNum">     963 </span>            :     return false;
+<span class="lineNum">     964 </span>            : 
+<span class="lineNum">     965 </span><span class="lineCov">        548 :   name = maybe_rewrite_identifier (name);</span>
+<span class="lineNum">     966 </span><span class="lineCov">        274 :   symtab-&gt;change_decl_assembler_name (decl,</span>
+<span class="lineNum">     967 </span>            :                                       clone_function_name_1 (name,
+<span class="lineNum">     968 </span>            :                                                              &quot;lto_priv&quot;));
+<span class="lineNum">     969 </span>            : 
+<span class="lineNum">     970 </span><span class="lineCov">        274 :   if (node-&gt;lto_file_data)</span>
+<span class="lineNum">     971 </span><span class="lineCov">        544 :     lto_record_renamed_decl (node-&gt;lto_file_data, name,</span>
+<span class="lineNum">     972 </span><span class="lineCov">        272 :                              IDENTIFIER_POINTER</span>
+<span class="lineNum">     973 </span>            :                              (DECL_ASSEMBLER_NAME (decl)));
+<span class="lineNum">     974 </span>            : 
+<span class="lineNum">     975 </span><span class="lineCov">        274 :   if (dump_file)</span>
+<span class="lineNum">     976 </span><span class="lineNoCov">          0 :     fprintf (dump_file,</span>
+<span class="lineNum">     977 </span>            :              &quot;Privatizing symbol name: %s -&gt; %s\n&quot;,
+<span class="lineNum">     978 </span><span class="lineNoCov">          0 :              name, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));</span>
+<span class="lineNum">     979 </span>            : 
+<span class="lineNum">     980 </span>            :   return true;
+<span class="lineNum">     981 </span>            : }
+<span class="lineNum">     982 </span>            : 
+<span class="lineNum">     983 </span>            : /* Mangle NODE symbol name into a local name.
+<span class="lineNum">     984 </span>            :    This is necessary to do
+<span class="lineNum">     985 </span>            :    1) if two or more static vars of same assembler name
+<span class="lineNum">     986 </span>            :       are merged into single ltrans unit.
+<span class="lineNum">     987 </span>            :    2) if previously static var was promoted hidden to avoid possible conflict
+<span class="lineNum">     988 </span>            :       with symbols defined out of the LTO world.  */
+<a name="989"><span class="lineNum">     989 </span>            : </a>
+<span class="lineNum">     990 </span>            : static bool
+<span class="lineNum">     991 </span><span class="lineNoCov">          0 : privatize_symbol_name (symtab_node *node)</span>
+<span class="lineNum">     992 </span>            : {
+<span class="lineNum">     993 </span><span class="lineCov">        103 :   if (!privatize_symbol_name_1 (node, node-&gt;decl))</span>
+<span class="lineNum">     994 </span><span class="lineNoCov">          0 :     return false;</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span>            :   return true;
+<span class="lineNum">     997 </span>            : }
+<span class="lineNum">     998 </span>            : 
+<span class="lineNum">     999 </span>            : /* Promote variable VNODE to be static.  */
+<a name="1000"><span class="lineNum">    1000 </span>            : </a>
+<span class="lineNum">    1001 </span>            : static void
+<span class="lineNum">    1002 </span><span class="lineCov">        210 : promote_symbol (symtab_node *node)</span>
+<span class="lineNum">    1003 </span>            : {
+<span class="lineNum">    1004 </span>            :   /* We already promoted ... */
+<span class="lineNum">    1005 </span><span class="lineCov">        210 :   if (DECL_VISIBILITY (node-&gt;decl) == VISIBILITY_HIDDEN</span>
+<span class="lineNum">    1006 </span><span class="lineCov">         10 :       &amp;&amp; DECL_VISIBILITY_SPECIFIED (node-&gt;decl)</span>
+<span class="lineNum">    1007 </span><span class="lineCov">        215 :       &amp;&amp; TREE_PUBLIC (node-&gt;decl))</span>
+<span class="lineNum">    1008 </span>            :     {
+<span class="lineNum">    1009 </span><span class="lineCov">          5 :       validize_symbol_for_target (node);</span>
+<span class="lineNum">    1010 </span><span class="lineCov">          5 :       return;</span>
+<span class="lineNum">    1011 </span>            :     }
+<span class="lineNum">    1012 </span>            : 
+<span class="lineNum">    1013 </span><span class="lineCov">        205 :   gcc_checking_assert (!TREE_PUBLIC (node-&gt;decl)</span>
+<span class="lineNum">    1014 </span>            :                        &amp;&amp; !DECL_EXTERNAL (node-&gt;decl));
+<span class="lineNum">    1015 </span>            :   /* Be sure that newly public symbol does not conflict with anything already
+<span class="lineNum">    1016 </span>            :      defined by the non-LTO part.  */
+<span class="lineNum">    1017 </span><span class="lineCov">        205 :   privatize_symbol_name (node);</span>
+<span class="lineNum">    1018 </span><span class="lineCov">        205 :   TREE_PUBLIC (node-&gt;decl) = 1;</span>
+<span class="lineNum">    1019 </span><span class="lineCov">        205 :   DECL_VISIBILITY (node-&gt;decl) = VISIBILITY_HIDDEN;</span>
+<span class="lineNum">    1020 </span><span class="lineCov">        205 :   DECL_VISIBILITY_SPECIFIED (node-&gt;decl) = true;</span>
+<span class="lineNum">    1021 </span><span class="lineCov">        205 :   if (dump_file)</span>
+<span class="lineNum">    1022 </span><span class="lineNoCov">          0 :     fprintf (dump_file,</span>
+<span class="lineNum">    1023 </span>            :              &quot;Promoting as hidden: %s (%s)\n&quot;, node-&gt;name (),
+<span class="lineNum">    1024 </span><span class="lineNoCov">          0 :              IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node-&gt;decl)));</span>
+<span class="lineNum">    1025 </span>            : 
+<span class="lineNum">    1026 </span>            :   /* Promoting a symbol also promotes all transparent aliases with exception
+<span class="lineNum">    1027 </span>            :      of weakref where the visibility flags are always wrong and set to 
+<span class="lineNum">    1028 </span>            :      !PUBLIC.  */
+<span class="lineNum">    1029 </span>            :   ipa_ref *ref;
+<span class="lineNum">    1030 </span><span class="lineCov">        224 :   for (unsigned i = 0; node-&gt;iterate_direct_aliases (i, ref); i++)</span>
+<span class="lineNum">    1031 </span>            :     {
+<span class="lineNum">    1032 </span><span class="lineCov">          6 :       struct symtab_node *alias = ref-&gt;referring;</span>
+<span class="lineNum">    1033 </span><span class="lineCov">          6 :       if (alias-&gt;transparent_alias &amp;&amp; !alias-&gt;weakref)</span>
+<span class="lineNum">    1034 </span>            :         {
+<span class="lineNum">    1035 </span><span class="lineNoCov">          0 :           TREE_PUBLIC (alias-&gt;decl) = 1;</span>
+<span class="lineNum">    1036 </span><span class="lineNoCov">          0 :           DECL_VISIBILITY (alias-&gt;decl) = VISIBILITY_HIDDEN;</span>
+<span class="lineNum">    1037 </span><span class="lineNoCov">          0 :           DECL_VISIBILITY_SPECIFIED (alias-&gt;decl) = true;</span>
+<span class="lineNum">    1038 </span><span class="lineNoCov">          0 :           if (dump_file)</span>
+<span class="lineNum">    1039 </span><span class="lineNoCov">          0 :             fprintf (dump_file,</span>
+<span class="lineNum">    1040 </span>            :                      &quot;Promoting alias as hidden: %s\n&quot;,
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :                      IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node-&gt;decl)));</span>
+<span class="lineNum">    1042 </span>            :         }
+<span class="lineNum">    1043 </span><span class="lineCov">          6 :       gcc_assert (!alias-&gt;weakref || TREE_PUBLIC (alias-&gt;decl));</span>
+<span class="lineNum">    1044 </span>            :     }
+<span class="lineNum">    1045 </span>            : }
+<span class="lineNum">    1046 </span>            : 
+<span class="lineNum">    1047 </span>            : /* Return true if NODE needs named section even if it won't land in
+<span class="lineNum">    1048 </span>            :    the partition symbol table.
+<span class="lineNum">    1049 </span>            : 
+<span class="lineNum">    1050 </span>            :    FIXME: we should really not use named sections for inline clones
+<span class="lineNum">    1051 </span>            :    and master clones.  */
+<a name="1052"><span class="lineNum">    1052 </span>            : </a>
+<span class="lineNum">    1053 </span>            : static bool
+<span class="lineNum">    1054 </span><span class="lineCov">      57198 : may_need_named_section_p (lto_symtab_encoder_t encoder, symtab_node *node)</span>
+<span class="lineNum">    1055 </span>            : {
+<span class="lineNum">    1056 </span><span class="lineCov">      57198 :   struct cgraph_node *cnode = dyn_cast &lt;cgraph_node *&gt; (node);</span>
+<span class="lineNum">    1057 </span><span class="lineCov">      51227 :   if (!cnode)</span>
+<span class="lineNum">    1058 </span>            :     return false;
+<span class="lineNum">    1059 </span><span class="lineCov">      51227 :   if (node-&gt;real_symbol_p ())</span>
+<span class="lineNum">    1060 </span>            :     return false;
+<span class="lineNum">    1061 </span><span class="lineCov">       2170 :   return (!encoder</span>
+<span class="lineNum">    1062 </span><span class="lineCov">       2170 :           || (lto_symtab_encoder_lookup (encoder, node) != LCC_NOT_FOUND</span>
+<span class="lineNum">    1063 </span><span class="lineCov">       2151 :               &amp;&amp; lto_symtab_encoder_encode_body_p (encoder,</span>
+<span class="lineNum">    1064 </span>            :                                                    cnode)));
+<span class="lineNum">    1065 </span>            : }
+<span class="lineNum">    1066 </span>            : 
+<span class="lineNum">    1067 </span>            : /* If NODE represents a static variable.  See if there are other variables
+<span class="lineNum">    1068 </span>            :    of the same name in partition ENCODER (or in whole compilation unit if
+<span class="lineNum">    1069 </span>            :    ENCODER is NULL) and if so, mangle the statics.  Always mangle all
+<span class="lineNum">    1070 </span>            :    conflicting statics, so we reduce changes of silently miscompiling
+<span class="lineNum">    1071 </span>            :    asm statements referring to them by symbol name.  */
+<a name="1072"><span class="lineNum">    1072 </span>            : </a>
+<span class="lineNum">    1073 </span>            : static void
+<span class="lineNum">    1074 </span><span class="lineCov">     116194 : rename_statics (lto_symtab_encoder_t encoder, symtab_node *node)</span>
+<span class="lineNum">    1075 </span>            : {
+<span class="lineNum">    1076 </span><span class="lineCov">     116194 :   tree decl = node-&gt;decl;</span>
+<span class="lineNum">    1077 </span><span class="lineCov">     116194 :   symtab_node *s;</span>
+<span class="lineNum">    1078 </span><span class="lineCov">     116194 :   tree name = DECL_ASSEMBLER_NAME (decl);</span>
+<span class="lineNum">    1079 </span>            : 
+<span class="lineNum">    1080 </span>            :   /* See if this is static symbol. */
+<span class="lineNum">    1081 </span><span class="lineCov">     116194 :   if (((node-&gt;externally_visible &amp;&amp; !node-&gt;weakref)</span>
+<span class="lineNum">    1082 </span>            :       /* FIXME: externally_visible is somewhat illogically not set for
+<span class="lineNum">    1083 </span>            :          external symbols (i.e. those not defined).  Remove this test
+<span class="lineNum">    1084 </span>            :          once this is fixed.  */
+<span class="lineNum">    1085 </span><span class="lineCov">      75918 :         || DECL_EXTERNAL (node-&gt;decl)</span>
+<span class="lineNum">    1086 </span><span class="lineCov">      61159 :         || !node-&gt;real_symbol_p ())</span>
+<span class="lineNum">    1087 </span><span class="lineCov">     132203 :        &amp;&amp; !may_need_named_section_p (encoder, node))</span>
+<span class="lineNum">    1088 </span>            :     return;
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span>            :   /* Now walk symbols sharing the same name and see if there are any conflicts.
+<span class="lineNum">    1091 </span>            :      (all types of symbols counts here, since we can not have static of the
+<span class="lineNum">    1092 </span>            :      same name as external or public symbol.)  */
+<span class="lineNum">    1093 </span><span class="lineCov">      60725 :   for (s = symtab_node::get_for_asmname (name);</span>
+<span class="lineNum">    1094 </span><span class="lineCov">     121505 :        s; s = s-&gt;next_sharing_asm_name)</span>
+<span class="lineNum">    1095 </span><span class="lineCov">      61744 :     if ((s-&gt;real_symbol_p () || may_need_named_section_p (encoder, s))</span>
+<span class="lineNum">    1096 </span><span class="lineCov">      60738 :         &amp;&amp; s-&gt;decl != node-&gt;decl</span>
+<span class="lineNum">    1097 </span><span class="lineCov">      60905 :         &amp;&amp; (!encoder</span>
+<span class="lineNum">    1098 </span><span class="lineCov">         33 :             || lto_symtab_encoder_lookup (encoder, s) != LCC_NOT_FOUND))</span>
+<span class="lineNum">    1099 </span>            :        break;
+<span class="lineNum">    1100 </span>            : 
+<span class="lineNum">    1101 </span>            :   /* OK, no confict, so we have nothing to do.  */
+<span class="lineNum">    1102 </span><span class="lineCov">      60725 :   if (!s)</span>
+<span class="lineNum">    1103 </span>            :     return;
+<span class="lineNum">    1104 </span>            : 
+<span class="lineNum">    1105 </span><span class="lineCov">         57 :   if (dump_file)</span>
+<span class="lineNum">    1106 </span><span class="lineNoCov">          0 :     fprintf (dump_file,</span>
+<span class="lineNum">    1107 </span>            :             &quot;Renaming statics with asm name: %s\n&quot;, node-&gt;name ());
+<span class="lineNum">    1108 </span>            : 
+<span class="lineNum">    1109 </span>            :   /* Assign every symbol in the set that shares the same ASM name an unique
+<span class="lineNum">    1110 </span>            :      mangled name.  */
+<span class="lineNum">    1111 </span><span class="lineCov">        183 :   for (s = symtab_node::get_for_asmname (name); s;)</span>
+<span class="lineNum">    1112 </span><span class="lineCov">        126 :     if ((!s-&gt;externally_visible || s-&gt;weakref)</span>
+<span class="lineNum">    1113 </span>            :         /* Transparent aliases having same name as target are renamed at a
+<span class="lineNum">    1114 </span>            :            time their target gets new name.  Transparent aliases that use
+<span class="lineNum">    1115 </span>            :            separate assembler name require the name to be unique.  */
+<span class="lineNum">    1116 </span><span class="lineCov">        111 :         &amp;&amp; (!s-&gt;transparent_alias || !s-&gt;definition || s-&gt;weakref</span>
+<span class="lineNum">    1117 </span><span class="lineCov">          6 :             || !symbol_table::assembler_names_equal_p</span>
+<span class="lineNum">    1118 </span><span class="lineCov">          6 :                  (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (s-&gt;decl)),</span>
+<span class="lineNum">    1119 </span><span class="lineCov">          6 :                   IDENTIFIER_POINTER</span>
+<span class="lineNum">    1120 </span>            :                     (DECL_ASSEMBLER_NAME (s-&gt;get_alias_target()-&gt;decl))))
+<span class="lineNum">    1121 </span><span class="lineCov">        105 :         &amp;&amp; ((s-&gt;real_symbol_p ()</span>
+<span class="lineNum">    1122 </span><span class="lineCov">        101 :              &amp;&amp; !DECL_EXTERNAL (s-&gt;decl)</span>
+<span class="lineNum">    1123 </span><span class="lineCov">         99 :              &amp;&amp; !TREE_PUBLIC (s-&gt;decl))</span>
+<span class="lineNum">    1124 </span><span class="lineCov">          6 :             || may_need_named_section_p (encoder, s))</span>
+<span class="lineNum">    1125 </span><span class="lineCov">        229 :         &amp;&amp; (!encoder</span>
+<span class="lineNum">    1126 </span><span class="lineCov">         37 :             || lto_symtab_encoder_lookup (encoder, s) != LCC_NOT_FOUND))</span>
+<span class="lineNum">    1127 </span>            :       {
+<span class="lineNum">    1128 </span><span class="lineCov">        103 :         if (privatize_symbol_name (s))</span>
+<span class="lineNum">    1129 </span>            :           /* Re-start from beginning since we do not know how many
+<span class="lineNum">    1130 </span>            :              symbols changed a name.  */
+<span class="lineNum">    1131 </span><span class="lineCov">         98 :           s = symtab_node::get_for_asmname (name);</span>
+<span class="lineNum">    1132 </span><span class="lineCov">          5 :         else s = s-&gt;next_sharing_asm_name;</span>
+<span class="lineNum">    1133 </span>            :       }
+<span class="lineNum">    1134 </span><span class="lineCov">         23 :     else s = s-&gt;next_sharing_asm_name;</span>
+<span class="lineNum">    1135 </span>            : }
+<span class="lineNum">    1136 </span>            : 
+<span class="lineNum">    1137 </span>            : /* Find out all static decls that need to be promoted to global because
+<span class="lineNum">    1138 </span>            :    of cross file sharing.  This function must be run in the WPA mode after
+<span class="lineNum">    1139 </span>            :    all inlinees are added.  */
+<a name="1140"><span class="lineNum">    1140 </span>            : </a>
+<span class="lineNum">    1141 </span>            : void
+<span class="lineNum">    1142 </span><span class="lineCov">       4550 : lto_promote_cross_file_statics (void)</span>
+<span class="lineNum">    1143 </span>            : {
+<span class="lineNum">    1144 </span><span class="lineCov">       4550 :   unsigned i, n_sets;</span>
+<span class="lineNum">    1145 </span>            : 
+<span class="lineNum">    1146 </span><span class="lineCov">       4550 :   gcc_assert (flag_wpa);</span>
+<span class="lineNum">    1147 </span>            : 
+<span class="lineNum">    1148 </span><span class="lineCov">       4550 :   lto_stream_offload_p = false;</span>
+<span class="lineNum">    1149 </span><span class="lineCov">       4550 :   select_what_to_stream ();</span>
+<span class="lineNum">    1150 </span>            : 
+<span class="lineNum">    1151 </span>            :   /* First compute boundaries.  */
+<span class="lineNum">    1152 </span><span class="lineCov">       4550 :   n_sets = ltrans_partitions.length ();</span>
+<span class="lineNum">    1153 </span><span class="lineCov">       9419 :   for (i = 0; i &lt; n_sets; i++)</span>
+<span class="lineNum">    1154 </span>            :     {
+<span class="lineNum">    1155 </span><span class="lineCov">       4869 :       ltrans_partition part</span>
+<span class="lineNum">    1156 </span><span class="lineCov">       4869 :         = ltrans_partitions[i];</span>
+<span class="lineNum">    1157 </span><span class="lineCov">       4869 :       part-&gt;encoder = compute_ltrans_boundary (part-&gt;encoder);</span>
+<span class="lineNum">    1158 </span>            :     }
+<span class="lineNum">    1159 </span>            : 
+<span class="lineNum">    1160 </span>            :   /* Look at boundaries and promote symbols as needed.  */
+<span class="lineNum">    1161 </span><span class="lineCov">       9419 :   for (i = 0; i &lt; n_sets; i++)</span>
+<span class="lineNum">    1162 </span>            :     {
+<span class="lineNum">    1163 </span><span class="lineCov">       4869 :       lto_symtab_encoder_iterator lsei;</span>
+<span class="lineNum">    1164 </span><span class="lineCov">       4869 :       lto_symtab_encoder_t encoder = ltrans_partitions[i]-&gt;encoder;</span>
+<span class="lineNum">    1165 </span>            : 
+<span class="lineNum">    1166 </span><span class="lineCov">     141154 :       for (lsei = lsei_start (encoder); !lsei_end_p (lsei);</span>
+<span class="lineNum">    1167 </span><span class="lineCov">      63278 :            lsei_next (&amp;lsei))</span>
+<span class="lineNum">    1168 </span>            :         {
+<span class="lineNum">    1169 </span><span class="lineCov">      63278 :           symtab_node *node = lsei_node (lsei);</span>
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span>            :           /* If symbol is static, rename it if its assembler name
+<span class="lineNum">    1172 </span>            :              clashes with anything else in this unit.  */
+<span class="lineNum">    1173 </span><span class="lineCov">      63278 :           rename_statics (encoder, node);</span>
+<span class="lineNum">    1174 </span>            : 
+<span class="lineNum">    1175 </span>            :           /* No need to promote if symbol already is externally visible ... */
+<span class="lineNum">    1176 </span><span class="lineCov">      63278 :           if (node-&gt;externally_visible</span>
+<span class="lineNum">    1177 </span>            :               /* ... or if it is part of current partition ... */
+<span class="lineNum">    1178 </span><span class="lineCov">      56982 :               || lto_symtab_encoder_in_partition_p (encoder, node)</span>
+<span class="lineNum">    1179 </span>            :               /* ... or if we do not partition it. This mean that it will
+<span class="lineNum">    1180 </span>            :                  appear in every partition referencing it.  */
+<span class="lineNum">    1181 </span><span class="lineCov">      73285 :               || node-&gt;get_partitioning_class () != SYMBOL_PARTITION)</span>
+<span class="lineNum">    1182 </span>            :             {
+<span class="lineNum">    1183 </span><span class="lineCov">      63068 :               validize_symbol_for_target (node);</span>
+<span class="lineNum">    1184 </span><span class="lineCov">      63068 :               continue;</span>
+<span class="lineNum">    1185 </span>            :             }
+<span class="lineNum">    1186 </span>            : 
+<span class="lineNum">    1187 </span><span class="lineCov">        210 :           promote_symbol (node);</span>
+<span class="lineNum">    1188 </span>            :         }
+<span class="lineNum">    1189 </span>            :     }
+<span class="lineNum">    1190 </span><span class="lineCov">       4550 : }</span>
+<span class="lineNum">    1191 </span>            : 
+<span class="lineNum">    1192 </span>            : /* Rename statics in the whole unit in the case that 
+<span class="lineNum">    1193 </span>            :    we do -flto-partition=none.  */
+<a name="1194"><span class="lineNum">    1194 </span>            : </a>
+<span class="lineNum">    1195 </span>            : void
+<span class="lineNum">    1196 </span><span class="lineCov">       3345 : lto_promote_statics_nonwpa (void)</span>
+<span class="lineNum">    1197 </span>            : {
+<span class="lineNum">    1198 </span><span class="lineCov">       3345 :   symtab_node *node;</span>
+<span class="lineNum">    1199 </span><span class="lineCov">      59606 :   FOR_EACH_SYMBOL (node)</span>
+<span class="lineNum">    1200 </span>            :     {
+<span class="lineNum">    1201 </span><span class="lineCov">      52916 :       rename_statics (NULL, node);</span>
+<span class="lineNum">    1202 </span><span class="lineCov">      52916 :       validize_symbol_for_target (node);</span>
+<span class="lineNum">    1203 </span>            :     }
+<span class="lineNum">    1204 </span><span class="lineCov">       3345 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

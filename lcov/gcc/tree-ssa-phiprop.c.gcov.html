@@ -1,0 +1,600 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-phiprop.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-phiprop.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-phiprop.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">188</td>
+            <td class="headerCovTableEntry">197</td>
+            <td class="headerCovTableEntryHi">95.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Backward propagation of indirect loads through PHIs.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2007-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Richard Guenther &lt;rguenther@suse.de&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-eh.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-ssa-loop.h&quot;
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            : /* This pass propagates indirect loads through the PHI node for its
+<span class="lineNum">      38 </span>            :    address to make the load source possibly non-addressable and to
+<span class="lineNum">      39 </span>            :    allow for PHI optimization to trigger.
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            :    For example the pass changes
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :      # addr_1 = PHI &lt;&amp;a, &amp;b&gt;
+<span class="lineNum">      44 </span>            :      tmp_1 = *addr_1;
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            :    to
+<span class="lineNum">      47 </span>            : 
+<span class="lineNum">      48 </span>            :      # tmp_1 = PHI &lt;a, b&gt;
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :    but also handles more complex scenarios like
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            :      D.2077_2 = &amp;this_1(D)-&gt;a1;
+<span class="lineNum">      53 </span>            :      ...
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            :      # b_12 = PHI &lt;&amp;c(2), D.2077_2(3)&gt;
+<span class="lineNum">      56 </span>            :      D.2114_13 = *b_12;
+<span class="lineNum">      57 </span>            :      ...
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :      # b_15 = PHI &lt;b_12(4), &amp;b(5)&gt;
+<span class="lineNum">      60 </span>            :      D.2080_5 = &amp;this_1(D)-&gt;a0;
+<span class="lineNum">      61 </span>            :      ...
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :      # b_18 = PHI &lt;D.2080_5(6), &amp;c(7)&gt;
+<span class="lineNum">      64 </span>            :      ...
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :      # b_21 = PHI &lt;b_15(8), b_18(9)&gt;
+<span class="lineNum">      67 </span>            :      D.2076_8 = *b_21;
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :    where the addresses loaded are defined by PHIs itself.
+<span class="lineNum">      70 </span>            :    The above happens for
+<span class="lineNum">      71 </span>            : 
+<span class="lineNum">      72 </span>            :      std::max(std::min(a0, c), std::min(std::max(a1, c), b))
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :    where this pass transforms it to a form later PHI optimization
+<span class="lineNum">      75 </span>            :    recognizes and transforms it to the simple
+<span class="lineNum">      76 </span>            : 
+<span class="lineNum">      77 </span>            :      D.2109_10 = this_1(D)-&gt;a1;
+<span class="lineNum">      78 </span>            :      D.2110_11 = c;
+<span class="lineNum">      79 </span>            :      D.2114_31 = MAX_EXPR &lt;D.2109_10, D.2110_11&gt;;
+<span class="lineNum">      80 </span>            :      D.2115_14 = b;
+<span class="lineNum">      81 </span>            :      D.2125_17 = MIN_EXPR &lt;D.2115_14, D.2114_31&gt;;
+<span class="lineNum">      82 </span>            :      D.2119_16 = this_1(D)-&gt;a0;
+<span class="lineNum">      83 </span>            :      D.2124_32 = MIN_EXPR &lt;D.2110_11, D.2119_16&gt;;
+<span class="lineNum">      84 </span>            :      D.2076_33 = MAX_EXPR &lt;D.2125_17, D.2124_32&gt;;
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :    The pass does a dominator walk processing loads using a basic-block
+<span class="lineNum">      87 </span>            :    local analysis and stores the result for use by transformations on
+<span class="lineNum">      88 </span>            :    dominated basic-blocks.  */
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            : /* Structure to keep track of the value of a dereferenced PHI result
+<span class="lineNum">      92 </span>            :    and the virtual operand used for that dereference.  */
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            : struct phiprop_d
+<span class="lineNum">      95 </span>            : {
+<span class="lineNum">      96 </span>            :   tree value;
+<span class="lineNum">      97 </span>            :   tree vuse;
+<span class="lineNum">      98 </span>            : };
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            : /* Verify if the value recorded for NAME in PHIVN is still valid at
+<span class="lineNum">     101 </span>            :    the start of basic block BB.  */
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span>            : static bool
+<span class="lineNum">     104 </span><span class="lineCov">        379 : phivn_valid_p (struct phiprop_d *phivn, tree name, basic_block bb)</span>
+<span class="lineNum">     105 </span>            : {
+<span class="lineNum">     106 </span><span class="lineCov">        379 :   tree vuse = phivn[SSA_NAME_VERSION (name)].vuse;</span>
+<span class="lineNum">     107 </span><span class="lineCov">        379 :   gimple *use_stmt;</span>
+<span class="lineNum">     108 </span><span class="lineCov">        379 :   imm_use_iterator ui2;</span>
+<span class="lineNum">     109 </span><span class="lineCov">        379 :   bool ok = true;</span>
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            :   /* The def stmts of the virtual uses need to be dominated by bb.  */
+<span class="lineNum">     112 </span><span class="lineCov">        379 :   gcc_assert (vuse != NULL_TREE);</span>
+<span class="lineNum">     113 </span>            : 
+<span class="lineNum">     114 </span><span class="lineCov">       2607 :   FOR_EACH_IMM_USE_STMT (use_stmt, ui2, vuse)</span>
+<span class="lineNum">     115 </span>            :     {
+<span class="lineNum">     116 </span>            :       /* If BB does not dominate a VDEF, the value is invalid.  */
+<span class="lineNum">     117 </span><span class="lineCov">       1152 :       if ((gimple_vdef (use_stmt) != NULL_TREE</span>
+<span class="lineNum">     118 </span><span class="lineCov">       1648 :            || gimple_code (use_stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">     119 </span><span class="lineCov">       1276 :           &amp;&amp; !dominated_by_p (CDI_DOMINATORS, gimple_bb (use_stmt), bb))</span>
+<span class="lineNum">     120 </span>            :         {
+<span class="lineNum">     121 </span><span class="lineCov">         38 :           ok = false;</span>
+<span class="lineNum">     122 </span><span class="lineCov">       1152 :           BREAK_FROM_IMM_USE_STMT (ui2);</span>
+<span class="lineNum">     123 </span>            :         }
+<span class="lineNum">     124 </span>            :     }
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span><span class="lineCov">        379 :   return ok;</span>
+<span class="lineNum">     127 </span>            : }
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : /* Insert a new phi node for the dereference of PHI at basic_block
+<span class="lineNum">     130 </span>            :    BB with the virtual operands from USE_STMT.  */
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : static tree
+<span class="lineNum">     133 </span><span class="lineCov">       6348 : phiprop_insert_phi (basic_block bb, gphi *phi, gimple *use_stmt,</span>
+<span class="lineNum">     134 </span>            :                     struct phiprop_d *phivn, size_t n)
+<span class="lineNum">     135 </span>            : {
+<span class="lineNum">     136 </span><span class="lineCov">       6348 :   tree res;</span>
+<span class="lineNum">     137 </span><span class="lineCov">       6348 :   gphi *new_phi = NULL;</span>
+<span class="lineNum">     138 </span><span class="lineCov">       6348 :   edge_iterator ei;</span>
+<span class="lineNum">     139 </span><span class="lineCov">       6348 :   edge e;</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineCov">      12696 :   gcc_assert (is_gimple_assign (use_stmt)</span>
+<span class="lineNum">     142 </span>            :               &amp;&amp; gimple_assign_rhs_code (use_stmt) == MEM_REF);
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            :   /* Build a new PHI node to replace the definition of
+<span class="lineNum">     145 </span>            :      the indirect reference lhs.  */
+<span class="lineNum">     146 </span><span class="lineCov">       6348 :   res = gimple_assign_lhs (use_stmt);</span>
+<span class="lineNum">     147 </span><span class="lineCov">       6348 :   if (TREE_CODE (res) == SSA_NAME)</span>
+<span class="lineNum">     148 </span><span class="lineCov">       6336 :     new_phi = create_phi_node (res, bb);</span>
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">       6348 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     151 </span>            :     {
+<span class="lineNum">     152 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;Inserting PHI for result of load &quot;);</span>
+<span class="lineNum">     153 </span><span class="lineCov">          1 :       print_gimple_stmt (dump_file, use_stmt, 0);</span>
+<span class="lineNum">     154 </span>            :     }
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :   /* Add PHI arguments for each edge inserting loads of the
+<span class="lineNum">     157 </span>            :      addressable operands.  */
+<span class="lineNum">     158 </span><span class="lineCov">      25439 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     159 </span>            :     {
+<span class="lineNum">     160 </span><span class="lineCov">      12743 :       tree old_arg, new_var;</span>
+<span class="lineNum">     161 </span><span class="lineCov">      12743 :       gassign *tmp;</span>
+<span class="lineNum">     162 </span><span class="lineCov">      12743 :       source_location locus;</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">      12743 :       old_arg = PHI_ARG_DEF_FROM_EDGE (phi, e);</span>
+<span class="lineNum">     165 </span><span class="lineCov">      25486 :       locus = gimple_phi_arg_location_from_edge (phi, e);</span>
+<span class="lineNum">     166 </span><span class="lineCov">      14295 :       while (TREE_CODE (old_arg) == SSA_NAME</span>
+<span class="lineNum">     167 </span><span class="lineCov">      13519 :              &amp;&amp; (SSA_NAME_VERSION (old_arg) &gt;= n</span>
+<span class="lineNum">     168 </span><span class="lineCov">       2216 :                  || phivn[SSA_NAME_VERSION (old_arg)].value == NULL_TREE))</span>
+<span class="lineNum">     169 </span>            :         {
+<span class="lineNum">     170 </span><span class="lineCov">        776 :           gimple *def_stmt = SSA_NAME_DEF_STMT (old_arg);</span>
+<span class="lineNum">     171 </span><span class="lineCov">        776 :           old_arg = gimple_assign_rhs1 (def_stmt);</span>
+<span class="lineNum">     172 </span><span class="lineCov">       1552 :           locus = gimple_location (def_stmt);</span>
+<span class="lineNum">     173 </span>            :         }
+<span class="lineNum">     174 </span>            : 
+<span class="lineNum">     175 </span><span class="lineCov">      12743 :       if (TREE_CODE (old_arg) == SSA_NAME)</span>
+<span class="lineNum">     176 </span>            :         {
+<span class="lineNum">     177 </span><span class="lineCov">        332 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     178 </span>            :             {
+<span class="lineNum">     179 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;  for edge defining &quot;);</span>
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :               print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e));</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot; reusing PHI result &quot;);</span>
+<span class="lineNum">     182 </span><span class="lineNoCov">          0 :               print_generic_expr (dump_file,</span>
+<span class="lineNum">     183 </span><span class="lineNoCov">          0 :                                   phivn[SSA_NAME_VERSION (old_arg)].value);</span>
+<span class="lineNum">     184 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     185 </span>            :             }
+<span class="lineNum">     186 </span>            :           /* Reuse a formerly created dereference.  */
+<span class="lineNum">     187 </span><span class="lineCov">        332 :           new_var = phivn[SSA_NAME_VERSION (old_arg)].value;</span>
+<span class="lineNum">     188 </span>            :         }
+<span class="lineNum">     189 </span>            :       else
+<span class="lineNum">     190 </span>            :         {
+<span class="lineNum">     191 </span><span class="lineCov">      12411 :           tree rhs = gimple_assign_rhs1 (use_stmt);</span>
+<span class="lineNum">     192 </span><span class="lineCov">      12411 :           gcc_assert (TREE_CODE (old_arg) == ADDR_EXPR);</span>
+<span class="lineNum">     193 </span><span class="lineCov">      12411 :           if (TREE_CODE (res) == SSA_NAME)</span>
+<span class="lineNum">     194 </span><span class="lineCov">      12384 :             new_var = make_ssa_name (TREE_TYPE (rhs));</span>
+<span class="lineNum">     195 </span>            :           else
+<span class="lineNum">     196 </span><span class="lineCov">         27 :             new_var = unshare_expr (res);</span>
+<span class="lineNum">     197 </span><span class="lineCov">      12411 :           if (!is_gimple_min_invariant (old_arg))</span>
+<span class="lineNum">     198 </span><span class="lineCov">        768 :             old_arg = PHI_ARG_DEF_FROM_EDGE (phi, e);</span>
+<span class="lineNum">     199 </span>            :           else
+<span class="lineNum">     200 </span><span class="lineCov">      11643 :             old_arg = unshare_expr (old_arg);</span>
+<span class="lineNum">     201 </span><span class="lineCov">      12411 :           tmp = gimple_build_assign (new_var,</span>
+<span class="lineNum">     202 </span><span class="lineCov">      12411 :                                      fold_build2 (MEM_REF, TREE_TYPE (rhs),</span>
+<span class="lineNum">     203 </span>            :                                                   old_arg,
+<span class="lineNum">     204 </span>            :                                                   TREE_OPERAND (rhs, 1)));
+<span class="lineNum">     205 </span><span class="lineCov">      12411 :           gimple_set_location (tmp, locus);</span>
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span><span class="lineCov">      12411 :           gsi_insert_on_edge (e, tmp);</span>
+<span class="lineNum">     208 </span><span class="lineCov">      12411 :           update_stmt (tmp);</span>
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span><span class="lineCov">      12411 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     211 </span>            :             {
+<span class="lineNum">     212 </span><span class="lineCov">          2 :               fprintf (dump_file, &quot;  for edge defining &quot;);</span>
+<span class="lineNum">     213 </span><span class="lineCov">          2 :               print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e));</span>
+<span class="lineNum">     214 </span><span class="lineCov">          2 :               fprintf (dump_file, &quot; inserting load &quot;);</span>
+<span class="lineNum">     215 </span><span class="lineCov">          2 :               print_gimple_stmt (dump_file, tmp, 0);</span>
+<span class="lineNum">     216 </span>            :             }
+<span class="lineNum">     217 </span>            :         }
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span><span class="lineCov">      12743 :       if (new_phi)</span>
+<span class="lineNum">     220 </span><span class="lineCov">      12716 :         add_phi_arg (new_phi, new_var, e, locus);</span>
+<span class="lineNum">     221 </span>            :     }
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span><span class="lineCov">       6348 :   if (new_phi)</span>
+<span class="lineNum">     224 </span>            :     {
+<span class="lineNum">     225 </span><span class="lineCov">       6336 :       update_stmt (new_phi);</span>
+<span class="lineNum">     226 </span>            : 
+<span class="lineNum">     227 </span><span class="lineCov">       6336 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     228 </span><span class="lineCov">          1 :         print_gimple_stmt (dump_file, new_phi, 0);</span>
+<span class="lineNum">     229 </span>            :     }
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">       6348 :   return res;</span>
+<span class="lineNum">     232 </span>            : }
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            : /* Verify if *idx is available at *DATA.  */
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span>            : static bool
+<span class="lineNum">     237 </span><span class="lineCov">         16 : chk_uses (tree, tree *idx, void *data)</span>
+<span class="lineNum">     238 </span>            : {
+<span class="lineNum">     239 </span><span class="lineCov">         16 :   basic_block dom = (basic_block) data;</span>
+<span class="lineNum">     240 </span><span class="lineCov">         16 :   if (TREE_CODE (*idx) == SSA_NAME)</span>
+<span class="lineNum">     241 </span><span class="lineCov">          8 :     return (SSA_NAME_IS_DEFAULT_DEF (*idx)</span>
+<span class="lineNum">     242 </span><span class="lineCov">          8 :             || ! dominated_by_p (CDI_DOMINATORS,</span>
+<span class="lineNum">     243 </span><span class="lineCov">          8 :                                  gimple_bb (SSA_NAME_DEF_STMT (*idx)), dom));</span>
+<span class="lineNum">     244 </span>            :   return true;
+<span class="lineNum">     245 </span>            : }
+<span class="lineNum">     246 </span>            : 
+<span class="lineNum">     247 </span>            : /* Propagate between the phi node arguments of PHI in BB and phi result
+<span class="lineNum">     248 </span>            :    users.  For now this matches
+<span class="lineNum">     249 </span>            :         # p_2 = PHI &lt;&amp;x, &amp;y&gt;
+<span class="lineNum">     250 </span>            :       &lt;Lx&gt;:;
+<span class="lineNum">     251 </span>            :         p_3 = p_2;
+<span class="lineNum">     252 </span>            :         z_2 = *p_3;
+<span class="lineNum">     253 </span>            :    and converts it to
+<span class="lineNum">     254 </span>            :         # z_2 = PHI &lt;x, y&gt;
+<span class="lineNum">     255 </span>            :       &lt;Lx&gt;:;
+<span class="lineNum">     256 </span>            :    Returns true if a transformation was done and edge insertions
+<span class="lineNum">     257 </span>            :    need to be committed.  Global data PHIVN and N is used to track
+<span class="lineNum">     258 </span>            :    past transformation results.  We need to be especially careful here
+<span class="lineNum">     259 </span>            :    with aliasing issues as we are moving memory reads.  */
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span>            : static bool
+<span class="lineNum">     262 </span><span class="lineCov">    2100870 : propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,</span>
+<span class="lineNum">     263 </span>            :                     size_t n)
+<span class="lineNum">     264 </span>            : {
+<span class="lineNum">     265 </span><span class="lineCov">    4201740 :   tree ptr = PHI_RESULT (phi);</span>
+<span class="lineNum">     266 </span><span class="lineCov">    2100870 :   gimple *use_stmt;</span>
+<span class="lineNum">     267 </span><span class="lineCov">    2100870 :   tree res = NULL_TREE;</span>
+<span class="lineNum">     268 </span><span class="lineCov">    2100870 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     269 </span><span class="lineCov">    2100870 :   imm_use_iterator ui;</span>
+<span class="lineNum">     270 </span><span class="lineCov">    2100870 :   use_operand_p arg_p, use;</span>
+<span class="lineNum">     271 </span><span class="lineCov">    2100870 :   ssa_op_iter i;</span>
+<span class="lineNum">     272 </span><span class="lineCov">    2100870 :   bool phi_inserted;</span>
+<span class="lineNum">     273 </span><span class="lineCov">    2100870 :   bool changed;</span>
+<span class="lineNum">     274 </span><span class="lineCov">    2100870 :   tree type = NULL_TREE;</span>
+<span class="lineNum">     275 </span>            : 
+<span class="lineNum">     276 </span><span class="lineCov">    5800762 :   if (!POINTER_TYPE_P (TREE_TYPE (ptr))</span>
+<span class="lineNum">     277 </span><span class="lineCov">    2117818 :       || (!is_gimple_reg_type (TREE_TYPE (TREE_TYPE (ptr)))</span>
+<span class="lineNum">     278 </span><span class="lineCov">     369396 :           &amp;&amp; TYPE_MODE (TREE_TYPE (TREE_TYPE (ptr))) == BLKmode))</span>
+<span class="lineNum">     279 </span>            :     return false;
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            :   /* Check if we can &quot;cheaply&quot; dereference all phi arguments.  */
+<span class="lineNum">     282 </span><span class="lineCov">     202862 :   FOR_EACH_PHI_ARG (arg_p, phi, i, SSA_OP_USE)</span>
+<span class="lineNum">     283 </span>            :     {
+<span class="lineNum">     284 </span><span class="lineCov">     385346 :       tree arg = USE_FROM_PTR (arg_p);</span>
+<span class="lineNum">     285 </span>            :       /* Walk the ssa chain until we reach a ssa name we already
+<span class="lineNum">     286 </span>            :          created a value for or we reach a definition of the form
+<span class="lineNum">     287 </span>            :          ssa_name_n = &amp;var;  */
+<span class="lineNum">     288 </span><span class="lineCov">     270261 :       while (TREE_CODE (arg) == SSA_NAME</span>
+<span class="lineNum">     289 </span><span class="lineCov">     282522 :              &amp;&amp; !SSA_NAME_IS_DEFAULT_DEF (arg)</span>
+<span class="lineNum">     290 </span><span class="lineCov">     497845 :              &amp;&amp; (SSA_NAME_VERSION (arg) &gt;= n</span>
+<span class="lineNum">     291 </span><span class="lineCov">     266322 :                  || phivn[SSA_NAME_VERSION (arg)].value == NULL_TREE))</span>
+<span class="lineNum">     292 </span>            :         {
+<span class="lineNum">     293 </span><span class="lineCov">     132810 :           gimple *def_stmt = SSA_NAME_DEF_STMT (arg);</span>
+<span class="lineNum">     294 </span><span class="lineCov">     132810 :           if (!gimple_assign_single_p (def_stmt))</span>
+<span class="lineNum">     295 </span>            :             return false;
+<span class="lineNum">     296 </span><span class="lineCov">      77588 :           arg = gimple_assign_rhs1 (def_stmt);</span>
+<span class="lineNum">     297 </span>            :         }
+<span class="lineNum">     298 </span><span class="lineCov">      98657 :       if (TREE_CODE (arg) != ADDR_EXPR</span>
+<span class="lineNum">     299 </span><span class="lineCov">      99036 :           &amp;&amp; !(TREE_CODE (arg) == SSA_NAME</span>
+<span class="lineNum">     300 </span><span class="lineCov">      16902 :                &amp;&amp; SSA_NAME_VERSION (arg) &lt; n</span>
+<span class="lineNum">     301 </span><span class="lineCov">      16902 :                &amp;&amp; phivn[SSA_NAME_VERSION (arg)].value != NULL_TREE</span>
+<span class="lineNum">     302 </span><span class="lineCov">        379 :                &amp;&amp; (!type</span>
+<span class="lineNum">     303 </span><span class="lineCov">          3 :                    || types_compatible_p</span>
+<span class="lineNum">     304 </span><span class="lineCov">          6 :                        (type, TREE_TYPE (phivn[SSA_NAME_VERSION (arg)].value)))</span>
+<span class="lineNum">     305 </span><span class="lineCov">        379 :                &amp;&amp; phivn_valid_p (phivn, arg, bb)))</span>
+<span class="lineNum">     306 </span><span class="lineCov">      62418 :         return false;</span>
+<span class="lineNum">     307 </span><span class="lineCov">      36239 :       if (!type</span>
+<span class="lineNum">     308 </span><span class="lineCov">      36233 :           &amp;&amp; TREE_CODE (arg) == SSA_NAME)</span>
+<span class="lineNum">     309 </span><span class="lineCov">        676 :         type = TREE_TYPE (phivn[SSA_NAME_VERSION (arg)].value);</span>
+<span class="lineNum">     310 </span>            :     }
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            :   /* Find a dereferencing use.  First follow (single use) ssa
+<span class="lineNum">     313 </span>            :      copy chains for ptr.  */
+<span class="lineNum">     314 </span><span class="lineCov">      10201 :   while (single_imm_use (ptr, &amp;use, &amp;use_stmt)</span>
+<span class="lineNum">     315 </span><span class="lineCov">      10201 :          &amp;&amp; gimple_assign_ssa_name_copy_p (use_stmt))</span>
+<span class="lineNum">     316 </span><span class="lineCov">         12 :     ptr = gimple_assign_lhs (use_stmt);</span>
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span>            :   /* Replace the first dereference of *ptr if there is one and if we
+<span class="lineNum">     319 </span>            :      can move the loads to the place of the ptr phi node.  */
+<span class="lineNum">     320 </span><span class="lineCov">      10189 :   phi_inserted = false;</span>
+<span class="lineNum">     321 </span><span class="lineCov">      10189 :   changed = false;</span>
+<span class="lineNum">     322 </span><span class="lineCov">      24611 :   FOR_EACH_IMM_USE_STMT (use_stmt, ui, ptr)</span>
+<span class="lineNum">     323 </span>            :     {
+<span class="lineNum">     324 </span><span class="lineCov">      14422 :       gimple *def_stmt;</span>
+<span class="lineNum">     325 </span><span class="lineCov">      14422 :       tree vuse;</span>
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            :       /* Only replace loads in blocks that post-dominate the PHI node.  That
+<span class="lineNum">     328 </span>            :          makes sure we don't end up speculating loads.  */
+<span class="lineNum">     329 </span><span class="lineCov">      14422 :       if (!dominated_by_p (CDI_POST_DOMINATORS,</span>
+<span class="lineNum">     330 </span><span class="lineCov">      14422 :                            bb, gimple_bb (use_stmt)))</span>
+<span class="lineNum">     331 </span>            :         continue;
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span>            :       /* Check whether this is a load of *ptr.  */
+<span class="lineNum">     334 </span><span class="lineCov">      31857 :       if (!(is_gimple_assign (use_stmt)</span>
+<span class="lineNum">     335 </span><span class="lineCov">       7198 :             &amp;&amp; gimple_assign_rhs_code (use_stmt) == MEM_REF</span>
+<span class="lineNum">     336 </span><span class="lineCov">      13058 :             &amp;&amp; TREE_OPERAND (gimple_assign_rhs1 (use_stmt), 0) == ptr</span>
+<span class="lineNum">     337 </span><span class="lineCov">      13058 :             &amp;&amp; integer_zerop (TREE_OPERAND (gimple_assign_rhs1 (use_stmt), 1))</span>
+<span class="lineNum">     338 </span><span class="lineCov">       6527 :             &amp;&amp; (!type</span>
+<span class="lineNum">     339 </span><span class="lineCov">        329 :                 || types_compatible_p</span>
+<span class="lineNum">     340 </span><span class="lineCov">        329 :                      (TREE_TYPE (gimple_assign_lhs (use_stmt)), type))</span>
+<span class="lineNum">     341 </span>            :             /* We cannot replace a load that may throw or is volatile.  */
+<span class="lineNum">     342 </span><span class="lineCov">       6527 :             &amp;&amp; !stmt_can_throw_internal (use_stmt)))</span>
+<span class="lineNum">     343 </span><span class="lineCov">       6156 :         continue;</span>
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span>            :       /* Check if we can move the loads.  The def stmt of the virtual use
+<span class="lineNum">     346 </span>            :          needs to be in a different basic block dominating bb.  When the
+<span class="lineNum">     347 </span>            :          def is an edge-inserted one we know it dominates us.  */
+<span class="lineNum">     348 </span><span class="lineCov">       6509 :       vuse = gimple_vuse (use_stmt);</span>
+<span class="lineNum">     349 </span><span class="lineCov">       6509 :       def_stmt = SSA_NAME_DEF_STMT (vuse);</span>
+<span class="lineNum">     350 </span><span class="lineCov">       6509 :       if (!SSA_NAME_IS_DEFAULT_DEF (vuse)</span>
+<span class="lineNum">     351 </span><span class="lineCov">       6509 :           &amp;&amp; (gimple_bb (def_stmt) == bb</span>
+<span class="lineNum">     352 </span><span class="lineCov">      12280 :               || (gimple_bb (def_stmt)</span>
+<span class="lineNum">     353 </span><span class="lineCov">       6140 :                   &amp;&amp; !dominated_by_p (CDI_DOMINATORS,</span>
+<span class="lineNum">     354 </span><span class="lineCov">       6140 :                                       bb, gimple_bb (def_stmt)))))</span>
+<span class="lineNum">     355 </span><span class="lineCov">        145 :         goto next;</span>
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            :       /* Found a proper dereference with an aggregate copy.  Just
+<span class="lineNum">     358 </span>            :          insert aggregate copies on the edges instead.  */
+<span class="lineNum">     359 </span><span class="lineCov">       6364 :       if (!is_gimple_reg_type (TREE_TYPE (gimple_assign_lhs (use_stmt))))</span>
+<span class="lineNum">     360 </span>            :         {
+<span class="lineNum">     361 </span><span class="lineCov">         56 :           if (!gimple_vdef (use_stmt))</span>
+<span class="lineNum">     362 </span><span class="lineCov">         16 :             goto next;</span>
+<span class="lineNum">     363 </span>            : 
+<span class="lineNum">     364 </span>            :           /* As we replicate the lhs on each incoming edge all
+<span class="lineNum">     365 </span>            :              used SSA names have to be available there.  */
+<span class="lineNum">     366 </span><span class="lineCov">         28 :           if (! for_each_index (gimple_assign_lhs_ptr (use_stmt),</span>
+<span class="lineNum">     367 </span>            :                                 chk_uses,
+<span class="lineNum">     368 </span><span class="lineCov">         56 :                                 get_immediate_dominator (CDI_DOMINATORS,</span>
+<span class="lineNum">     369 </span>            :                                                          gimple_bb (phi))))
+<span class="lineNum">     370 </span>            :             goto next;
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span><span class="lineCov">         20 :           gimple *vuse_stmt;</span>
+<span class="lineNum">     373 </span><span class="lineCov">         20 :           imm_use_iterator vui;</span>
+<span class="lineNum">     374 </span><span class="lineCov">         20 :           use_operand_p vuse_p;</span>
+<span class="lineNum">     375 </span>            :           /* In order to move the aggregate copies earlier, make sure
+<span class="lineNum">     376 </span>            :              there are no statements that could read from memory
+<span class="lineNum">     377 </span>            :              aliasing the lhs in between the start of bb and use_stmt.
+<span class="lineNum">     378 </span>            :              As we require use_stmt to have a VDEF above, loads after
+<span class="lineNum">     379 </span>            :              use_stmt will use a different virtual SSA_NAME.  */
+<span class="lineNum">     380 </span><span class="lineCov">         58 :           FOR_EACH_IMM_USE_FAST (vuse_p, vui, vuse)</span>
+<span class="lineNum">     381 </span>            :             {
+<span class="lineNum">     382 </span><span class="lineCov">         46 :               vuse_stmt = USE_STMT (vuse_p);</span>
+<span class="lineNum">     383 </span><span class="lineCov">         46 :               if (vuse_stmt == use_stmt)</span>
+<span class="lineNum">     384 </span>            :                 continue;
+<span class="lineNum">     385 </span><span class="lineCov">         26 :               if (!dominated_by_p (CDI_DOMINATORS,</span>
+<span class="lineNum">     386 </span><span class="lineCov">         26 :                                    gimple_bb (vuse_stmt), bb))</span>
+<span class="lineNum">     387 </span>            :                 continue;
+<span class="lineNum">     388 </span><span class="lineCov">          8 :               if (ref_maybe_used_by_stmt_p (vuse_stmt,</span>
+<span class="lineNum">     389 </span>            :                                             gimple_assign_lhs (use_stmt)))
+<span class="lineNum">     390 </span>            :                 goto next;
+<span class="lineNum">     391 </span>            :             }
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span><span class="lineCov">         12 :           phiprop_insert_phi (bb, phi, use_stmt, phivn, n);</span>
+<span class="lineNum">     394 </span>            : 
+<span class="lineNum">     395 </span>            :           /* Remove old stmt.  The phi is taken care of by DCE.  */
+<span class="lineNum">     396 </span><span class="lineCov">         12 :           gsi = gsi_for_stmt (use_stmt);</span>
+<span class="lineNum">     397 </span>            :           /* Unlinking the VDEF here is fine as we are sure that we process
+<span class="lineNum">     398 </span>            :              stmts in execution order due to aggregate copies having VDEFs
+<span class="lineNum">     399 </span>            :              and we emit loads on the edges in the very same order.
+<span class="lineNum">     400 </span>            :              We get multiple copies (or intermediate register loads) handled
+<span class="lineNum">     401 </span>            :              only by walking PHIs or immediate uses in a lucky order though,
+<span class="lineNum">     402 </span>            :              so we could signal the caller to re-start iterating over PHIs
+<span class="lineNum">     403 </span>            :              when we come here which would make it quadratic in the number
+<span class="lineNum">     404 </span>            :              of PHIs.  */
+<span class="lineNum">     405 </span><span class="lineCov">         12 :           unlink_stmt_vdef (use_stmt);</span>
+<span class="lineNum">     406 </span><span class="lineCov">         12 :           gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">         12 :           changed = true;</span>
+<span class="lineNum">     409 </span>            :         }
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            :       /* Found a proper dereference.  Insert a phi node if this
+<span class="lineNum">     412 </span>            :          is the first load transformation.  */
+<span class="lineNum">     413 </span><span class="lineCov">       6336 :       else if (!phi_inserted)</span>
+<span class="lineNum">     414 </span>            :         {
+<span class="lineNum">     415 </span><span class="lineCov">       6336 :           res = phiprop_insert_phi (bb, phi, use_stmt, phivn, n);</span>
+<span class="lineNum">     416 </span><span class="lineCov">       6336 :           type = TREE_TYPE (res);</span>
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span>            :           /* Remember the value we created for *ptr.  */
+<span class="lineNum">     419 </span><span class="lineCov">       6336 :           phivn[SSA_NAME_VERSION (ptr)].value = res;</span>
+<span class="lineNum">     420 </span><span class="lineCov">       6336 :           phivn[SSA_NAME_VERSION (ptr)].vuse = vuse;</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span>            :           /* Remove old stmt.  The phi is taken care of by DCE, if we
+<span class="lineNum">     423 </span>            :              want to delete it here we also have to delete all intermediate
+<span class="lineNum">     424 </span>            :              copies.  */
+<span class="lineNum">     425 </span><span class="lineCov">       6336 :           gsi = gsi_for_stmt (use_stmt);</span>
+<span class="lineNum">     426 </span><span class="lineCov">       6336 :           gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     427 </span>            : 
+<span class="lineNum">     428 </span><span class="lineCov">       6336 :           phi_inserted = true;</span>
+<span class="lineNum">     429 </span><span class="lineCov">       6336 :           changed = true;</span>
+<span class="lineNum">     430 </span>            :         }
+<span class="lineNum">     431 </span>            :       else
+<span class="lineNum">     432 </span>            :         {
+<span class="lineNum">     433 </span>            :           /* Further replacements are easy, just make a copy out of the
+<span class="lineNum">     434 </span>            :              load.  */
+<span class="lineNum">     435 </span><span class="lineNoCov">          0 :           gimple_assign_set_rhs1 (use_stmt, res);</span>
+<span class="lineNum">     436 </span><span class="lineNoCov">          0 :           update_stmt (use_stmt);</span>
+<span class="lineNum">     437 </span><span class="lineNoCov">          0 :           changed = true;</span>
+<span class="lineNum">     438 </span>            :         }
+<span class="lineNum">     439 </span>            : 
+<span class="lineNum">     440 </span>            : next:;
+<span class="lineNum">     441 </span>            :       /* Continue searching for a proper dereference.  */
+<span class="lineNum">     442 </span>            :     }
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span>            :   return changed;
+<span class="lineNum">     445 </span>            : }
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            : /* Main entry for phiprop pass.  */
+<span class="lineNum">     448 </span>            : 
+<span class="lineNum">     449 </span>            : namespace {
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : const pass_data pass_data_phiprop =
+<span class="lineNum">     452 </span>            : {
+<span class="lineNum">     453 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     454 </span>            :   &quot;phiprop&quot;, /* name */
+<span class="lineNum">     455 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     456 </span>            :   TV_TREE_PHIPROP, /* tv_id */
+<span class="lineNum">     457 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">     458 </span>            :   0, /* properties_provided */
+<span class="lineNum">     459 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     460 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     461 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     462 </span>            : };
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span>            : class pass_phiprop : public gimple_opt_pass
+<span class="lineNum">     465 </span>            : {
+<span class="lineNum">     466 </span>            : public:
+<span class="lineNum">     467 </span>            :   pass_phiprop (gcc::context *ctxt)
+<span class="lineNum">     468 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_phiprop, ctxt)</span>
+<span class="lineNum">     469 </span>            :   {}
+<a name="470"><span class="lineNum">     470 </span>            : </a>
+<span class="lineNum">     471 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     472 </span><span class="lineCov">     620946 :   virtual bool gate (function *) { return flag_tree_phiprop; }</span>
+<span class="lineNum">     473 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span>            : }; // class pass_phiprop
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span>            : unsigned int
+<span class="lineNum">     478 </span><span class="lineCov">     620934 : pass_phiprop::execute (function *fun)</span>
+<span class="lineNum">     479 </span>            : {
+<span class="lineNum">     480 </span><span class="lineCov">     620934 :   vec&lt;basic_block&gt; bbs;</span>
+<span class="lineNum">     481 </span><span class="lineCov">     620934 :   struct phiprop_d *phivn;</span>
+<span class="lineNum">     482 </span><span class="lineCov">     620934 :   bool did_something = false;</span>
+<span class="lineNum">     483 </span><span class="lineCov">     620934 :   basic_block bb;</span>
+<span class="lineNum">     484 </span><span class="lineCov">     620934 :   gphi_iterator gsi;</span>
+<span class="lineNum">     485 </span><span class="lineCov">     620934 :   unsigned i;</span>
+<span class="lineNum">     486 </span><span class="lineCov">     620934 :   size_t n;</span>
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span><span class="lineCov">     620934 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     489 </span><span class="lineCov">     620934 :   calculate_dominance_info (CDI_POST_DOMINATORS);</span>
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span><span class="lineCov">     620934 :   n = num_ssa_names;</span>
+<span class="lineNum">     492 </span><span class="lineCov">     620934 :   phivn = XCNEWVEC (struct phiprop_d, n);</span>
+<span class="lineNum">     493 </span>            : 
+<span class="lineNum">     494 </span>            :   /* Walk the dominator tree in preorder.  */
+<span class="lineNum">     495 </span><span class="lineCov">     620934 :   bbs = get_all_dominated_blocks (CDI_DOMINATORS,</span>
+<span class="lineNum">     496 </span><span class="lineCov">     620934 :                                   single_succ (ENTRY_BLOCK_PTR_FOR_FN (fun)));</span>
+<span class="lineNum">     497 </span><span class="lineCov">    6710933 :   FOR_EACH_VEC_ELT (bbs, i, bb)</span>
+<span class="lineNum">     498 </span><span class="lineCov">   10291739 :     for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     499 </span><span class="lineCov">    2100870 :       did_something |= propagate_with_phi (bb, gsi.phi (), phivn, n);</span>
+<span class="lineNum">     500 </span>            : 
+<span class="lineNum">     501 </span><span class="lineCov">     620934 :   if (did_something)</span>
+<span class="lineNum">     502 </span><span class="lineCov">       4327 :     gsi_commit_edge_inserts ();</span>
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span><span class="lineCov">     620934 :   bbs.release ();</span>
+<span class="lineNum">     505 </span><span class="lineCov">     620934 :   free (phivn);</span>
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineCov">     620934 :   free_dominance_info (CDI_POST_DOMINATORS);</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">     620934 :   return 0;</span>
+<span class="lineNum">     510 </span>            : }
+<span class="lineNum">     511 </span>            : 
+<span class="lineNum">     512 </span>            : } // anon namespace
+<a name="513"><span class="lineNum">     513 </span>            : </a>
+<span class="lineNum">     514 </span>            : gimple_opt_pass *
+<span class="lineNum">     515 </span><span class="lineCov">     170312 : make_pass_phiprop (gcc::context *ctxt)</span>
+<span class="lineNum">     516 </span>            : {
+<span class="lineNum">     517 </span><span class="lineCov">     170312 :   return new pass_phiprop (ctxt);</span>
+<span class="lineNum">     518 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

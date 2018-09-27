@@ -1,0 +1,818 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/sched-ebb.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - sched-ebb.c<span style="font-size: 80%;"> (source / <a href="sched-ebb.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">172</td>
+            <td class="headerCovTableEntry">266</td>
+            <td class="headerCovTableEntryLo">64.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntryLo">66.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Instruction scheduling pass.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1992-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
+<span class="lineNum">       4 </span>            :    and currently maintained by, Jim Wilson (wilson@cygnus.com)
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : This file is part of GCC.
+<span class="lineNum">       7 </span>            : 
+<span class="lineNum">       8 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       9 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">      10 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      11 </span>            : version.
+<span class="lineNum">      12 </span>            : 
+<span class="lineNum">      13 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      14 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      15 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      16 </span>            : for more details.
+<span class="lineNum">      17 </span>            : 
+<span class="lineNum">      18 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      19 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      20 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;profile.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;insn-attr.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;cfgbuild.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;sched-int.h&quot;
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : #ifdef INSN_SCHEDULING
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : /* The number of insns to be scheduled in total.  */
+<span class="lineNum">      41 </span>            : static int rgn_n_insns;
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            : /* The number of insns scheduled so far.  */
+<span class="lineNum">      44 </span>            : static int sched_rgn_n_insns;
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            : /* Set of blocks, that already have their dependencies calculated.  */
+<span class="lineNum">      47 </span>            : static bitmap_head dont_calc_deps;
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : /* Last basic block in current ebb.  */
+<span class="lineNum">      50 </span>            : static basic_block last_bb;
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            : /* Implementations of the sched_info functions for region scheduling.  */
+<span class="lineNum">      53 </span>            : static void init_ready_list (void);
+<span class="lineNum">      54 </span>            : static void begin_schedule_ready (rtx_insn *);
+<span class="lineNum">      55 </span>            : static int schedule_more_p (void);
+<span class="lineNum">      56 </span>            : static const char *ebb_print_insn (const rtx_insn *, int);
+<span class="lineNum">      57 </span>            : static int rank (rtx_insn *, rtx_insn *);
+<span class="lineNum">      58 </span>            : static int ebb_contributes_to_priority (rtx_insn *, rtx_insn *);
+<span class="lineNum">      59 </span>            : static basic_block earliest_block_with_similiar_load (basic_block, rtx);
+<span class="lineNum">      60 </span>            : static void add_deps_for_risky_insns (rtx_insn *, rtx_insn *);
+<span class="lineNum">      61 </span>            : static void debug_ebb_dependencies (rtx_insn *, rtx_insn *);
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            : static void ebb_add_remove_insn (rtx_insn *, int);
+<span class="lineNum">      64 </span>            : static void ebb_add_block (basic_block, basic_block);
+<span class="lineNum">      65 </span>            : static basic_block advance_target_bb (basic_block, rtx_insn *);
+<span class="lineNum">      66 </span>            : static void ebb_fix_recovery_cfg (int, int, int);
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : /* Allocate memory and store the state of the frontend.  Return the allocated
+<a name="69"><span class="lineNum">      69 </span>            :    memory.  */</a>
+<span class="lineNum">      70 </span>            : static void *
+<span class="lineNum">      71 </span><span class="lineNoCov">          0 : save_ebb_state (void)</span>
+<span class="lineNum">      72 </span>            : {
+<span class="lineNum">      73 </span><span class="lineNoCov">          0 :   int *p = XNEW (int);</span>
+<span class="lineNum">      74 </span><span class="lineNoCov">          0 :   *p = sched_rgn_n_insns;</span>
+<span class="lineNum">      75 </span><span class="lineNoCov">          0 :   return p;</span>
+<span class="lineNum">      76 </span>            : }
+<span class="lineNum">      77 </span>            : 
+<a name="78"><span class="lineNum">      78 </span>            : /* Restore the state of the frontend from P_, then free it.  */</a>
+<span class="lineNum">      79 </span>            : static void
+<span class="lineNum">      80 </span><span class="lineNoCov">          0 : restore_ebb_state (void *p_)</span>
+<span class="lineNum">      81 </span>            : {
+<span class="lineNum">      82 </span><span class="lineNoCov">          0 :   int *p = (int *)p_;</span>
+<span class="lineNum">      83 </span><span class="lineNoCov">          0 :   sched_rgn_n_insns = *p;</span>
+<span class="lineNum">      84 </span><span class="lineNoCov">          0 :   free (p_);</span>
+<span class="lineNum">      85 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            : /* Return nonzero if there are more insns that should be scheduled.  */
+<a name="88"><span class="lineNum">      88 </span>            : </a>
+<span class="lineNum">      89 </span>            : static int
+<span class="lineNum">      90 </span><span class="lineCov">       2284 : schedule_more_p (void)</span>
+<span class="lineNum">      91 </span>            : {
+<span class="lineNum">      92 </span><span class="lineCov">       2284 :   return sched_rgn_n_insns &lt; rgn_n_insns;</span>
+<span class="lineNum">      93 </span>            : }
+<span class="lineNum">      94 </span>            : 
+<a name="95"><span class="lineNum">      95 </span>            : /* Print dependency information about ebb between HEAD and TAIL.  */</a>
+<span class="lineNum">      96 </span>            : static void
+<span class="lineNum">      97 </span><span class="lineNoCov">          0 : debug_ebb_dependencies (rtx_insn *head, rtx_insn *tail)</span>
+<span class="lineNum">      98 </span>            : {
+<span class="lineNum">      99 </span><span class="lineNoCov">          0 :   fprintf (sched_dump,</span>
+<span class="lineNum">     100 </span>            :            &quot;;;   --------------- forward dependences: ------------ \n&quot;);
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span><span class="lineNoCov">          0 :   fprintf (sched_dump, &quot;\n;;   --- EBB Dependences --- from bb%d to bb%d \n&quot;,</span>
+<span class="lineNum">     103 </span><span class="lineNoCov">          0 :            BLOCK_NUM (head), BLOCK_NUM (tail));</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span><span class="lineNoCov">          0 :   debug_dependencies (head, tail);</span>
+<span class="lineNum">     106 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            : /* Add all insns that are initially ready to the ready list READY.  Called
+<span class="lineNum">     109 </span>            :    once before scheduling a set of insns.  */
+<a name="110"><span class="lineNum">     110 </span>            : </a>
+<span class="lineNum">     111 </span>            : static void
+<span class="lineNum">     112 </span><span class="lineCov">        259 : init_ready_list (void)</span>
+<span class="lineNum">     113 </span>            : {
+<span class="lineNum">     114 </span><span class="lineCov">        259 :   int n = 0;</span>
+<span class="lineNum">     115 </span><span class="lineCov">        259 :   rtx_insn *prev_head = current_sched_info-&gt;prev_head;</span>
+<span class="lineNum">     116 </span><span class="lineCov">        259 :   rtx_insn *next_tail = current_sched_info-&gt;next_tail;</span>
+<span class="lineNum">     117 </span><span class="lineCov">        259 :   rtx_insn *insn;</span>
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span><span class="lineCov">        259 :   sched_rgn_n_insns = 0;</span>
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span>            :   /* Print debugging information.  */
+<span class="lineNum">     122 </span><span class="lineCov">        259 :   if (sched_verbose &gt;= 5)</span>
+<span class="lineNum">     123 </span><span class="lineNoCov">          0 :     debug_ebb_dependencies (NEXT_INSN (prev_head), PREV_INSN (next_tail));</span>
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            :   /* Initialize ready list with all 'ready' insns in target block.
+<span class="lineNum">     126 </span>            :      Count number of insns in the target block being scheduled.  */
+<span class="lineNum">     127 </span><span class="lineCov">       1724 :   for (insn = NEXT_INSN (prev_head); insn != next_tail; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     128 </span>            :     {
+<span class="lineNum">     129 </span><span class="lineCov">       1206 :       try_ready (insn);</span>
+<span class="lineNum">     130 </span><span class="lineCov">       1206 :       n++;</span>
+<span class="lineNum">     131 </span>            :     }
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">        259 :   gcc_assert (n == rgn_n_insns);</span>
+<span class="lineNum">     134 </span><span class="lineCov">        259 : }</span>
+<span class="lineNum">     135 </span>            : 
+<a name="136"><span class="lineNum">     136 </span>            : /* INSN is being scheduled after LAST.  Update counters.  */</a>
+<span class="lineNum">     137 </span>            : static void
+<span class="lineNum">     138 </span><span class="lineCov">       1206 : begin_schedule_ready (rtx_insn *insn ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     139 </span>            : {
+<span class="lineNum">     140 </span><span class="lineCov">       1206 :   sched_rgn_n_insns++;</span>
+<span class="lineNum">     141 </span><span class="lineCov">       1206 : }</span>
+<span class="lineNum">     142 </span>            : 
+<a name="143"><span class="lineNum">     143 </span>            : /* INSN is being moved to its place in the schedule, after LAST.  */</a>
+<span class="lineNum">     144 </span>            : static void
+<span class="lineNum">     145 </span><span class="lineCov">       1206 : begin_move_insn (rtx_insn *insn, rtx_insn *last)</span>
+<span class="lineNum">     146 </span>            : {
+<span class="lineNum">     147 </span><span class="lineCov">       1206 :   if (BLOCK_FOR_INSN (insn) == last_bb</span>
+<span class="lineNum">     148 </span>            :       /* INSN is a jump in the last block, ...  */
+<span class="lineNum">     149 </span><span class="lineCov">        940 :       &amp;&amp; control_flow_insn_p (insn)</span>
+<span class="lineNum">     150 </span>            :       /* that is going to be moved over some instructions.  */
+<span class="lineNum">     151 </span><span class="lineCov">       1387 :       &amp;&amp; last != PREV_INSN (insn))</span>
+<span class="lineNum">     152 </span>            :     {
+<span class="lineNum">     153 </span><span class="lineNoCov">          0 :       edge e;</span>
+<span class="lineNum">     154 </span><span class="lineNoCov">          0 :       basic_block bb;</span>
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :       /* An obscure special case, where we do have partially dead
+<span class="lineNum">     157 </span>            :          instruction scheduled after last control flow instruction.
+<span class="lineNum">     158 </span>            :          In this case we can create new basic block.  It is
+<span class="lineNum">     159 </span>            :          always exactly one basic block last in the sequence.  */
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span><span class="lineNoCov">          0 :       e = find_fallthru_edge (last_bb-&gt;succs);</span>
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span><span class="lineNoCov">          0 :       gcc_checking_assert (!e || !(e-&gt;flags &amp; EDGE_COMPLEX));</span>
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineNoCov">          0 :       gcc_checking_assert (BLOCK_FOR_INSN (insn) == last_bb</span>
+<span class="lineNum">     166 </span>            :                            &amp;&amp; !IS_SPECULATION_CHECK_P (insn)
+<span class="lineNum">     167 </span>            :                            &amp;&amp; BB_HEAD (last_bb) != insn
+<span class="lineNum">     168 </span>            :                            &amp;&amp; BB_END (last_bb) == insn);
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span><span class="lineNoCov">          0 :       {</span>
+<span class="lineNum">     171 </span><span class="lineNoCov">          0 :         rtx_insn *x = NEXT_INSN (insn);</span>
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 :         if (e)</span>
+<span class="lineNum">     173 </span><span class="lineNoCov">          0 :           gcc_checking_assert (NOTE_P (x) || LABEL_P (x));</span>
+<span class="lineNum">     174 </span>            :         else
+<span class="lineNum">     175 </span><span class="lineNoCov">          0 :           gcc_checking_assert (BARRIER_P (x));</span>
+<span class="lineNum">     176 </span>            :       }
+<span class="lineNum">     177 </span>            : 
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :       if (e)</span>
+<span class="lineNum">     179 </span>            :         {
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :           bb = split_edge (e);</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :           gcc_assert (NOTE_INSN_BASIC_BLOCK_P (BB_END (bb)));</span>
+<span class="lineNum">     182 </span>            :         }
+<span class="lineNum">     183 </span>            :       else
+<span class="lineNum">     184 </span>            :         {
+<span class="lineNum">     185 </span>            :           /* Create an empty unreachable block after the INSN.  */
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 :           rtx_insn *next = NEXT_INSN (insn);</span>
+<span class="lineNum">     187 </span><span class="lineNoCov">          0 :           if (next &amp;&amp; BARRIER_P (next))</span>
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 :             next = NEXT_INSN (next);</span>
+<span class="lineNum">     189 </span><span class="lineNoCov">          0 :           bb = create_basic_block (next, NULL_RTX, last_bb);</span>
+<span class="lineNum">     190 </span>            :         }
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span>            :       /* split_edge () creates BB before E-&gt;DEST.  Keep in mind, that
+<span class="lineNum">     193 </span>            :          this operation extends scheduling region till the end of BB.
+<span class="lineNum">     194 </span>            :          Hence, we need to shift NEXT_TAIL, so haifa-sched.c won't go out
+<span class="lineNum">     195 </span>            :          of the scheduling region.  */
+<span class="lineNum">     196 </span><span class="lineNoCov">          0 :       current_sched_info-&gt;next_tail = NEXT_INSN (BB_END (bb));</span>
+<span class="lineNum">     197 </span><span class="lineNoCov">          0 :       gcc_assert (current_sched_info-&gt;next_tail);</span>
+<span class="lineNum">     198 </span>            : 
+<span class="lineNum">     199 </span>            :       /* Append new basic block to the end of the ebb.  */
+<span class="lineNum">     200 </span><span class="lineNoCov">          0 :       sched_init_only_bb (bb, last_bb);</span>
+<span class="lineNum">     201 </span><span class="lineNoCov">          0 :       gcc_assert (last_bb == bb);</span>
+<span class="lineNum">     202 </span>            :     }
+<span class="lineNum">     203 </span><span class="lineCov">       1206 : }</span>
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span>            : /* Return a string that contains the insn uid and optionally anything else
+<span class="lineNum">     206 </span>            :    necessary to identify this insn in an output.  It's valid to use a
+<span class="lineNum">     207 </span>            :    static buffer for this.  The ALIGNED parameter should cause the string
+<span class="lineNum">     208 </span>            :    to be formatted so that multiple output lines will line up nicely.  */
+<a name="209"><span class="lineNum">     209 </span>            : </a>
+<span class="lineNum">     210 </span>            : static const char *
+<span class="lineNum">     211 </span><span class="lineCov">         21 : ebb_print_insn (const rtx_insn *insn, int aligned ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     212 </span>            : {
+<span class="lineNum">     213 </span><span class="lineCov">         21 :   static char tmp[80];</span>
+<span class="lineNum">     214 </span>            : 
+<span class="lineNum">     215 </span>            :   /* '+' before insn means it is a new cycle start.  */
+<span class="lineNum">     216 </span><span class="lineCov">         42 :   if (GET_MODE (insn) == TImode)</span>
+<span class="lineNum">     217 </span><span class="lineNoCov">          0 :     sprintf (tmp, &quot;+ %4d&quot;, INSN_UID (insn));</span>
+<span class="lineNum">     218 </span>            :   else
+<span class="lineNum">     219 </span><span class="lineCov">         21 :     sprintf (tmp, &quot;  %4d&quot;, INSN_UID (insn));</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span><span class="lineCov">         21 :   return tmp;</span>
+<span class="lineNum">     222 </span>            : }
+<span class="lineNum">     223 </span>            : 
+<span class="lineNum">     224 </span>            : /* Compare priority of two insns.  Return a positive number if the second
+<span class="lineNum">     225 </span>            :    insn is to be preferred for scheduling, and a negative one if the first
+<span class="lineNum">     226 </span>            :    is to be preferred.  Zero if they are equally good.  */
+<a name="227"><span class="lineNum">     227 </span>            : </a>
+<span class="lineNum">     228 </span>            : static int
+<span class="lineNum">     229 </span><span class="lineCov">      38764 : rank (rtx_insn *insn1, rtx_insn *insn2)</span>
+<span class="lineNum">     230 </span>            : {
+<span class="lineNum">     231 </span><span class="lineCov">      38764 :   basic_block bb1 = BLOCK_FOR_INSN (insn1);</span>
+<span class="lineNum">     232 </span><span class="lineCov">      38764 :   basic_block bb2 = BLOCK_FOR_INSN (insn2);</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span><span class="lineCov">      38764 :   if (bb1-&gt;count &gt; bb2-&gt;count)</span>
+<span class="lineNum">     235 </span>            :     return -1;
+<span class="lineNum">     236 </span><span class="lineCov">      38759 :   if (bb1-&gt;count &lt; bb2-&gt;count)</span>
+<span class="lineNum">     237 </span><span class="lineCov">          2 :     return 1;</span>
+<span class="lineNum">     238 </span>            :   return 0;
+<span class="lineNum">     239 </span>            : }
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            : /* NEXT is an instruction that depends on INSN (a backward dependence);
+<span class="lineNum">     242 </span>            :    return nonzero if we should include this dependence in priority
+<span class="lineNum">     243 </span>            :    calculations.  */
+<a name="244"><span class="lineNum">     244 </span>            : </a>
+<span class="lineNum">     245 </span>            : static int
+<span class="lineNum">     246 </span><span class="lineCov">       2859 : ebb_contributes_to_priority (rtx_insn *next ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     247 </span>            :                              rtx_insn *insn ATTRIBUTE_UNUSED)
+<span class="lineNum">     248 </span>            : {
+<span class="lineNum">     249 </span><span class="lineCov">       2859 :   return 1;</span>
+<span class="lineNum">     250 </span>            : }
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span>            :  /* INSN is a JUMP_INSN.  Store the set of registers that
+<span class="lineNum">     253 </span>            :     must be considered as used by this jump in USED.  */
+<a name="254"><span class="lineNum">     254 </span>            : </a>
+<span class="lineNum">     255 </span>            : void
+<span class="lineNum">     256 </span><span class="lineCov">        141 : ebb_compute_jump_reg_dependencies (rtx insn, regset used)</span>
+<span class="lineNum">     257 </span>            : {
+<span class="lineNum">     258 </span><span class="lineCov">        141 :   basic_block b = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">     259 </span><span class="lineCov">        141 :   edge e;</span>
+<span class="lineNum">     260 </span><span class="lineCov">        141 :   edge_iterator ei;</span>
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span><span class="lineCov">        564 :   FOR_EACH_EDGE (e, ei, b-&gt;succs)</span>
+<span class="lineNum">     263 </span><span class="lineCov">        282 :     if ((e-&gt;flags &amp; EDGE_FALLTHRU) == 0)</span>
+<span class="lineNum">     264 </span><span class="lineCov">        141 :       bitmap_ior_into (used, df_get_live_in (e-&gt;dest));</span>
+<span class="lineNum">     265 </span><span class="lineCov">        141 : }</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            : /* Used in schedule_insns to initialize current_sched_info for scheduling
+<span class="lineNum">     268 </span>            :    regions (or single basic blocks).  */
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : static struct common_sched_info_def ebb_common_sched_info;
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : static struct sched_deps_info_def ebb_sched_deps_info =
+<span class="lineNum">     273 </span>            :   {
+<span class="lineNum">     274 </span>            :     ebb_compute_jump_reg_dependencies,
+<span class="lineNum">     275 </span>            :     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+<span class="lineNum">     276 </span>            :     NULL,
+<span class="lineNum">     277 </span>            :     1, 0, 0
+<span class="lineNum">     278 </span>            :   };
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span>            : static struct haifa_sched_info ebb_sched_info =
+<span class="lineNum">     281 </span>            : {
+<span class="lineNum">     282 </span>            :   init_ready_list,
+<span class="lineNum">     283 </span>            :   NULL,
+<span class="lineNum">     284 </span>            :   schedule_more_p,
+<span class="lineNum">     285 </span>            :   NULL,
+<span class="lineNum">     286 </span>            :   rank,
+<span class="lineNum">     287 </span>            :   ebb_print_insn,
+<span class="lineNum">     288 </span>            :   ebb_contributes_to_priority,
+<span class="lineNum">     289 </span>            :   NULL, /* insn_finishes_block_p */
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            :   NULL, NULL,
+<span class="lineNum">     292 </span>            :   NULL, NULL,
+<span class="lineNum">     293 </span>            :   1, 0,
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span>            :   ebb_add_remove_insn,
+<span class="lineNum">     296 </span>            :   begin_schedule_ready,
+<span class="lineNum">     297 </span>            :   begin_move_insn,
+<span class="lineNum">     298 </span>            :   advance_target_bb,
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span>            :   save_ebb_state,
+<span class="lineNum">     301 </span>            :   restore_ebb_state,
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span>            :   SCHED_EBB
+<span class="lineNum">     304 </span>            :   /* We can create new blocks in begin_schedule_ready ().  */
+<span class="lineNum">     305 </span>            :   | NEW_BBS
+<span class="lineNum">     306 </span>            : };
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : /* Returns the earliest block in EBB currently being processed where a
+<span class="lineNum">     309 </span>            :    &quot;similar load&quot; 'insn2' is found, and hence LOAD_INSN can move
+<span class="lineNum">     310 </span>            :    speculatively into the found block.  All the following must hold:
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            :    (1) both loads have 1 base register (PFREE_CANDIDATEs).
+<span class="lineNum">     313 </span>            :    (2) load_insn and load2 have a def-use dependence upon
+<span class="lineNum">     314 </span>            :    the same insn 'insn1'.
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span>            :    From all these we can conclude that the two loads access memory
+<span class="lineNum">     317 </span>            :    addresses that differ at most by a constant, and hence if moving
+<span class="lineNum">     318 </span>            :    load_insn would cause an exception, it would have been caused by
+<span class="lineNum">     319 </span>            :    load2 anyhow.
+<span class="lineNum">     320 </span>            : 
+<span class="lineNum">     321 </span>            :    The function uses list (given by LAST_BLOCK) of already processed
+<span class="lineNum">     322 </span>            :    blocks in EBB.  The list is formed in `add_deps_for_risky_insns'.  */
+<a name="323"><span class="lineNum">     323 </span>            : </a>
+<span class="lineNum">     324 </span>            : static basic_block
+<span class="lineNum">     325 </span><span class="lineNoCov">          0 : earliest_block_with_similiar_load (basic_block last_block, rtx load_insn)</span>
+<span class="lineNum">     326 </span>            : {
+<span class="lineNum">     327 </span><span class="lineNoCov">          0 :   sd_iterator_def back_sd_it;</span>
+<span class="lineNum">     328 </span><span class="lineNoCov">          0 :   dep_t back_dep;</span>
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :   basic_block bb, earliest_block = NULL;</span>
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineNoCov">          0 :   FOR_EACH_DEP (load_insn, SD_LIST_BACK, back_sd_it, back_dep)</span>
+<span class="lineNum">     332 </span>            :     {
+<span class="lineNum">     333 </span><span class="lineNoCov">          0 :       rtx_insn *insn1 = DEP_PRO (back_dep);</span>
+<span class="lineNum">     334 </span>            : 
+<span class="lineNum">     335 </span><span class="lineNoCov">          0 :       if (DEP_TYPE (back_dep) == REG_DEP_TRUE)</span>
+<span class="lineNum">     336 </span>            :         /* Found a DEF-USE dependence (insn1, load_insn).  */
+<span class="lineNum">     337 </span>            :         {
+<span class="lineNum">     338 </span><span class="lineNoCov">          0 :           sd_iterator_def fore_sd_it;</span>
+<span class="lineNum">     339 </span><span class="lineNoCov">          0 :           dep_t fore_dep;</span>
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineNoCov">          0 :           FOR_EACH_DEP (insn1, SD_LIST_FORW, fore_sd_it, fore_dep)</span>
+<span class="lineNum">     342 </span>            :             {
+<span class="lineNum">     343 </span><span class="lineNoCov">          0 :               rtx_insn *insn2 = DEP_CON (fore_dep);</span>
+<span class="lineNum">     344 </span><span class="lineNoCov">          0 :               basic_block insn2_block = BLOCK_FOR_INSN (insn2);</span>
+<span class="lineNum">     345 </span>            : 
+<span class="lineNum">     346 </span><span class="lineNoCov">          0 :               if (DEP_TYPE (fore_dep) == REG_DEP_TRUE)</span>
+<span class="lineNum">     347 </span>            :                 {
+<span class="lineNum">     348 </span><span class="lineNoCov">          0 :                   if (earliest_block != NULL</span>
+<span class="lineNum">     349 </span><span class="lineNoCov">          0 :                       &amp;&amp; earliest_block-&gt;index &lt; insn2_block-&gt;index)</span>
+<span class="lineNum">     350 </span>            :                     continue;
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            :                   /* Found a DEF-USE dependence (insn1, insn2).  */
+<span class="lineNum">     353 </span><span class="lineNoCov">          0 :                   if (haifa_classify_insn (insn2) != PFREE_CANDIDATE)</span>
+<span class="lineNum">     354 </span>            :                     /* insn2 not guaranteed to be a 1 base reg load.  */
+<span class="lineNum">     355 </span>            :                     continue;
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span><span class="lineNoCov">          0 :                   for (bb = last_block; bb; bb = (basic_block) bb-&gt;aux)</span>
+<span class="lineNum">     358 </span><span class="lineNoCov">          0 :                     if (insn2_block == bb)</span>
+<span class="lineNum">     359 </span>            :                       break;
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineNoCov">          0 :                   if (!bb)</span>
+<span class="lineNum">     362 </span>            :                     /* insn2 is the similar load.  */
+<span class="lineNum">     363 </span><span class="lineNoCov">          0 :                     earliest_block = insn2_block;</span>
+<span class="lineNum">     364 </span>            :                 }
+<span class="lineNum">     365 </span>            :             }
+<span class="lineNum">     366 </span>            :         }
+<span class="lineNum">     367 </span>            :     }
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span><span class="lineNoCov">          0 :   return earliest_block;</span>
+<span class="lineNum">     370 </span>            : }
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            : /* The following function adds dependencies between jumps and risky
+<span class="lineNum">     373 </span>            :    insns in given ebb.  */
+<a name="374"><span class="lineNum">     374 </span>            : </a>
+<span class="lineNum">     375 </span>            : static void
+<span class="lineNum">     376 </span><span class="lineCov">        259 : add_deps_for_risky_insns (rtx_insn *head, rtx_insn *tail)</span>
+<span class="lineNum">     377 </span>            : {
+<span class="lineNum">     378 </span><span class="lineCov">        259 :   rtx_insn *insn, *prev;</span>
+<span class="lineNum">     379 </span><span class="lineCov">        259 :   int classification;</span>
+<span class="lineNum">     380 </span><span class="lineCov">        259 :   rtx_insn *last_jump = NULL;</span>
+<span class="lineNum">     381 </span><span class="lineCov">        259 :   rtx_insn *next_tail = NEXT_INSN (tail);</span>
+<span class="lineNum">     382 </span><span class="lineCov">        259 :   basic_block last_block = NULL, bb;</span>
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span><span class="lineCov">       3063 :   for (insn = head; insn != next_tail; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     385 </span>            :     {
+<span class="lineNum">     386 </span><span class="lineCov">       1402 :       add_delay_dependencies (insn);</span>
+<span class="lineNum">     387 </span><span class="lineCov">       1402 :       if (control_flow_insn_p (insn))</span>
+<span class="lineNum">     388 </span>            :         {
+<span class="lineNum">     389 </span><span class="lineCov">        249 :           bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">     390 </span><span class="lineCov">        249 :           bb-&gt;aux = last_block;</span>
+<span class="lineNum">     391 </span><span class="lineCov">        249 :           last_block = bb;</span>
+<span class="lineNum">     392 </span>            :           /* Ensure blocks stay in the same order.  */
+<span class="lineNum">     393 </span><span class="lineCov">        249 :           if (last_jump)</span>
+<span class="lineNum">     394 </span><span class="lineCov">         63 :             add_dependence (insn, last_jump, REG_DEP_ANTI);</span>
+<span class="lineNum">     395 </span>            :           last_jump = insn;
+<span class="lineNum">     396 </span>            :         }
+<span class="lineNum">     397 </span><span class="lineCov">       1153 :       else if (INSN_P (insn) &amp;&amp; last_jump != NULL_RTX)</span>
+<span class="lineNum">     398 </span>            :         {
+<span class="lineNum">     399 </span><span class="lineCov">        176 :           classification = haifa_classify_insn (insn);</span>
+<span class="lineNum">     400 </span><span class="lineCov">        176 :           prev = last_jump;</span>
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span><span class="lineCov">        176 :           switch (classification)</span>
+<span class="lineNum">     403 </span>            :             {
+<span class="lineNum">     404 </span><span class="lineCov">          3 :             case PFREE_CANDIDATE:</span>
+<span class="lineNum">     405 </span><span class="lineCov">          3 :               if (flag_schedule_speculative_load)</span>
+<span class="lineNum">     406 </span>            :                 {
+<span class="lineNum">     407 </span><span class="lineNoCov">          0 :                   bb = earliest_block_with_similiar_load (last_block, insn);</span>
+<span class="lineNum">     408 </span><span class="lineNoCov">          0 :                   if (bb)</span>
+<span class="lineNum">     409 </span>            :                     {
+<span class="lineNum">     410 </span><span class="lineNoCov">          0 :                       bb = (basic_block) bb-&gt;aux;</span>
+<span class="lineNum">     411 </span><span class="lineNoCov">          0 :                       if (!bb)</span>
+<span class="lineNum">     412 </span>            :                         break;
+<span class="lineNum">     413 </span><span class="lineNoCov">          0 :                       prev = BB_END (bb);</span>
+<span class="lineNum">     414 </span>            :                     }
+<span class="lineNum">     415 </span>            :                 }
+<span class="lineNum">     416 </span>            :               /* Fall through.  */
+<span class="lineNum">     417 </span><span class="lineCov">         51 :             case TRAP_RISKY:</span>
+<span class="lineNum">     418 </span><span class="lineCov">         51 :             case IRISKY:</span>
+<span class="lineNum">     419 </span><span class="lineCov">         51 :             case PRISKY_CANDIDATE:</span>
+<span class="lineNum">     420 </span>            :               /* ??? We could implement better checking PRISKY_CANDIDATEs
+<span class="lineNum">     421 </span>            :                  analogous to sched-rgn.c.  */
+<span class="lineNum">     422 </span>            :               /* We can not change the mode of the backward
+<span class="lineNum">     423 </span>            :                  dependency because REG_DEP_ANTI has the lowest
+<span class="lineNum">     424 </span>            :                  rank.  */
+<span class="lineNum">     425 </span><span class="lineCov">         51 :               if (! sched_insns_conditions_mutex_p (insn, prev))</span>
+<span class="lineNum">     426 </span>            :                 {
+<span class="lineNum">     427 </span><span class="lineCov">         51 :                   if ((current_sched_info-&gt;flags &amp; DO_SPECULATION)</span>
+<span class="lineNum">     428 </span><span class="lineNoCov">          0 :                       &amp;&amp; (spec_info-&gt;mask &amp; BEGIN_CONTROL))</span>
+<span class="lineNum">     429 </span>            :                     {
+<span class="lineNum">     430 </span><span class="lineNoCov">          0 :                       dep_def _dep, *dep = &amp;_dep;</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineNoCov">          0 :                       init_dep (dep, prev, insn, REG_DEP_ANTI);</span>
+<span class="lineNum">     433 </span>            : 
+<span class="lineNum">     434 </span><span class="lineNoCov">          0 :                       if (current_sched_info-&gt;flags &amp; USE_DEPS_LIST)</span>
+<span class="lineNum">     435 </span>            :                         {
+<span class="lineNum">     436 </span><span class="lineNoCov">          0 :                           DEP_STATUS (dep) = set_dep_weak (DEP_ANTI, BEGIN_CONTROL,</span>
+<span class="lineNum">     437 </span>            :                                                            MAX_DEP_WEAK);
+<span class="lineNum">     438 </span>            : 
+<span class="lineNum">     439 </span>            :                         }
+<span class="lineNum">     440 </span><span class="lineNoCov">          0 :                       sd_add_or_update_dep (dep, false);</span>
+<span class="lineNum">     441 </span>            :                     }
+<span class="lineNum">     442 </span>            :                   else
+<span class="lineNum">     443 </span><span class="lineCov">         51 :                     add_dependence (insn, prev, REG_DEP_CONTROL);</span>
+<span class="lineNum">     444 </span>            :                 }
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span>            :               break;
+<span class="lineNum">     447 </span>            : 
+<span class="lineNum">     448 </span>            :             default:
+<span class="lineNum">     449 </span>            :               break;
+<span class="lineNum">     450 </span>            :             }
+<span class="lineNum">     451 </span>            :         }
+<span class="lineNum">     452 </span>            :     }
+<span class="lineNum">     453 </span>            :   /* Maintain the invariant that bb-&gt;aux is clear after use.  */
+<span class="lineNum">     454 </span><span class="lineCov">        508 :   while (last_block)</span>
+<span class="lineNum">     455 </span>            :     {
+<span class="lineNum">     456 </span><span class="lineCov">        249 :       bb = (basic_block) last_block-&gt;aux;</span>
+<span class="lineNum">     457 </span><span class="lineCov">        249 :       last_block-&gt;aux = NULL;</span>
+<span class="lineNum">     458 </span><span class="lineCov">        249 :       last_block = bb;</span>
+<span class="lineNum">     459 </span>            :     }
+<span class="lineNum">     460 </span><span class="lineCov">        259 : }</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span>            : /* Schedule a single extended basic block, defined by the boundaries
+<span class="lineNum">     463 </span>            :    HEAD and TAIL.
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span>            :    We change our expectations about scheduler behavior depending on
+<span class="lineNum">     466 </span>            :    whether MODULO_SCHEDULING is true.  If it is, we expect that the
+<span class="lineNum">     467 </span>            :    caller has already called set_modulo_params and created delay pairs
+<span class="lineNum">     468 </span>            :    as appropriate.  If the modulo schedule failed, we return
+<span class="lineNum">     469 </span>            :    NULL_RTX.  */
+<a name="470"><span class="lineNum">     470 </span>            : </a>
+<span class="lineNum">     471 </span>            : basic_block
+<span class="lineNum">     472 </span><span class="lineCov">        259 : schedule_ebb (rtx_insn *head, rtx_insn *tail, bool modulo_scheduling)</span>
+<span class="lineNum">     473 </span>            : {
+<span class="lineNum">     474 </span><span class="lineCov">        838 :   basic_block first_bb, target_bb;</span>
+<span class="lineNum">     475 </span><span class="lineCov">        838 :   struct deps_desc tmp_deps;</span>
+<span class="lineNum">     476 </span><span class="lineCov">        838 :   bool success;</span>
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span>            :   /* Blah.  We should fix the rest of the code not to get confused by
+<span class="lineNum">     479 </span>            :      a note or two.  */
+<span class="lineNum">     480 </span><span class="lineCov">        838 :   while (head != tail)</span>
+<span class="lineNum">     481 </span>            :     {
+<span class="lineNum">     482 </span><span class="lineCov">        804 :       if (NOTE_P (head) || DEBUG_INSN_P (head))</span>
+<span class="lineNum">     483 </span><span class="lineCov">        784 :         head = NEXT_INSN (head);</span>
+<span class="lineNum">     484 </span><span class="lineCov">        412 :       else if (NOTE_P (tail) || DEBUG_INSN_P (tail))</span>
+<span class="lineNum">     485 </span><span class="lineCov">        162 :         tail = PREV_INSN (tail);</span>
+<span class="lineNum">     486 </span><span class="lineCov">        331 :       else if (LABEL_P (head))</span>
+<span class="lineNum">     487 </span><span class="lineCov">        212 :         head = NEXT_INSN (head);</span>
+<span class="lineNum">     488 </span>            :       else
+<span class="lineNum">     489 </span>            :         break;
+<span class="lineNum">     490 </span>            :     }
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span><span class="lineCov">        259 :   first_bb = BLOCK_FOR_INSN (head);</span>
+<span class="lineNum">     493 </span><span class="lineCov">        259 :   last_bb = BLOCK_FOR_INSN (tail);</span>
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span><span class="lineCov">        259 :   if (no_real_insns_p (head, tail))</span>
+<span class="lineNum">     496 </span><span class="lineNoCov">          0 :     return BLOCK_FOR_INSN (tail);</span>
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span><span class="lineCov">        259 :   gcc_assert (INSN_P (head) &amp;&amp; INSN_P (tail));</span>
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span><span class="lineCov">        259 :   if (!bitmap_bit_p (&amp;dont_calc_deps, first_bb-&gt;index))</span>
+<span class="lineNum">     501 </span>            :     {
+<span class="lineNum">     502 </span><span class="lineCov">        259 :       init_deps_global ();</span>
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span>            :       /* Compute dependencies.  */
+<span class="lineNum">     505 </span><span class="lineCov">        259 :       init_deps (&amp;tmp_deps, false);</span>
+<span class="lineNum">     506 </span><span class="lineCov">        259 :       sched_analyze (&amp;tmp_deps, head, tail);</span>
+<span class="lineNum">     507 </span><span class="lineCov">        259 :       free_deps (&amp;tmp_deps);</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">        259 :       add_deps_for_risky_insns (head, tail);</span>
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span><span class="lineCov">        259 :       if (targetm.sched.dependencies_evaluation_hook)</span>
+<span class="lineNum">     512 </span><span class="lineCov">        259 :         targetm.sched.dependencies_evaluation_hook (head, tail);</span>
+<span class="lineNum">     513 </span>            : 
+<span class="lineNum">     514 </span><span class="lineCov">        259 :       finish_deps_global ();</span>
+<span class="lineNum">     515 </span>            :     }
+<span class="lineNum">     516 </span>            :   else
+<span class="lineNum">     517 </span>            :     /* Only recovery blocks can have their dependencies already calculated,
+<span class="lineNum">     518 </span>            :        and they always are single block ebbs.  */
+<span class="lineNum">     519 </span><span class="lineNoCov">          0 :     gcc_assert (first_bb == last_bb);</span>
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span>            :   /* Set priorities.  */
+<span class="lineNum">     522 </span><span class="lineCov">        259 :   current_sched_info-&gt;sched_max_insns_priority = 0;</span>
+<span class="lineNum">     523 </span><span class="lineCov">        259 :   rgn_n_insns = set_priorities (head, tail);</span>
+<span class="lineNum">     524 </span><span class="lineCov">        259 :   current_sched_info-&gt;sched_max_insns_priority++;</span>
+<span class="lineNum">     525 </span>            : 
+<span class="lineNum">     526 </span><span class="lineCov">        259 :   current_sched_info-&gt;prev_head = PREV_INSN (head);</span>
+<span class="lineNum">     527 </span><span class="lineCov">        259 :   current_sched_info-&gt;next_tail = NEXT_INSN (tail);</span>
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span><span class="lineCov">        259 :   remove_notes (head, tail);</span>
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span><span class="lineCov">        259 :   unlink_bb_notes (first_bb, last_bb);</span>
+<span class="lineNum">     532 </span>            : 
+<span class="lineNum">     533 </span><span class="lineCov">        259 :   target_bb = first_bb;</span>
+<span class="lineNum">     534 </span>            : 
+<span class="lineNum">     535 </span>            :   /* Make ready list big enough to hold all the instructions from the ebb.  */
+<span class="lineNum">     536 </span><span class="lineCov">        259 :   sched_extend_ready_list (rgn_n_insns);</span>
+<span class="lineNum">     537 </span><span class="lineCov">        259 :   success = schedule_block (&amp;target_bb, NULL);</span>
+<span class="lineNum">     538 </span><span class="lineCov">        259 :   gcc_assert (success || modulo_scheduling);</span>
+<span class="lineNum">     539 </span>            : 
+<span class="lineNum">     540 </span>            :   /* Free ready list.  */
+<span class="lineNum">     541 </span><span class="lineCov">        259 :   sched_finish_ready_list ();</span>
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            :   /* We might pack all instructions into fewer blocks,
+<span class="lineNum">     544 </span>            :      so we may made some of them empty.  Can't assert (b == last_bb).  */
+<span class="lineNum">     545 </span>            : 
+<span class="lineNum">     546 </span>            :   /* Sanity check: verify that all region insns were scheduled.  */
+<span class="lineNum">     547 </span><span class="lineCov">        259 :   gcc_assert (modulo_scheduling || sched_rgn_n_insns == rgn_n_insns);</span>
+<span class="lineNum">     548 </span>            : 
+<span class="lineNum">     549 </span>            :   /* Free dependencies.  */
+<span class="lineNum">     550 </span><span class="lineCov">        259 :   sched_free_deps (current_sched_info-&gt;head, current_sched_info-&gt;tail, true);</span>
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span><span class="lineCov">        259 :   gcc_assert (haifa_recovery_bb_ever_added_p</span>
+<span class="lineNum">     553 </span>            :               || deps_pools_are_empty_p ());
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span><span class="lineCov">        259 :   if (EDGE_COUNT (last_bb-&gt;preds) == 0)</span>
+<span class="lineNum">     556 </span>            :     /* LAST_BB is unreachable.  */
+<span class="lineNum">     557 </span>            :     {
+<span class="lineNum">     558 </span><span class="lineNoCov">          0 :       gcc_assert (first_bb != last_bb</span>
+<span class="lineNum">     559 </span>            :                   &amp;&amp; EDGE_COUNT (last_bb-&gt;succs) == 0);
+<span class="lineNum">     560 </span><span class="lineNoCov">          0 :       last_bb = last_bb-&gt;prev_bb;</span>
+<span class="lineNum">     561 </span><span class="lineNoCov">          0 :       delete_basic_block (last_bb-&gt;next_bb);</span>
+<span class="lineNum">     562 </span>            :     }
+<span class="lineNum">     563 </span>            : 
+<span class="lineNum">     564 </span><span class="lineCov">        259 :   return success ? last_bb : NULL;</span>
+<span class="lineNum">     565 </span>            : }
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span>            : /* Perform initializations before running schedule_ebbs or a single
+<a name="568"><span class="lineNum">     568 </span>            :    schedule_ebb.  */</a>
+<span class="lineNum">     569 </span>            : void
+<span class="lineNum">     570 </span><span class="lineCov">         84 : schedule_ebbs_init (void)</span>
+<span class="lineNum">     571 </span>            : {
+<span class="lineNum">     572 </span>            :   /* Setup infos.  */
+<span class="lineNum">     573 </span><span class="lineCov">         84 :   {</span>
+<span class="lineNum">     574 </span><span class="lineCov">         84 :     memcpy (&amp;ebb_common_sched_info, &amp;haifa_common_sched_info,</span>
+<span class="lineNum">     575 </span>            :             sizeof (ebb_common_sched_info));
+<span class="lineNum">     576 </span>            : 
+<span class="lineNum">     577 </span><span class="lineCov">         84 :     ebb_common_sched_info.fix_recovery_cfg = ebb_fix_recovery_cfg;</span>
+<span class="lineNum">     578 </span><span class="lineCov">         84 :     ebb_common_sched_info.add_block = ebb_add_block;</span>
+<span class="lineNum">     579 </span><span class="lineCov">         84 :     ebb_common_sched_info.sched_pass_id = SCHED_EBB_PASS;</span>
+<span class="lineNum">     580 </span>            : 
+<span class="lineNum">     581 </span><span class="lineCov">         84 :     common_sched_info = &amp;ebb_common_sched_info;</span>
+<span class="lineNum">     582 </span><span class="lineCov">         84 :     sched_deps_info = &amp;ebb_sched_deps_info;</span>
+<span class="lineNum">     583 </span><span class="lineCov">         84 :     current_sched_info = &amp;ebb_sched_info;</span>
+<span class="lineNum">     584 </span>            :   }
+<span class="lineNum">     585 </span>            : 
+<span class="lineNum">     586 </span><span class="lineCov">         84 :   haifa_sched_init ();</span>
+<span class="lineNum">     587 </span>            : 
+<span class="lineNum">     588 </span><span class="lineCov">         84 :   compute_bb_for_insn ();</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            :   /* Initialize DONT_CALC_DEPS and ebb-{start, end} markers.  */
+<span class="lineNum">     591 </span><span class="lineCov">         84 :   bitmap_initialize (&amp;dont_calc_deps, 0);</span>
+<span class="lineNum">     592 </span><span class="lineCov">         84 :   bitmap_clear (&amp;dont_calc_deps);</span>
+<span class="lineNum">     593 </span><span class="lineCov">         84 : }</span>
+<span class="lineNum">     594 </span>            : 
+<a name="595"><span class="lineNum">     595 </span>            : /* Perform cleanups after scheduling using schedules_ebbs or schedule_ebb.  */</a>
+<span class="lineNum">     596 </span>            : void
+<span class="lineNum">     597 </span><span class="lineCov">         84 : schedule_ebbs_finish (void)</span>
+<span class="lineNum">     598 </span>            : {
+<span class="lineNum">     599 </span><span class="lineCov">         84 :   bitmap_clear (&amp;dont_calc_deps);</span>
+<span class="lineNum">     600 </span>            : 
+<span class="lineNum">     601 </span>            :   /* Reposition the prologue and epilogue notes in case we moved the
+<span class="lineNum">     602 </span>            :      prologue/epilogue insns.  */
+<span class="lineNum">     603 </span><span class="lineCov">         84 :   if (reload_completed)</span>
+<span class="lineNum">     604 </span><span class="lineCov">         84 :     reposition_prologue_and_epilogue_notes ();</span>
+<span class="lineNum">     605 </span>            : 
+<span class="lineNum">     606 </span><span class="lineCov">         84 :   haifa_sched_finish ();</span>
+<span class="lineNum">     607 </span><span class="lineCov">         84 : }</span>
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span>            : /* The main entry point in this file.  */
+<a name="610"><span class="lineNum">     610 </span>            : </a>
+<span class="lineNum">     611 </span>            : void
+<span class="lineNum">     612 </span><span class="lineCov">         84 : schedule_ebbs (void)</span>
+<span class="lineNum">     613 </span>            : {
+<span class="lineNum">     614 </span><span class="lineCov">         84 :   basic_block bb;</span>
+<span class="lineNum">     615 </span><span class="lineCov">         84 :   int probability_cutoff;</span>
+<span class="lineNum">     616 </span><span class="lineCov">         84 :   rtx_insn *tail;</span>
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span>            :   /* Taking care of this degenerate case makes the rest of
+<span class="lineNum">     619 </span>            :      this code simpler.  */
+<span class="lineNum">     620 </span><span class="lineCov">         84 :   if (n_basic_blocks_for_fn (cfun) == NUM_FIXED_BLOCKS)</span>
+<span class="lineNum">     621 </span>            :     return;
+<span class="lineNum">     622 </span>            : 
+<span class="lineNum">     623 </span><span class="lineCov">         84 :   if (profile_info &amp;&amp; profile_status_for_fn (cfun) == PROFILE_READ)</span>
+<span class="lineNum">     624 </span><span class="lineNoCov">          0 :     probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY_FEEDBACK);</span>
+<span class="lineNum">     625 </span>            :   else
+<span class="lineNum">     626 </span><span class="lineCov">         84 :     probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY);</span>
+<span class="lineNum">     627 </span><span class="lineCov">         84 :   probability_cutoff = REG_BR_PROB_BASE / 100 * probability_cutoff;</span>
+<span class="lineNum">     628 </span>            : 
+<span class="lineNum">     629 </span><span class="lineCov">         84 :   schedule_ebbs_init ();</span>
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span>            :   /* Schedule every region in the subroutine.  */
+<span class="lineNum">     632 </span><span class="lineCov">        343 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     633 </span>            :     {
+<span class="lineNum">     634 </span><span class="lineCov">        259 :       rtx_insn *head = BB_HEAD (bb);</span>
+<span class="lineNum">     635 </span>            : 
+<span class="lineNum">     636 </span><span class="lineCov">        259 :       if (bb-&gt;flags &amp; BB_DISABLE_SCHEDULE)</span>
+<span class="lineNum">     637 </span>            :         continue;
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span><span class="lineCov">        327 :       for (;;)</span>
+<span class="lineNum">     640 </span>            :         {
+<span class="lineNum">     641 </span><span class="lineCov">        327 :           edge e;</span>
+<span class="lineNum">     642 </span><span class="lineCov">        327 :           tail = BB_END (bb);</span>
+<span class="lineNum">     643 </span><span class="lineCov">        327 :           if (bb-&gt;next_bb == EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     644 </span><span class="lineCov">        243 :               || LABEL_P (BB_HEAD (bb-&gt;next_bb)))</span>
+<span class="lineNum">     645 </span>            :             break;
+<span class="lineNum">     646 </span><span class="lineCov">        137 :           e = find_fallthru_edge (bb-&gt;succs);</span>
+<span class="lineNum">     647 </span><span class="lineCov">        137 :           if (! e)</span>
+<span class="lineNum">     648 </span>            :             break;
+<span class="lineNum">     649 </span><span class="lineCov">        137 :           if (e-&gt;probability.initialized_p ()</span>
+<span class="lineNum">     650 </span><span class="lineCov">        137 :               &amp;&amp; e-&gt;probability.to_reg_br_prob_base () &lt;= probability_cutoff)</span>
+<span class="lineNum">     651 </span>            :             break;
+<span class="lineNum">     652 </span><span class="lineCov">         68 :           if (e-&gt;dest-&gt;flags &amp; BB_DISABLE_SCHEDULE)</span>
+<span class="lineNum">     653 </span>            :             break;
+<span class="lineNum">     654 </span><span class="lineCov">         68 :           bb = bb-&gt;next_bb;</span>
+<span class="lineNum">     655 </span><span class="lineCov">         68 :         }</span>
+<span class="lineNum">     656 </span>            : 
+<span class="lineNum">     657 </span><span class="lineCov">        259 :       bb = schedule_ebb (head, tail, false);</span>
+<span class="lineNum">     658 </span>            :     }
+<span class="lineNum">     659 </span><span class="lineCov">         84 :   schedule_ebbs_finish ();</span>
+<span class="lineNum">     660 </span>            : }
+<span class="lineNum">     661 </span>            : 
+<a name="662"><span class="lineNum">     662 </span>            : /* INSN has been added to/removed from current ebb.  */</a>
+<span class="lineNum">     663 </span>            : static void
+<span class="lineNum">     664 </span><span class="lineNoCov">          0 : ebb_add_remove_insn (rtx_insn *insn ATTRIBUTE_UNUSED, int remove_p)</span>
+<span class="lineNum">     665 </span>            : {
+<span class="lineNum">     666 </span><span class="lineNoCov">          0 :   if (!remove_p)</span>
+<span class="lineNum">     667 </span><span class="lineNoCov">          0 :     rgn_n_insns++;</span>
+<span class="lineNum">     668 </span>            :   else
+<span class="lineNum">     669 </span><span class="lineNoCov">          0 :     rgn_n_insns--;</span>
+<span class="lineNum">     670 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     671 </span>            : 
+<a name="672"><span class="lineNum">     672 </span>            : /* BB was added to ebb after AFTER.  */</a>
+<span class="lineNum">     673 </span>            : static void
+<span class="lineNum">     674 </span><span class="lineNoCov">          0 : ebb_add_block (basic_block bb, basic_block after)</span>
+<span class="lineNum">     675 </span>            : {
+<span class="lineNum">     676 </span>            :   /* Recovery blocks are always bounded by BARRIERS,
+<span class="lineNum">     677 </span>            :      therefore, they always form single block EBB,
+<span class="lineNum">     678 </span>            :      therefore, we can use rec-&gt;index to identify such EBBs.  */
+<span class="lineNum">     679 </span><span class="lineNoCov">          0 :   if (after == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     680 </span><span class="lineNoCov">          0 :     bitmap_set_bit (&amp;dont_calc_deps, bb-&gt;index);</span>
+<span class="lineNum">     681 </span><span class="lineNoCov">          0 :   else if (after == last_bb)</span>
+<span class="lineNum">     682 </span><span class="lineNoCov">          0 :     last_bb = bb;</span>
+<span class="lineNum">     683 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span>            : /* Return next block in ebb chain.  For parameter meaning please refer to
+<a name="686"><span class="lineNum">     686 </span>            :    sched-int.h: struct sched_info: advance_target_bb.  */</a>
+<span class="lineNum">     687 </span>            : static basic_block
+<span class="lineNum">     688 </span><span class="lineCov">       1206 : advance_target_bb (basic_block bb, rtx_insn *insn)</span>
+<span class="lineNum">     689 </span>            : {
+<span class="lineNum">     690 </span><span class="lineCov">       1206 :   if (insn)</span>
+<span class="lineNum">     691 </span>            :     {
+<span class="lineNum">     692 </span><span class="lineCov">       1138 :       if (BLOCK_FOR_INSN (insn) != bb</span>
+<span class="lineNum">     693 </span><span class="lineCov">          7 :           &amp;&amp; control_flow_insn_p (insn)</span>
+<span class="lineNum">     694 </span>            :           /* We handle interblock movement of the speculation check
+<span class="lineNum">     695 </span>            :              or over a speculation check in
+<span class="lineNum">     696 </span>            :              haifa-sched.c: move_block_after_check ().  */
+<span class="lineNum">     697 </span><span class="lineNoCov">          0 :           &amp;&amp; !IS_SPECULATION_BRANCHY_CHECK_P (insn)</span>
+<span class="lineNum">     698 </span><span class="lineCov">       1138 :           &amp;&amp; !IS_SPECULATION_BRANCHY_CHECK_P (BB_END (bb)))</span>
+<span class="lineNum">     699 </span>            :         {
+<span class="lineNum">     700 </span>            :           /* Assert that we don't move jumps across blocks.  */
+<span class="lineNum">     701 </span><span class="lineNoCov">          0 :           gcc_assert (!control_flow_insn_p (BB_END (bb))</span>
+<span class="lineNum">     702 </span>            :                       &amp;&amp; NOTE_INSN_BASIC_BLOCK_P (BB_HEAD (bb-&gt;next_bb)));
+<span class="lineNum">     703 </span>            :           return bb;
+<span class="lineNum">     704 </span>            :         }
+<span class="lineNum">     705 </span>            :       else
+<span class="lineNum">     706 </span><span class="lineCov">       1138 :         return 0;</span>
+<span class="lineNum">     707 </span>            :     }
+<span class="lineNum">     708 </span>            :   else
+<span class="lineNum">     709 </span>            :     /* Return next non empty block.  */
+<span class="lineNum">     710 </span>            :     {
+<span class="lineNum">     711 </span><span class="lineCov">         68 :       do</span>
+<span class="lineNum">     712 </span>            :         {
+<span class="lineNum">     713 </span><span class="lineCov">         68 :           gcc_assert (bb != last_bb);</span>
+<span class="lineNum">     714 </span>            : 
+<span class="lineNum">     715 </span><span class="lineCov">         68 :           bb = bb-&gt;next_bb;</span>
+<span class="lineNum">     716 </span>            :         }
+<span class="lineNum">     717 </span><span class="lineCov">         68 :       while (bb_note (bb) == BB_END (bb));</span>
+<span class="lineNum">     718 </span>            : 
+<span class="lineNum">     719 </span><span class="lineCov">         68 :       return bb;</span>
+<span class="lineNum">     720 </span>            :     }
+<span class="lineNum">     721 </span>            : }
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span>            : /* Fix internal data after interblock movement of jump instruction.
+<span class="lineNum">     724 </span>            :    For parameter meaning please refer to
+<a name="725"><span class="lineNum">     725 </span>            :    sched-int.h: struct sched_info: fix_recovery_cfg.  */</a>
+<span class="lineNum">     726 </span>            : static void
+<span class="lineNum">     727 </span><span class="lineNoCov">          0 : ebb_fix_recovery_cfg (int bbi ATTRIBUTE_UNUSED, int jump_bbi,</span>
+<span class="lineNum">     728 </span>            :                       int jump_bb_nexti)
+<span class="lineNum">     729 </span>            : {
+<span class="lineNum">     730 </span><span class="lineNoCov">          0 :   gcc_assert (last_bb-&gt;index != bbi);</span>
+<span class="lineNum">     731 </span>            : 
+<span class="lineNum">     732 </span><span class="lineNoCov">          0 :   if (jump_bb_nexti == last_bb-&gt;index)</span>
+<span class="lineNum">     733 </span><span class="lineNoCov">          0 :     last_bb = BASIC_BLOCK_FOR_FN (cfun, jump_bbi);</span>
+<span class="lineNum">     734 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     735 </span>            : 
+<span class="lineNum">     736 </span>            : #endif /* INSN_SCHEDULING */
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

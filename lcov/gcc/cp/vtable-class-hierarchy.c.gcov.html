@@ -1,0 +1,1430 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/cp/vtable-class-hierarchy.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/cp</a> - vtable-class-hierarchy.c<span style="font-size: 80%;"> (source / <a href="vtable-class-hierarchy.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">336</td>
+            <td class="headerCovTableEntry">494</td>
+            <td class="headerCovTableEntryLo">68.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">28</td>
+            <td class="headerCovTableEntryLo">71.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Copyright (C) 2012-2018 Free Software Foundation, Inc.</a>
+<span class="lineNum">       2 </span>            : 
+<span class="lineNum">       3 </span>            :    This file is part of GCC.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            :    GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       6 </span>            :    under the terms of the GNU General Public License as published by
+<span class="lineNum">       7 </span>            :    the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       8 </span>            :    any later version.
+<span class="lineNum">       9 </span>            : 
+<span class="lineNum">      10 </span>            :    GCC is distributed in the hope that it will be useful, but
+<span class="lineNum">      11 </span>            :    WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      12 </span>            :    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+<span class="lineNum">      13 </span>            :    General Public License for more details.
+<span class="lineNum">      14 </span>            : 
+<span class="lineNum">      15 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      16 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      17 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      18 </span>            : 
+<span class="lineNum">      19 </span>            : /* Virtual Table Pointer Security Pass - Detect corruption of vtable pointers
+<span class="lineNum">      20 </span>            :    before using them for virtual method dispatches.  */
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : /* This file is part of the vtable security feature implementation.
+<span class="lineNum">      23 </span>            :    The vtable security feature is designed to detect when a virtual
+<span class="lineNum">      24 </span>            :    call is about to be made through an invalid vtable pointer
+<span class="lineNum">      25 </span>            :    (possibly due to data corruption or malicious attacks). The
+<span class="lineNum">      26 </span>            :    compiler finds every virtual call, and inserts a verification call
+<span class="lineNum">      27 </span>            :    before the virtual call.  The verification call takes the actual
+<span class="lineNum">      28 </span>            :    vtable pointer value in the object through which the virtual call
+<span class="lineNum">      29 </span>            :    is being made, and compares the vtable pointer against a set of all
+<span class="lineNum">      30 </span>            :    valid vtable pointers that the object could contain (this set is
+<span class="lineNum">      31 </span>            :    based on the declared type of the object).  If the pointer is in
+<span class="lineNum">      32 </span>            :    the valid set, execution is allowed to continue; otherwise the
+<span class="lineNum">      33 </span>            :    program is halted.
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            :   There are several pieces needed in order to make this work: 1. For
+<span class="lineNum">      36 </span>            :   every virtual class in the program (i.e. a class that contains
+<span class="lineNum">      37 </span>            :   virtual methods), we need to build the set of all possible valid
+<span class="lineNum">      38 </span>            :   vtables that an object of that class could point to.  This includes
+<span class="lineNum">      39 </span>            :   vtables for any class(es) that inherit from the class under
+<span class="lineNum">      40 </span>            :   consideration.  2. For every such data set we build up, we need a
+<span class="lineNum">      41 </span>            :   way to find and reference the data set.  This is complicated by the
+<span class="lineNum">      42 </span>            :   fact that the real vtable addresses are not known until runtime,
+<span class="lineNum">      43 </span>            :   when the program is loaded into memory, but we need to reference the
+<span class="lineNum">      44 </span>            :   sets at compile time when we are inserting verification calls into
+<span class="lineNum">      45 </span>            :   the program.  3.  We need to find every virtual call in the program,
+<span class="lineNum">      46 </span>            :   and insert the verification call (with the appropriate arguments)
+<span class="lineNum">      47 </span>            :   before the virtual call.  4. We need some runtime library pieces:
+<span class="lineNum">      48 </span>            :   the code to build up the data sets at runtime; the code to actually
+<span class="lineNum">      49 </span>            :   perform the verification using the data sets; and some code to set
+<span class="lineNum">      50 </span>            :   protections on the data sets, so they themselves do not become
+<span class="lineNum">      51 </span>            :   hacker targets.
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            :   To find and reference the set of valid vtable pointers for any given
+<span class="lineNum">      54 </span>            :   virtual class, we create a special global varible for each virtual
+<span class="lineNum">      55 </span>            :   class.  We refer to this as the &quot;vtable map variable&quot; for that
+<span class="lineNum">      56 </span>            :   class.  The vtable map variable has the type &quot;void *&quot;, and is
+<span class="lineNum">      57 </span>            :   initialized by the compiler to NULL.  At runtime when the set of
+<span class="lineNum">      58 </span>            :   valid vtable pointers for a virtual class, e.g. class Foo, is built,
+<span class="lineNum">      59 </span>            :   the vtable map variable for class Foo is made to point to the set.
+<span class="lineNum">      60 </span>            :   During compile time, when the compiler is inserting verification
+<span class="lineNum">      61 </span>            :   calls into the program, it passes the vtable map variable for the
+<span class="lineNum">      62 </span>            :   appropriate class to the verification call, so that at runtime the
+<span class="lineNum">      63 </span>            :   verification call can find the appropriate data set.
+<span class="lineNum">      64 </span>            : 
+<span class="lineNum">      65 </span>            :   The actual set of valid vtable pointers for a virtual class,
+<span class="lineNum">      66 </span>            :   e.g. class Foo, cannot be built until runtime, when the vtables get
+<span class="lineNum">      67 </span>            :   loaded into memory and their addresses are known.  But the knowledge
+<span class="lineNum">      68 </span>            :   about which vtables belong in which class' hierarchy is only known
+<span class="lineNum">      69 </span>            :   at compile time.  Therefore at compile time we collect class
+<span class="lineNum">      70 </span>            :   hierarchy and vtable information about every virtual class, and we
+<span class="lineNum">      71 </span>            :   generate calls to build up the data sets at runtime.  To build the
+<span class="lineNum">      72 </span>            :   data sets, we call one of the functions we add to the runtime
+<span class="lineNum">      73 </span>            :   library, __VLTRegisterPair.  __VLTRegisterPair takes two arguments,
+<span class="lineNum">      74 </span>            :   a vtable map variable and the address of a vtable.  If the vtable
+<span class="lineNum">      75 </span>            :   map variable is currently NULL, it creates a new data set (hash
+<span class="lineNum">      76 </span>            :   table), makes the vtable map variable point to the new data set, and
+<span class="lineNum">      77 </span>            :   inserts the vtable address into the data set.  If the vtable map
+<span class="lineNum">      78 </span>            :   variable is not NULL, it just inserts the vtable address into the
+<span class="lineNum">      79 </span>            :   data set.  In order to make sure that our data sets are built before
+<span class="lineNum">      80 </span>            :   any verification calls happen, we create a special constructor
+<span class="lineNum">      81 </span>            :   initialization function for each compilation unit, give it a very
+<span class="lineNum">      82 </span>            :   high initialization priority, and insert all of our calls to
+<span class="lineNum">      83 </span>            :   __VLTRegisterPair into our special constructor initialization
+<span class="lineNum">      84 </span>            :   function.
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :   The vtable verification feature is controlled by the flag
+<span class="lineNum">      87 </span>            :   '-fvtable-verify='.  There are three flavors of this:
+<span class="lineNum">      88 </span>            :   '-fvtable-verify=std', '-fvtable-verify=preinit', and
+<span class="lineNum">      89 </span>            :   '-fvtable-verify=none'.  If the option '-fvtable-verfy=preinit' is
+<span class="lineNum">      90 </span>            :   used, then our constructor initialization function gets put into the
+<span class="lineNum">      91 </span>            :   preinit array.  This is necessary if there are data sets that need
+<span class="lineNum">      92 </span>            :   to be built very early in execution.  If the constructor
+<span class="lineNum">      93 </span>            :   initialization function gets put into the preinit array, the we also
+<span class="lineNum">      94 </span>            :   add calls to __VLTChangePermission at the beginning and end of the
+<span class="lineNum">      95 </span>            :   function.  The call at the beginning sets the permissions on the
+<span class="lineNum">      96 </span>            :   data sets and vtable map variables to read/write, and the one at the
+<span class="lineNum">      97 </span>            :   end makes them read-only.  If the '-fvtable-verify=std' option is
+<span class="lineNum">      98 </span>            :   used, the constructor initialization functions are executed at their
+<span class="lineNum">      99 </span>            :   normal time, and the __VLTChangePermission calls are handled
+<span class="lineNum">     100 </span>            :   differently (see the comments in libstdc++-v3/libsupc++/vtv_rts.cc).
+<span class="lineNum">     101 </span>            :   The option '-fvtable-verify=none' turns off vtable verification.
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span>            :   This file contains code to find and record the class hierarchies for
+<span class="lineNum">     104 </span>            :   the virtual classes in a program, and all the vtables associated
+<span class="lineNum">     105 </span>            :   with each such class; to generate the vtable map variables; and to
+<span class="lineNum">     106 </span>            :   generate the constructor initialization function (with the calls to
+<span class="lineNum">     107 </span>            :   __VLTRegisterPair, and __VLTChangePermission).  The main data
+<span class="lineNum">     108 </span>            :   structures used for collecting the class hierarchy data and
+<span class="lineNum">     109 </span>            :   building/maintaining the vtable map variable data are defined in
+<span class="lineNum">     110 </span>            :   gcc/vtable-verify.h, because they are used both here and in
+<span class="lineNum">     111 </span>            :   gcc/vtable-verify.c.  */
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">     114 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">     115 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">     116 </span>            : #include &quot;vtable-verify.h&quot;
+<span class="lineNum">     117 </span>            : #include &quot;cp-tree.h&quot;
+<span class="lineNum">     118 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">     119 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">     120 </span>            : #include &quot;output.h&quot;
+<span class="lineNum">     121 </span>            : #include &quot;tree-iterator.h&quot;
+<span class="lineNum">     122 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">     123 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            : static int num_calls_to_regset = 0;
+<span class="lineNum">     126 </span>            : static int num_calls_to_regpair = 0;
+<span class="lineNum">     127 </span>            : static int current_set_size;
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : /* Mark these specially since they need to be stored in precompiled
+<span class="lineNum">     130 </span>            :    header IR.  */
+<span class="lineNum">     131 </span>            : static GTY (()) vec&lt;tree, va_gc&gt; *vlt_saved_class_info;
+<span class="lineNum">     132 </span>            : static GTY (()) tree vlt_register_pairs_fndecl = NULL_TREE;
+<span class="lineNum">     133 </span>            : static GTY (()) tree vlt_register_set_fndecl = NULL_TREE;
+<span class="lineNum">     134 </span>            : 
+<span class="lineNum">     135 </span>            : struct work_node {
+<span class="lineNum">     136 </span>            :   struct vtv_graph_node *node;
+<span class="lineNum">     137 </span>            :   struct work_node *next;
+<span class="lineNum">     138 </span>            : };
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            : struct vtbl_map_node *vtable_find_or_create_map_decl (tree);
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            : /* As part of vtable verification the compiler generates and inserts
+<span class="lineNum">     143 </span>            :    calls to __VLTVerifyVtablePointer, which is in libstdc++.  This
+<span class="lineNum">     144 </span>            :    function builds and initializes the function decl that is used
+<span class="lineNum">     145 </span>            :    in generating those function calls.
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span>            :    In addition to __VLTVerifyVtablePointer there is also
+<span class="lineNum">     148 </span>            :    __VLTVerifyVtablePointerDebug which can be used in place of
+<span class="lineNum">     149 </span>            :    __VLTVerifyVtablePointer, and which takes extra parameters and
+<span class="lineNum">     150 </span>            :    outputs extra information, to help debug problems.  The debug
+<span class="lineNum">     151 </span>            :    version of this function is generated and used if flag_vtv_debug is
+<span class="lineNum">     152 </span>            :    true.
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span>            :    The signatures for these functions are:
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :    void * __VLTVerifyVtablePointer (void **, void*);
+<span class="lineNum">     157 </span>            :    void * __VLTVerifyVtablePointerDebug (void**, void *, char *, char *);
+<span class="lineNum">     158 </span>            : */
+<a name="159"><span class="lineNum">     159 </span>            : </a>
+<span class="lineNum">     160 </span>            : void
+<span class="lineNum">     161 </span><span class="lineCov">         12 : vtv_build_vtable_verify_fndecl (void)</span>
+<span class="lineNum">     162 </span>            : {
+<span class="lineNum">     163 </span><span class="lineCov">         12 :   tree func_type = NULL_TREE;</span>
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineCov">         12 :   if (verify_vtbl_ptr_fndecl != NULL_TREE</span>
+<span class="lineNum">     166 </span><span class="lineNoCov">          0 :       &amp;&amp; TREE_CODE (verify_vtbl_ptr_fndecl) != ERROR_MARK)</span>
+<span class="lineNum">     167 </span>            :     return;
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span><span class="lineCov">         12 :   if (flag_vtv_debug)</span>
+<span class="lineNum">     170 </span>            :     {
+<span class="lineNum">     171 </span><span class="lineNoCov">          0 :       func_type = build_function_type_list (const_ptr_type_node,</span>
+<span class="lineNum">     172 </span>            :                                             build_pointer_type (ptr_type_node),
+<span class="lineNum">     173 </span>            :                                             const_ptr_type_node,
+<span class="lineNum">     174 </span>            :                                             const_string_type_node,
+<span class="lineNum">     175 </span>            :                                             const_string_type_node,
+<span class="lineNum">     176 </span>            :                                             NULL_TREE);
+<span class="lineNum">     177 </span><span class="lineNoCov">          0 :       verify_vtbl_ptr_fndecl =</span>
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :         build_lang_decl (FUNCTION_DECL,</span>
+<span class="lineNum">     179 </span>            :                          get_identifier (&quot;__VLTVerifyVtablePointerDebug&quot;),
+<span class="lineNum">     180 </span>            :                          func_type);
+<span class="lineNum">     181 </span>            :     }
+<span class="lineNum">     182 </span>            :   else
+<span class="lineNum">     183 </span>            :     {
+<span class="lineNum">     184 </span><span class="lineCov">         12 :       func_type = build_function_type_list (const_ptr_type_node,</span>
+<span class="lineNum">     185 </span>            :                                             build_pointer_type (ptr_type_node),
+<span class="lineNum">     186 </span>            :                                             const_ptr_type_node,
+<span class="lineNum">     187 </span>            :                                             NULL_TREE);
+<span class="lineNum">     188 </span><span class="lineCov">         12 :       verify_vtbl_ptr_fndecl =</span>
+<span class="lineNum">     189 </span><span class="lineCov">         12 :         build_lang_decl (FUNCTION_DECL,</span>
+<span class="lineNum">     190 </span>            :                          get_identifier (&quot;__VLTVerifyVtablePointer&quot;),
+<span class="lineNum">     191 </span>            :                          func_type);
+<span class="lineNum">     192 </span>            :     }
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span><span class="lineCov">         12 :   TREE_NOTHROW (verify_vtbl_ptr_fndecl) = 1;</span>
+<span class="lineNum">     195 </span><span class="lineCov">         12 :   DECL_ATTRIBUTES (verify_vtbl_ptr_fndecl)</span>
+<span class="lineNum">     196 </span><span class="lineCov">         12 :       = tree_cons (get_identifier (&quot;leaf&quot;), NULL,</span>
+<span class="lineNum">     197 </span><span class="lineCov">         12 :                    DECL_ATTRIBUTES (verify_vtbl_ptr_fndecl));</span>
+<span class="lineNum">     198 </span><span class="lineCov">         12 :   DECL_PURE_P (verify_vtbl_ptr_fndecl) = 1;</span>
+<span class="lineNum">     199 </span><span class="lineCov">         12 :   TREE_PUBLIC (verify_vtbl_ptr_fndecl) = 1;</span>
+<span class="lineNum">     200 </span><span class="lineCov">         12 :   DECL_PRESERVE_P (verify_vtbl_ptr_fndecl) = 1;</span>
+<span class="lineNum">     201 </span>            : }
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span>            : /* As part of vtable verification the compiler generates and inserts
+<span class="lineNum">     204 </span>            :    calls to __VLTRegisterSet and __VLTRegisterPair, which are in
+<span class="lineNum">     205 </span>            :    libsupc++.  This function builds and initializes the function decls
+<span class="lineNum">     206 </span>            :    that are used in generating those function calls.
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            :    The signatures for these functions are:
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span>            :    void __VLTRegisterSetDebug (void **, const void *, std::size_t,
+<span class="lineNum">     211 </span>            :                                size_t, void **);
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span>            :    void __VLTRegisterSet (void **, const void *, std::size_t,
+<span class="lineNum">     214 </span>            :                           size_t, void **);
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :    void __VLTRegisterPairDebug (void **, const void *, size_t,
+<span class="lineNum">     217 </span>            :                                 const void *, const char *, const char *);
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :    void __VLTRegisterPair (void **, const void *, size_t, const void *);
+<span class="lineNum">     220 </span>            : */
+<a name="221"><span class="lineNum">     221 </span>            : </a>
+<span class="lineNum">     222 </span>            : static void
+<span class="lineNum">     223 </span><span class="lineCov">         12 : init_functions (void)</span>
+<span class="lineNum">     224 </span>            : {
+<span class="lineNum">     225 </span><span class="lineCov">         12 :   tree register_set_type;</span>
+<span class="lineNum">     226 </span><span class="lineCov">         12 :   tree register_pairs_type;</span>
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span><span class="lineCov">         12 :   if (vlt_register_set_fndecl != NULL_TREE)</span>
+<span class="lineNum">     229 </span>            :     return;
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">         12 :   gcc_assert (vlt_register_pairs_fndecl == NULL_TREE);</span>
+<span class="lineNum">     232 </span><span class="lineCov">         12 :   gcc_assert (vlt_register_set_fndecl == NULL_TREE);</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            :   /* Build function decl for __VLTRegisterSet*.  */
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span><span class="lineCov">         12 :   register_set_type = build_function_type_list</span>
+<span class="lineNum">     237 </span><span class="lineCov">         12 :                                              (void_type_node,</span>
+<span class="lineNum">     238 </span>            :                                               build_pointer_type (ptr_type_node),
+<span class="lineNum">     239 </span>            :                                               const_ptr_type_node,
+<span class="lineNum">     240 </span>            :                                               size_type_node,
+<span class="lineNum">     241 </span>            :                                               size_type_node,
+<span class="lineNum">     242 </span>            :                                               build_pointer_type (ptr_type_node),
+<span class="lineNum">     243 </span>            :                                               NULL_TREE);
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">         12 :   if (flag_vtv_debug)</span>
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 :     vlt_register_set_fndecl = build_lang_decl</span>
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 :                                        (FUNCTION_DECL,</span>
+<span class="lineNum">     248 </span>            :                                         get_identifier (&quot;__VLTRegisterSetDebug&quot;),
+<span class="lineNum">     249 </span>            :                                         register_set_type);
+<span class="lineNum">     250 </span>            :   else
+<span class="lineNum">     251 </span><span class="lineCov">         12 :     vlt_register_set_fndecl = build_lang_decl</span>
+<span class="lineNum">     252 </span><span class="lineCov">         12 :                                        (FUNCTION_DECL,</span>
+<span class="lineNum">     253 </span>            :                                         get_identifier (&quot;__VLTRegisterSet&quot;),
+<span class="lineNum">     254 </span>            :                                         register_set_type);
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineCov">         12 :   TREE_NOTHROW (vlt_register_set_fndecl) = 1;</span>
+<span class="lineNum">     258 </span><span class="lineCov">         12 :   DECL_ATTRIBUTES (vlt_register_set_fndecl) =</span>
+<span class="lineNum">     259 </span><span class="lineCov">         12 :                     tree_cons (get_identifier (&quot;leaf&quot;), NULL,</span>
+<span class="lineNum">     260 </span><span class="lineCov">         12 :                                DECL_ATTRIBUTES (vlt_register_set_fndecl));</span>
+<span class="lineNum">     261 </span><span class="lineCov">         12 :   DECL_EXTERNAL(vlt_register_set_fndecl) = 1;</span>
+<span class="lineNum">     262 </span><span class="lineCov">         12 :   TREE_PUBLIC (vlt_register_set_fndecl) = 1;</span>
+<span class="lineNum">     263 </span><span class="lineCov">         12 :   DECL_PRESERVE_P (vlt_register_set_fndecl) = 1;</span>
+<span class="lineNum">     264 </span><span class="lineCov">         12 :   SET_DECL_LANGUAGE (vlt_register_set_fndecl, lang_cplusplus);</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span>            :   /* Build function decl for __VLTRegisterPair*.  */
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span><span class="lineCov">         12 :   if (flag_vtv_debug)</span>
+<span class="lineNum">     269 </span>            :     {
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 :       register_pairs_type = build_function_type_list (void_type_node,</span>
+<span class="lineNum">     271 </span>            :                                                       build_pointer_type
+<span class="lineNum">     272 </span>            :                                                               (ptr_type_node),
+<span class="lineNum">     273 </span>            :                                                       const_ptr_type_node,
+<span class="lineNum">     274 </span>            :                                                       size_type_node,
+<span class="lineNum">     275 </span>            :                                                       const_ptr_type_node,
+<span class="lineNum">     276 </span>            :                                                       const_string_type_node,
+<span class="lineNum">     277 </span>            :                                                       const_string_type_node,
+<span class="lineNum">     278 </span>            :                                                       NULL_TREE);
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :       vlt_register_pairs_fndecl = build_lang_decl</span>
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :                                       (FUNCTION_DECL,</span>
+<span class="lineNum">     282 </span>            :                                        get_identifier (&quot;__VLTRegisterPairDebug&quot;),
+<span class="lineNum">     283 </span>            :                                        register_pairs_type);
+<span class="lineNum">     284 </span>            :     }
+<span class="lineNum">     285 </span>            :   else
+<span class="lineNum">     286 </span>            :     {
+<span class="lineNum">     287 </span><span class="lineCov">         12 :       register_pairs_type = build_function_type_list (void_type_node,</span>
+<span class="lineNum">     288 </span>            :                                                       build_pointer_type
+<span class="lineNum">     289 </span>            :                                                               (ptr_type_node),
+<span class="lineNum">     290 </span>            :                                                       const_ptr_type_node,
+<span class="lineNum">     291 </span>            :                                                       size_type_node,
+<span class="lineNum">     292 </span>            :                                                       const_ptr_type_node,
+<span class="lineNum">     293 </span>            :                                                       NULL_TREE);
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">         12 :       vlt_register_pairs_fndecl = build_lang_decl</span>
+<span class="lineNum">     296 </span><span class="lineCov">         12 :                                       (FUNCTION_DECL,</span>
+<span class="lineNum">     297 </span>            :                                        get_identifier (&quot;__VLTRegisterPair&quot;),
+<span class="lineNum">     298 </span>            :                                        register_pairs_type);
+<span class="lineNum">     299 </span>            :     }
+<span class="lineNum">     300 </span>            : 
+<span class="lineNum">     301 </span><span class="lineCov">         12 :   TREE_NOTHROW (vlt_register_pairs_fndecl) = 1;</span>
+<span class="lineNum">     302 </span><span class="lineCov">         12 :   DECL_ATTRIBUTES (vlt_register_pairs_fndecl) =</span>
+<span class="lineNum">     303 </span><span class="lineCov">         12 :                     tree_cons (get_identifier (&quot;leaf&quot;), NULL,</span>
+<span class="lineNum">     304 </span><span class="lineCov">         12 :                                DECL_ATTRIBUTES (vlt_register_pairs_fndecl));</span>
+<span class="lineNum">     305 </span><span class="lineCov">         12 :   DECL_EXTERNAL(vlt_register_pairs_fndecl) = 1;</span>
+<span class="lineNum">     306 </span><span class="lineCov">         12 :   TREE_PUBLIC (vlt_register_pairs_fndecl) = 1;</span>
+<span class="lineNum">     307 </span><span class="lineCov">         12 :   DECL_PRESERVE_P (vlt_register_pairs_fndecl) = 1;</span>
+<span class="lineNum">     308 </span><span class="lineCov">         12 :   SET_DECL_LANGUAGE (vlt_register_pairs_fndecl, lang_cplusplus);</span>
+<span class="lineNum">     309 </span>            : 
+<span class="lineNum">     310 </span>            : }
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            : /* This is a helper function for
+<span class="lineNum">     313 </span>            :    vtv_compute_class_hierarchy_transitive_closure.  It adds a
+<span class="lineNum">     314 </span>            :    vtv_graph_node to the WORKLIST, which is a linked list of
+<span class="lineNum">     315 </span>            :    seen-but-not-yet-processed nodes.  INSERTED is a bitmap, one bit
+<span class="lineNum">     316 </span>            :    per node, to help make sure that we don't insert a node into the
+<span class="lineNum">     317 </span>            :    worklist more than once.  Each node represents a class somewhere in
+<span class="lineNum">     318 </span>            :    our class hierarchy information. Every node in the graph gets added
+<span class="lineNum">     319 </span>            :    to the worklist exactly once and removed from the worklist exactly
+<span class="lineNum">     320 </span>            :    once (when all of its children have been processed).  */
+<a name="321"><span class="lineNum">     321 </span>            : </a>
+<span class="lineNum">     322 </span>            : static void
+<span class="lineNum">     323 </span><span class="lineCov">          5 : add_to_worklist (struct work_node **worklist, struct vtv_graph_node *node,</span>
+<span class="lineNum">     324 </span>            :                  sbitmap inserted)
+<span class="lineNum">     325 </span>            : {
+<span class="lineNum">     326 </span><span class="lineCov">          5 :   struct work_node *new_work_node;</span>
+<span class="lineNum">     327 </span>            : 
+<span class="lineNum">     328 </span><span class="lineCov">          5 :   if (bitmap_bit_p (inserted, node-&gt;class_uid))</span>
+<span class="lineNum">     329 </span>            :     return;
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineCov">          5 :   new_work_node = XNEW (struct work_node);</span>
+<span class="lineNum">     332 </span><span class="lineCov">          5 :   new_work_node-&gt;next = *worklist;</span>
+<span class="lineNum">     333 </span><span class="lineCov">          5 :   new_work_node-&gt;node = node;</span>
+<span class="lineNum">     334 </span><span class="lineCov">          5 :   *worklist = new_work_node;</span>
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineCov">          5 :   bitmap_set_bit (inserted, node-&gt;class_uid);</span>
+<span class="lineNum">     337 </span>            : }
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : /* This is a helper function for
+<span class="lineNum">     340 </span>            :    vtv_compute_class_hierarchy_transitive_closure.  It goes through
+<span class="lineNum">     341 </span>            :    the WORKLIST of class hierarchy nodes looking for a &quot;leaf&quot; node,
+<span class="lineNum">     342 </span>            :    i.e. a node whose children in the hierarchy have all been
+<span class="lineNum">     343 </span>            :    processed.  When it finds the next leaf node, it removes it from
+<span class="lineNum">     344 </span>            :    the linked list (WORKLIST) and returns the node.  */
+<span class="lineNum">     345 </span>            : 
+<span class="lineNum">     346 </span>            : static struct vtv_graph_node *
+<span class="lineNum">     347 </span><span class="lineCov">          5 : find_and_remove_next_leaf_node (struct work_node **worklist)</span>
+<span class="lineNum">     348 </span>            : {
+<span class="lineNum">     349 </span><span class="lineCov">          5 :   struct work_node *prev, *cur;</span>
+<span class="lineNum">     350 </span><span class="lineCov">          5 :   struct vtv_graph_node *ret_val = NULL;</span>
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span><span class="lineCov">          5 :   for (prev = NULL, cur = *worklist; cur; prev = cur, cur = cur-&gt;next)</span>
+<span class="lineNum">     353 </span>            :     {
+<span class="lineNum">     354 </span><span class="lineCov">         10 :       if ((cur-&gt;node-&gt;children).length() == cur-&gt;node-&gt;num_processed_children)</span>
+<span class="lineNum">     355 </span>            :         {
+<span class="lineNum">     356 </span><span class="lineCov">          5 :           if (prev == NULL)</span>
+<span class="lineNum">     357 </span><span class="lineCov">          5 :             (*worklist) = cur-&gt;next;</span>
+<span class="lineNum">     358 </span>            :           else
+<span class="lineNum">     359 </span><span class="lineNoCov">          0 :             prev-&gt;next = cur-&gt;next;</span>
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineCov">          5 :           cur-&gt;next = NULL;</span>
+<span class="lineNum">     362 </span><span class="lineCov">          5 :           ret_val = cur-&gt;node;</span>
+<span class="lineNum">     363 </span><span class="lineCov">          5 :           free (cur);</span>
+<span class="lineNum">     364 </span><span class="lineCov">          5 :           return ret_val;</span>
+<span class="lineNum">     365 </span>            :         }
+<span class="lineNum">     366 </span>            :     }
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            :   return NULL;
+<span class="lineNum">     369 </span>            : }
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span>            : /* In our class hierarchy graph, each class node contains a bitmap,
+<span class="lineNum">     372 </span>            :    with one bit for each class in the hierarchy.  The bits are set for
+<span class="lineNum">     373 </span>            :    classes that are descendants in the graph of the current node.
+<span class="lineNum">     374 </span>            :    Initially the descendants bitmap is only set for immediate
+<span class="lineNum">     375 </span>            :    descendants.  This function traverses the class hierarchy graph,
+<span class="lineNum">     376 </span>            :    bottom up, filling in the transitive closures for the descendants
+<span class="lineNum">     377 </span>            :    as we rise up the graph.  */
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            : void
+<span class="lineNum">     380 </span><span class="lineCov">         12 : vtv_compute_class_hierarchy_transitive_closure (void)</span>
+<span class="lineNum">     381 </span>            : {
+<span class="lineNum">     382 </span><span class="lineCov">         12 :   struct work_node *worklist = NULL;</span>
+<span class="lineNum">     383 </span><span class="lineCov">         12 :   sbitmap inserted = sbitmap_alloc (num_vtable_map_nodes);</span>
+<span class="lineNum">     384 </span><span class="lineCov">         12 :   unsigned i;</span>
+<span class="lineNum">     385 </span><span class="lineCov">         12 :   unsigned j;</span>
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            :   /* Note: Every node in the graph gets added to the worklist exactly
+<span class="lineNum">     388 </span>            :    once and removed from the worklist exactly once (when all of its
+<span class="lineNum">     389 </span>            :    children have been processed).  Each node's children edges are
+<span class="lineNum">     390 </span>            :    followed exactly once, and each node's parent edges are followed
+<span class="lineNum">     391 </span>            :    exactly once.  So this algorithm is roughly O(V + 2E), i.e.
+<span class="lineNum">     392 </span>            :    O(E + V).  */
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            :   /* Set-up:                                                                */
+<span class="lineNum">     395 </span>            :   /* Find all the &quot;leaf&quot; nodes in the graph, and add them to the worklist.  */
+<span class="lineNum">     396 </span><span class="lineCov">         12 :   bitmap_clear (inserted);</span>
+<span class="lineNum">     397 </span><span class="lineCov">         17 :   for (j = 0; j &lt; num_vtable_map_nodes; ++j)</span>
+<span class="lineNum">     398 </span>            :     {
+<span class="lineNum">     399 </span><span class="lineCov">          5 :       struct vtbl_map_node *cur = vtbl_map_nodes_vec[j];</span>
+<span class="lineNum">     400 </span><span class="lineCov">          5 :       if (cur-&gt;class_info</span>
+<span class="lineNum">     401 </span><span class="lineCov">          5 :           &amp;&amp; ((cur-&gt;class_info-&gt;children).length() == 0)</span>
+<span class="lineNum">     402 </span><span class="lineCov">         10 :           &amp;&amp; ! (bitmap_bit_p (inserted, cur-&gt;class_info-&gt;class_uid)))</span>
+<span class="lineNum">     403 </span><span class="lineCov">          5 :         add_to_worklist (&amp;worklist, cur-&gt;class_info, inserted);</span>
+<span class="lineNum">     404 </span>            :     }
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            :   /* Main work: pull next leaf node off work list, process it, add its
+<span class="lineNum">     407 </span>            :      parents to the worklist, where a 'leaf' node is one that has no
+<span class="lineNum">     408 </span>            :      children, or all of its children have been processed.  */
+<span class="lineNum">     409 </span><span class="lineCov">         17 :   while (worklist)</span>
+<span class="lineNum">     410 </span>            :     {
+<span class="lineNum">     411 </span><span class="lineCov">          5 :       struct vtv_graph_node *temp_node =</span>
+<span class="lineNum">     412 </span><span class="lineCov">          5 :                                   find_and_remove_next_leaf_node (&amp;worklist);</span>
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span><span class="lineCov">          5 :       gcc_assert (temp_node != NULL);</span>
+<span class="lineNum">     415 </span><span class="lineCov">          5 :       temp_node-&gt;descendants = sbitmap_alloc (num_vtable_map_nodes);</span>
+<span class="lineNum">     416 </span><span class="lineCov">          5 :       bitmap_clear (temp_node-&gt;descendants);</span>
+<span class="lineNum">     417 </span><span class="lineCov">          5 :       bitmap_set_bit (temp_node-&gt;descendants, temp_node-&gt;class_uid);</span>
+<span class="lineNum">     418 </span><span class="lineCov">         10 :       for (i = 0; i &lt; (temp_node-&gt;children).length(); ++i)</span>
+<span class="lineNum">     419 </span><span class="lineNoCov">          0 :         bitmap_ior (temp_node-&gt;descendants, temp_node-&gt;descendants,</span>
+<span class="lineNum">     420 </span><span class="lineNoCov">          0 :                         temp_node-&gt;children[i]-&gt;descendants);</span>
+<span class="lineNum">     421 </span><span class="lineCov">         10 :       for (i = 0; i &lt; (temp_node-&gt;parents).length(); ++i)</span>
+<span class="lineNum">     422 </span>            :         {
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :           temp_node-&gt;parents[i]-&gt;num_processed_children =</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :                     temp_node-&gt;parents[i]-&gt;num_processed_children + 1;</span>
+<span class="lineNum">     425 </span><span class="lineNoCov">          0 :           if (!bitmap_bit_p (inserted, temp_node-&gt;parents[i]-&gt;class_uid))</span>
+<span class="lineNum">     426 </span><span class="lineNoCov">          0 :             add_to_worklist (&amp;worklist, temp_node-&gt;parents[i], inserted);</span>
+<span class="lineNum">     427 </span>            :         }
+<span class="lineNum">     428 </span>            :     }
+<span class="lineNum">     429 </span><span class="lineCov">         12 : }</span>
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span>            : /* Keep track of which pairs we have already created __VLTRegisterPair
+<span class="lineNum">     432 </span>            :    calls for, to prevent creating duplicate calls within the same
+<span class="lineNum">     433 </span>            :    compilation unit.  VTABLE_DECL is the var decl for the vtable of
+<span class="lineNum">     434 </span>            :    the (descendant) class that we are adding to our class hierarchy
+<span class="lineNum">     435 </span>            :    data.  VPTR_ADDRESS is an expression for calculating the correct
+<span class="lineNum">     436 </span>            :    offset into the vtable (VTABLE_DECL).  It is the actual vtable
+<span class="lineNum">     437 </span>            :    pointer address that will be stored in our list of valid vtable
+<span class="lineNum">     438 </span>            :    pointers for BASE_CLASS.  BASE_CLASS is the record_type node for
+<span class="lineNum">     439 </span>            :    the base class to whose hiearchy we want to add
+<span class="lineNum">     440 </span>            :    VPTR_ADDRESS. (VTABLE_DECL should be the vtable for BASE_CLASS or
+<span class="lineNum">     441 </span>            :    one of BASE_CLASS' descendents.  */
+<a name="442"><span class="lineNum">     442 </span>            : </a>
+<span class="lineNum">     443 </span>            : static bool
+<span class="lineNum">     444 </span><span class="lineCov">         10 : check_and_record_registered_pairs (tree vtable_decl, tree vptr_address,</span>
+<span class="lineNum">     445 </span>            :                                    tree base_class)
+<span class="lineNum">     446 </span>            : {
+<span class="lineNum">     447 </span><span class="lineCov">         10 :   unsigned offset;</span>
+<span class="lineNum">     448 </span><span class="lineCov">         10 :   struct vtbl_map_node *base_vtable_map_node;</span>
+<span class="lineNum">     449 </span><span class="lineCov">         10 :   bool inserted_something = false;</span>
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span><span class="lineCov">         10 :   if (TREE_CODE (vptr_address) == ADDR_EXPR</span>
+<span class="lineNum">     453 </span><span class="lineCov">         10 :       &amp;&amp; TREE_CODE (TREE_OPERAND (vptr_address, 0)) == MEM_REF)</span>
+<span class="lineNum">     454 </span><span class="lineCov">          5 :     vptr_address = TREE_OPERAND (vptr_address, 0);</span>
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span><span class="lineCov">         10 :   if (TREE_OPERAND_LENGTH (vptr_address) &gt; 1)</span>
+<span class="lineNum">     457 </span><span class="lineCov">         10 :     offset = TREE_INT_CST_LOW (TREE_OPERAND (vptr_address, 1));</span>
+<span class="lineNum">     458 </span>            :   else
+<span class="lineNum">     459 </span>            :     offset = 0;
+<span class="lineNum">     460 </span>            : 
+<span class="lineNum">     461 </span><span class="lineCov">         10 :   base_vtable_map_node = vtbl_map_get_node (TYPE_MAIN_VARIANT (base_class));</span>
+<span class="lineNum">     462 </span>            : 
+<span class="lineNum">     463 </span><span class="lineCov">         10 :   inserted_something = vtbl_map_node_registration_insert</span>
+<span class="lineNum">     464 </span><span class="lineCov">         10 :                                                         (base_vtable_map_node,</span>
+<span class="lineNum">     465 </span>            :                                                          vtable_decl,
+<span class="lineNum">     466 </span>            :                                                          offset);
+<span class="lineNum">     467 </span><span class="lineCov">         10 :   return !inserted_something;</span>
+<span class="lineNum">     468 </span>            : }
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span>            : /* Given an IDENTIFIER_NODE, build and return a string literal based on it.  */
+<a name="471"><span class="lineNum">     471 </span>            : </a>
+<span class="lineNum">     472 </span>            : static tree
+<span class="lineNum">     473 </span><span class="lineCov">          5 : build_string_from_id (tree identifier)</span>
+<span class="lineNum">     474 </span>            : {
+<span class="lineNum">     475 </span><span class="lineCov">          5 :   int len;</span>
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span><span class="lineCov">          5 :   gcc_assert (TREE_CODE (identifier) == IDENTIFIER_NODE);</span>
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span><span class="lineCov">          5 :   len = IDENTIFIER_LENGTH (identifier);</span>
+<span class="lineNum">     480 </span><span class="lineCov">         10 :   return build_string_literal (len + 1, IDENTIFIER_POINTER (identifier));</span>
+<span class="lineNum">     481 </span>            : }
+<span class="lineNum">     482 </span>            : 
+<span class="lineNum">     483 </span>            : /* A class may contain secondary vtables in it, for various reasons.
+<span class="lineNum">     484 </span>            :    This function goes through the decl chain of a class record looking
+<span class="lineNum">     485 </span>            :    for any fields that point to secondary vtables, and adding calls to
+<span class="lineNum">     486 </span>            :    __VLTRegisterPair for the secondary vtable pointers.
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span>            :    BASE_CLASS_DECL_ARG is an expression for the address of the vtable
+<span class="lineNum">     489 </span>            :    map variable for the BASE_CLASS (whose hierarchy we are currently
+<span class="lineNum">     490 </span>            :    updating).  BASE_CLASS is the record_type node for the base class.
+<span class="lineNum">     491 </span>            :    RECORD_TYPE is the record_type node for the descendant class that
+<span class="lineNum">     492 </span>            :    we are possibly adding to BASE_CLASS's hierarchy.  BODY is the
+<span class="lineNum">     493 </span>            :    function body for the constructor init function to which we are
+<span class="lineNum">     494 </span>            :    adding our calls to __VLTRegisterPair.  */
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span>            : static void
+<span class="lineNum">     497 </span><span class="lineCov">          5 : register_construction_vtables (tree base_class, tree record_type,</span>
+<span class="lineNum">     498 </span>            :                                vec&lt;tree&gt; *vtable_ptr_array)
+<span class="lineNum">     499 </span>            : {
+<span class="lineNum">     500 </span><span class="lineCov">          5 :   tree vtbl_var_decl;</span>
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineCov">          5 :   if (TREE_CODE (record_type) != RECORD_TYPE)</span>
+<span class="lineNum">     503 </span>            :     return;
+<span class="lineNum">     504 </span>            : 
+<span class="lineNum">     505 </span><span class="lineCov">          5 :   vtbl_var_decl = CLASSTYPE_VTABLES (record_type);</span>
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineCov">         10 :   if (CLASSTYPE_VBASECLASSES (record_type))</span>
+<span class="lineNum">     508 </span>            :     {
+<span class="lineNum">     509 </span><span class="lineCov">          5 :       tree vtt_decl;</span>
+<span class="lineNum">     510 </span><span class="lineCov">          5 :       bool already_registered = false;</span>
+<span class="lineNum">     511 </span><span class="lineCov">          5 :       tree val_vtbl_decl = NULL_TREE;</span>
+<span class="lineNum">     512 </span>            : 
+<span class="lineNum">     513 </span><span class="lineCov">          5 :       vtt_decl = DECL_CHAIN (vtbl_var_decl);</span>
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span>            :       /* Check to see if we have found a VTT.  Add its data if appropriate.  */
+<span class="lineNum">     516 </span><span class="lineCov">          5 :       if (vtt_decl)</span>
+<span class="lineNum">     517 </span>            :         {
+<span class="lineNum">     518 </span><span class="lineCov">          5 :           tree values = DECL_INITIAL (vtt_decl);</span>
+<span class="lineNum">     519 </span><span class="lineCov">          5 :           if (TREE_ASM_WRITTEN (vtt_decl)</span>
+<span class="lineNum">     520 </span><span class="lineCov">          5 :               &amp;&amp; values != NULL_TREE</span>
+<span class="lineNum">     521 </span><span class="lineCov">          5 :               &amp;&amp; TREE_CODE (values) == CONSTRUCTOR</span>
+<span class="lineNum">     522 </span><span class="lineCov">         10 :               &amp;&amp; TREE_CODE (TREE_TYPE (values)) == ARRAY_TYPE)</span>
+<span class="lineNum">     523 </span>            :             {
+<span class="lineNum">     524 </span>            :               unsigned HOST_WIDE_INT cnt;
+<span class="lineNum">     525 </span>            :               constructor_elt *ce;
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span>            :               /* Loop through the initialization values for this
+<span class="lineNum">     528 </span>            :                  vtable to get all the correct vtable pointer
+<span class="lineNum">     529 </span>            :                  addresses that we need to add to our set of valid
+<span class="lineNum">     530 </span>            :                  vtable pointers for the current base class.  This may
+<span class="lineNum">     531 </span>            :                  result in adding more than just the element assigned
+<span class="lineNum">     532 </span>            :                  to the primary vptr of the class, so we may end up
+<span class="lineNum">     533 </span>            :                  with more vtable pointers than are strictly
+<span class="lineNum">     534 </span>            :                  necessary.  */
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span><span class="lineCov">          5 :               for (cnt = 0;</span>
+<span class="lineNum">     537 </span><span class="lineCov">         10 :                    vec_safe_iterate (CONSTRUCTOR_ELTS (values),</span>
+<span class="lineNum">     538 </span>            :                                      cnt, &amp;ce);
+<span class="lineNum">     539 </span>            :                    cnt++)
+<span class="lineNum">     540 </span>            :                 {
+<span class="lineNum">     541 </span><span class="lineCov">          5 :                   tree value = ce-&gt;value;</span>
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            :                   /* Search for the ADDR_EXPR operand within the value.  */
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span><span class="lineCov">          5 :                   while (value</span>
+<span class="lineNum">     546 </span><span class="lineCov">          5 :                          &amp;&amp; TREE_OPERAND (value, 0)</span>
+<span class="lineNum">     547 </span><span class="lineCov">         10 :                          &amp;&amp; TREE_CODE (TREE_OPERAND (value, 0)) == ADDR_EXPR)</span>
+<span class="lineNum">     548 </span><span class="lineNoCov">          0 :                     value = TREE_OPERAND (value, 0);</span>
+<span class="lineNum">     549 </span>            : 
+<span class="lineNum">     550 </span>            :                   /* The VAR_DECL for the vtable should be the first
+<span class="lineNum">     551 </span>            :                      argument of the ADDR_EXPR, which is the first
+<span class="lineNum">     552 </span>            :                      argument of value.*/
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span><span class="lineCov">          5 :                   if (TREE_OPERAND (value, 0))</span>
+<span class="lineNum">     555 </span><span class="lineCov">          5 :                     val_vtbl_decl = TREE_OPERAND (value, 0);</span>
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span><span class="lineCov">         25 :                   while (!VAR_P (val_vtbl_decl)</span>
+<span class="lineNum">     558 </span><span class="lineCov">         15 :                          &amp;&amp; TREE_OPERAND (val_vtbl_decl, 0))</span>
+<span class="lineNum">     559 </span><span class="lineCov">         10 :                     val_vtbl_decl = TREE_OPERAND (val_vtbl_decl, 0);</span>
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span><span class="lineCov">          5 :                   gcc_assert (VAR_P (val_vtbl_decl));</span>
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span>            :                   /* Check to see if we already have this vtable pointer in
+<span class="lineNum">     564 </span>            :                      our valid set for this base class.  */
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span><span class="lineCov">          5 :                   already_registered = check_and_record_registered_pairs</span>
+<span class="lineNum">     567 </span><span class="lineCov">          5 :                                                                (val_vtbl_decl,</span>
+<span class="lineNum">     568 </span>            :                                                                 value,
+<span class="lineNum">     569 </span>            :                                                                 base_class);
+<span class="lineNum">     570 </span>            : 
+<span class="lineNum">     571 </span><span class="lineCov">          5 :                   if (already_registered)</span>
+<span class="lineNum">     572 </span><span class="lineCov">          5 :                     continue;</span>
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span>            :                   /* Add this vtable pointer to our set of valid
+<span class="lineNum">     575 </span>            :                      pointers for the base class.  */
+<span class="lineNum">     576 </span>            : 
+<span class="lineNum">     577 </span><span class="lineNoCov">          0 :                   vtable_ptr_array-&gt;safe_push (value);</span>
+<span class="lineNum">     578 </span><span class="lineNoCov">          0 :                   current_set_size++;</span>
+<span class="lineNum">     579 </span>            :                 }
+<span class="lineNum">     580 </span>            :             }
+<span class="lineNum">     581 </span>            :         }
+<span class="lineNum">     582 </span>            :     }
+<span class="lineNum">     583 </span>            : }
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span>            : /* This function iterates through all the vtables it can find from the
+<span class="lineNum">     586 </span>            :    BINFO of a class, to make sure we have found ALL of the vtables
+<span class="lineNum">     587 </span>            :    that an object of that class could point to.  Generate calls to
+<span class="lineNum">     588 </span>            :    __VLTRegisterPair for those vtable pointers that we find.
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            :    BINFO is the tree_binfo node for the BASE_CLASS.  BODY is the
+<span class="lineNum">     591 </span>            :    function body for the constructor init function to which we are
+<span class="lineNum">     592 </span>            :    adding calls to __VLTRegisterPair.  ARG1 is an expression for the
+<span class="lineNum">     593 </span>            :    address of the vtable map variable (for the BASE_CLASS), that will
+<span class="lineNum">     594 </span>            :    point to the updated data set.  BASE_CLASS is the record_type node
+<span class="lineNum">     595 </span>            :    for the base class whose set of valid vtable pointers we are
+<span class="lineNum">     596 </span>            :    updating. STR1 and STR2 are all debugging information, to be passed
+<span class="lineNum">     597 </span>            :    as parameters to __VLTRegisterPairDebug.  STR1 represents the name
+<span class="lineNum">     598 </span>            :    of the vtable map variable to be updated by the call.  Similarly,
+<span class="lineNum">     599 </span>            :    STR2 represents the name of the class whose vtable pointer is being
+<span class="lineNum">     600 </span>            :    added to the hierarchy.  */
+<span class="lineNum">     601 </span>            : 
+<span class="lineNum">     602 </span>            : static void
+<span class="lineNum">     603 </span><span class="lineCov">         10 : register_other_binfo_vtables (tree binfo, tree base_class,</span>
+<span class="lineNum">     604 </span>            :                               vec&lt;tree&gt; *vtable_ptr_array)
+<span class="lineNum">     605 </span>            : {
+<span class="lineNum">     606 </span><span class="lineCov">         10 :   unsigned ix;</span>
+<span class="lineNum">     607 </span><span class="lineCov">         10 :   tree base_binfo;</span>
+<span class="lineNum">     608 </span><span class="lineCov">         10 :   tree vtable_decl;</span>
+<span class="lineNum">     609 </span><span class="lineCov">         10 :   bool already_registered;</span>
+<span class="lineNum">     610 </span>            : 
+<span class="lineNum">     611 </span><span class="lineCov">         10 :   if (binfo == NULL_TREE)</span>
+<span class="lineNum">     612 </span>            :     return;
+<span class="lineNum">     613 </span>            : 
+<span class="lineNum">     614 </span><span class="lineCov">         15 :   for (ix = 0; BINFO_BASE_ITERATE (binfo, ix, base_binfo); ix++)</span>
+<span class="lineNum">     615 </span>            :     {
+<span class="lineNum">     616 </span><span class="lineCov">          5 :       if ((!BINFO_PRIMARY_P (base_binfo)</span>
+<span class="lineNum">     617 </span><span class="lineNoCov">          0 :            || BINFO_VIRTUAL_P (base_binfo))</span>
+<span class="lineNum">     618 </span><span class="lineCov">          5 :           &amp;&amp; (vtable_decl = get_vtbl_decl_for_binfo (base_binfo)))</span>
+<span class="lineNum">     619 </span>            :         {
+<span class="lineNum">     620 </span><span class="lineNoCov">          0 :           tree vtable_address = build_vtbl_address (base_binfo);</span>
+<span class="lineNum">     621 </span>            : 
+<span class="lineNum">     622 </span><span class="lineNoCov">          0 :           already_registered = check_and_record_registered_pairs</span>
+<span class="lineNum">     623 </span><span class="lineNoCov">          0 :                                                               (vtable_decl,</span>
+<span class="lineNum">     624 </span>            :                                                                vtable_address,
+<span class="lineNum">     625 </span>            :                                                                base_class);
+<span class="lineNum">     626 </span><span class="lineNoCov">          0 :           if (!already_registered)</span>
+<span class="lineNum">     627 </span>            :             {
+<span class="lineNum">     628 </span><span class="lineNoCov">          0 :               vtable_ptr_array-&gt;safe_push (vtable_address);</span>
+<span class="lineNum">     629 </span><span class="lineNoCov">          0 :               current_set_size++;</span>
+<span class="lineNum">     630 </span>            :             }
+<span class="lineNum">     631 </span>            :         }
+<span class="lineNum">     632 </span>            : 
+<span class="lineNum">     633 </span><span class="lineCov">          5 :       register_other_binfo_vtables (base_binfo, base_class, vtable_ptr_array);</span>
+<span class="lineNum">     634 </span>            :     }
+<span class="lineNum">     635 </span>            : }
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span>            : /* The set of valid vtable pointers for any given class are stored in
+<span class="lineNum">     638 </span>            :    a hash table.  For reasons of efficiency, that hash table size is
+<span class="lineNum">     639 </span>            :    always a power of two.  In order to try to prevent re-sizing the
+<span class="lineNum">     640 </span>            :    hash tables very often, we pass __VLTRegisterPair an initial guess
+<span class="lineNum">     641 </span>            :    as to the number of entries the hashtable will eventually need
+<span class="lineNum">     642 </span>            :    (rounded up to the nearest power of two).  This function takes the
+<span class="lineNum">     643 </span>            :    class information we have collected for a particular class,
+<span class="lineNum">     644 </span>            :    CLASS_NODE, and calculates the hash table size guess.  */
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span>            : static int
+<span class="lineNum">     647 </span><span class="lineCov">          5 : guess_num_vtable_pointers (struct vtv_graph_node *class_node)</span>
+<span class="lineNum">     648 </span>            : {
+<span class="lineNum">     649 </span><span class="lineCov">          5 :   tree vtbl;</span>
+<span class="lineNum">     650 </span><span class="lineCov">          5 :   int total_num_vtbls = 0;</span>
+<span class="lineNum">     651 </span><span class="lineCov">          5 :   int num_vtbls_power_of_two = 1;</span>
+<span class="lineNum">     652 </span><span class="lineCov">          5 :   unsigned i;</span>
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span><span class="lineCov">         10 :   for (i = 0; i &lt; num_vtable_map_nodes; ++i)</span>
+<span class="lineNum">     655 </span><span class="lineCov">          5 :     if (bitmap_bit_p (class_node-&gt;descendants, i))</span>
+<span class="lineNum">     656 </span>            :       {
+<span class="lineNum">     657 </span><span class="lineCov">          5 :         tree class_type = vtbl_map_nodes_vec[i]-&gt;class_info-&gt;class_type;</span>
+<span class="lineNum">     658 </span><span class="lineCov">         15 :         for (vtbl = CLASSTYPE_VTABLES (class_type); vtbl;</span>
+<span class="lineNum">     659 </span><span class="lineCov">         10 :              vtbl = DECL_CHAIN (vtbl))</span>
+<span class="lineNum">     660 </span>            :           {
+<span class="lineNum">     661 </span><span class="lineCov">         10 :             total_num_vtbls++;</span>
+<span class="lineNum">     662 </span><span class="lineCov">         10 :             if (total_num_vtbls &gt; num_vtbls_power_of_two)</span>
+<span class="lineNum">     663 </span><span class="lineCov">          5 :               num_vtbls_power_of_two &lt;&lt;= 1;</span>
+<span class="lineNum">     664 </span>            :           }
+<span class="lineNum">     665 </span>            :       }
+<span class="lineNum">     666 </span><span class="lineCov">          5 :   return num_vtbls_power_of_two;</span>
+<span class="lineNum">     667 </span>            : }
+<span class="lineNum">     668 </span>            : 
+<span class="lineNum">     669 </span>            : /* A simple hash function on strings */
+<span class="lineNum">     670 </span>            : /* Be careful about changing this routine. The values generated will
+<span class="lineNum">     671 </span>            :    be stored in the calls to InitSet. So, changing this routine may
+<span class="lineNum">     672 </span>            :    cause a binary incompatibility.  */
+<a name="673"><span class="lineNum">     673 </span>            : </a>
+<span class="lineNum">     674 </span>            : static uint32_t
+<span class="lineNum">     675 </span><span class="lineCov">          5 : vtv_string_hash (const char *in)</span>
+<span class="lineNum">     676 </span>            : {
+<span class="lineNum">     677 </span><span class="lineCov">          5 :   const char *s = in;</span>
+<span class="lineNum">     678 </span><span class="lineCov">          5 :   uint32_t h = 0;</span>
+<span class="lineNum">     679 </span>            : 
+<span class="lineNum">     680 </span><span class="lineCov">          5 :   gcc_assert (in != NULL);</span>
+<span class="lineNum">     681 </span><span class="lineCov">        155 :   for ( ; *s; ++s)</span>
+<span class="lineNum">     682 </span><span class="lineCov">        150 :     h = 5 * h + *s;</span>
+<span class="lineNum">     683 </span><span class="lineCov">          5 :   return h;</span>
+<span class="lineNum">     684 </span>            : }
+<a name="685"><span class="lineNum">     685 </span>            : </a>
+<span class="lineNum">     686 </span>            : static char *
+<span class="lineNum">     687 </span><span class="lineNoCov">          0 : get_log_file_name (const char *fname)</span>
+<span class="lineNum">     688 </span>            : {
+<span class="lineNum">     689 </span><span class="lineNoCov">          0 :   const char *tmp_dir = concat (dump_dir_name, NULL);</span>
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :   char *full_name;</span>
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :   int dir_len;</span>
+<span class="lineNum">     692 </span><span class="lineNoCov">          0 :   int fname_len;</span>
+<span class="lineNum">     693 </span>            : 
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 :   dir_len = strlen (tmp_dir);</span>
+<span class="lineNum">     695 </span><span class="lineNoCov">          0 :   fname_len = strlen (fname);</span>
+<span class="lineNum">     696 </span>            : 
+<span class="lineNum">     697 </span><span class="lineNoCov">          0 :   full_name = XNEWVEC (char, dir_len + fname_len + 1);</span>
+<span class="lineNum">     698 </span><span class="lineNoCov">          0 :   strcpy (full_name, tmp_dir);</span>
+<span class="lineNum">     699 </span><span class="lineNoCov">          0 :   strcpy (full_name + dir_len, fname);</span>
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span><span class="lineNoCov">          0 :   return full_name;</span>
+<span class="lineNum">     702 </span>            : }
+<a name="703"><span class="lineNum">     703 </span>            : </a>
+<span class="lineNum">     704 </span>            : static void
+<span class="lineNum">     705 </span><span class="lineNoCov">          0 : write_out_current_set_data (tree base_class, int set_size)</span>
+<span class="lineNum">     706 </span>            : {
+<span class="lineNum">     707 </span><span class="lineNoCov">          0 :   static int class_data_log_fd = -1;</span>
+<span class="lineNum">     708 </span><span class="lineNoCov">          0 :   char buffer[1024];</span>
+<span class="lineNum">     709 </span><span class="lineNoCov">          0 :   int bytes_written __attribute__ ((unused));</span>
+<span class="lineNum">     710 </span><span class="lineNoCov">          0 :   char *file_name = get_log_file_name (&quot;vtv_class_set_sizes.log&quot;);</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineNoCov">          0 :   if (class_data_log_fd == -1)</span>
+<span class="lineNum">     713 </span><span class="lineNoCov">          0 :     class_data_log_fd = open (file_name,</span>
+<span class="lineNum">     714 </span>            :                               O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+<span class="lineNum">     715 </span>            : 
+<span class="lineNum">     716 </span><span class="lineNoCov">          0 :   if (class_data_log_fd == -1)</span>
+<span class="lineNum">     717 </span>            :     {
+<span class="lineNum">     718 </span><span class="lineNoCov">          0 :       warning_at (UNKNOWN_LOCATION, 0,</span>
+<span class="lineNum">     719 </span>            :                   &quot;unable to open log file %&lt;vtv_class_set_sizes.log%&gt;: %m&quot;);
+<span class="lineNum">     720 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">     721 </span>            :     }
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span><span class="lineNoCov">          0 :   snprintf (buffer, sizeof (buffer), &quot;%s %d\n&quot;,</span>
+<span class="lineNum">     724 </span><span class="lineNoCov">          0 :             IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (TYPE_NAME (base_class))),</span>
+<span class="lineNum">     725 </span>            :             set_size);
+<span class="lineNum">     726 </span><span class="lineNoCov">          0 :   bytes_written = write (class_data_log_fd, buffer, strlen (buffer));</span>
+<span class="lineNum">     727 </span>            : }
+<a name="728"><span class="lineNum">     728 </span>            : </a>
+<span class="lineNum">     729 </span>            : static tree
+<span class="lineNum">     730 </span><span class="lineCov">          5 : build_key_buffer_arg (tree base_ptr_var_decl)</span>
+<span class="lineNum">     731 </span>            : {
+<span class="lineNum">     732 </span><span class="lineCov">          5 :   const int key_type_fixed_size = 8;</span>
+<span class="lineNum">     733 </span><span class="lineCov">          5 :   uint32_t len1 = IDENTIFIER_LENGTH (DECL_NAME (base_ptr_var_decl));</span>
+<span class="lineNum">     734 </span><span class="lineCov">         15 :   uint32_t hash_value = vtv_string_hash (IDENTIFIER_POINTER</span>
+<span class="lineNum">     735 </span>            :                                               (DECL_NAME (base_ptr_var_decl)));
+<span class="lineNum">     736 </span><span class="lineCov">          5 :   void *key_buffer = xmalloc (len1 + key_type_fixed_size);</span>
+<span class="lineNum">     737 </span><span class="lineCov">          5 :   uint32_t *value_ptr = (uint32_t *) key_buffer;</span>
+<span class="lineNum">     738 </span><span class="lineCov">          5 :   tree ret_value;</span>
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span>            :   /* Set the len and hash for the string.  */
+<span class="lineNum">     741 </span><span class="lineCov">          5 :   *value_ptr = len1;</span>
+<span class="lineNum">     742 </span><span class="lineCov">          5 :   value_ptr++;</span>
+<span class="lineNum">     743 </span><span class="lineCov">          5 :   *value_ptr = hash_value;</span>
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span>            :   /* Now copy the string representation of the vtbl map name...  */
+<span class="lineNum">     746 </span><span class="lineCov">         10 :   memcpy ((char *) key_buffer + key_type_fixed_size,</span>
+<span class="lineNum">     747 </span><span class="lineCov">          5 :           IDENTIFIER_POINTER (DECL_NAME (base_ptr_var_decl)),</span>
+<span class="lineNum">     748 </span>            :           len1);
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span>            :   /* ... and build a string literal from it. This will make a copy
+<span class="lineNum">     751 </span>            :      so the key_bufffer is not needed anymore after this.  */
+<span class="lineNum">     752 </span><span class="lineCov">          5 :   ret_value = build_string_literal (len1 + key_type_fixed_size,</span>
+<span class="lineNum">     753 </span>            :                                     (char *) key_buffer);
+<span class="lineNum">     754 </span><span class="lineCov">          5 :   free (key_buffer);</span>
+<span class="lineNum">     755 </span><span class="lineCov">          5 :   return ret_value;</span>
+<span class="lineNum">     756 </span>            : }
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : static void
+<span class="lineNum">     759 </span><span class="lineNoCov">          0 : insert_call_to_register_set (tree class_name,</span>
+<span class="lineNum">     760 </span>            :                              vec&lt;tree&gt; *vtbl_ptr_array, tree body, tree arg1,
+<span class="lineNum">     761 </span>            :                              tree arg2, tree size_hint_arg)
+<span class="lineNum">     762 </span>            : {
+<span class="lineNum">     763 </span><span class="lineNoCov">          0 :   tree call_expr;</span>
+<span class="lineNum">     764 </span><span class="lineNoCov">          0 :   int num_args = vtbl_ptr_array-&gt;length();</span>
+<span class="lineNum">     765 </span><span class="lineNoCov">          0 :   char *array_arg_name = ACONCAT ((&quot;__vptr_array_&quot;,</span>
+<span class="lineNum">     766 </span>            :                                    IDENTIFIER_POINTER (class_name), NULL));
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :   tree array_arg_type = build_array_type_nelts (build_pointer_type</span>
+<span class="lineNum">     768 </span>            :                                                   (build_pointer_type
+<span class="lineNum">     769 </span>            :                                                      (void_type_node)),
+<span class="lineNum">     770 </span>            :                                                 num_args);
+<span class="lineNum">     771 </span><span class="lineNoCov">          0 :   tree array_arg = build_decl (UNKNOWN_LOCATION, VAR_DECL,</span>
+<span class="lineNum">     772 </span>            :                                get_identifier (array_arg_name),
+<span class="lineNum">     773 </span><span class="lineNoCov">          0 :                                array_arg_type);</span>
+<span class="lineNum">     774 </span><span class="lineNoCov">          0 :   int k;</span>
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span><span class="lineNoCov">          0 :   vec&lt;constructor_elt, va_gc&gt; *array_elements;</span>
+<span class="lineNum">     777 </span><span class="lineNoCov">          0 :   vec_alloc (array_elements, num_args);</span>
+<span class="lineNum">     778 </span>            :                                                         
+<span class="lineNum">     779 </span><span class="lineNoCov">          0 :   tree initial = NULL_TREE;</span>
+<span class="lineNum">     780 </span><span class="lineNoCov">          0 :   tree arg3 = NULL_TREE;</span>
+<span class="lineNum">     781 </span>            : 
+<span class="lineNum">     782 </span><span class="lineNoCov">          0 :   TREE_PUBLIC (array_arg) = 0;</span>
+<span class="lineNum">     783 </span><span class="lineNoCov">          0 :   DECL_EXTERNAL (array_arg) = 0;</span>
+<span class="lineNum">     784 </span><span class="lineNoCov">          0 :   TREE_STATIC (array_arg) = 1;</span>
+<span class="lineNum">     785 </span><span class="lineNoCov">          0 :   DECL_ARTIFICIAL (array_arg) = 0;</span>
+<span class="lineNum">     786 </span><span class="lineNoCov">          0 :   TREE_READONLY (array_arg) = 1;</span>
+<span class="lineNum">     787 </span><span class="lineNoCov">          0 :   DECL_IGNORED_P (array_arg) = 0;</span>
+<span class="lineNum">     788 </span><span class="lineNoCov">          0 :   DECL_PRESERVE_P (array_arg) = 0;</span>
+<span class="lineNum">     789 </span><span class="lineNoCov">          0 :   DECL_VISIBILITY (array_arg) = VISIBILITY_HIDDEN;</span>
+<span class="lineNum">     790 </span>            : 
+<span class="lineNum">     791 </span><span class="lineNoCov">          0 :   for (k = 0; k &lt; num_args; ++k)</span>
+<span class="lineNum">     792 </span>            :     {
+<span class="lineNum">     793 </span><span class="lineNoCov">          0 :       CONSTRUCTOR_APPEND_ELT (array_elements, NULL_TREE, (*vtbl_ptr_array)[k]);</span>
+<span class="lineNum">     794 </span>            :     }
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span><span class="lineNoCov">          0 :   initial = build_constructor (TREE_TYPE (array_arg), array_elements);</span>
+<span class="lineNum">     797 </span>            : 
+<span class="lineNum">     798 </span><span class="lineNoCov">          0 :   TREE_CONSTANT (initial) = 1;</span>
+<span class="lineNum">     799 </span><span class="lineNoCov">          0 :   TREE_STATIC (initial) = 1;</span>
+<span class="lineNum">     800 </span><span class="lineNoCov">          0 :   DECL_INITIAL (array_arg) = initial;</span>
+<span class="lineNum">     801 </span><span class="lineNoCov">          0 :   relayout_decl (array_arg);</span>
+<span class="lineNum">     802 </span><span class="lineNoCov">          0 :   varpool_node::finalize_decl (array_arg);</span>
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span><span class="lineNoCov">          0 :   arg3 = build1 (ADDR_EXPR, TYPE_POINTER_TO (TREE_TYPE (array_arg)), array_arg);</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span><span class="lineNoCov">          0 :   TREE_TYPE (arg3) = build_pointer_type (TREE_TYPE (array_arg));</span>
+<span class="lineNum">     807 </span>            : 
+<span class="lineNum">     808 </span><span class="lineNoCov">          0 :   call_expr = build_call_expr (vlt_register_set_fndecl, 5, arg1,</span>
+<span class="lineNum">     809 </span>            :                                arg2, /* set_symbol_key */
+<span class="lineNum">     810 </span>            :                                size_hint_arg, build_int_cst (size_type_node,
+<span class="lineNum">     811 </span>            :                                                              num_args),
+<span class="lineNum">     812 </span>            :                                arg3);
+<span class="lineNum">     813 </span><span class="lineNoCov">          0 :   append_to_statement_list (call_expr, &amp;body);</span>
+<span class="lineNum">     814 </span><span class="lineNoCov">          0 :   num_calls_to_regset++;</span>
+<span class="lineNum">     815 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span>            : static void
+<span class="lineNum">     818 </span><span class="lineCov">          5 : insert_call_to_register_pair (vec&lt;tree&gt; *vtbl_ptr_array, tree arg1,</span>
+<span class="lineNum">     819 </span>            :                               tree arg2, tree size_hint_arg, tree str1,
+<span class="lineNum">     820 </span>            :                               tree str2, tree body)
+<span class="lineNum">     821 </span>            : {
+<span class="lineNum">     822 </span><span class="lineCov">          5 :   tree call_expr;</span>
+<span class="lineNum">     823 </span><span class="lineCov">          5 :   int num_args = vtbl_ptr_array-&gt;length();</span>
+<span class="lineNum">     824 </span><span class="lineCov">          5 :   tree vtable_address = NULL_TREE;</span>
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span><span class="lineCov">          5 :   if (num_args == 0)</span>
+<span class="lineNum">     827 </span><span class="lineNoCov">          0 :     vtable_address = build_int_cst (build_pointer_type (void_type_node), 0);</span>
+<span class="lineNum">     828 </span>            :   else
+<span class="lineNum">     829 </span><span class="lineCov">         10 :     vtable_address = (*vtbl_ptr_array)[0];</span>
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span><span class="lineCov">          5 :   if (flag_vtv_debug)</span>
+<span class="lineNum">     832 </span><span class="lineNoCov">          0 :     call_expr = build_call_expr (vlt_register_pairs_fndecl, 6, arg1, arg2,</span>
+<span class="lineNum">     833 </span>            :                                  size_hint_arg, vtable_address, str1, str2);
+<span class="lineNum">     834 </span>            :   else
+<span class="lineNum">     835 </span><span class="lineCov">          5 :     call_expr = build_call_expr (vlt_register_pairs_fndecl, 4, arg1, arg2,</span>
+<span class="lineNum">     836 </span>            :                                  size_hint_arg, vtable_address);
+<span class="lineNum">     837 </span>            :     
+<span class="lineNum">     838 </span><span class="lineCov">          5 :   append_to_statement_list (call_expr, &amp;body);</span>
+<span class="lineNum">     839 </span><span class="lineCov">          5 :   num_calls_to_regpair++;</span>
+<span class="lineNum">     840 </span><span class="lineCov">          5 : }</span>
+<span class="lineNum">     841 </span>            : 
+<span class="lineNum">     842 </span>            : static void
+<span class="lineNum">     843 </span><span class="lineNoCov">          0 : output_set_info (tree record_type, vec&lt;tree&gt; vtbl_ptr_array)</span>
+<span class="lineNum">     844 </span>            : {
+<span class="lineNum">     845 </span><span class="lineNoCov">          0 :   static int vtv_debug_log_fd = -1;</span>
+<span class="lineNum">     846 </span><span class="lineNoCov">          0 :   char buffer[1024];</span>
+<span class="lineNum">     847 </span><span class="lineNoCov">          0 :   int bytes_written __attribute__ ((unused));</span>
+<span class="lineNum">     848 </span><span class="lineNoCov">          0 :   int array_len = vtbl_ptr_array.length();</span>
+<span class="lineNum">     849 </span><span class="lineNoCov">          0 :   const char *class_name =</span>
+<span class="lineNum">     850 </span><span class="lineNoCov">          0 :               IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (TYPE_NAME (record_type)));</span>
+<span class="lineNum">     851 </span><span class="lineNoCov">          0 :   char *file_name = get_log_file_name (&quot;vtv_set_ptr_data.log&quot;);</span>
+<span class="lineNum">     852 </span>            : 
+<span class="lineNum">     853 </span><span class="lineNoCov">          0 :   if (vtv_debug_log_fd == -1)</span>
+<span class="lineNum">     854 </span><span class="lineNoCov">          0 :     vtv_debug_log_fd = open (file_name,</span>
+<span class="lineNum">     855 </span>            :                              O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+<span class="lineNum">     856 </span><span class="lineNoCov">          0 :   if (vtv_debug_log_fd == -1)</span>
+<span class="lineNum">     857 </span>            :     {
+<span class="lineNum">     858 </span><span class="lineNoCov">          0 :       warning_at (UNKNOWN_LOCATION, 0,</span>
+<span class="lineNum">     859 </span>            :                   &quot;unable to open log file %&lt;vtv_set_ptr_data.log%&gt;: %m&quot;);
+<span class="lineNum">     860 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">     861 </span>            :     }
+<span class="lineNum">     862 </span>            : 
+<span class="lineNum">     863 </span><span class="lineNoCov">          0 :   for (int i = 0; i &lt; array_len; ++i)</span>
+<span class="lineNum">     864 </span>            :     {
+<span class="lineNum">     865 </span><span class="lineNoCov">          0 :       const char *vptr_name = &quot;unknown&quot;;</span>
+<span class="lineNum">     866 </span><span class="lineNoCov">          0 :       int vptr_offset = 0;</span>
+<span class="lineNum">     867 </span>            :       
+<span class="lineNum">     868 </span><span class="lineNoCov">          0 :       if (TREE_CODE (vtbl_ptr_array[i]) == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     869 </span>            :         {
+<span class="lineNum">     870 </span><span class="lineNoCov">          0 :           tree arg0 = TREE_OPERAND (vtbl_ptr_array[i], 0);</span>
+<span class="lineNum">     871 </span><span class="lineNoCov">          0 :           tree arg1 = TREE_OPERAND (vtbl_ptr_array[i], 1);</span>
+<span class="lineNum">     872 </span>            : 
+<span class="lineNum">     873 </span><span class="lineNoCov">          0 :           if (TREE_CODE (arg0) == ADDR_EXPR)</span>
+<span class="lineNum">     874 </span><span class="lineNoCov">          0 :             arg0 = TREE_OPERAND (arg0, 0);</span>
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span><span class="lineNoCov">          0 :           if (VAR_P (arg0))</span>
+<span class="lineNum">     877 </span><span class="lineNoCov">          0 :             vptr_name = IDENTIFIER_POINTER (DECL_NAME (arg0));</span>
+<span class="lineNum">     878 </span>            : 
+<span class="lineNum">     879 </span><span class="lineNoCov">          0 :           if (TREE_CODE (arg1) == INTEGER_CST)</span>
+<span class="lineNum">     880 </span><span class="lineNoCov">          0 :             vptr_offset = TREE_INT_CST_LOW (arg1);</span>
+<span class="lineNum">     881 </span>            :         }
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span><span class="lineNoCov">          0 :       snprintf (buffer, sizeof (buffer), &quot;%s %s %s + %d\n&quot;,</span>
+<span class="lineNum">     884 </span>            :                 main_input_filename, class_name, vptr_name, vptr_offset);
+<span class="lineNum">     885 </span><span class="lineNoCov">          0 :       bytes_written = write (vtv_debug_log_fd, buffer, strlen(buffer));</span>
+<span class="lineNum">     886 </span>            :     }
+<span class="lineNum">     887 </span>            : 
+<span class="lineNum">     888 </span>            : }
+<span class="lineNum">     889 </span>            : 
+<span class="lineNum">     890 </span>            : /* This function goes through our internal class hierarchy &amp; vtable
+<span class="lineNum">     891 </span>            :    pointer data structure and outputs calls to __VLTRegisterPair for
+<span class="lineNum">     892 </span>            :    every class-vptr pair (for those classes whose vtable would be
+<span class="lineNum">     893 </span>            :    output in the current compilation unit).  These calls get put into
+<span class="lineNum">     894 </span>            :    our constructor initialization function.  BODY is the function
+<span class="lineNum">     895 </span>            :    body, so far, of our constructor initialization function, to which we
+<span class="lineNum">     896 </span>            :    add the calls.  */
+<span class="lineNum">     897 </span>            : 
+<span class="lineNum">     898 </span>            : static bool
+<span class="lineNum">     899 </span><span class="lineCov">          5 : register_all_pairs (tree body)</span>
+<span class="lineNum">     900 </span>            : {
+<span class="lineNum">     901 </span><span class="lineCov">          5 :   bool registered_at_least_one = false;</span>
+<span class="lineNum">     902 </span><span class="lineCov">          5 :   vec&lt;tree&gt; *vtbl_ptr_array = NULL;</span>
+<span class="lineNum">     903 </span><span class="lineCov">          5 :   unsigned j;</span>
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span><span class="lineCov">         10 :   for (j = 0; j &lt; num_vtable_map_nodes; ++j)</span>
+<span class="lineNum">     906 </span>            :     {
+<span class="lineNum">     907 </span><span class="lineCov">          5 :       struct vtbl_map_node *current = vtbl_map_nodes_vec[j];</span>
+<span class="lineNum">     908 </span><span class="lineCov">          5 :       unsigned i = 0;</span>
+<span class="lineNum">     909 </span><span class="lineCov">          5 :       tree base_class = current-&gt;class_info-&gt;class_type;</span>
+<span class="lineNum">     910 </span><span class="lineCov">          5 :       tree base_ptr_var_decl = current-&gt;vtbl_map_decl;</span>
+<span class="lineNum">     911 </span><span class="lineCov">          5 :       tree arg1;</span>
+<span class="lineNum">     912 </span><span class="lineCov">          5 :       tree arg2;</span>
+<span class="lineNum">     913 </span><span class="lineCov">          5 :       tree new_type;</span>
+<span class="lineNum">     914 </span><span class="lineCov">          5 :       tree str1 = NULL_TREE;</span>
+<span class="lineNum">     915 </span><span class="lineCov">          5 :       tree str2 = NULL_TREE;</span>
+<span class="lineNum">     916 </span><span class="lineCov">          5 :       size_t size_hint;</span>
+<span class="lineNum">     917 </span><span class="lineCov">          5 :       tree size_hint_arg;</span>
+<span class="lineNum">     918 </span>            : 
+<span class="lineNum">     919 </span><span class="lineCov">          5 :       gcc_assert (current-&gt;class_info != NULL);</span>
+<span class="lineNum">     920 </span>            : 
+<span class="lineNum">     921 </span>            : 
+<span class="lineNum">     922 </span><span class="lineCov">          5 :       if (flag_vtv_debug)</span>
+<span class="lineNum">     923 </span><span class="lineNoCov">          0 :         str1 = build_string_from_id (DECL_NAME (base_ptr_var_decl));</span>
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span><span class="lineCov">          5 :       new_type = build_pointer_type (TREE_TYPE (base_ptr_var_decl));</span>
+<span class="lineNum">     926 </span><span class="lineCov">          5 :       arg1 = build1 (ADDR_EXPR, new_type, base_ptr_var_decl);</span>
+<span class="lineNum">     927 </span>            : 
+<span class="lineNum">     928 </span>            :       /* We need a fresh vector for each iteration.  */
+<span class="lineNum">     929 </span><span class="lineCov">          5 :       if (vtbl_ptr_array)</span>
+<span class="lineNum">     930 </span><span class="lineNoCov">          0 :         vec_free (vtbl_ptr_array);</span>
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span><span class="lineCov">          5 :       vec_alloc (vtbl_ptr_array, 10);</span>
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span><span class="lineCov">         10 :       for (i = 0; i &lt; num_vtable_map_nodes; ++i)</span>
+<span class="lineNum">     935 </span><span class="lineCov">          5 :         if (bitmap_bit_p (current-&gt;class_info-&gt;descendants, i))</span>
+<span class="lineNum">     936 </span>            :           {
+<span class="lineNum">     937 </span><span class="lineCov">          5 :             struct vtbl_map_node *vtbl_class_node = vtbl_map_nodes_vec[i];</span>
+<span class="lineNum">     938 </span><span class="lineCov">          5 :             tree class_type = vtbl_class_node-&gt;class_info-&gt;class_type;</span>
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span><span class="lineCov">          5 :             if (class_type</span>
+<span class="lineNum">     941 </span><span class="lineCov">          5 :                 &amp;&amp; (TREE_CODE (class_type) == RECORD_TYPE))</span>
+<span class="lineNum">     942 </span>            :               {
+<span class="lineNum">     943 </span><span class="lineCov">          5 :                 bool already_registered;</span>
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span><span class="lineCov">          5 :                 tree binfo = TYPE_BINFO (class_type);</span>
+<span class="lineNum">     946 </span><span class="lineCov">          5 :                 tree vtable_decl;</span>
+<span class="lineNum">     947 </span><span class="lineCov">          5 :                 bool vtable_should_be_output = false;</span>
+<span class="lineNum">     948 </span>            : 
+<span class="lineNum">     949 </span><span class="lineCov">          5 :                 vtable_decl = CLASSTYPE_VTABLES (class_type);</span>
+<span class="lineNum">     950 </span>            : 
+<span class="lineNum">     951 </span>            :                 /* Handle main vtable for this class.  */
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span><span class="lineCov">          5 :                 if (vtable_decl)</span>
+<span class="lineNum">     954 </span>            :                   {
+<span class="lineNum">     955 </span><span class="lineCov">          5 :                     vtable_should_be_output = TREE_ASM_WRITTEN (vtable_decl);</span>
+<span class="lineNum">     956 </span><span class="lineCov">          5 :                     str2 = build_string_from_id (DECL_NAME (vtable_decl));</span>
+<span class="lineNum">     957 </span>            :                   }
+<span class="lineNum">     958 </span>            : 
+<span class="lineNum">     959 </span><span class="lineCov">          5 :                 if (vtable_decl &amp;&amp; vtable_should_be_output)</span>
+<span class="lineNum">     960 </span>            :                   {
+<span class="lineNum">     961 </span><span class="lineCov">          5 :                     tree vtable_address = build_vtbl_address (binfo);</span>
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span><span class="lineCov">          5 :                     already_registered = check_and_record_registered_pairs</span>
+<span class="lineNum">     964 </span><span class="lineCov">          5 :                                                               (vtable_decl,</span>
+<span class="lineNum">     965 </span>            :                                                                vtable_address,
+<span class="lineNum">     966 </span>            :                                                                base_class);
+<span class="lineNum">     967 </span>            : 
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span><span class="lineCov">          5 :                     if (!already_registered)</span>
+<span class="lineNum">     970 </span>            :                       {
+<span class="lineNum">     971 </span><span class="lineCov">          5 :                         vtbl_ptr_array-&gt;safe_push (vtable_address);</span>
+<span class="lineNum">     972 </span>            : 
+<span class="lineNum">     973 </span>            :                         /* Find and handle any 'extra' vtables associated
+<span class="lineNum">     974 </span>            :                            with this class, via virtual inheritance.   */
+<span class="lineNum">     975 </span><span class="lineCov">          5 :                         register_construction_vtables (base_class, class_type,</span>
+<span class="lineNum">     976 </span>            :                                                        vtbl_ptr_array);
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span>            :                         /* Find and handle any 'extra' vtables associated
+<span class="lineNum">     979 </span>            :                            with this class, via multiple inheritance.   */
+<span class="lineNum">     980 </span><span class="lineCov">          5 :                         register_other_binfo_vtables (binfo, base_class,</span>
+<span class="lineNum">     981 </span>            :                                                       vtbl_ptr_array);
+<span class="lineNum">     982 </span>            :                       }
+<span class="lineNum">     983 </span>            :                   }
+<span class="lineNum">     984 </span>            :               }
+<span class="lineNum">     985 </span>            :           }
+<span class="lineNum">     986 </span><span class="lineCov">          5 :       current_set_size = vtbl_ptr_array-&gt;length();</span>
+<span class="lineNum">     987 </span>            : 
+<span class="lineNum">     988 </span>            :       /* Sometimes we need to initialize the set symbol even if we are
+<span class="lineNum">     989 </span>            :          not adding any vtable pointers to the set in the current
+<span class="lineNum">     990 </span>            :          compilation unit.  In that case, we need to initialize the
+<span class="lineNum">     991 </span>            :          set to our best guess as to what the eventual size of the set
+<span class="lineNum">     992 </span>            :          hash table will be (to prevent having to re-size the hash
+<span class="lineNum">     993 </span>            :          table later).  */
+<span class="lineNum">     994 </span>            : 
+<span class="lineNum">     995 </span><span class="lineCov">          5 :       size_hint = guess_num_vtable_pointers (current-&gt;class_info);</span>
+<span class="lineNum">     996 </span>            : 
+<span class="lineNum">     997 </span>            :       /* If we have added vtable pointers to the set in this
+<span class="lineNum">     998 </span>            :          compilation unit, adjust the size hint for the set's hash
+<span class="lineNum">     999 </span>            :          table appropriately.  */
+<span class="lineNum">    1000 </span><span class="lineCov">          5 :       if (vtbl_ptr_array-&gt;length() &gt; 0)</span>
+<span class="lineNum">    1001 </span>            :         {
+<span class="lineNum">    1002 </span>            :           unsigned len = vtbl_ptr_array-&gt;length();
+<span class="lineNum">    1003 </span><span class="lineCov">          5 :           while ((size_t) len &gt; size_hint)</span>
+<span class="lineNum">    1004 </span><span class="lineNoCov">          0 :             size_hint &lt;&lt;= 1;</span>
+<span class="lineNum">    1005 </span>            :         }
+<span class="lineNum">    1006 </span><span class="lineCov">         10 :       size_hint_arg = build_int_cst (size_type_node, size_hint);</span>
+<span class="lineNum">    1007 </span>            : 
+<span class="lineNum">    1008 </span>            :       /* Get the key-buffer argument.  */
+<span class="lineNum">    1009 </span><span class="lineCov">          5 :       arg2 = build_key_buffer_arg (base_ptr_var_decl);</span>
+<span class="lineNum">    1010 </span>            : 
+<span class="lineNum">    1011 </span><span class="lineCov">          5 :       if (str2 == NULL_TREE)</span>
+<span class="lineNum">    1012 </span><span class="lineNoCov">          0 :         str2 = build_string_literal (strlen (&quot;unknown&quot;) + 1,</span>
+<span class="lineNum">    1013 </span>            :                                      &quot;unknown&quot;);
+<span class="lineNum">    1014 </span>            : 
+<span class="lineNum">    1015 </span><span class="lineCov">          5 :       if (flag_vtv_debug)</span>
+<span class="lineNum">    1016 </span><span class="lineNoCov">          0 :         output_set_info (current-&gt;class_info-&gt;class_type,</span>
+<span class="lineNum">    1017 </span>            :                          *vtbl_ptr_array);
+<span class="lineNum">    1018 </span>            : 
+<span class="lineNum">    1019 </span><span class="lineCov">          5 :       if (vtbl_ptr_array-&gt;length() &gt; 1)</span>
+<span class="lineNum">    1020 </span>            :         {
+<span class="lineNum">    1021 </span><span class="lineNoCov">          0 :           insert_call_to_register_set (current-&gt;class_name,</span>
+<span class="lineNum">    1022 </span>            :                                        vtbl_ptr_array, body, arg1, arg2,
+<span class="lineNum">    1023 </span>            :                                        size_hint_arg);
+<span class="lineNum">    1024 </span><span class="lineNoCov">          0 :           registered_at_least_one = true;</span>
+<span class="lineNum">    1025 </span>            :         }
+<span class="lineNum">    1026 </span>            :       else
+<span class="lineNum">    1027 </span>            :         {
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span><span class="lineCov">          5 :           if (vtbl_ptr_array-&gt;length() &gt; 0</span>
+<span class="lineNum">    1030 </span><span class="lineCov">          5 :               || (current-&gt;is_used</span>
+<span class="lineNum">    1031 </span><span class="lineNoCov">          0 :                   || (current-&gt;registered-&gt;size() &gt; 0)))</span>
+<span class="lineNum">    1032 </span>            :             {
+<span class="lineNum">    1033 </span><span class="lineCov">          5 :               insert_call_to_register_pair (vtbl_ptr_array,</span>
+<span class="lineNum">    1034 </span>            :                                             arg1, arg2, size_hint_arg, str1,
+<span class="lineNum">    1035 </span>            :                                             str2, body);
+<span class="lineNum">    1036 </span><span class="lineCov">          5 :               registered_at_least_one = true;</span>
+<span class="lineNum">    1037 </span>            :             }
+<span class="lineNum">    1038 </span>            :         }
+<span class="lineNum">    1039 </span>            : 
+<span class="lineNum">    1040 </span><span class="lineCov">          5 :       if (flag_vtv_counts &amp;&amp; current_set_size &gt; 0)</span>
+<span class="lineNum">    1041 </span><span class="lineNoCov">          0 :         write_out_current_set_data (base_class, current_set_size);</span>
+<span class="lineNum">    1042 </span>            : 
+<span class="lineNum">    1043 </span>            :     }
+<span class="lineNum">    1044 </span>            : 
+<span class="lineNum">    1045 </span><span class="lineCov">          5 :   return registered_at_least_one;</span>
+<span class="lineNum">    1046 </span>            : }
+<span class="lineNum">    1047 </span>            : 
+<span class="lineNum">    1048 </span>            : /* Given a tree containing a class type (CLASS_TYPE), this function
+<span class="lineNum">    1049 </span>            :    finds and returns the class hierarchy node for that class in our
+<span class="lineNum">    1050 </span>            :    data structure.  */
+<a name="1051"><span class="lineNum">    1051 </span>            : </a>
+<span class="lineNum">    1052 </span>            : static struct vtv_graph_node *
+<span class="lineNum">    1053 </span><span class="lineNoCov">          0 : find_graph_node (tree class_type)</span>
+<span class="lineNum">    1054 </span>            : {
+<span class="lineNum">    1055 </span><span class="lineNoCov">          0 :   struct vtbl_map_node *vtbl_node;</span>
+<span class="lineNum">    1056 </span>            : 
+<span class="lineNum">    1057 </span><span class="lineNoCov">          0 :   vtbl_node = vtbl_map_get_node (TYPE_MAIN_VARIANT (class_type));</span>
+<span class="lineNum">    1058 </span><span class="lineNoCov">          0 :   if (vtbl_node)</span>
+<span class="lineNum">    1059 </span><span class="lineNoCov">          0 :     return vtbl_node-&gt;class_info;</span>
+<span class="lineNum">    1060 </span>            : 
+<span class="lineNum">    1061 </span>            :   return NULL;
+<span class="lineNum">    1062 </span>            : }
+<span class="lineNum">    1063 </span>            : 
+<span class="lineNum">    1064 </span>            : /* Add base class/derived class pair to our internal class hierarchy
+<span class="lineNum">    1065 </span>            :    data structure.  BASE_NODE is our vtv_graph_node that corresponds
+<span class="lineNum">    1066 </span>            :    to a base class.  DERIVED_NODE is our vtv_graph_node that
+<span class="lineNum">    1067 </span>            :    corresponds to a class that is a descendant of the base class
+<span class="lineNum">    1068 </span>            :    (possibly the base class itself).  */
+<a name="1069"><span class="lineNum">    1069 </span>            : </a>
+<span class="lineNum">    1070 </span>            : static void
+<span class="lineNum">    1071 </span><span class="lineNoCov">          0 : add_hierarchy_pair (struct vtv_graph_node *base_node,</span>
+<span class="lineNum">    1072 </span>            :                     struct vtv_graph_node *derived_node)
+<span class="lineNum">    1073 </span>            : {
+<span class="lineNum">    1074 </span><span class="lineNoCov">          0 :   (base_node-&gt;children).safe_push (derived_node);</span>
+<span class="lineNum">    1075 </span><span class="lineNoCov">          0 :   (derived_node-&gt;parents).safe_push (base_node);</span>
+<span class="lineNum">    1076 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1077 </span>            : 
+<span class="lineNum">    1078 </span>            : /* This functions adds a new base class/derived class relationship to
+<span class="lineNum">    1079 </span>            :    our class hierarchy data structure.  Both parameters are trees
+<span class="lineNum">    1080 </span>            :    representing the class types, i.e. RECORD_TYPE trees.
+<span class="lineNum">    1081 </span>            :    DERIVED_CLASS can be the same as BASE_CLASS.  */
+<a name="1082"><span class="lineNum">    1082 </span>            : </a>
+<span class="lineNum">    1083 </span>            : static void
+<span class="lineNum">    1084 </span><span class="lineNoCov">          0 : update_class_hierarchy_information (tree base_class,</span>
+<span class="lineNum">    1085 </span>            :                                     tree derived_class)
+<span class="lineNum">    1086 </span>            : {
+<span class="lineNum">    1087 </span><span class="lineNoCov">          0 :   struct vtv_graph_node *base_node = find_graph_node (base_class);</span>
+<span class="lineNum">    1088 </span><span class="lineNoCov">          0 :   struct vtv_graph_node *derived_node = find_graph_node (derived_class);</span>
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span><span class="lineNoCov">          0 :   add_hierarchy_pair (base_node, derived_node);</span>
+<span class="lineNum">    1091 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1092 </span>            : 
+<span class="lineNum">    1093 </span>            : 
+<span class="lineNum">    1094 </span>            : static void
+<span class="lineNum">    1095 </span><span class="lineNoCov">          0 : write_out_vtv_count_data (void)</span>
+<span class="lineNum">    1096 </span>            : {
+<span class="lineNum">    1097 </span><span class="lineNoCov">          0 :   static int vtv_count_log_fd = -1;</span>
+<span class="lineNum">    1098 </span><span class="lineNoCov">          0 :   char buffer[1024];</span>
+<span class="lineNum">    1099 </span><span class="lineNoCov">          0 :   int unused_vtbl_map_vars = 0;</span>
+<span class="lineNum">    1100 </span><span class="lineNoCov">          0 :   int bytes_written __attribute__ ((unused));</span>
+<span class="lineNum">    1101 </span><span class="lineNoCov">          0 :   char *file_name = get_log_file_name (&quot;vtv_count_data.log&quot;);</span>
+<span class="lineNum">    1102 </span>            : 
+<span class="lineNum">    1103 </span><span class="lineNoCov">          0 :   if (vtv_count_log_fd == -1)</span>
+<span class="lineNum">    1104 </span><span class="lineNoCov">          0 :     vtv_count_log_fd = open (file_name,</span>
+<span class="lineNum">    1105 </span>            :                              O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
+<span class="lineNum">    1106 </span><span class="lineNoCov">          0 :   if (vtv_count_log_fd == -1)</span>
+<span class="lineNum">    1107 </span>            :     {
+<span class="lineNum">    1108 </span><span class="lineNoCov">          0 :       warning_at (UNKNOWN_LOCATION, 0,</span>
+<span class="lineNum">    1109 </span>            :                   &quot;unable to open log file %&lt;vtv_count_data.log%&gt;: %m&quot;);
+<span class="lineNum">    1110 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">    1111 </span>            :     }
+<span class="lineNum">    1112 </span>            : 
+<span class="lineNum">    1113 </span><span class="lineNoCov">          0 :   for (unsigned i = 0; i &lt; num_vtable_map_nodes; ++i)</span>
+<span class="lineNum">    1114 </span>            :     {
+<span class="lineNum">    1115 </span><span class="lineNoCov">          0 :       struct vtbl_map_node *current = vtbl_map_nodes_vec[i];</span>
+<span class="lineNum">    1116 </span><span class="lineNoCov">          0 :       if (!current-&gt;is_used</span>
+<span class="lineNum">    1117 </span><span class="lineNoCov">          0 :           &amp;&amp; current-&gt;registered-&gt;size() == 0)</span>
+<span class="lineNum">    1118 </span><span class="lineNoCov">          0 :         unused_vtbl_map_vars++;</span>
+<span class="lineNum">    1119 </span>            :     }
+<span class="lineNum">    1120 </span>            : 
+<span class="lineNum">    1121 </span><span class="lineNoCov">          0 :   snprintf (buffer, sizeof (buffer), &quot;%s %d %d %d %d %d\n&quot;,</span>
+<span class="lineNum">    1122 </span>            :             main_input_filename, total_num_virtual_calls,
+<span class="lineNum">    1123 </span>            :             total_num_verified_vcalls, num_calls_to_regset,
+<span class="lineNum">    1124 </span>            :             num_calls_to_regpair, unused_vtbl_map_vars);
+<span class="lineNum">    1125 </span>            : 
+<span class="lineNum">    1126 </span><span class="lineNoCov">          0 :   bytes_written = write (vtv_count_log_fd, buffer, strlen (buffer));</span>
+<span class="lineNum">    1127 </span>            : }
+<span class="lineNum">    1128 </span>            : 
+<span class="lineNum">    1129 </span>            : /* This function calls register_all_pairs, which actually generates
+<span class="lineNum">    1130 </span>            :    all the calls to __VLTRegisterPair (in the verification constructor
+<span class="lineNum">    1131 </span>            :    init function).  It also generates the calls to
+<span class="lineNum">    1132 </span>            :    __VLTChangePermission, if the verification constructor init
+<span class="lineNum">    1133 </span>            :    function is going into the preinit array.  INIT_ROUTINE_BODY is
+<span class="lineNum">    1134 </span>            :    the body of our constructior initialization function, to which we
+<span class="lineNum">    1135 </span>            :    add our function calls.*/
+<a name="1136"><span class="lineNum">    1136 </span>            : </a>
+<span class="lineNum">    1137 </span>            : bool
+<span class="lineNum">    1138 </span><span class="lineCov">         12 : vtv_register_class_hierarchy_information (tree init_routine_body)</span>
+<span class="lineNum">    1139 </span>            : {
+<span class="lineNum">    1140 </span><span class="lineCov">         12 :   bool registered_something = false;</span>
+<span class="lineNum">    1141 </span>            :  
+<span class="lineNum">    1142 </span><span class="lineCov">         12 :   init_functions ();</span>
+<span class="lineNum">    1143 </span>            : 
+<span class="lineNum">    1144 </span><span class="lineCov">         12 :   if (num_vtable_map_nodes == 0)</span>
+<span class="lineNum">    1145 </span>            :     return false;
+<span class="lineNum">    1146 </span>            : 
+<span class="lineNum">    1147 </span>            :   /* Add class hierarchy pairs to the vtable map data structure.  */
+<span class="lineNum">    1148 </span><span class="lineCov">          5 :   registered_something = register_all_pairs (init_routine_body);</span>
+<span class="lineNum">    1149 </span>            : 
+<span class="lineNum">    1150 </span><span class="lineCov">          5 :   if (flag_vtv_counts)</span>
+<span class="lineNum">    1151 </span><span class="lineNoCov">          0 :     write_out_vtv_count_data ();</span>
+<span class="lineNum">    1152 </span>            : 
+<span class="lineNum">    1153 </span>            :   return registered_something;
+<span class="lineNum">    1154 </span>            : }
+<span class="lineNum">    1155 </span>            : 
+<span class="lineNum">    1156 </span>            : 
+<span class="lineNum">    1157 </span>            : /* Generate the special constructor function that calls
+<span class="lineNum">    1158 </span>            :    __VLTChangePermission and __VLTRegisterPairs, and give it a very
+<span class="lineNum">    1159 </span>            :    high initialization priority.  */
+<a name="1160"><span class="lineNum">    1160 </span>            : </a>
+<span class="lineNum">    1161 </span>            : void
+<span class="lineNum">    1162 </span><span class="lineCov">         12 : vtv_generate_init_routine (void)</span>
+<span class="lineNum">    1163 </span>            : {
+<span class="lineNum">    1164 </span><span class="lineCov">         12 :   tree init_routine_body;</span>
+<span class="lineNum">    1165 </span><span class="lineCov">         12 :   bool vtable_classes_found = false;</span>
+<span class="lineNum">    1166 </span>            : 
+<span class="lineNum">    1167 </span><span class="lineCov">         12 :   push_lang_context (lang_name_c);</span>
+<span class="lineNum">    1168 </span>            : 
+<span class="lineNum">    1169 </span>            :   /* The priority for this init function (constructor) is carefully
+<span class="lineNum">    1170 </span>            :      chosen so that it will happen after the calls to unprotect the
+<span class="lineNum">    1171 </span>            :      memory used for vtable verification and before the memory is
+<span class="lineNum">    1172 </span>            :      protected again.  */
+<span class="lineNum">    1173 </span><span class="lineCov">         12 :   init_routine_body = vtv_start_verification_constructor_init_function ();</span>
+<span class="lineNum">    1174 </span>            : 
+<span class="lineNum">    1175 </span><span class="lineCov">         12 :   vtable_classes_found =</span>
+<span class="lineNum">    1176 </span><span class="lineCov">         12 :                  vtv_register_class_hierarchy_information (init_routine_body);</span>
+<span class="lineNum">    1177 </span>            : 
+<span class="lineNum">    1178 </span><span class="lineCov">         12 :   if (vtable_classes_found)</span>
+<span class="lineNum">    1179 </span>            :     {
+<span class="lineNum">    1180 </span><span class="lineCov">          5 :       tree vtv_fndecl =</span>
+<span class="lineNum">    1181 </span><span class="lineCov">          5 :         vtv_finish_verification_constructor_init_function (init_routine_body);</span>
+<span class="lineNum">    1182 </span><span class="lineCov">          5 :       TREE_STATIC (vtv_fndecl) = 1;</span>
+<span class="lineNum">    1183 </span><span class="lineCov">          5 :       TREE_USED (vtv_fndecl) = 1;</span>
+<span class="lineNum">    1184 </span><span class="lineCov">          5 :       DECL_PRESERVE_P (vtv_fndecl) = 1;</span>
+<span class="lineNum">    1185 </span>            :       /* We are running too late to generate any meaningful debug information
+<span class="lineNum">    1186 </span>            :          for this routine.  */
+<span class="lineNum">    1187 </span><span class="lineCov">          5 :       DECL_IGNORED_P (vtv_fndecl) = 1;</span>
+<span class="lineNum">    1188 </span><span class="lineCov">          5 :       if (flag_vtable_verify == VTV_PREINIT_PRIORITY &amp;&amp; !TARGET_PECOFF)</span>
+<span class="lineNum">    1189 </span><span class="lineNoCov">          0 :         DECL_STATIC_CONSTRUCTOR (vtv_fndecl) = 0;</span>
+<span class="lineNum">    1190 </span>            : 
+<span class="lineNum">    1191 </span><span class="lineCov">          5 :       gimplify_function_tree (vtv_fndecl);</span>
+<span class="lineNum">    1192 </span><span class="lineCov">          5 :       cgraph_node::add_new_function (vtv_fndecl, false);</span>
+<span class="lineNum">    1193 </span>            : 
+<span class="lineNum">    1194 </span><span class="lineCov">          5 :       symtab-&gt;process_new_functions ();</span>
+<span class="lineNum">    1195 </span>            : 
+<span class="lineNum">    1196 </span><span class="lineCov">          5 :       if (flag_vtable_verify == VTV_PREINIT_PRIORITY &amp;&amp; !TARGET_PECOFF)</span>
+<span class="lineNum">    1197 </span><span class="lineNoCov">          0 :         assemble_vtv_preinit_initializer (vtv_fndecl);</span>
+<span class="lineNum">    1198 </span>            : 
+<span class="lineNum">    1199 </span>            :     }
+<span class="lineNum">    1200 </span><span class="lineCov">         12 :   pop_lang_context ();</span>
+<span class="lineNum">    1201 </span><span class="lineCov">         12 : }</span>
+<span class="lineNum">    1202 </span>            : 
+<span class="lineNum">    1203 </span>            : /* This funtion takes a tree containing a class type (BASE_TYPE), and
+<span class="lineNum">    1204 </span>            :    it either finds the existing vtbl_map_node for that class in our
+<span class="lineNum">    1205 </span>            :    data structure, or it creates a new node and adds it to the data
+<span class="lineNum">    1206 </span>            :    structure if there is not one for the class already.  As part of
+<span class="lineNum">    1207 </span>            :    this process it also creates the global vtable map variable for the
+<span class="lineNum">    1208 </span>            :    class.  */
+<a name="1209"><span class="lineNum">    1209 </span>            : </a>
+<span class="lineNum">    1210 </span>            : struct vtbl_map_node *
+<span class="lineNum">    1211 </span><span class="lineCov">         15 : vtable_find_or_create_map_decl (tree base_type)</span>
+<span class="lineNum">    1212 </span>            : {
+<span class="lineNum">    1213 </span><span class="lineCov">         15 :   char *var_name = NULL;</span>
+<span class="lineNum">    1214 </span><span class="lineCov">         15 :   struct vtbl_map_node *vtable_map_node = NULL;</span>
+<span class="lineNum">    1215 </span>            : 
+<span class="lineNum">    1216 </span>            :   /* Verify the type has an associated vtable.  */
+<span class="lineNum">    1217 </span><span class="lineCov">         15 :   if (!TYPE_BINFO (base_type) || !BINFO_VTABLE (TYPE_BINFO (base_type)))</span>
+<span class="lineNum">    1218 </span>            :     return NULL;
+<span class="lineNum">    1219 </span>            : 
+<span class="lineNum">    1220 </span>            :   /* Create map lookup symbol for base class */
+<span class="lineNum">    1221 </span><span class="lineCov">          5 :   var_name = get_mangled_vtable_map_var_name (base_type);</span>
+<span class="lineNum">    1222 </span>            : 
+<span class="lineNum">    1223 </span>            :   /* We've already created the variable; just look it.  */
+<span class="lineNum">    1224 </span><span class="lineCov">          5 :   vtable_map_node = vtbl_map_get_node (TYPE_MAIN_VARIANT (base_type));</span>
+<span class="lineNum">    1225 </span>            : 
+<span class="lineNum">    1226 </span><span class="lineCov">          5 :   if (!vtable_map_node || (vtable_map_node-&gt;vtbl_map_decl == NULL_TREE))</span>
+<span class="lineNum">    1227 </span>            :     {
+<span class="lineNum">    1228 </span>            :       /* If we haven't already created the *__vtable_map global
+<span class="lineNum">    1229 </span>            :          variable for this class, do so now, and add it to the
+<span class="lineNum">    1230 </span>            :          varpool, to make sure it gets saved and written out.  */
+<span class="lineNum">    1231 </span>            : 
+<span class="lineNum">    1232 </span><span class="lineCov">          5 :       tree var_decl = NULL;</span>
+<span class="lineNum">    1233 </span><span class="lineCov">          5 :       tree var_type = build_pointer_type (void_type_node);</span>
+<span class="lineNum">    1234 </span><span class="lineCov">          5 :       tree initial_value = integer_zero_node;</span>
+<span class="lineNum">    1235 </span>            : 
+<span class="lineNum">    1236 </span><span class="lineCov">          5 :       var_decl  = build_decl (UNKNOWN_LOCATION, VAR_DECL,</span>
+<span class="lineNum">    1237 </span>            :                               get_identifier (var_name), var_type);
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span><span class="lineCov">          5 :       DECL_EXTERNAL (var_decl) = 0;</span>
+<span class="lineNum">    1240 </span><span class="lineCov">          5 :       TREE_STATIC (var_decl) = 1;</span>
+<span class="lineNum">    1241 </span><span class="lineCov">          5 :       DECL_VISIBILITY (var_decl) = VISIBILITY_HIDDEN;</span>
+<span class="lineNum">    1242 </span><span class="lineCov">          5 :       SET_DECL_ASSEMBLER_NAME (var_decl, get_identifier (var_name));</span>
+<span class="lineNum">    1243 </span><span class="lineCov">          5 :       DECL_ARTIFICIAL (var_decl) = 1;</span>
+<span class="lineNum">    1244 </span>            :       /* We cannot mark this variable as read-only because we want to be
+<span class="lineNum">    1245 </span>            :          able to write to it at runtime.  */
+<span class="lineNum">    1246 </span><span class="lineCov">          5 :       TREE_READONLY (var_decl) = 0;</span>
+<span class="lineNum">    1247 </span><span class="lineCov">          5 :       DECL_IGNORED_P (var_decl) = 1;</span>
+<span class="lineNum">    1248 </span><span class="lineCov">          5 :       DECL_PRESERVE_P (var_decl) = 1;</span>
+<span class="lineNum">    1249 </span>            : 
+<span class="lineNum">    1250 </span>            :       /* Put these mmap variables in thr .vtable_map_vars section, so
+<span class="lineNum">    1251 </span>            :          we can find and protect them.  */
+<span class="lineNum">    1252 </span>            : 
+<span class="lineNum">    1253 </span><span class="lineCov">          5 :       set_decl_section_name (var_decl, &quot;.vtable_map_vars&quot;);</span>
+<span class="lineNum">    1254 </span><span class="lineCov">          5 :       symtab_node::get (var_decl)-&gt;implicit_section = true;</span>
+<span class="lineNum">    1255 </span><span class="lineCov">          5 :       DECL_INITIAL (var_decl) = initial_value;</span>
+<span class="lineNum">    1256 </span>            : 
+<span class="lineNum">    1257 </span><span class="lineCov">          5 :       comdat_linkage (var_decl);</span>
+<span class="lineNum">    1258 </span>            : 
+<span class="lineNum">    1259 </span><span class="lineCov">          5 :       varpool_node::finalize_decl (var_decl);</span>
+<span class="lineNum">    1260 </span><span class="lineCov">          5 :       if (!vtable_map_node)</span>
+<span class="lineNum">    1261 </span><span class="lineCov">         10 :         vtable_map_node =</span>
+<span class="lineNum">    1262 </span><span class="lineCov">          5 :                    find_or_create_vtbl_map_node (TYPE_MAIN_VARIANT (base_type));</span>
+<span class="lineNum">    1263 </span><span class="lineCov">          5 :       if (vtable_map_node-&gt;vtbl_map_decl == NULL_TREE)</span>
+<span class="lineNum">    1264 </span><span class="lineCov">          5 :         vtable_map_node-&gt;vtbl_map_decl = var_decl;</span>
+<span class="lineNum">    1265 </span>            :     }
+<span class="lineNum">    1266 </span>            : 
+<span class="lineNum">    1267 </span><span class="lineCov">          5 :   gcc_assert (vtable_map_node);</span>
+<span class="lineNum">    1268 </span>            :   return vtable_map_node;
+<span class="lineNum">    1269 </span>            : }
+<span class="lineNum">    1270 </span>            : 
+<span class="lineNum">    1271 </span>            : /* This function is used to build up our class hierarchy data for a
+<span class="lineNum">    1272 </span>            :    particular class.  TYPE is the record_type tree node for the
+<span class="lineNum">    1273 </span>            :    class.  */
+<span class="lineNum">    1274 </span>            : 
+<span class="lineNum">    1275 </span>            : static void
+<span class="lineNum">    1276 </span><span class="lineCov">         10 : vtv_insert_single_class_info (tree type)</span>
+<span class="lineNum">    1277 </span>            : {
+<span class="lineNum">    1278 </span><span class="lineCov">         10 :   if (flag_vtable_verify)</span>
+<span class="lineNum">    1279 </span>            :     {
+<span class="lineNum">    1280 </span><span class="lineCov">         10 :       tree binfo =  TYPE_BINFO (type);</span>
+<span class="lineNum">    1281 </span><span class="lineCov">         10 :       tree base_binfo;</span>
+<span class="lineNum">    1282 </span><span class="lineCov">         10 :       struct vtbl_map_node *own_map;</span>
+<span class="lineNum">    1283 </span><span class="lineCov">         10 :       int i;</span>
+<span class="lineNum">    1284 </span>            : 
+<span class="lineNum">    1285 </span>            :       /* First make sure to create the map for this record type.  */
+<span class="lineNum">    1286 </span><span class="lineCov">         10 :       own_map = vtable_find_or_create_map_decl (type);</span>
+<span class="lineNum">    1287 </span><span class="lineCov">         10 :       if (own_map == NULL)</span>
+<span class="lineNum">    1288 </span>            :         return;
+<span class="lineNum">    1289 </span>            : 
+<span class="lineNum">    1290 </span>            :       /* Go through the list of all base classes for the current
+<span class="lineNum">    1291 </span>            :          (derived) type, make sure the *__vtable_map global variable
+<span class="lineNum">    1292 </span>            :          for the base class exists, and add the base class/derived
+<span class="lineNum">    1293 </span>            :          class pair to the class hierarchy information we are
+<span class="lineNum">    1294 </span>            :          accumulating (for vtable pointer verification).  */
+<span class="lineNum">    1295 </span><span class="lineCov">         10 :       for (i = 0; BINFO_BASE_ITERATE (binfo, i, base_binfo); i++)</span>
+<span class="lineNum">    1296 </span>            :         {
+<span class="lineNum">    1297 </span><span class="lineCov">          5 :           tree tree_val = BINFO_TYPE (base_binfo);</span>
+<span class="lineNum">    1298 </span><span class="lineCov">          5 :           struct vtbl_map_node *vtable_map_node = NULL;</span>
+<span class="lineNum">    1299 </span>            : 
+<span class="lineNum">    1300 </span><span class="lineCov">          5 :           vtable_map_node = vtable_find_or_create_map_decl (tree_val);</span>
+<span class="lineNum">    1301 </span>            : 
+<span class="lineNum">    1302 </span><span class="lineCov">          5 :           if (vtable_map_node != NULL)</span>
+<span class="lineNum">    1303 </span><span class="lineNoCov">          0 :             update_class_hierarchy_information (tree_val, type);</span>
+<span class="lineNum">    1304 </span>            :         }
+<span class="lineNum">    1305 </span>            :     }
+<span class="lineNum">    1306 </span>            : }
+<span class="lineNum">    1307 </span>            : 
+<span class="lineNum">    1308 </span>            : /* This function adds classes we are interested in to a list of
+<span class="lineNum">    1309 </span>            :    classes.  RECORD is the record_type node for the class we are
+<span class="lineNum">    1310 </span>            :    adding to the list.  */
+<span class="lineNum">    1311 </span>            : 
+<span class="lineNum">    1312 </span>            : void
+<span class="lineNum">    1313 </span><span class="lineCov">         10 : vtv_save_class_info (tree record)</span>
+<span class="lineNum">    1314 </span>            : {
+<span class="lineNum">    1315 </span><span class="lineCov">         10 :   if (!flag_vtable_verify || TREE_CODE (record) == UNION_TYPE)</span>
+<span class="lineNum">    1316 </span>            :     return;
+<span class="lineNum">    1317 </span>            : 
+<span class="lineNum">    1318 </span><span class="lineCov">         10 :   if (!vlt_saved_class_info)</span>
+<span class="lineNum">    1319 </span><span class="lineCov">          5 :     vec_alloc (vlt_saved_class_info, 10);</span>
+<span class="lineNum">    1320 </span>            : 
+<span class="lineNum">    1321 </span><span class="lineCov">         10 :   gcc_assert (TREE_CODE (record) == RECORD_TYPE);</span>
+<span class="lineNum">    1322 </span>            : 
+<span class="lineNum">    1323 </span><span class="lineCov">         10 :   vec_safe_push (vlt_saved_class_info, record);</span>
+<span class="lineNum">    1324 </span>            : }
+<span class="lineNum">    1325 </span>            : 
+<span class="lineNum">    1326 </span>            : 
+<span class="lineNum">    1327 </span>            : /* This function goes through the list of classes we saved and calls
+<span class="lineNum">    1328 </span>            :    vtv_insert_single_class_info on each one, to build up our class
+<span class="lineNum">    1329 </span>            :    hierarchy data structure.  */
+<a name="1330"><span class="lineNum">    1330 </span>            : </a>
+<span class="lineNum">    1331 </span>            : void
+<span class="lineNum">    1332 </span><span class="lineCov">         12 : vtv_recover_class_info (void)</span>
+<span class="lineNum">    1333 </span>            : {
+<span class="lineNum">    1334 </span><span class="lineCov">         12 :   tree current_class;</span>
+<span class="lineNum">    1335 </span><span class="lineCov">         12 :   unsigned i;</span>
+<span class="lineNum">    1336 </span>            : 
+<span class="lineNum">    1337 </span><span class="lineCov">         12 :   if (vlt_saved_class_info)</span>
+<span class="lineNum">    1338 </span>            :     {
+<span class="lineNum">    1339 </span><span class="lineCov">         15 :       for (i = 0; i &lt; vlt_saved_class_info-&gt;length(); ++i)</span>
+<span class="lineNum">    1340 </span>            :         {
+<span class="lineNum">    1341 </span><span class="lineCov">         10 :           current_class = (*vlt_saved_class_info)[i];</span>
+<span class="lineNum">    1342 </span><span class="lineCov">         10 :           gcc_assert (TREE_CODE (current_class) == RECORD_TYPE);</span>
+<span class="lineNum">    1343 </span><span class="lineCov">         10 :           vtv_insert_single_class_info (current_class);</span>
+<span class="lineNum">    1344 </span>            :         }
+<span class="lineNum">    1345 </span>            :     }
+<span class="lineNum">    1346 </span><span class="lineCov">         12 : }</span>
+<span class="lineNum">    1347 </span>            : 
+<span class="lineNum">    1348 </span>            : #include &quot;gt-cp-vtable-class-hierarchy.h&quot;
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,1405 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ira-emit.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ira-emit.c<span style="font-size: 80%;"> (source / <a href="ira-emit.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">628</td>
+            <td class="headerCovTableEntry">676</td>
+            <td class="headerCovTableEntryHi">92.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">24</td>
+            <td class="headerCovTableEntry">31</td>
+            <td class="headerCovTableEntryMed">77.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Integrated Register Allocator.  Changing code and generating moves.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2006-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Vladimir Makarov &lt;vmakarov@redhat.com&gt;.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : /* When we have more one region, we need to change the original RTL
+<span class="lineNum">      22 </span>            :    code after coloring.  Let us consider two allocnos representing the
+<span class="lineNum">      23 </span>            :    same pseudo-register outside and inside a region respectively.
+<span class="lineNum">      24 </span>            :    They can get different hard-registers.  The reload pass works on
+<span class="lineNum">      25 </span>            :    pseudo registers basis and there is no way to say the reload that
+<span class="lineNum">      26 </span>            :    pseudo could be in different registers and it is even more
+<span class="lineNum">      27 </span>            :    difficult to say in what places of the code the pseudo should have
+<span class="lineNum">      28 </span>            :    particular hard-registers.  So in this case IRA has to create and
+<span class="lineNum">      29 </span>            :    use a new pseudo-register inside the region and adds code to move
+<span class="lineNum">      30 </span>            :    allocno values on the region's borders.  This is done by the code
+<span class="lineNum">      31 </span>            :    in this file.
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            :    The code makes top-down traversal of the regions and generate new
+<span class="lineNum">      34 </span>            :    pseudos and the move code on the region borders.  In some
+<span class="lineNum">      35 </span>            :    complicated cases IRA can create a new pseudo used temporarily to
+<span class="lineNum">      36 </span>            :    move allocno values when a swap of values stored in two
+<span class="lineNum">      37 </span>            :    hard-registers is needed (e.g. two allocnos representing different
+<span class="lineNum">      38 </span>            :    pseudos outside region got respectively hard registers 1 and 2 and
+<span class="lineNum">      39 </span>            :    the corresponding allocnos inside the region got respectively hard
+<span class="lineNum">      40 </span>            :    registers 2 and 1).  At this stage, the new pseudo is marked as
+<span class="lineNum">      41 </span>            :    spilled.
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :    IRA still creates the pseudo-register and the moves on the region
+<span class="lineNum">      44 </span>            :    borders even when the both corresponding allocnos were assigned to
+<span class="lineNum">      45 </span>            :    the same hard-register.  It is done because, if the reload pass for
+<span class="lineNum">      46 </span>            :    some reason spills a pseudo-register representing the original
+<span class="lineNum">      47 </span>            :    pseudo outside or inside the region, the effect will be smaller
+<span class="lineNum">      48 </span>            :    because another pseudo will still be in the hard-register.  In most
+<span class="lineNum">      49 </span>            :    cases, this is better then spilling the original pseudo in its
+<span class="lineNum">      50 </span>            :    whole live-range.  If reload does not change the allocation for the
+<span class="lineNum">      51 </span>            :    two pseudo-registers, the trivial move will be removed by
+<span class="lineNum">      52 </span>            :    post-reload optimizations.
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :    IRA does not generate a new pseudo and moves for the allocno values
+<span class="lineNum">      55 </span>            :    if the both allocnos representing an original pseudo inside and
+<span class="lineNum">      56 </span>            :    outside region assigned to the same hard register when the register
+<span class="lineNum">      57 </span>            :    pressure in the region for the corresponding pressure class is less
+<span class="lineNum">      58 </span>            :    than number of available hard registers for given pressure class.
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :    IRA also does some optimizations to remove redundant moves which is
+<span class="lineNum">      61 </span>            :    transformed into stores by the reload pass on CFG edges
+<span class="lineNum">      62 </span>            :    representing exits from the region.
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            :    IRA tries to reduce duplication of code generated on CFG edges
+<span class="lineNum">      65 </span>            :    which are enters and exits to/from regions by moving some code to
+<span class="lineNum">      66 </span>            :    the edge sources or destinations when it is possible.  */
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      69 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      70 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      71 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      72 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      73 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      74 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      75 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      76 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      77 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      78 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      79 </span>            : #include &quot;ira.h&quot;
+<span class="lineNum">      80 </span>            : #include &quot;ira-int.h&quot;
+<span class="lineNum">      81 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      82 </span>            : #include &quot;cfgbuild.h&quot;
+<span class="lineNum">      83 </span>            : #include &quot;expr.h&quot;
+<span class="lineNum">      84 </span>            : #include &quot;reload.h&quot;
+<span class="lineNum">      85 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            : 
+<span class="lineNum">      88 </span>            : /* Data used to emit live range split insns and to flattening IR.  */
+<span class="lineNum">      89 </span>            : ira_emit_data_t ira_allocno_emit_data;
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            : /* Definitions for vectors of pointers.  */
+<span class="lineNum">      92 </span>            : typedef void *void_p;
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            : /* Pointers to data allocated for allocnos being created during
+<span class="lineNum">      95 </span>            :    emitting.  Usually there are quite few such allocnos because they
+<span class="lineNum">      96 </span>            :    are created only for resolving loop in register shuffling.  */
+<span class="lineNum">      97 </span>            : static vec&lt;void_p&gt; new_allocno_emit_data_vec;
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            : /* Allocate and initiate the emit data.  */
+<span class="lineNum">     100 </span>            : void
+<span class="lineNum">     101 </span><span class="lineCov">     832590 : ira_initiate_emit_data (void)</span>
+<span class="lineNum">     102 </span>            : {
+<span class="lineNum">     103 </span><span class="lineCov">     832590 :   ira_allocno_t a;</span>
+<span class="lineNum">     104 </span><span class="lineCov">     832590 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span><span class="lineCov">     832590 :   ira_allocno_emit_data</span>
+<span class="lineNum">     107 </span><span class="lineCov">     832590 :     = (ira_emit_data_t) ira_allocate (ira_allocnos_num</span>
+<span class="lineNum">     108 </span>            :                                       * sizeof (struct ira_emit_data));
+<span class="lineNum">     109 </span><span class="lineCov">     832590 :   memset (ira_allocno_emit_data, 0,</span>
+<span class="lineNum">     110 </span>            :           ira_allocnos_num * sizeof (struct ira_emit_data));
+<span class="lineNum">     111 </span><span class="lineCov">   20098604 :   FOR_EACH_ALLOCNO (a, ai)</span>
+<span class="lineNum">     112 </span><span class="lineCov">   19266014 :     ALLOCNO_ADD_DATA (a) = ira_allocno_emit_data + ALLOCNO_NUM (a);</span>
+<span class="lineNum">     113 </span><span class="lineCov">     832590 :   new_allocno_emit_data_vec.create (50);</span>
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span><span class="lineCov">     832590 : }</span>
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : /* Free the emit data.  */
+<span class="lineNum">     118 </span>            : void
+<span class="lineNum">     119 </span><span class="lineCov">     832590 : ira_finish_emit_data (void)</span>
+<span class="lineNum">     120 </span>            : {
+<span class="lineNum">     121 </span><span class="lineCov">     832590 :   void_p p;</span>
+<span class="lineNum">     122 </span><span class="lineCov">     832590 :   ira_allocno_t a;</span>
+<span class="lineNum">     123 </span><span class="lineCov">     832590 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span><span class="lineCov">     832590 :   ira_free (ira_allocno_emit_data);</span>
+<span class="lineNum">     126 </span><span class="lineCov">   20101288 :   FOR_EACH_ALLOCNO (a, ai)</span>
+<span class="lineNum">     127 </span><span class="lineCov">   19268698 :     ALLOCNO_ADD_DATA (a) = NULL;</span>
+<span class="lineNum">     128 </span><span class="lineCov">     835274 :   for (;new_allocno_emit_data_vec.length () != 0;)</span>
+<span class="lineNum">     129 </span>            :     {
+<span class="lineNum">     130 </span><span class="lineCov">       2684 :       p = new_allocno_emit_data_vec.pop ();</span>
+<span class="lineNum">     131 </span><span class="lineCov">       2684 :       ira_free (p);</span>
+<span class="lineNum">     132 </span>            :     }
+<span class="lineNum">     133 </span><span class="lineCov">     832590 :   new_allocno_emit_data_vec.release ();</span>
+<span class="lineNum">     134 </span><span class="lineCov">     832590 : }</span>
+<span class="lineNum">     135 </span>            : 
+<span class="lineNum">     136 </span>            : /* Create and return a new allocno with given REGNO and
+<a name="137"><span class="lineNum">     137 </span>            :    LOOP_TREE_NODE.  Allocate emit data for it.  */</a>
+<span class="lineNum">     138 </span>            : static ira_allocno_t
+<span class="lineNum">     139 </span><span class="lineCov">       2684 : create_new_allocno (int regno, ira_loop_tree_node_t loop_tree_node)</span>
+<span class="lineNum">     140 </span>            : {
+<span class="lineNum">     141 </span><span class="lineCov">       2684 :   ira_allocno_t a;</span>
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span><span class="lineCov">       2684 :   a = ira_create_allocno (regno, false, loop_tree_node);</span>
+<span class="lineNum">     144 </span><span class="lineCov">       2684 :   ALLOCNO_ADD_DATA (a) = ira_allocate (sizeof (struct ira_emit_data));</span>
+<span class="lineNum">     145 </span><span class="lineCov">       2684 :   memset (ALLOCNO_ADD_DATA (a), 0, sizeof (struct ira_emit_data));</span>
+<span class="lineNum">     146 </span><span class="lineCov">       2684 :   new_allocno_emit_data_vec.safe_push (ALLOCNO_ADD_DATA (a));</span>
+<span class="lineNum">     147 </span><span class="lineCov">       2684 :   return a;</span>
+<span class="lineNum">     148 </span>            : }
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span>            : /* See comments below.  */
+<span class="lineNum">     153 </span>            : typedef struct move *move_t;
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span>            : /* The structure represents an allocno move.  Both allocnos have the
+<span class="lineNum">     156 </span>            :    same original regno but different allocation.  */
+<span class="lineNum">     157 </span>            : struct move
+<span class="lineNum">     158 </span>            : {
+<span class="lineNum">     159 </span>            :   /* The allocnos involved in the move.  */
+<span class="lineNum">     160 </span>            :   ira_allocno_t from, to;
+<span class="lineNum">     161 </span>            :   /* The next move in the move sequence.  */
+<span class="lineNum">     162 </span>            :   move_t next;
+<span class="lineNum">     163 </span>            :   /* Used for finding dependencies.  */
+<span class="lineNum">     164 </span>            :   bool visited_p;
+<span class="lineNum">     165 </span>            :   /* The size of the following array. */
+<span class="lineNum">     166 </span>            :   int deps_num;
+<span class="lineNum">     167 </span>            :   /* Moves on which given move depends on.  Dependency can be cyclic.
+<span class="lineNum">     168 </span>            :      It means we need a temporary to generates the moves.  Sequence
+<span class="lineNum">     169 </span>            :      A1-&gt;A2, B1-&gt;B2 where A1 and B2 are assigned to reg R1 and A2 and
+<span class="lineNum">     170 </span>            :      B1 are assigned to reg R2 is an example of the cyclic
+<span class="lineNum">     171 </span>            :      dependencies.  */
+<span class="lineNum">     172 </span>            :   move_t *deps;
+<span class="lineNum">     173 </span>            :   /* First insn generated for the move.  */
+<span class="lineNum">     174 </span>            :   rtx_insn *insn;
+<span class="lineNum">     175 </span>            : };
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            : /* Array of moves (indexed by BB index) which should be put at the
+<span class="lineNum">     178 </span>            :    start/end of the corresponding basic blocks.  */
+<span class="lineNum">     179 </span>            : static move_t *at_bb_start, *at_bb_end;
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            : /* Max regno before renaming some pseudo-registers.  For example, the
+<span class="lineNum">     182 </span>            :    same pseudo-register can be renamed in a loop if its allocation is
+<span class="lineNum">     183 </span>            :    different outside the loop.  */
+<span class="lineNum">     184 </span>            : static int max_regno_before_changing;
+<span class="lineNum">     185 </span>            : 
+<a name="186"><span class="lineNum">     186 </span>            : /* Return new move of allocnos TO and FROM.  */</a>
+<span class="lineNum">     187 </span>            : static move_t
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 : create_move (ira_allocno_t to, ira_allocno_t from)</span>
+<span class="lineNum">     189 </span>            : {
+<span class="lineNum">     190 </span><span class="lineCov">     975541 :   move_t move;</span>
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span><span class="lineNoCov">          0 :   move = (move_t) ira_allocate (sizeof (struct move));</span>
+<span class="lineNum">     193 </span><span class="lineCov">     975541 :   move-&gt;deps = NULL;</span>
+<span class="lineNum">     194 </span><span class="lineCov">     975541 :   move-&gt;deps_num = 0;</span>
+<span class="lineNum">     195 </span><span class="lineCov">     975541 :   move-&gt;to = to;</span>
+<span class="lineNum">     196 </span><span class="lineCov">     975541 :   move-&gt;from = from;</span>
+<span class="lineNum">     197 </span><span class="lineCov">     975541 :   move-&gt;next = NULL;</span>
+<span class="lineNum">     198 </span><span class="lineCov">     975541 :   move-&gt;insn = NULL;</span>
+<span class="lineNum">     199 </span><span class="lineCov">     975541 :   move-&gt;visited_p = false;</span>
+<span class="lineNum">     200 </span><span class="lineCov">     975541 :   return move;</span>
+<span class="lineNum">     201 </span>            : }
+<span class="lineNum">     202 </span>            : 
+<a name="203"><span class="lineNum">     203 </span>            : /* Free memory for MOVE and its dependencies.  */</a>
+<span class="lineNum">     204 </span>            : static void
+<span class="lineNum">     205 </span><span class="lineCov">     975541 : free_move (move_t move)</span>
+<span class="lineNum">     206 </span>            : {
+<span class="lineNum">     207 </span><span class="lineCov">     975541 :   if (move-&gt;deps != NULL)</span>
+<span class="lineNum">     208 </span><span class="lineCov">     908919 :     ira_free (move-&gt;deps);</span>
+<span class="lineNum">     209 </span><span class="lineCov">     975541 :   ira_free (move);</span>
+<span class="lineNum">     210 </span><span class="lineCov">     975541 : }</span>
+<span class="lineNum">     211 </span>            : 
+<a name="212"><span class="lineNum">     212 </span>            : /* Free memory for list of the moves given by its HEAD.  */</a>
+<span class="lineNum">     213 </span>            : static void
+<span class="lineNum">     214 </span><span class="lineNoCov">          0 : free_move_list (move_t head)</span>
+<span class="lineNum">     215 </span>            : {
+<span class="lineNum">     216 </span><span class="lineCov">    6288035 :   move_t next;</span>
+<span class="lineNum">     217 </span>            : 
+<span class="lineNum">     218 </span><span class="lineCov">    6288035 :   for (; head != NULL; head = next)</span>
+<span class="lineNum">     219 </span>            :     {
+<span class="lineNum">     220 </span><span class="lineCov">     975541 :       next = head-&gt;next;</span>
+<span class="lineNum">     221 </span><span class="lineCov">     975541 :       free_move (head);</span>
+<span class="lineNum">     222 </span>            :     }
+<span class="lineNum">     223 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            : /* Return TRUE if the move list LIST1 and LIST2 are equal (two
+<a name="226"><span class="lineNum">     226 </span>            :    moves are equal if they involve the same allocnos).  */</a>
+<span class="lineNum">     227 </span>            : static bool
+<span class="lineNum">     228 </span><span class="lineNoCov">          0 : eq_move_lists_p (move_t list1, move_t list2)</span>
+<span class="lineNum">     229 </span>            : {
+<span class="lineNum">     230 </span><span class="lineCov">    1485023 :   for (; list1 != NULL &amp;&amp; list2 != NULL;</span>
+<span class="lineNum">     231 </span><span class="lineCov">      50597 :        list1 = list1-&gt;next, list2 = list2-&gt;next)</span>
+<span class="lineNum">     232 </span><span class="lineCov">      51306 :     if (list1-&gt;from != list2-&gt;from || list1-&gt;to != list2-&gt;to)</span>
+<span class="lineNum">     233 </span>            :       return false;
+<span class="lineNum">     234 </span><span class="lineCov">    1433717 :   return list1 == list2;</span>
+<span class="lineNum">     235 </span>            : }
+<span class="lineNum">     236 </span>            : 
+<a name="237"><span class="lineNum">     237 </span>            : /* Print move list LIST into file F.  */</a>
+<span class="lineNum">     238 </span>            : static void
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 : print_move_list (FILE *f, move_t list)</span>
+<span class="lineNum">     240 </span>            : {
+<span class="lineNum">     241 </span><span class="lineNoCov">          0 :   for (; list != NULL; list = list-&gt;next)</span>
+<span class="lineNum">     242 </span><span class="lineNoCov">          0 :     fprintf (f, &quot; a%dr%d-&gt;a%dr%d&quot;,</span>
+<span class="lineNum">     243 </span><span class="lineNoCov">          0 :              ALLOCNO_NUM (list-&gt;from), ALLOCNO_REGNO (list-&gt;from),</span>
+<span class="lineNum">     244 </span><span class="lineNoCov">          0 :              ALLOCNO_NUM (list-&gt;to), ALLOCNO_REGNO (list-&gt;to));</span>
+<span class="lineNum">     245 </span><span class="lineNoCov">          0 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            : extern void ira_debug_move_list (move_t list);
+<span class="lineNum">     249 </span>            : 
+<a name="250"><span class="lineNum">     250 </span>            : /* Print move list LIST into stderr.  */</a>
+<span class="lineNum">     251 </span>            : void
+<span class="lineNum">     252 </span><span class="lineNoCov">          0 : ira_debug_move_list (move_t list)</span>
+<span class="lineNum">     253 </span>            : {
+<span class="lineNum">     254 </span><span class="lineNoCov">          0 :   print_move_list (stderr, list);</span>
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span>            : /* This recursive function changes pseudo-registers in *LOC if it is
+<a name="258"><span class="lineNum">     258 </span>            :    necessary.  The function returns TRUE if a change was done.  */</a>
+<span class="lineNum">     259 </span>            : static bool
+<span class="lineNum">     260 </span><span class="lineCov">  103370259 : change_regs (rtx *loc)</span>
+<span class="lineNum">     261 </span>            : {
+<span class="lineNum">     262 </span><span class="lineCov">  103370259 :   int i, regno, result = false;</span>
+<span class="lineNum">     263 </span><span class="lineCov">  103370259 :   const char *fmt;</span>
+<span class="lineNum">     264 </span><span class="lineCov">  103370259 :   enum rtx_code code;</span>
+<span class="lineNum">     265 </span><span class="lineCov">  103370259 :   rtx reg;</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span><span class="lineCov">  103370259 :   if (*loc == NULL_RTX)</span>
+<span class="lineNum">     268 </span>            :     return false;
+<span class="lineNum">     269 </span><span class="lineCov">   90480052 :   code = GET_CODE (*loc);</span>
+<span class="lineNum">     270 </span><span class="lineCov">   90480052 :   if (code == REG)</span>
+<span class="lineNum">     271 </span>            :     {
+<span class="lineNum">     272 </span><span class="lineCov">   23393162 :       regno = REGNO (*loc);</span>
+<span class="lineNum">     273 </span><span class="lineCov">   23393162 :       if (regno &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     274 </span>            :         return false;
+<span class="lineNum">     275 </span><span class="lineCov">   12244609 :       if (regno &gt;= max_regno_before_changing)</span>
+<span class="lineNum">     276 </span>            :         /* It is a shared register which was changed already.  */
+<span class="lineNum">     277 </span>            :         return false;
+<span class="lineNum">     278 </span><span class="lineCov">   12244529 :       if (ira_curr_regno_allocno_map[regno] == NULL)</span>
+<span class="lineNum">     279 </span>            :         return false;
+<span class="lineNum">     280 </span><span class="lineCov">   12239578 :       reg = allocno_emit_reg (ira_curr_regno_allocno_map[regno]);</span>
+<span class="lineNum">     281 </span><span class="lineCov">   12239578 :       if (reg == *loc)</span>
+<span class="lineNum">     282 </span>            :         return false;
+<span class="lineNum">     283 </span><span class="lineCov">    1638339 :       *loc = reg;</span>
+<span class="lineNum">     284 </span><span class="lineCov">    1638339 :       return true;</span>
+<span class="lineNum">     285 </span>            :     }
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span><span class="lineCov">   67086890 :   fmt = GET_RTX_FORMAT (code);</span>
+<span class="lineNum">     288 </span><span class="lineCov">  242757719 :   for (i = GET_RTX_LENGTH (code) - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     289 </span>            :     {
+<span class="lineNum">     290 </span><span class="lineCov">  175670829 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">     291 </span><span class="lineCov">  168988679 :         result = change_regs (&amp;XEXP (*loc, i)) || result;</span>
+<span class="lineNum">     292 </span><span class="lineCov">   88575166 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">     293 </span>            :         {
+<span class="lineNum">     294 </span><span class="lineCov">    1927806 :           int j;</span>
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span><span class="lineCov">    5823366 :           for (j = XVECLEN (*loc, i) - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">     297 </span><span class="lineCov">    7516714 :             result = change_regs (&amp;XVECEXP (*loc, i, j)) || result;</span>
+<span class="lineNum">     298 </span>            :         }
+<span class="lineNum">     299 </span>            :     }
+<span class="lineNum">     300 </span><span class="lineCov">   67086890 :   return result;</span>
+<span class="lineNum">     301 </span>            : }
+<a name="302"><span class="lineNum">     302 </span>            : </a>
+<span class="lineNum">     303 </span>            : static bool
+<span class="lineNum">     304 </span><span class="lineCov">   12379036 : change_regs_in_insn (rtx_insn **insn_ptr)</span>
+<span class="lineNum">     305 </span>            : {
+<span class="lineNum">     306 </span><span class="lineCov">   12379036 :   rtx rtx = *insn_ptr;</span>
+<span class="lineNum">     307 </span><span class="lineCov">   12379036 :   bool result = change_regs (&amp;rtx);</span>
+<span class="lineNum">     308 </span><span class="lineCov">   12379036 :   *insn_ptr = as_a &lt;rtx_insn *&gt; (rtx);</span>
+<span class="lineNum">     309 </span><span class="lineCov">   12379036 :   return result;</span>
+<span class="lineNum">     310 </span>            : }
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            : /* Attach MOVE to the edge E.  The move is attached to the head of the
+<a name="313"><span class="lineNum">     313 </span>            :    list if HEAD_P is TRUE.  */</a>
+<span class="lineNum">     314 </span>            : static void
+<span class="lineNum">     315 </span><span class="lineNoCov">          0 : add_to_edge_list (edge e, move_t move, bool head_p)</span>
+<span class="lineNum">     316 </span>            : {
+<span class="lineNum">     317 </span><span class="lineCov">     972857 :   move_t last;</span>
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span><span class="lineNoCov">          0 :   if (head_p || e-&gt;aux == NULL)</span>
+<span class="lineNum">     320 </span>            :     {
+<span class="lineNum">     321 </span><span class="lineCov">     972857 :       move-&gt;next = (move_t) e-&gt;aux;</span>
+<span class="lineNum">     322 </span><span class="lineNoCov">          0 :       e-&gt;aux = move;</span>
+<span class="lineNum">     323 </span>            :     }
+<span class="lineNum">     324 </span>            :   else
+<span class="lineNum">     325 </span>            :     {
+<span class="lineNum">     326 </span><span class="lineNoCov">          0 :       for (last = (move_t) e-&gt;aux; last-&gt;next != NULL; last = last-&gt;next)</span>
+<span class="lineNum">     327 </span>            :         ;
+<span class="lineNum">     328 </span><span class="lineNoCov">          0 :       last-&gt;next = move;</span>
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :       move-&gt;next = NULL;</span>
+<span class="lineNum">     330 </span>            :     }
+<span class="lineNum">     331 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span>            : /* Create and return new pseudo-register with the same attributes as
+<a name="334"><span class="lineNum">     334 </span>            :    ORIGINAL_REG.  */</a>
+<span class="lineNum">     335 </span>            : rtx
+<span class="lineNum">     336 </span><span class="lineCov">     585637 : ira_create_new_reg (rtx original_reg)</span>
+<span class="lineNum">     337 </span>            : {
+<span class="lineNum">     338 </span><span class="lineCov">     585637 :   rtx new_reg;</span>
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span><span class="lineCov">     585637 :   new_reg = gen_reg_rtx (GET_MODE (original_reg));</span>
+<span class="lineNum">     341 </span><span class="lineCov">     585637 :   ORIGINAL_REGNO (new_reg) = ORIGINAL_REGNO (original_reg);</span>
+<span class="lineNum">     342 </span><span class="lineCov">     585637 :   REG_USERVAR_P (new_reg) = REG_USERVAR_P (original_reg);</span>
+<span class="lineNum">     343 </span><span class="lineCov">     585637 :   REG_POINTER (new_reg) = REG_POINTER (original_reg);</span>
+<span class="lineNum">     344 </span><span class="lineCov">     585637 :   REG_ATTRS (new_reg) = REG_ATTRS (original_reg);</span>
+<span class="lineNum">     345 </span><span class="lineCov">     585637 :   if (internal_flag_ira_verbose &gt; 3 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     346 </span><span class="lineCov">          6 :     fprintf (ira_dump_file, &quot;      Creating newreg=%i from oldreg=%i\n&quot;,</span>
+<span class="lineNum">     347 </span>            :              REGNO (new_reg), REGNO (original_reg));
+<span class="lineNum">     348 </span><span class="lineCov">     585637 :   ira_expand_reg_equiv ();</span>
+<span class="lineNum">     349 </span><span class="lineCov">     585637 :   return new_reg;</span>
+<span class="lineNum">     350 </span>            : }
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            : /* Return TRUE if loop given by SUBNODE inside the loop given by
+<a name="353"><span class="lineNum">     353 </span>            :    NODE.  */</a>
+<span class="lineNum">     354 </span>            : static bool
+<span class="lineNum">     355 </span><span class="lineNoCov">          0 : subloop_tree_node_p (ira_loop_tree_node_t subnode, ira_loop_tree_node_t node)</span>
+<span class="lineNum">     356 </span>            : {
+<span class="lineNum">     357 </span><span class="lineCov">    9557940 :   for (; subnode != NULL; subnode = subnode-&gt;parent)</span>
+<span class="lineNum">     358 </span><span class="lineCov">    7142209 :     if (subnode == node)</span>
+<span class="lineNum">     359 </span>            :       return true;
+<span class="lineNum">     360 </span>            :   return false;
+<span class="lineNum">     361 </span>            : }
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span>            : /* Set up member `reg' to REG for allocnos which has the same regno as
+<a name="364"><span class="lineNum">     364 </span>            :    ALLOCNO and which are inside the loop corresponding to ALLOCNO. */</a>
+<span class="lineNum">     365 </span>            : static void
+<span class="lineNum">     366 </span><span class="lineCov">     532455 : set_allocno_reg (ira_allocno_t allocno, rtx reg)</span>
+<span class="lineNum">     367 </span>            : {
+<span class="lineNum">     368 </span><span class="lineCov">     532455 :   int regno;</span>
+<span class="lineNum">     369 </span><span class="lineCov">     532455 :   ira_allocno_t a;</span>
+<span class="lineNum">     370 </span><span class="lineCov">     532455 :   ira_loop_tree_node_t node;</span>
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span><span class="lineCov">     532455 :   node = ALLOCNO_LOOP_TREE_NODE (allocno);</span>
+<span class="lineNum">     373 </span><span class="lineCov">     532455 :   for (a = ira_regno_allocno_map[ALLOCNO_REGNO (allocno)];</span>
+<span class="lineNum">     374 </span><span class="lineCov">    3673566 :        a != NULL;</span>
+<span class="lineNum">     375 </span><span class="lineCov">    3141111 :        a = ALLOCNO_NEXT_REGNO_ALLOCNO (a))</span>
+<span class="lineNum">     376 </span><span class="lineCov">    6282222 :     if (subloop_tree_node_p (ALLOCNO_LOOP_TREE_NODE (a), node))</span>
+<span class="lineNum">     377 </span><span class="lineCov">     725380 :       ALLOCNO_EMIT_DATA (a)-&gt;reg = reg;</span>
+<span class="lineNum">     378 </span><span class="lineCov">     533372 :   for (a = ALLOCNO_CAP (allocno); a != NULL; a = ALLOCNO_CAP (a))</span>
+<span class="lineNum">     379 </span><span class="lineCov">        917 :     ALLOCNO_EMIT_DATA (a)-&gt;reg = reg;</span>
+<span class="lineNum">     380 </span>            :   regno = ALLOCNO_REGNO (allocno);
+<span class="lineNum">     381 </span>            :   for (a = allocno;;)
+<span class="lineNum">     382 </span>            :     {
+<span class="lineNum">     383 </span><span class="lineCov">    1304390 :       if (a == NULL || (a = ALLOCNO_CAP (a)) == NULL)</span>
+<span class="lineNum">     384 </span>            :         {
+<span class="lineNum">     385 </span><span class="lineCov">    1124375 :           node = node-&gt;parent;</span>
+<span class="lineNum">     386 </span><span class="lineCov">    1124375 :           if (node == NULL)</span>
+<span class="lineNum">     387 </span>            :             break;
+<span class="lineNum">     388 </span><span class="lineCov">     823577 :           a = node-&gt;regno_allocno_map[regno];</span>
+<span class="lineNum">     389 </span>            :         }
+<span class="lineNum">     390 </span><span class="lineCov">    1003592 :       if (a == NULL)</span>
+<span class="lineNum">     391 </span>            :         continue;
+<span class="lineNum">     392 </span><span class="lineCov">     824486 :       if (ALLOCNO_EMIT_DATA (a)-&gt;child_renamed_p)</span>
+<span class="lineNum">     393 </span>            :         break;
+<span class="lineNum">     394 </span><span class="lineCov">     592829 :       ALLOCNO_EMIT_DATA (a)-&gt;child_renamed_p = true;</span>
+<span class="lineNum">     395 </span>            :     }
+<span class="lineNum">     396 </span><span class="lineCov">     532455 : }</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span>            : /* Return true if there is an entry to given loop not from its parent
+<span class="lineNum">     399 </span>            :    (or grandparent) block.  For example, it is possible for two
+<a name="400"><span class="lineNum">     400 </span>            :    adjacent loops inside another loop.  */</a>
+<span class="lineNum">     401 </span>            : static bool
+<span class="lineNum">     402 </span><span class="lineCov">     111946 : entered_from_non_parent_p (ira_loop_tree_node_t loop_node)</span>
+<span class="lineNum">     403 </span>            : {
+<span class="lineNum">     404 </span><span class="lineCov">     111946 :   ira_loop_tree_node_t bb_node, src_loop_node, parent;</span>
+<span class="lineNum">     405 </span><span class="lineCov">     111946 :   edge e;</span>
+<span class="lineNum">     406 </span><span class="lineCov">     111946 :   edge_iterator ei;</span>
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">     111946 :   for (bb_node = loop_node-&gt;children;</span>
+<span class="lineNum">     409 </span><span class="lineCov">    1548249 :        bb_node != NULL;</span>
+<span class="lineNum">     410 </span><span class="lineCov">    1436303 :        bb_node = bb_node-&gt;next)</span>
+<span class="lineNum">     411 </span><span class="lineCov">    1436452 :     if (bb_node-&gt;bb != NULL)</span>
+<span class="lineNum">     412 </span>            :       {
+<span class="lineNum">     413 </span><span class="lineCov">    4736651 :         FOR_EACH_EDGE (e, ei, bb_node-&gt;bb-&gt;preds)</span>
+<span class="lineNum">     414 </span><span class="lineCov">    2045790 :           if (e-&gt;src != ENTRY_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     415 </span><span class="lineCov">    2045790 :               &amp;&amp; (src_loop_node = IRA_BB_NODE (e-&gt;src)-&gt;parent) != loop_node)</span>
+<span class="lineNum">     416 </span>            :             {
+<span class="lineNum">     417 </span><span class="lineCov">     272344 :               for (parent = src_loop_node-&gt;parent;</span>
+<span class="lineNum">     418 </span><span class="lineCov">     362117 :                    parent != NULL;</span>
+<span class="lineNum">     419 </span><span class="lineCov">      89773 :                    parent = parent-&gt;parent)</span>
+<span class="lineNum">     420 </span><span class="lineCov">     260499 :                 if (parent == loop_node)</span>
+<span class="lineNum">     421 </span>            :                   break;
+<span class="lineNum">     422 </span><span class="lineCov">     272344 :               if (parent != NULL)</span>
+<span class="lineNum">     423 </span>            :                 /* That is an exit from a nested loop -- skip it.  */
+<span class="lineNum">     424 </span>            :                 continue;
+<span class="lineNum">     425 </span><span class="lineCov">     101618 :               for (parent = loop_node-&gt;parent;</span>
+<span class="lineNum">     426 </span><span class="lineCov">     101828 :                    parent != NULL;</span>
+<span class="lineNum">     427 </span><span class="lineCov">        210 :                    parent = parent-&gt;parent)</span>
+<span class="lineNum">     428 </span><span class="lineCov">     101679 :                 if (src_loop_node == parent)</span>
+<span class="lineNum">     429 </span>            :                   break;
+<span class="lineNum">     430 </span><span class="lineCov">     101618 :               if (parent == NULL)</span>
+<span class="lineNum">     431 </span>            :                 return true;
+<span class="lineNum">     432 </span>            :             }
+<span class="lineNum">     433 </span>            :       }
+<span class="lineNum">     434 </span>            :   return false;
+<span class="lineNum">     435 </span>            : }
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            : /* Set up ENTERED_FROM_NON_PARENT_P for each loop region.  */
+<span class="lineNum">     438 </span>            : static void
+<span class="lineNum">     439 </span><span class="lineCov">      20998 : setup_entered_from_non_parent_p (void)</span>
+<span class="lineNum">     440 </span>            : {
+<span class="lineNum">     441 </span><span class="lineCov">      20998 :   unsigned int i;</span>
+<span class="lineNum">     442 </span><span class="lineCov">      20998 :   loop_p loop;</span>
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span><span class="lineCov">      20998 :   ira_assert (current_loops != NULL);</span>
+<span class="lineNum">     445 </span><span class="lineCov">     140030 :   FOR_EACH_VEC_SAFE_ELT (get_loops (cfun), i, loop)</span>
+<span class="lineNum">     446 </span><span class="lineCov">     119032 :     if (ira_loop_nodes[i].regno_allocno_map != NULL)</span>
+<span class="lineNum">     447 </span><span class="lineCov">     111946 :       ira_loop_nodes[i].entered_from_non_parent_p</span>
+<span class="lineNum">     448 </span><span class="lineCov">     111946 :         = entered_from_non_parent_p (&amp;ira_loop_nodes[i]);</span>
+<span class="lineNum">     449 </span><span class="lineCov">      20998 : }</span>
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : /* Return TRUE if move of SRC_ALLOCNO (assigned to hard register) to
+<span class="lineNum">     452 </span>            :    DEST_ALLOCNO (assigned to memory) can be removed because it does
+<span class="lineNum">     453 </span>            :    not change value of the destination.  One possible reason for this
+<span class="lineNum">     454 </span>            :    is the situation when SRC_ALLOCNO is not modified in the
+<a name="455"><span class="lineNum">     455 </span>            :    corresponding loop.  */</a>
+<span class="lineNum">     456 </span>            : static bool
+<span class="lineNum">     457 </span><span class="lineCov">      44845 : store_can_be_removed_p (ira_allocno_t src_allocno, ira_allocno_t dest_allocno)</span>
+<span class="lineNum">     458 </span>            : {
+<span class="lineNum">     459 </span><span class="lineCov">      44845 :   int regno, orig_regno;</span>
+<span class="lineNum">     460 </span><span class="lineCov">      44845 :   ira_allocno_t a;</span>
+<span class="lineNum">     461 </span><span class="lineCov">      44845 :   ira_loop_tree_node_t node;</span>
+<span class="lineNum">     462 </span>            : 
+<span class="lineNum">     463 </span><span class="lineCov">      44845 :   ira_assert (ALLOCNO_CAP_MEMBER (src_allocno) == NULL</span>
+<span class="lineNum">     464 </span>            :               &amp;&amp; ALLOCNO_CAP_MEMBER (dest_allocno) == NULL);
+<span class="lineNum">     465 </span><span class="lineCov">      44845 :   orig_regno = ALLOCNO_REGNO (src_allocno);</span>
+<span class="lineNum">     466 </span><span class="lineCov">      89690 :   regno = REGNO (allocno_emit_reg (dest_allocno));</span>
+<span class="lineNum">     467 </span><span class="lineCov">      44845 :   for (node = ALLOCNO_LOOP_TREE_NODE (src_allocno);</span>
+<span class="lineNum">     468 </span><span class="lineCov">      69947 :        node != NULL;</span>
+<span class="lineNum">     469 </span><span class="lineCov">      25102 :        node = node-&gt;parent)</span>
+<span class="lineNum">     470 </span>            :     {
+<span class="lineNum">     471 </span><span class="lineCov">      69946 :       a = node-&gt;regno_allocno_map[orig_regno];</span>
+<span class="lineNum">     472 </span><span class="lineCov">      69946 :       ira_assert (a != NULL);</span>
+<span class="lineNum">     473 </span><span class="lineCov">     209838 :       if (REGNO (allocno_emit_reg (a)) == (unsigned) regno)</span>
+<span class="lineNum">     474 </span>            :         /* We achieved the destination and everything is ok.  */
+<span class="lineNum">     475 </span>            :         return true;
+<span class="lineNum">     476 </span><span class="lineCov">      49052 :       else if (bitmap_bit_p (node-&gt;modified_regnos, orig_regno))</span>
+<span class="lineNum">     477 </span>            :         return false;
+<span class="lineNum">     478 </span><span class="lineCov">      25132 :       else if (node-&gt;entered_from_non_parent_p)</span>
+<span class="lineNum">     479 </span>            :         /* If there is a path from a destination loop block to the
+<span class="lineNum">     480 </span>            :            source loop header containing basic blocks of non-parents
+<span class="lineNum">     481 </span>            :            (grandparents) of the source loop, we should have checked
+<span class="lineNum">     482 </span>            :            modifications of the pseudo on this path too to decide
+<span class="lineNum">     483 </span>            :            about possibility to remove the store.  It could be done by
+<span class="lineNum">     484 </span>            :            solving a data-flow problem.  Unfortunately such global
+<span class="lineNum">     485 </span>            :            solution would complicate IR flattening.  Therefore we just
+<span class="lineNum">     486 </span>            :            prohibit removal of the store in such complicated case.  */
+<span class="lineNum">     487 </span>            :         return false;
+<span class="lineNum">     488 </span>            :     }
+<span class="lineNum">     489 </span>            :   /* It is actually a loop entry -- do not remove the store.  */
+<span class="lineNum">     490 </span>            :   return false;
+<span class="lineNum">     491 </span>            : }
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : /* Generate and attach moves to the edge E.  This looks at the final
+<span class="lineNum">     494 </span>            :    regnos of allocnos living on the edge with the same original regno
+<a name="495"><span class="lineNum">     495 </span>            :    to figure out when moves should be generated.  */</a>
+<span class="lineNum">     496 </span>            : static void
+<span class="lineNum">     497 </span><span class="lineCov">    2025004 : generate_edge_moves (edge e)</span>
+<span class="lineNum">     498 </span>            : {
+<span class="lineNum">     499 </span><span class="lineCov">    2025004 :   ira_loop_tree_node_t src_loop_node, dest_loop_node;</span>
+<span class="lineNum">     500 </span><span class="lineCov">    2025004 :   unsigned int regno;</span>
+<span class="lineNum">     501 </span><span class="lineCov">    2025004 :   bitmap_iterator bi;</span>
+<span class="lineNum">     502 </span><span class="lineCov">    2025004 :   ira_allocno_t src_allocno, dest_allocno, *src_map, *dest_map;</span>
+<span class="lineNum">     503 </span><span class="lineCov">    2025004 :   move_t move;</span>
+<span class="lineNum">     504 </span><span class="lineCov">    2025004 :   bitmap regs_live_in_dest, regs_live_out_src;</span>
+<span class="lineNum">     505 </span>            : 
+<span class="lineNum">     506 </span><span class="lineCov">    2025004 :   src_loop_node = IRA_BB_NODE (e-&gt;src)-&gt;parent;</span>
+<span class="lineNum">     507 </span><span class="lineCov">    2025004 :   dest_loop_node = IRA_BB_NODE (e-&gt;dest)-&gt;parent;</span>
+<span class="lineNum">     508 </span><span class="lineCov">    2025004 :   e-&gt;aux = NULL;</span>
+<span class="lineNum">     509 </span><span class="lineCov">    2025004 :   if (src_loop_node == dest_loop_node)</span>
+<span class="lineNum">     510 </span><span class="lineCov">    1752600 :     return;</span>
+<span class="lineNum">     511 </span><span class="lineCov">     272404 :   src_map = src_loop_node-&gt;regno_allocno_map;</span>
+<span class="lineNum">     512 </span><span class="lineCov">     272404 :   dest_map = dest_loop_node-&gt;regno_allocno_map;</span>
+<span class="lineNum">     513 </span><span class="lineCov">     272404 :   regs_live_in_dest = df_get_live_in (e-&gt;dest);</span>
+<span class="lineNum">     514 </span><span class="lineCov">     272404 :   regs_live_out_src = df_get_live_out (e-&gt;src);</span>
+<span class="lineNum">     515 </span><span class="lineCov">    4300991 :   EXECUTE_IF_SET_IN_REG_SET (regs_live_in_dest,</span>
+<span class="lineNum">     516 </span>            :                              FIRST_PSEUDO_REGISTER, regno, bi)
+<span class="lineNum">     517 </span><span class="lineCov">    4028587 :     if (bitmap_bit_p (regs_live_out_src, regno))</span>
+<span class="lineNum">     518 </span>            :       {
+<span class="lineNum">     519 </span><span class="lineCov">    4028587 :         src_allocno = src_map[regno];</span>
+<span class="lineNum">     520 </span><span class="lineCov">    4028587 :         dest_allocno = dest_map[regno];</span>
+<span class="lineNum">     521 </span><span class="lineCov">   12085761 :         if (REGNO (allocno_emit_reg (src_allocno))</span>
+<span class="lineNum">     522 </span><span class="lineCov">    8057174 :             == REGNO (allocno_emit_reg (dest_allocno)))</span>
+<span class="lineNum">     523 </span>            :           continue;
+<span class="lineNum">     524 </span>            :         /* Remove unnecessary stores at the region exit.  We should do
+<span class="lineNum">     525 </span>            :            this for readonly memory for sure and this is guaranteed by
+<span class="lineNum">     526 </span>            :            that we never generate moves on region borders (see
+<span class="lineNum">     527 </span>            :            checking in function change_loop).  */
+<span class="lineNum">     528 </span><span class="lineCov">     993751 :         if (ALLOCNO_HARD_REGNO (dest_allocno) &lt; 0</span>
+<span class="lineNum">     529 </span><span class="lineCov">      44875 :             &amp;&amp; ALLOCNO_HARD_REGNO (src_allocno) &gt;= 0</span>
+<span class="lineNum">     530 </span><span class="lineCov">    1038596 :             &amp;&amp; store_can_be_removed_p (src_allocno, dest_allocno))</span>
+<span class="lineNum">     531 </span>            :           {
+<span class="lineNum">     532 </span><span class="lineCov">      20894 :             ALLOCNO_EMIT_DATA (src_allocno)-&gt;mem_optimized_dest = dest_allocno;</span>
+<span class="lineNum">     533 </span><span class="lineCov">      20894 :             ALLOCNO_EMIT_DATA (dest_allocno)-&gt;mem_optimized_dest_p = true;</span>
+<span class="lineNum">     534 </span><span class="lineCov">      20894 :             if (internal_flag_ira_verbose &gt; 3 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     535 </span><span class="lineNoCov">          0 :               fprintf (ira_dump_file, &quot;      Remove r%d:a%d-&gt;a%d(mem)\n&quot;,</span>
+<span class="lineNum">     536 </span>            :                        regno, ALLOCNO_NUM (src_allocno),
+<span class="lineNum">     537 </span>            :                        ALLOCNO_NUM (dest_allocno));
+<span class="lineNum">     538 </span><span class="lineCov">      20894 :             continue;</span>
+<span class="lineNum">     539 </span>            :           }
+<span class="lineNum">     540 </span><span class="lineCov">     972857 :         move = create_move (dest_allocno, src_allocno);</span>
+<span class="lineNum">     541 </span><span class="lineCov">     972857 :         add_to_edge_list (e, move, true);</span>
+<span class="lineNum">     542 </span>            :     }
+<span class="lineNum">     543 </span>            : }
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span>            : /* Bitmap of allocnos local for the current loop.  */
+<span class="lineNum">     546 </span>            : static bitmap local_allocno_bitmap;
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span>            : /* This bitmap is used to find that we need to generate and to use a
+<span class="lineNum">     549 </span>            :    new pseudo-register when processing allocnos with the same original
+<span class="lineNum">     550 </span>            :    regno.  */
+<span class="lineNum">     551 </span>            : static bitmap used_regno_bitmap;
+<span class="lineNum">     552 </span>            : 
+<span class="lineNum">     553 </span>            : /* This bitmap contains regnos of allocnos which were renamed locally
+<span class="lineNum">     554 </span>            :    because the allocnos correspond to disjoint live ranges in loops
+<span class="lineNum">     555 </span>            :    with a common parent.  */
+<span class="lineNum">     556 </span>            : static bitmap renamed_regno_bitmap;
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span>            : /* Change (if necessary) pseudo-registers inside loop given by loop
+<a name="559"><span class="lineNum">     559 </span>            :    tree node NODE.  */</a>
+<span class="lineNum">     560 </span>            : static void
+<span class="lineNum">     561 </span><span class="lineCov">    1457455 : change_loop (ira_loop_tree_node_t node)</span>
+<span class="lineNum">     562 </span>            : {
+<span class="lineNum">     563 </span><span class="lineCov">    1457455 :   bitmap_iterator bi;</span>
+<span class="lineNum">     564 </span><span class="lineCov">    1457455 :   unsigned int i;</span>
+<span class="lineNum">     565 </span><span class="lineCov">    1457455 :   int regno;</span>
+<span class="lineNum">     566 </span><span class="lineCov">    1457455 :   bool used_p;</span>
+<span class="lineNum">     567 </span><span class="lineCov">    1457455 :   ira_allocno_t allocno, parent_allocno, *map;</span>
+<span class="lineNum">     568 </span><span class="lineCov">    1457455 :   rtx_insn *insn;</span>
+<span class="lineNum">     569 </span><span class="lineCov">    1457455 :   rtx original_reg;</span>
+<span class="lineNum">     570 </span><span class="lineCov">    1457455 :   enum reg_class aclass, pclass;</span>
+<span class="lineNum">     571 </span><span class="lineCov">    1457455 :   ira_loop_tree_node_t parent;</span>
+<span class="lineNum">     572 </span>            : 
+<span class="lineNum">     573 </span><span class="lineCov">    1457455 :   if (node != ira_loop_tree_root)</span>
+<span class="lineNum">     574 </span>            :     {
+<span class="lineNum">     575 </span><span class="lineCov">    1436457 :       ira_assert (current_loops != NULL);</span>
+<span class="lineNum">     576 </span>            :       
+<span class="lineNum">     577 </span><span class="lineCov">    1436457 :       if (node-&gt;bb != NULL)</span>
+<span class="lineNum">     578 </span>            :         {
+<span class="lineNum">     579 </span><span class="lineCov">   16200526 :           FOR_BB_INSNS (node-&gt;bb, insn)</span>
+<span class="lineNum">     580 </span><span class="lineCov">   14855017 :             if (INSN_P (insn) &amp;&amp; change_regs_in_insn (&amp;insn))</span>
+<span class="lineNum">     581 </span>            :               {
+<span class="lineNum">     582 </span><span class="lineCov">    1128583 :                 df_insn_rescan (insn);</span>
+<span class="lineNum">     583 </span><span class="lineCov">    1128583 :                 df_notes_rescan (insn);</span>
+<span class="lineNum">     584 </span>            :               }
+<span class="lineNum">     585 </span><span class="lineCov">    1345509 :           return;</span>
+<span class="lineNum">     586 </span>            :         }
+<span class="lineNum">     587 </span>            : 
+<span class="lineNum">     588 </span><span class="lineCov">      90948 :       if (internal_flag_ira_verbose &gt; 3 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     589 </span><span class="lineNoCov">          0 :         fprintf (ira_dump_file,</span>
+<span class="lineNum">     590 </span>            :                  &quot;      Changing RTL for loop %d (header bb%d)\n&quot;,
+<span class="lineNum">     591 </span><span class="lineNoCov">          0 :                  node-&gt;loop_num, node-&gt;loop-&gt;header-&gt;index);</span>
+<span class="lineNum">     592 </span>            : 
+<span class="lineNum">     593 </span><span class="lineCov">      90948 :       parent = ira_curr_loop_tree_node-&gt;parent;</span>
+<span class="lineNum">     594 </span><span class="lineCov">      90948 :       map = parent-&gt;regno_allocno_map;</span>
+<span class="lineNum">     595 </span><span class="lineCov">    1970275 :       EXECUTE_IF_SET_IN_REG_SET (ira_curr_loop_tree_node-&gt;border_allocnos,</span>
+<span class="lineNum">     596 </span>            :                                  0, i, bi)
+<span class="lineNum">     597 </span>            :         {
+<span class="lineNum">     598 </span><span class="lineCov">    1879327 :           allocno = ira_allocnos[i];</span>
+<span class="lineNum">     599 </span><span class="lineCov">    1879327 :           regno = ALLOCNO_REGNO (allocno);</span>
+<span class="lineNum">     600 </span><span class="lineCov">    1879327 :           aclass = ALLOCNO_CLASS (allocno);</span>
+<span class="lineNum">     601 </span><span class="lineCov">    1879327 :           pclass = ira_pressure_class_translate[aclass];</span>
+<span class="lineNum">     602 </span><span class="lineCov">    1879327 :           parent_allocno = map[regno];</span>
+<span class="lineNum">     603 </span><span class="lineCov">    1879327 :           ira_assert (regno &lt; ira_reg_equiv_len);</span>
+<span class="lineNum">     604 </span>            :           /* We generate the same hard register move because the
+<span class="lineNum">     605 </span>            :              reload pass can put an allocno into memory in this case
+<span class="lineNum">     606 </span>            :              we will have live range splitting.  If it does not happen
+<span class="lineNum">     607 </span>            :              such the same hard register moves will be removed.  The
+<span class="lineNum">     608 </span>            :              worst case when the both allocnos are put into memory by
+<span class="lineNum">     609 </span>            :              the reload is very rare.  */
+<span class="lineNum">     610 </span><span class="lineCov">    1879327 :           if (parent_allocno != NULL</span>
+<span class="lineNum">     611 </span><span class="lineCov">    1879327 :               &amp;&amp; (ALLOCNO_HARD_REGNO (allocno)</span>
+<span class="lineNum">     612 </span><span class="lineCov">    1879327 :                   == ALLOCNO_HARD_REGNO (parent_allocno))</span>
+<span class="lineNum">     613 </span><span class="lineCov">    3693811 :               &amp;&amp; (ALLOCNO_HARD_REGNO (allocno) &lt; 0</span>
+<span class="lineNum">     614 </span><span class="lineCov">    1074686 :                   || (parent-&gt;reg_pressure[pclass] + 1</span>
+<span class="lineNum">     615 </span><span class="lineCov">     537343 :                       &lt;= ira_class_hard_regs_num[pclass])</span>
+<span class="lineNum">     616 </span><span class="lineCov">     497855 :                   || TEST_HARD_REG_BIT (ira_prohibited_mode_move_regs</span>
+<span class="lineNum">     617 </span>            :                                         [ALLOCNO_MODE (allocno)],
+<span class="lineNum">     618 </span>            :                                         ALLOCNO_HARD_REGNO (allocno))
+<span class="lineNum">     619 </span>            :                   /* don't create copies because reload can spill an
+<span class="lineNum">     620 </span>            :                      allocno set by copy although the allocno will not
+<span class="lineNum">     621 </span>            :                      get memory slot.  */
+<span class="lineNum">     622 </span><span class="lineCov">     497855 :                   || ira_equiv_no_lvalue_p (regno)</span>
+<span class="lineNum">     623 </span><span class="lineCov">     471874 :                   || (pic_offset_table_rtx != NULL</span>
+<span class="lineNum">     624 </span><span class="lineCov">      52998 :                       &amp;&amp; (ALLOCNO_REGNO (allocno)</span>
+<span class="lineNum">     625 </span><span class="lineCov">     105996 :                           == (int) REGNO (pic_offset_table_rtx)))))</span>
+<span class="lineNum">     626 </span>            :             continue;
+<span class="lineNum">     627 </span><span class="lineCov">     531761 :           original_reg = allocno_emit_reg (allocno);</span>
+<span class="lineNum">     628 </span><span class="lineCov">     531761 :           if (parent_allocno == NULL</span>
+<span class="lineNum">     629 </span><span class="lineCov">     531761 :               || (REGNO (allocno_emit_reg (parent_allocno))</span>
+<span class="lineNum">     630 </span><span class="lineCov">     531761 :                   == REGNO (original_reg)))</span>
+<span class="lineNum">     631 </span>            :             {
+<span class="lineNum">     632 </span><span class="lineCov">     531761 :               if (internal_flag_ira_verbose &gt; 3 &amp;&amp; ira_dump_file)</span>
+<span class="lineNum">     633 </span><span class="lineNoCov">          0 :                 fprintf (ira_dump_file, &quot;  %i vs parent %i:&quot;,</span>
+<span class="lineNum">     634 </span><span class="lineNoCov">          0 :                          ALLOCNO_HARD_REGNO (allocno),</span>
+<span class="lineNum">     635 </span><span class="lineNoCov">          0 :                          ALLOCNO_HARD_REGNO (parent_allocno));</span>
+<span class="lineNum">     636 </span><span class="lineCov">     531761 :               set_allocno_reg (allocno, ira_create_new_reg (original_reg));</span>
+<span class="lineNum">     637 </span>            :             }
+<span class="lineNum">     638 </span>            :         }
+<span class="lineNum">     639 </span>            :     }
+<span class="lineNum">     640 </span>            :   /* Rename locals: Local allocnos with same regno in different loops
+<span class="lineNum">     641 </span>            :      might get the different hard register.  So we need to change
+<span class="lineNum">     642 </span>            :      ALLOCNO_REG.  */
+<span class="lineNum">     643 </span><span class="lineCov">     223892 :   bitmap_and_compl (local_allocno_bitmap,</span>
+<span class="lineNum">     644 </span><span class="lineCov">     111946 :                     ira_curr_loop_tree_node-&gt;all_allocnos,</span>
+<span class="lineNum">     645 </span><span class="lineCov">     111946 :                     ira_curr_loop_tree_node-&gt;border_allocnos);</span>
+<span class="lineNum">     646 </span><span class="lineCov">    4814291 :   EXECUTE_IF_SET_IN_REG_SET (local_allocno_bitmap, 0, i, bi)</span>
+<span class="lineNum">     647 </span>            :     {
+<span class="lineNum">     648 </span><span class="lineCov">    4702345 :       allocno = ira_allocnos[i];</span>
+<span class="lineNum">     649 </span><span class="lineCov">    4702345 :       regno = ALLOCNO_REGNO (allocno);</span>
+<span class="lineNum">     650 </span><span class="lineCov">    4702345 :       if (ALLOCNO_CAP_MEMBER (allocno) != NULL)</span>
+<span class="lineNum">     651 </span>            :         continue;
+<span class="lineNum">     652 </span><span class="lineCov">    2403457 :       used_p = !bitmap_set_bit (used_regno_bitmap, regno);</span>
+<span class="lineNum">     653 </span><span class="lineCov">    2403457 :       ALLOCNO_EMIT_DATA (allocno)-&gt;somewhere_renamed_p = true;</span>
+<span class="lineNum">     654 </span><span class="lineCov">    2403457 :       if (! used_p)</span>
+<span class="lineNum">     655 </span>            :         continue;
+<span class="lineNum">     656 </span><span class="lineCov">        694 :       bitmap_set_bit (renamed_regno_bitmap, regno);</span>
+<span class="lineNum">     657 </span><span class="lineCov">       1388 :       set_allocno_reg (allocno, ira_create_new_reg (allocno_emit_reg (allocno)));</span>
+<span class="lineNum">     658 </span>            :     }
+<span class="lineNum">     659 </span>            : }
+<span class="lineNum">     660 </span>            : 
+<a name="661"><span class="lineNum">     661 </span>            : /* Process to set up flag somewhere_renamed_p.  */</a>
+<span class="lineNum">     662 </span>            : static void
+<span class="lineNum">     663 </span><span class="lineCov">      20998 : set_allocno_somewhere_renamed_p (void)</span>
+<span class="lineNum">     664 </span>            : {
+<span class="lineNum">     665 </span><span class="lineCov">      20998 :   unsigned int regno;</span>
+<span class="lineNum">     666 </span><span class="lineCov">      20998 :   ira_allocno_t allocno;</span>
+<span class="lineNum">     667 </span><span class="lineCov">      20998 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">     668 </span>            : 
+<span class="lineNum">     669 </span><span class="lineCov">    6602670 :   FOR_EACH_ALLOCNO (allocno, ai)</span>
+<span class="lineNum">     670 </span>            :     {
+<span class="lineNum">     671 </span><span class="lineCov">    6581672 :       regno = ALLOCNO_REGNO (allocno);</span>
+<span class="lineNum">     672 </span><span class="lineCov">    6581672 :       if (bitmap_bit_p (renamed_regno_bitmap, regno)</span>
+<span class="lineNum">     673 </span><span class="lineCov">    6581672 :           &amp;&amp; REGNO (allocno_emit_reg (allocno)) == regno)</span>
+<span class="lineNum">     674 </span><span class="lineCov">        937 :         ALLOCNO_EMIT_DATA (allocno)-&gt;somewhere_renamed_p = true;</span>
+<span class="lineNum">     675 </span>            :     }
+<span class="lineNum">     676 </span><span class="lineCov">      20998 : }</span>
+<span class="lineNum">     677 </span>            : 
+<span class="lineNum">     678 </span>            : /* Return TRUE if move lists on all edges given in vector VEC are
+<span class="lineNum">     679 </span>            :    equal.  */
+<span class="lineNum">     680 </span>            : static bool
+<span class="lineNum">     681 </span><span class="lineCov">    2640605 : eq_edge_move_lists_p (vec&lt;edge, va_gc&gt; *vec)</span>
+<span class="lineNum">     682 </span>            : {
+<span class="lineNum">     683 </span><span class="lineCov">    2640605 :   move_t list;</span>
+<span class="lineNum">     684 </span><span class="lineCov">    2640605 :   int i;</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span><span class="lineCov">    2640605 :   list = (move_t) EDGE_I (vec, 0)-&gt;aux;</span>
+<span class="lineNum">     687 </span><span class="lineCov">    6581946 :   for (i = EDGE_COUNT (vec) - 1; i &gt; 0; i--)</span>
+<span class="lineNum">     688 </span><span class="lineCov">    2868852 :     if (! eq_move_lists_p (list, (move_t) EDGE_I (vec, i)-&gt;aux))</span>
+<span class="lineNum">     689 </span>            :       return false;
+<span class="lineNum">     690 </span>            :   return true;
+<span class="lineNum">     691 </span>            : }
+<span class="lineNum">     692 </span>            : 
+<span class="lineNum">     693 </span>            : /* Look at all entry edges (if START_P) or exit edges of basic block
+<span class="lineNum">     694 </span>            :    BB and put move lists at the BB start or end if it is possible.  In
+<span class="lineNum">     695 </span>            :    other words, this decreases code duplication of allocno moves.  */
+<span class="lineNum">     696 </span>            : static void
+<span class="lineNum">     697 </span><span class="lineCov">    2691018 : unify_moves (basic_block bb, bool start_p)</span>
+<span class="lineNum">     698 </span>            : {
+<span class="lineNum">     699 </span><span class="lineCov">    2691018 :   int i;</span>
+<span class="lineNum">     700 </span><span class="lineCov">    2691018 :   edge e;</span>
+<span class="lineNum">     701 </span><span class="lineCov">    2691018 :   move_t list;</span>
+<span class="lineNum">     702 </span><span class="lineCov">    2691018 :   vec&lt;edge, va_gc&gt; *vec;</span>
+<span class="lineNum">     703 </span>            : 
+<span class="lineNum">     704 </span><span class="lineCov">    2691018 :   vec = (start_p ? bb-&gt;preds : bb-&gt;succs);</span>
+<span class="lineNum">     705 </span><span class="lineCov">    2691018 :   if (EDGE_COUNT (vec) == 0 || ! eq_edge_move_lists_p (vec))</span>
+<span class="lineNum">     706 </span>            :     return;
+<span class="lineNum">     707 </span><span class="lineCov">    2506915 :   e = EDGE_I (vec, 0);</span>
+<span class="lineNum">     708 </span><span class="lineCov">    2506915 :   list = (move_t) e-&gt;aux;</span>
+<span class="lineNum">     709 </span><span class="lineCov">    2506915 :   if (! start_p &amp;&amp; control_flow_insn_p (BB_END (bb)))</span>
+<span class="lineNum">     710 </span>            :     return;
+<span class="lineNum">     711 </span><span class="lineCov">    1477023 :   e-&gt;aux = NULL;</span>
+<span class="lineNum">     712 </span><span class="lineCov">    3528853 :   for (i = EDGE_COUNT (vec) - 1; i &gt; 0; i--)</span>
+<span class="lineNum">     713 </span>            :     {
+<span class="lineNum">     714 </span><span class="lineCov">     574807 :       e = EDGE_I (vec, i);</span>
+<span class="lineNum">     715 </span><span class="lineCov">     574807 :       free_move_list ((move_t) e-&gt;aux);</span>
+<span class="lineNum">     716 </span><span class="lineCov">     574807 :       e-&gt;aux = NULL;</span>
+<span class="lineNum">     717 </span>            :     }
+<span class="lineNum">     718 </span><span class="lineCov">    1477023 :   if (start_p)</span>
+<span class="lineNum">     719 </span><span class="lineCov">    1248638 :     at_bb_start[bb-&gt;index] = list;</span>
+<span class="lineNum">     720 </span>            :   else
+<span class="lineNum">     721 </span><span class="lineCov">     228385 :     at_bb_end[bb-&gt;index] = list;</span>
+<span class="lineNum">     722 </span>            : }
+<span class="lineNum">     723 </span>            : 
+<span class="lineNum">     724 </span>            : /* Last move (in move sequence being processed) setting up the
+<span class="lineNum">     725 </span>            :    corresponding hard register.  */
+<span class="lineNum">     726 </span>            : static move_t hard_regno_last_set[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">     727 </span>            : 
+<span class="lineNum">     728 </span>            : /* If the element value is equal to CURR_TICK then the corresponding
+<span class="lineNum">     729 </span>            :    element in `hard_regno_last_set' is defined and correct.  */
+<span class="lineNum">     730 </span>            : static int hard_regno_last_set_check[FIRST_PSEUDO_REGISTER];
+<span class="lineNum">     731 </span>            : 
+<span class="lineNum">     732 </span>            : /* Last move (in move sequence being processed) setting up the
+<span class="lineNum">     733 </span>            :    corresponding allocno.  */
+<span class="lineNum">     734 </span>            : static move_t *allocno_last_set;
+<span class="lineNum">     735 </span>            : 
+<span class="lineNum">     736 </span>            : /* If the element value is equal to CURR_TICK then the corresponding
+<span class="lineNum">     737 </span>            :    element in . `allocno_last_set' is defined and correct.  */
+<span class="lineNum">     738 </span>            : static int *allocno_last_set_check;
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span>            : /* Definition of vector of moves.  */
+<span class="lineNum">     741 </span>            : 
+<span class="lineNum">     742 </span>            : /* This vec contains moves sorted topologically (depth-first) on their
+<span class="lineNum">     743 </span>            :    dependency graph.  */
+<span class="lineNum">     744 </span>            : static vec&lt;move_t&gt; move_vec;
+<span class="lineNum">     745 </span>            : 
+<span class="lineNum">     746 </span>            : /* The variable value is used to check correctness of values of
+<span class="lineNum">     747 </span>            :    elements of arrays `hard_regno_last_set' and
+<span class="lineNum">     748 </span>            :    `allocno_last_set_check'.  */
+<span class="lineNum">     749 </span>            : static int curr_tick;
+<span class="lineNum">     750 </span>            : 
+<span class="lineNum">     751 </span>            : /* This recursive function traverses dependencies of MOVE and produces
+<a name="752"><span class="lineNum">     752 </span>            :    topological sorting (in depth-first order).  */</a>
+<span class="lineNum">     753 </span>            : static void
+<span class="lineNum">     754 </span><span class="lineCov">     991520 : traverse_moves (move_t move)</span>
+<span class="lineNum">     755 </span>            : {
+<span class="lineNum">     756 </span><span class="lineCov">     991520 :   int i;</span>
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span><span class="lineCov">     991520 :   if (move-&gt;visited_p)</span>
+<span class="lineNum">     759 </span>            :     return;
+<span class="lineNum">     760 </span><span class="lineCov">     964416 :   move-&gt;visited_p = true;</span>
+<span class="lineNum">     761 </span><span class="lineCov">     991520 :   for (i = move-&gt;deps_num - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     762 </span><span class="lineCov">      27104 :     traverse_moves (move-&gt;deps[i]);</span>
+<span class="lineNum">     763 </span><span class="lineCov">     964416 :   move_vec.safe_push (move);</span>
+<span class="lineNum">     764 </span>            : }
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span>            : /* Remove unnecessary moves in the LIST, makes topological sorting,
+<span class="lineNum">     767 </span>            :    and removes cycles on hard reg dependencies by introducing new
+<span class="lineNum">     768 </span>            :    allocnos assigned to memory and additional moves.  It returns the
+<span class="lineNum">     769 </span>            :    result move list.  */
+<span class="lineNum">     770 </span>            : static move_t
+<span class="lineNum">     771 </span><span class="lineCov">     180783 : modify_move_list (move_t list)</span>
+<span class="lineNum">     772 </span>            : {
+<span class="lineNum">     773 </span><span class="lineCov">     180783 :   int i, n, nregs, hard_regno;</span>
+<span class="lineNum">     774 </span><span class="lineCov">     180783 :   ira_allocno_t to, from;</span>
+<span class="lineNum">     775 </span><span class="lineCov">     180783 :   move_t move, new_move, set_move, first, last;</span>
+<span class="lineNum">     776 </span>            : 
+<span class="lineNum">     777 </span><span class="lineCov">     180783 :   if (list == NULL)</span>
+<span class="lineNum">     778 </span>            :     return NULL;
+<span class="lineNum">     779 </span>            :   /* Create move deps.  */
+<span class="lineNum">     780 </span><span class="lineCov">     180783 :   curr_tick++;</span>
+<span class="lineNum">     781 </span><span class="lineCov">    1145199 :   for (move = list; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">     782 </span>            :     {
+<span class="lineNum">     783 </span><span class="lineCov">     964416 :       to = move-&gt;to;</span>
+<span class="lineNum">     784 </span><span class="lineCov">     964416 :       if ((hard_regno = ALLOCNO_HARD_REGNO (to)) &lt; 0)</span>
+<span class="lineNum">     785 </span>            :         continue;
+<span class="lineNum">     786 </span><span class="lineCov">     940557 :       nregs = hard_regno_nregs (hard_regno, ALLOCNO_MODE (to));</span>
+<span class="lineNum">     787 </span><span class="lineCov">    1886650 :       for (i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">     788 </span>            :         {
+<span class="lineNum">     789 </span><span class="lineCov">     946093 :           hard_regno_last_set[hard_regno + i] = move;</span>
+<span class="lineNum">     790 </span><span class="lineCov">     946093 :           hard_regno_last_set_check[hard_regno + i] = curr_tick;</span>
+<span class="lineNum">     791 </span>            :         }
+<span class="lineNum">     792 </span>            :     }
+<span class="lineNum">     793 </span><span class="lineCov">    1145199 :   for (move = list; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">     794 </span>            :     {
+<span class="lineNum">     795 </span><span class="lineCov">     964416 :       from = move-&gt;from;</span>
+<span class="lineNum">     796 </span><span class="lineCov">     964416 :       to = move-&gt;to;</span>
+<span class="lineNum">     797 </span><span class="lineCov">     964416 :       if ((hard_regno = ALLOCNO_HARD_REGNO (from)) &gt;= 0)</span>
+<span class="lineNum">     798 </span>            :         {
+<span class="lineNum">     799 </span><span class="lineCov">     908919 :           nregs = hard_regno_nregs (hard_regno, ALLOCNO_MODE (from));</span>
+<span class="lineNum">     800 </span><span class="lineCov">    1823080 :           for (n = i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">     801 </span><span class="lineCov">     914161 :             if (hard_regno_last_set_check[hard_regno + i] == curr_tick</span>
+<span class="lineNum">     802 </span><span class="lineCov">    1781416 :                 &amp;&amp; (ALLOCNO_REGNO (hard_regno_last_set[hard_regno + i]-&gt;to)</span>
+<span class="lineNum">     803 </span><span class="lineCov">     890708 :                     != ALLOCNO_REGNO (from)))</span>
+<span class="lineNum">     804 </span><span class="lineCov">      27104 :               n++;</span>
+<span class="lineNum">     805 </span><span class="lineCov">     908919 :           move-&gt;deps = (move_t *) ira_allocate (n * sizeof (move_t));</span>
+<span class="lineNum">     806 </span><span class="lineCov">    1823080 :           for (n = i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">     807 </span><span class="lineCov">     914161 :             if (hard_regno_last_set_check[hard_regno + i] == curr_tick</span>
+<span class="lineNum">     808 </span><span class="lineCov">    1781416 :                 &amp;&amp; (ALLOCNO_REGNO (hard_regno_last_set[hard_regno + i]-&gt;to)</span>
+<span class="lineNum">     809 </span><span class="lineCov">     890708 :                     != ALLOCNO_REGNO (from)))</span>
+<span class="lineNum">     810 </span><span class="lineCov">      27104 :               move-&gt;deps[n++] = hard_regno_last_set[hard_regno + i];</span>
+<span class="lineNum">     811 </span><span class="lineCov">     908919 :           move-&gt;deps_num = n;</span>
+<span class="lineNum">     812 </span>            :         }
+<span class="lineNum">     813 </span>            :     }
+<span class="lineNum">     814 </span>            :   /* Topological sorting:  */
+<span class="lineNum">     815 </span><span class="lineCov">     180783 :   move_vec.truncate (0);</span>
+<span class="lineNum">     816 </span><span class="lineCov">    1145199 :   for (move = list; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">     817 </span><span class="lineCov">     964416 :     traverse_moves (move);</span>
+<span class="lineNum">     818 </span><span class="lineCov">     180783 :   last = NULL;</span>
+<span class="lineNum">     819 </span><span class="lineCov">    1325982 :   for (i = (int) move_vec.length () - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     820 </span>            :     {
+<span class="lineNum">     821 </span><span class="lineCov">     964416 :       move = move_vec[i];</span>
+<span class="lineNum">     822 </span><span class="lineCov">     964416 :       move-&gt;next = NULL;</span>
+<span class="lineNum">     823 </span><span class="lineCov">     964416 :       if (last != NULL)</span>
+<span class="lineNum">     824 </span><span class="lineCov">     783633 :         last-&gt;next = move;</span>
+<span class="lineNum">     825 </span><span class="lineCov">     964416 :       last = move;</span>
+<span class="lineNum">     826 </span>            :     }
+<span class="lineNum">     827 </span><span class="lineCov">     180783 :   first = move_vec.last ();</span>
+<span class="lineNum">     828 </span>            :   /* Removing cycles:  */
+<span class="lineNum">     829 </span><span class="lineCov">     180783 :   curr_tick++;</span>
+<span class="lineNum">     830 </span><span class="lineCov">     180783 :   move_vec.truncate (0);</span>
+<span class="lineNum">     831 </span><span class="lineCov">    1145199 :   for (move = first; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">     832 </span>            :     {
+<span class="lineNum">     833 </span><span class="lineCov">     964416 :       from = move-&gt;from;</span>
+<span class="lineNum">     834 </span><span class="lineCov">     964416 :       to = move-&gt;to;</span>
+<span class="lineNum">     835 </span><span class="lineCov">     964416 :       if ((hard_regno = ALLOCNO_HARD_REGNO (from)) &gt;= 0)</span>
+<span class="lineNum">     836 </span>            :         {
+<span class="lineNum">     837 </span><span class="lineCov">     908919 :           nregs = hard_regno_nregs (hard_regno, ALLOCNO_MODE (from));</span>
+<span class="lineNum">     838 </span><span class="lineCov">    1823080 :           for (i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">     839 </span><span class="lineCov">     914161 :             if (hard_regno_last_set_check[hard_regno + i] == curr_tick</span>
+<span class="lineNum">     840 </span><span class="lineCov">       2684 :                 &amp;&amp; ALLOCNO_HARD_REGNO</span>
+<span class="lineNum">     841 </span>            :                    (hard_regno_last_set[hard_regno + i]-&gt;to) &gt;= 0)
+<span class="lineNum">     842 </span>            :               {
+<span class="lineNum">     843 </span><span class="lineCov">       2684 :                 int n, j;</span>
+<span class="lineNum">     844 </span><span class="lineCov">       2684 :                 ira_allocno_t new_allocno;</span>
+<span class="lineNum">     845 </span>            : 
+<span class="lineNum">     846 </span><span class="lineCov">       2684 :                 set_move = hard_regno_last_set[hard_regno + i];</span>
+<span class="lineNum">     847 </span>            :                 /* It does not matter what loop_tree_node (of TO or
+<span class="lineNum">     848 </span>            :                    FROM) to use for the new allocno because of
+<span class="lineNum">     849 </span>            :                    subsequent IRA internal representation
+<span class="lineNum">     850 </span>            :                    flattening.  */
+<span class="lineNum">     851 </span><span class="lineCov">       2684 :                 new_allocno</span>
+<span class="lineNum">     852 </span><span class="lineCov">       2684 :                   = create_new_allocno (ALLOCNO_REGNO (set_move-&gt;to),</span>
+<span class="lineNum">     853 </span>            :                                         ALLOCNO_LOOP_TREE_NODE (set_move-&gt;to));
+<span class="lineNum">     854 </span><span class="lineCov">       2684 :                 ALLOCNO_MODE (new_allocno) = ALLOCNO_MODE (set_move-&gt;to);</span>
+<span class="lineNum">     855 </span><span class="lineCov">       5368 :                 ira_set_allocno_class (new_allocno,</span>
+<span class="lineNum">     856 </span><span class="lineCov">       2684 :                                        ALLOCNO_CLASS (set_move-&gt;to));</span>
+<span class="lineNum">     857 </span><span class="lineCov">       2684 :                 ira_create_allocno_objects (new_allocno);</span>
+<span class="lineNum">     858 </span><span class="lineCov">       2684 :                 ALLOCNO_ASSIGNED_P (new_allocno) = true;</span>
+<span class="lineNum">     859 </span><span class="lineCov">       2684 :                 ALLOCNO_HARD_REGNO (new_allocno) = -1;</span>
+<span class="lineNum">     860 </span><span class="lineCov">       5368 :                 ALLOCNO_EMIT_DATA (new_allocno)-&gt;reg</span>
+<span class="lineNum">     861 </span><span class="lineCov">       5368 :                   = ira_create_new_reg (allocno_emit_reg (set_move-&gt;to));</span>
+<span class="lineNum">     862 </span>            : 
+<span class="lineNum">     863 </span>            :                 /* Make it possibly conflicting with all earlier
+<span class="lineNum">     864 </span>            :                    created allocnos.  Cases where temporary allocnos
+<span class="lineNum">     865 </span>            :                    created to remove the cycles are quite rare.  */
+<span class="lineNum">     866 </span><span class="lineCov">       2684 :                 n = ALLOCNO_NUM_OBJECTS (new_allocno);</span>
+<span class="lineNum">     867 </span><span class="lineCov">       2684 :                 gcc_assert (n == ALLOCNO_NUM_OBJECTS (set_move-&gt;to));</span>
+<span class="lineNum">     868 </span><span class="lineCov">       5368 :                 for (j = 0; j &lt; n; j++)</span>
+<span class="lineNum">     869 </span>            :                   {
+<span class="lineNum">     870 </span><span class="lineCov">       2684 :                     ira_object_t new_obj = ALLOCNO_OBJECT (new_allocno, j);</span>
+<span class="lineNum">     871 </span>            : 
+<span class="lineNum">     872 </span><span class="lineCov">       2684 :                     OBJECT_MIN (new_obj) = 0;</span>
+<span class="lineNum">     873 </span><span class="lineCov">       2684 :                     OBJECT_MAX (new_obj) = ira_objects_num - 1;</span>
+<span class="lineNum">     874 </span>            :                   }
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span><span class="lineCov">       2684 :                 new_move = create_move (set_move-&gt;to, new_allocno);</span>
+<span class="lineNum">     877 </span><span class="lineCov">       2684 :                 set_move-&gt;to = new_allocno;</span>
+<span class="lineNum">     878 </span><span class="lineCov">       2684 :                 move_vec.safe_push (new_move);</span>
+<span class="lineNum">     879 </span><span class="lineCov">       2684 :                 ira_move_loops_num++;</span>
+<span class="lineNum">     880 </span><span class="lineCov">       2684 :                 if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">     881 </span><span class="lineNoCov">          0 :                   fprintf (ira_dump_file,</span>
+<span class="lineNum">     882 </span>            :                            &quot;    Creating temporary allocno a%dr%d\n&quot;,
+<span class="lineNum">     883 </span>            :                            ALLOCNO_NUM (new_allocno),
+<span class="lineNum">     884 </span><span class="lineNoCov">          0 :                            REGNO (allocno_emit_reg (new_allocno)));</span>
+<span class="lineNum">     885 </span>            :               }
+<span class="lineNum">     886 </span>            :         }
+<span class="lineNum">     887 </span><span class="lineCov">     964416 :       if ((hard_regno = ALLOCNO_HARD_REGNO (to)) &lt; 0)</span>
+<span class="lineNum">     888 </span>            :         continue;
+<span class="lineNum">     889 </span><span class="lineCov">     940557 :       nregs = hard_regno_nregs (hard_regno, ALLOCNO_MODE (to));</span>
+<span class="lineNum">     890 </span><span class="lineCov">    1886650 :       for (i = 0; i &lt; nregs; i++)</span>
+<span class="lineNum">     891 </span>            :         {
+<span class="lineNum">     892 </span><span class="lineCov">     946093 :           hard_regno_last_set[hard_regno + i] = move;</span>
+<span class="lineNum">     893 </span><span class="lineCov">     946093 :           hard_regno_last_set_check[hard_regno + i] = curr_tick;</span>
+<span class="lineNum">     894 </span>            :         }
+<span class="lineNum">     895 </span>            :     }
+<span class="lineNum">     896 </span><span class="lineCov">     364250 :   for (i = (int) move_vec.length () - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     897 </span>            :     {
+<span class="lineNum">     898 </span><span class="lineCov">       2684 :       move = move_vec[i];</span>
+<span class="lineNum">     899 </span><span class="lineCov">       2684 :       move-&gt;next = NULL;</span>
+<span class="lineNum">     900 </span><span class="lineCov">       2684 :       last-&gt;next = move;</span>
+<span class="lineNum">     901 </span><span class="lineCov">       2684 :       last = move;</span>
+<span class="lineNum">     902 </span>            :     }
+<span class="lineNum">     903 </span>            :   return first;
+<span class="lineNum">     904 </span>            : }
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span>            : /* Generate RTX move insns from the move list LIST.  This updates
+<span class="lineNum">     907 </span>            :    allocation cost using move execution frequency FREQ.  */
+<span class="lineNum">     908 </span>            : static rtx_insn *
+<span class="lineNum">     909 </span><span class="lineCov">     180783 : emit_move_list (move_t list, int freq)</span>
+<span class="lineNum">     910 </span>            : {
+<span class="lineNum">     911 </span><span class="lineCov">     180783 :   rtx to, from, dest;</span>
+<span class="lineNum">     912 </span><span class="lineCov">     180783 :   int to_regno, from_regno, cost, regno;</span>
+<span class="lineNum">     913 </span><span class="lineCov">     180783 :   rtx_insn *result, *insn;</span>
+<span class="lineNum">     914 </span><span class="lineCov">     180783 :   rtx set;</span>
+<span class="lineNum">     915 </span><span class="lineCov">     180783 :   machine_mode mode;</span>
+<span class="lineNum">     916 </span><span class="lineCov">     180783 :   enum reg_class aclass;</span>
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span><span class="lineCov">     180783 :   grow_reg_equivs ();</span>
+<span class="lineNum">     919 </span><span class="lineCov">     180783 :   start_sequence ();</span>
+<span class="lineNum">     920 </span><span class="lineCov">    1147883 :   for (; list != NULL; list = list-&gt;next)</span>
+<span class="lineNum">     921 </span>            :     {
+<span class="lineNum">     922 </span><span class="lineCov">     967100 :       start_sequence ();</span>
+<span class="lineNum">     923 </span><span class="lineCov">     967100 :       to = allocno_emit_reg (list-&gt;to);</span>
+<span class="lineNum">     924 </span><span class="lineCov">     967100 :       to_regno = REGNO (to);</span>
+<span class="lineNum">     925 </span><span class="lineCov">     967100 :       from = allocno_emit_reg (list-&gt;from);</span>
+<span class="lineNum">     926 </span><span class="lineCov">     967100 :       from_regno = REGNO (from);</span>
+<span class="lineNum">     927 </span><span class="lineCov">     967100 :       emit_move_insn (to, from);</span>
+<span class="lineNum">     928 </span><span class="lineCov">     967100 :       list-&gt;insn = get_insns ();</span>
+<span class="lineNum">     929 </span><span class="lineCov">     967100 :       end_sequence ();</span>
+<span class="lineNum">     930 </span><span class="lineCov">    2901300 :       for (insn = list-&gt;insn; insn != NULL_RTX; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     931 </span>            :         {
+<span class="lineNum">     932 </span>            :           /* The reload needs to have set up insn codes.  If the
+<span class="lineNum">     933 </span>            :              reload sets up insn codes by itself, it may fail because
+<span class="lineNum">     934 </span>            :              insns will have hard registers instead of pseudos and
+<span class="lineNum">     935 </span>            :              there may be no machine insn with given hard
+<span class="lineNum">     936 </span>            :              registers.  */
+<span class="lineNum">     937 </span><span class="lineCov">     967100 :           recog_memoized (insn);</span>
+<span class="lineNum">     938 </span>            :           /* Add insn to equiv init insn list if it is necessary.
+<span class="lineNum">     939 </span>            :              Otherwise reload will not remove this insn if it decides
+<span class="lineNum">     940 </span>            :              to use the equivalence.  */
+<span class="lineNum">     941 </span><span class="lineCov">     967100 :           if ((set = single_set (insn)) != NULL_RTX)</span>
+<span class="lineNum">     942 </span>            :             {
+<span class="lineNum">     943 </span><span class="lineCov">     967100 :               dest = SET_DEST (set);</span>
+<span class="lineNum">     944 </span><span class="lineCov">     967100 :               if (GET_CODE (dest) == SUBREG)</span>
+<span class="lineNum">     945 </span><span class="lineNoCov">          0 :                 dest = SUBREG_REG (dest);</span>
+<span class="lineNum">     946 </span><span class="lineCov">     967100 :               ira_assert (REG_P (dest));</span>
+<span class="lineNum">     947 </span><span class="lineCov">     967100 :               regno = REGNO (dest);</span>
+<span class="lineNum">     948 </span><span class="lineCov">     967100 :               if (regno &gt;= ira_reg_equiv_len</span>
+<span class="lineNum">     949 </span><span class="lineCov">     967100 :                   || (ira_reg_equiv[regno].invariant == NULL_RTX</span>
+<span class="lineNum">     950 </span><span class="lineCov">     967078 :                       &amp;&amp; ira_reg_equiv[regno].constant == NULL_RTX))</span>
+<span class="lineNum">     951 </span>            :                 continue; /* regno has no equivalence.  */
+<span class="lineNum">     952 </span><span class="lineCov">         24 :               ira_assert ((int) reg_equivs-&gt;length () &gt; regno);</span>
+<span class="lineNum">     953 </span><span class="lineCov">         48 :               reg_equiv_init (regno)</span>
+<span class="lineNum">     954 </span><span class="lineCov">         24 :                 = gen_rtx_INSN_LIST (VOIDmode, insn, reg_equiv_init (regno));</span>
+<span class="lineNum">     955 </span>            :             }
+<span class="lineNum">     956 </span>            :         }
+<span class="lineNum">     957 </span><span class="lineCov">     967100 :       if (ira_use_lra_p)</span>
+<span class="lineNum">     958 </span><span class="lineCov">     967100 :         ira_update_equiv_info_by_shuffle_insn (to_regno, from_regno, list-&gt;insn);</span>
+<span class="lineNum">     959 </span><span class="lineCov">     967100 :       emit_insn (list-&gt;insn);</span>
+<span class="lineNum">     960 </span><span class="lineCov">     967100 :       mode = ALLOCNO_MODE (list-&gt;to);</span>
+<span class="lineNum">     961 </span><span class="lineCov">     967100 :       aclass = ALLOCNO_CLASS (list-&gt;to);</span>
+<span class="lineNum">     962 </span><span class="lineCov">     967100 :       cost = 0;</span>
+<span class="lineNum">     963 </span><span class="lineCov">     967100 :       if (ALLOCNO_HARD_REGNO (list-&gt;to) &lt; 0)</span>
+<span class="lineNum">     964 </span>            :         {
+<span class="lineNum">     965 </span><span class="lineCov">      26543 :           if (ALLOCNO_HARD_REGNO (list-&gt;from) &gt;= 0)</span>
+<span class="lineNum">     966 </span>            :             {
+<span class="lineNum">     967 </span><span class="lineCov">      26513 :               cost = ira_memory_move_cost[mode][aclass][0] * freq;</span>
+<span class="lineNum">     968 </span><span class="lineCov">      26513 :               ira_store_cost += cost;</span>
+<span class="lineNum">     969 </span>            :             }
+<span class="lineNum">     970 </span>            :         }
+<span class="lineNum">     971 </span><span class="lineCov">     940557 :       else if (ALLOCNO_HARD_REGNO (list-&gt;from) &lt; 0)</span>
+<span class="lineNum">     972 </span>            :         {
+<span class="lineNum">     973 </span><span class="lineCov">      58151 :           if (ALLOCNO_HARD_REGNO (list-&gt;to) &gt;= 0)</span>
+<span class="lineNum">     974 </span>            :             {
+<span class="lineNum">     975 </span><span class="lineCov">      58151 :               cost = ira_memory_move_cost[mode][aclass][0] * freq;</span>
+<span class="lineNum">     976 </span><span class="lineCov">      58151 :               ira_load_cost += cost;</span>
+<span class="lineNum">     977 </span>            :             }
+<span class="lineNum">     978 </span>            :         }
+<span class="lineNum">     979 </span>            :       else
+<span class="lineNum">     980 </span>            :         {
+<span class="lineNum">     981 </span><span class="lineCov">     882406 :           ira_init_register_move_cost_if_necessary (mode);</span>
+<span class="lineNum">     982 </span><span class="lineCov">     882406 :           cost = ira_register_move_cost[mode][aclass][aclass] * freq;</span>
+<span class="lineNum">     983 </span><span class="lineCov">     882406 :           ira_shuffle_cost += cost;</span>
+<span class="lineNum">     984 </span>            :         }
+<span class="lineNum">     985 </span><span class="lineCov">     967100 :       ira_overall_cost += cost;</span>
+<span class="lineNum">     986 </span>            :     }
+<span class="lineNum">     987 </span><span class="lineCov">     180783 :   result = get_insns ();</span>
+<span class="lineNum">     988 </span><span class="lineCov">     180783 :   end_sequence ();</span>
+<span class="lineNum">     989 </span><span class="lineCov">     180783 :   return result;</span>
+<span class="lineNum">     990 </span>            : }
+<span class="lineNum">     991 </span>            : 
+<span class="lineNum">     992 </span>            : /* Generate RTX move insns from move lists attached to basic blocks
+<span class="lineNum">     993 </span>            :    and edges.  */
+<span class="lineNum">     994 </span>            : static void
+<span class="lineNum">     995 </span><span class="lineCov">      20998 : emit_moves (void)</span>
+<span class="lineNum">     996 </span>            : {
+<span class="lineNum">     997 </span><span class="lineCov">      20998 :   basic_block bb;</span>
+<span class="lineNum">     998 </span><span class="lineCov">      20998 :   edge_iterator ei;</span>
+<span class="lineNum">     999 </span><span class="lineCov">      20998 :   edge e;</span>
+<span class="lineNum">    1000 </span><span class="lineCov">      20998 :   rtx_insn *insns, *tmp;</span>
+<span class="lineNum">    1001 </span>            : 
+<span class="lineNum">    1002 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1003 </span>            :     {
+<span class="lineNum">    1004 </span><span class="lineCov">    1345509 :       if (at_bb_start[bb-&gt;index] != NULL)</span>
+<span class="lineNum">    1005 </span>            :         {
+<span class="lineNum">    1006 </span><span class="lineCov">      70150 :           at_bb_start[bb-&gt;index] = modify_move_list (at_bb_start[bb-&gt;index]);</span>
+<span class="lineNum">    1007 </span><span class="lineCov">     140300 :           insns = emit_move_list (at_bb_start[bb-&gt;index],</span>
+<span class="lineNum">    1008 </span><span class="lineCov">     140300 :                                   REG_FREQ_FROM_BB (bb));</span>
+<span class="lineNum">    1009 </span><span class="lineCov">      70150 :           tmp = BB_HEAD (bb);</span>
+<span class="lineNum">    1010 </span><span class="lineCov">      70150 :           if (LABEL_P (tmp))</span>
+<span class="lineNum">    1011 </span><span class="lineCov">      21264 :             tmp = NEXT_INSN (tmp);</span>
+<span class="lineNum">    1012 </span><span class="lineCov">      70150 :           if (NOTE_INSN_BASIC_BLOCK_P (tmp))</span>
+<span class="lineNum">    1013 </span><span class="lineCov">     140300 :             tmp = NEXT_INSN (tmp);</span>
+<span class="lineNum">    1014 </span><span class="lineCov">      70150 :           if (tmp == BB_HEAD (bb))</span>
+<span class="lineNum">    1015 </span><span class="lineNoCov">          0 :             emit_insn_before (insns, tmp);</span>
+<span class="lineNum">    1016 </span><span class="lineCov">      70150 :           else if (tmp != NULL_RTX)</span>
+<span class="lineNum">    1017 </span><span class="lineCov">      70150 :             emit_insn_after (insns, PREV_INSN (tmp));</span>
+<span class="lineNum">    1018 </span>            :           else
+<span class="lineNum">    1019 </span><span class="lineNoCov">          0 :             emit_insn_after (insns, get_last_insn ());</span>
+<span class="lineNum">    1020 </span>            :         }
+<span class="lineNum">    1021 </span>            : 
+<span class="lineNum">    1022 </span><span class="lineCov">    1345509 :       if (at_bb_end[bb-&gt;index] != NULL)</span>
+<span class="lineNum">    1023 </span>            :         {
+<span class="lineNum">    1024 </span><span class="lineCov">      52367 :           at_bb_end[bb-&gt;index] = modify_move_list (at_bb_end[bb-&gt;index]);</span>
+<span class="lineNum">    1025 </span><span class="lineCov">      52367 :           insns = emit_move_list (at_bb_end[bb-&gt;index], REG_FREQ_FROM_BB (bb));</span>
+<span class="lineNum">    1026 </span><span class="lineCov">      52367 :           ira_assert (! control_flow_insn_p (BB_END (bb)));</span>
+<span class="lineNum">    1027 </span><span class="lineCov">      52367 :           emit_insn_after (insns, BB_END (bb));</span>
+<span class="lineNum">    1028 </span>            :         }
+<span class="lineNum">    1029 </span>            : 
+<span class="lineNum">    1030 </span><span class="lineCov">    4737687 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1031 </span>            :         {
+<span class="lineNum">    1032 </span><span class="lineCov">    2046669 :           if (e-&gt;aux == NULL)</span>
+<span class="lineNum">    1033 </span>            :             continue;
+<span class="lineNum">    1034 </span><span class="lineCov">      58266 :           ira_assert ((e-&gt;flags &amp; EDGE_ABNORMAL) == 0</span>
+<span class="lineNum">    1035 </span>            :                       || ! EDGE_CRITICAL_P (e));
+<span class="lineNum">    1036 </span><span class="lineCov">      58266 :           e-&gt;aux = modify_move_list ((move_t) e-&gt;aux);</span>
+<span class="lineNum">    1037 </span><span class="lineCov">      58266 :           insert_insn_on_edge</span>
+<span class="lineNum">    1038 </span><span class="lineCov">     116532 :             (emit_move_list ((move_t) e-&gt;aux,</span>
+<span class="lineNum">    1039 </span><span class="lineCov">     116532 :                              REG_FREQ_FROM_EDGE_FREQ (EDGE_FREQUENCY (e))),</span>
+<span class="lineNum">    1040 </span>            :              e);
+<span class="lineNum">    1041 </span><span class="lineCov">      58266 :           if (e-&gt;src-&gt;next_bb != e-&gt;dest)</span>
+<span class="lineNum">    1042 </span><span class="lineCov">      45493 :             ira_additional_jumps_num++;</span>
+<span class="lineNum">    1043 </span>            :         }
+<span class="lineNum">    1044 </span>            :     }
+<span class="lineNum">    1045 </span><span class="lineCov">      20998 : }</span>
+<span class="lineNum">    1046 </span>            : 
+<span class="lineNum">    1047 </span>            : /* Update costs of A and corresponding allocnos on upper levels on the
+<span class="lineNum">    1048 </span>            :    loop tree from reading (if READ_P) or writing A on an execution
+<a name="1049"><span class="lineNum">    1049 </span>            :    path with FREQ.  */</a>
+<span class="lineNum">    1050 </span>            : static void
+<span class="lineNum">    1051 </span><span class="lineCov">    1934200 : update_costs (ira_allocno_t a, bool read_p, int freq)</span>
+<span class="lineNum">    1052 </span>            : {
+<span class="lineNum">    1053 </span><span class="lineCov">    4948335 :   ira_loop_tree_node_t parent;</span>
+<span class="lineNum">    1054 </span>            : 
+<span class="lineNum">    1055 </span><span class="lineCov">    4948335 :   for (;;)</span>
+<span class="lineNum">    1056 </span>            :     {
+<span class="lineNum">    1057 </span><span class="lineCov">    4948335 :       ALLOCNO_NREFS (a)++;</span>
+<span class="lineNum">    1058 </span><span class="lineCov">    4948335 :       ALLOCNO_FREQ (a) += freq;</span>
+<span class="lineNum">    1059 </span><span class="lineCov">    4948335 :       ALLOCNO_MEMORY_COST (a)</span>
+<span class="lineNum">    1060 </span><span class="lineCov">   14845005 :         += (ira_memory_move_cost[ALLOCNO_MODE (a)][ALLOCNO_CLASS (a)]</span>
+<span class="lineNum">    1061 </span><span class="lineCov">    4948335 :             [read_p ? 1 : 0] * freq);</span>
+<span class="lineNum">    1062 </span><span class="lineCov">    4948335 :       if (ALLOCNO_CAP (a) != NULL)</span>
+<span class="lineNum">    1063 </span>            :         a = ALLOCNO_CAP (a);
+<span class="lineNum">    1064 </span><span class="lineCov">    3938867 :       else if ((parent = ALLOCNO_LOOP_TREE_NODE (a)-&gt;parent) == NULL</span>
+<span class="lineNum">    1065 </span><span class="lineCov">    3938867 :                || (a = parent-&gt;regno_allocno_map[ALLOCNO_REGNO (a)]) == NULL)</span>
+<span class="lineNum">    1066 </span>            :         break;
+<span class="lineNum">    1067 </span>            :     }
+<span class="lineNum">    1068 </span><span class="lineCov">    1934200 : }</span>
+<span class="lineNum">    1069 </span>            : 
+<span class="lineNum">    1070 </span>            : /* Process moves from LIST with execution FREQ to add ranges, copies,
+<span class="lineNum">    1071 </span>            :    and modify costs for allocnos involved in the moves.  All regnos
+<span class="lineNum">    1072 </span>            :    living through the list is in LIVE_THROUGH, and the loop tree node
+<a name="1073"><span class="lineNum">    1073 </span>            :    used to find corresponding allocnos is NODE.  */</a>
+<span class="lineNum">    1074 </span>            : static void
+<span class="lineNum">    1075 </span><span class="lineCov">    4737687 : add_range_and_copies_from_move_list (move_t list, ira_loop_tree_node_t node,</span>
+<span class="lineNum">    1076 </span>            :                                      bitmap live_through, int freq)
+<span class="lineNum">    1077 </span>            : {
+<span class="lineNum">    1078 </span><span class="lineCov">    4737687 :   int start, n;</span>
+<span class="lineNum">    1079 </span><span class="lineCov">    4737687 :   unsigned int regno;</span>
+<span class="lineNum">    1080 </span><span class="lineCov">    4737687 :   move_t move;</span>
+<span class="lineNum">    1081 </span><span class="lineCov">    4737687 :   ira_allocno_t a;</span>
+<span class="lineNum">    1082 </span><span class="lineCov">    4737687 :   ira_copy_t cp;</span>
+<span class="lineNum">    1083 </span><span class="lineCov">    4737687 :   live_range_t r;</span>
+<span class="lineNum">    1084 </span><span class="lineCov">    4737687 :   bitmap_iterator bi;</span>
+<span class="lineNum">    1085 </span><span class="lineCov">    4737687 :   HARD_REG_SET hard_regs_live;</span>
+<span class="lineNum">    1086 </span>            : 
+<span class="lineNum">    1087 </span><span class="lineCov">    4737687 :   if (list == NULL)</span>
+<span class="lineNum">    1088 </span><span class="lineCov">    4556904 :     return;</span>
+<span class="lineNum">    1089 </span><span class="lineCov">     180783 :   n = 0;</span>
+<span class="lineNum">    1090 </span><span class="lineCov">    3721371 :   EXECUTE_IF_SET_IN_BITMAP (live_through, FIRST_PSEUDO_REGISTER, regno, bi)</span>
+<span class="lineNum">    1091 </span><span class="lineCov">    3540588 :     n++;</span>
+<span class="lineNum">    1092 </span><span class="lineCov">     180783 :   REG_SET_TO_HARD_REG_SET (hard_regs_live, live_through);</span>
+<span class="lineNum">    1093 </span>            :   /* This is a trick to guarantee that new ranges is not merged with
+<span class="lineNum">    1094 </span>            :      the old ones.  */
+<span class="lineNum">    1095 </span><span class="lineCov">     180783 :   ira_max_point++;</span>
+<span class="lineNum">    1096 </span><span class="lineCov">     180783 :   start = ira_max_point;</span>
+<span class="lineNum">    1097 </span><span class="lineCov">    1147883 :   for (move = list; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">    1098 </span>            :     {
+<span class="lineNum">    1099 </span><span class="lineCov">     967100 :       ira_allocno_t from = move-&gt;from;</span>
+<span class="lineNum">    1100 </span><span class="lineCov">     967100 :       ira_allocno_t to = move-&gt;to;</span>
+<span class="lineNum">    1101 </span><span class="lineCov">     967100 :       int nr, i;</span>
+<span class="lineNum">    1102 </span>            : 
+<span class="lineNum">    1103 </span><span class="lineCov">     967100 :       bitmap_clear_bit (live_through, ALLOCNO_REGNO (from));</span>
+<span class="lineNum">    1104 </span><span class="lineCov">     967100 :       bitmap_clear_bit (live_through, ALLOCNO_REGNO (to));</span>
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span><span class="lineCov">     967100 :       nr = ALLOCNO_NUM_OBJECTS (to);</span>
+<span class="lineNum">    1107 </span><span class="lineCov">    1940575 :       for (i = 0; i &lt; nr; i++)</span>
+<span class="lineNum">    1108 </span>            :         {
+<span class="lineNum">    1109 </span><span class="lineCov">     973475 :           ira_object_t to_obj = ALLOCNO_OBJECT (to, i);</span>
+<span class="lineNum">    1110 </span><span class="lineCov">     973475 :           if (OBJECT_CONFLICT_ARRAY (to_obj) == NULL)</span>
+<span class="lineNum">    1111 </span>            :             {
+<span class="lineNum">    1112 </span><span class="lineCov">       2684 :               if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1113 </span><span class="lineNoCov">          0 :                 fprintf (ira_dump_file, &quot;    Allocate conflicts for a%dr%d\n&quot;,</span>
+<span class="lineNum">    1114 </span><span class="lineNoCov">          0 :                          ALLOCNO_NUM (to), REGNO (allocno_emit_reg (to)));</span>
+<span class="lineNum">    1115 </span><span class="lineCov">       2684 :               ira_allocate_object_conflicts (to_obj, n);</span>
+<span class="lineNum">    1116 </span>            :             }
+<span class="lineNum">    1117 </span>            :         }
+<span class="lineNum">    1118 </span><span class="lineCov">     967100 :       ior_hard_reg_conflicts (from, &amp;hard_regs_live);</span>
+<span class="lineNum">    1119 </span><span class="lineCov">     967100 :       ior_hard_reg_conflicts (to, &amp;hard_regs_live);</span>
+<span class="lineNum">    1120 </span>            : 
+<span class="lineNum">    1121 </span><span class="lineCov">     967100 :       update_costs (from, true, freq);</span>
+<span class="lineNum">    1122 </span><span class="lineCov">     967100 :       update_costs (to, false, freq);</span>
+<span class="lineNum">    1123 </span><span class="lineCov">     967100 :       cp = ira_add_allocno_copy (from, to, freq, false, move-&gt;insn, NULL);</span>
+<span class="lineNum">    1124 </span><span class="lineCov">     967100 :       if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1125 </span><span class="lineNoCov">          0 :         fprintf (ira_dump_file, &quot;    Adding cp%d:a%dr%d-a%dr%d\n&quot;,</span>
+<span class="lineNum">    1126 </span>            :                  cp-&gt;num, ALLOCNO_NUM (cp-&gt;first),
+<span class="lineNum">    1127 </span><span class="lineNoCov">          0 :                  REGNO (allocno_emit_reg (cp-&gt;first)),</span>
+<span class="lineNum">    1128 </span>            :                  ALLOCNO_NUM (cp-&gt;second),
+<span class="lineNum">    1129 </span><span class="lineNoCov">          0 :                  REGNO (allocno_emit_reg (cp-&gt;second)));</span>
+<span class="lineNum">    1130 </span>            : 
+<span class="lineNum">    1131 </span><span class="lineCov">     967100 :       nr = ALLOCNO_NUM_OBJECTS (from);</span>
+<span class="lineNum">    1132 </span><span class="lineCov">    1940575 :       for (i = 0; i &lt; nr; i++)</span>
+<span class="lineNum">    1133 </span>            :         {
+<span class="lineNum">    1134 </span><span class="lineCov">     973475 :           ira_object_t from_obj = ALLOCNO_OBJECT (from, i);</span>
+<span class="lineNum">    1135 </span><span class="lineCov">     973475 :           r = OBJECT_LIVE_RANGES (from_obj);</span>
+<span class="lineNum">    1136 </span><span class="lineCov">     973475 :           if (r == NULL || r-&gt;finish &gt;= 0)</span>
+<span class="lineNum">    1137 </span>            :             {
+<span class="lineNum">    1138 </span><span class="lineCov">     970791 :               ira_add_live_range_to_object (from_obj, start, ira_max_point);</span>
+<span class="lineNum">    1139 </span><span class="lineCov">     970791 :               if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1140 </span><span class="lineNoCov">          0 :                 fprintf (ira_dump_file,</span>
+<span class="lineNum">    1141 </span>            :                          &quot;    Adding range [%d..%d] to allocno a%dr%d\n&quot;,
+<span class="lineNum">    1142 </span>            :                          start, ira_max_point, ALLOCNO_NUM (from),
+<span class="lineNum">    1143 </span><span class="lineNoCov">          0 :                          REGNO (allocno_emit_reg (from)));</span>
+<span class="lineNum">    1144 </span>            :             }
+<span class="lineNum">    1145 </span>            :           else
+<span class="lineNum">    1146 </span>            :             {
+<span class="lineNum">    1147 </span><span class="lineCov">       2684 :               r-&gt;finish = ira_max_point;</span>
+<span class="lineNum">    1148 </span><span class="lineCov">       2684 :               if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1149 </span><span class="lineNoCov">          0 :                 fprintf (ira_dump_file,</span>
+<span class="lineNum">    1150 </span>            :                          &quot;    Adding range [%d..%d] to allocno a%dr%d\n&quot;,
+<span class="lineNum">    1151 </span>            :                          r-&gt;start, ira_max_point, ALLOCNO_NUM (from),
+<span class="lineNum">    1152 </span><span class="lineNoCov">          0 :                          REGNO (allocno_emit_reg (from)));</span>
+<span class="lineNum">    1153 </span>            :             }
+<span class="lineNum">    1154 </span>            :         }
+<span class="lineNum">    1155 </span><span class="lineCov">     967100 :       ira_max_point++;</span>
+<span class="lineNum">    1156 </span><span class="lineCov">     967100 :       nr = ALLOCNO_NUM_OBJECTS (to);</span>
+<span class="lineNum">    1157 </span><span class="lineCov">    1940575 :       for (i = 0; i &lt; nr; i++)</span>
+<span class="lineNum">    1158 </span>            :         {
+<span class="lineNum">    1159 </span><span class="lineCov">     973475 :           ira_object_t to_obj = ALLOCNO_OBJECT (to, i);</span>
+<span class="lineNum">    1160 </span><span class="lineCov">     973475 :           ira_add_live_range_to_object (to_obj, ira_max_point, -1);</span>
+<span class="lineNum">    1161 </span>            :         }
+<span class="lineNum">    1162 </span><span class="lineCov">     967100 :       ira_max_point++;</span>
+<span class="lineNum">    1163 </span>            :     }
+<span class="lineNum">    1164 </span><span class="lineCov">    1147883 :   for (move = list; move != NULL; move = move-&gt;next)</span>
+<span class="lineNum">    1165 </span>            :     {
+<span class="lineNum">    1166 </span><span class="lineCov">     967100 :       int nr, i;</span>
+<span class="lineNum">    1167 </span><span class="lineCov">     967100 :       nr = ALLOCNO_NUM_OBJECTS (move-&gt;to);</span>
+<span class="lineNum">    1168 </span><span class="lineCov">    1940575 :       for (i = 0; i &lt; nr; i++)</span>
+<span class="lineNum">    1169 </span>            :         {
+<span class="lineNum">    1170 </span><span class="lineCov">     973475 :           ira_object_t to_obj = ALLOCNO_OBJECT (move-&gt;to, i);</span>
+<span class="lineNum">    1171 </span><span class="lineCov">     973475 :           r = OBJECT_LIVE_RANGES (to_obj);</span>
+<span class="lineNum">    1172 </span><span class="lineCov">     973475 :           if (r-&gt;finish &lt; 0)</span>
+<span class="lineNum">    1173 </span>            :             {
+<span class="lineNum">    1174 </span><span class="lineCov">     970791 :               r-&gt;finish = ira_max_point - 1;</span>
+<span class="lineNum">    1175 </span><span class="lineCov">     970791 :               if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1176 </span><span class="lineNoCov">          0 :                 fprintf (ira_dump_file,</span>
+<span class="lineNum">    1177 </span>            :                          &quot;    Adding range [%d..%d] to allocno a%dr%d\n&quot;,
+<span class="lineNum">    1178 </span>            :                          r-&gt;start, r-&gt;finish, ALLOCNO_NUM (move-&gt;to),
+<span class="lineNum">    1179 </span><span class="lineNoCov">          0 :                          REGNO (allocno_emit_reg (move-&gt;to)));</span>
+<span class="lineNum">    1180 </span>            :             }
+<span class="lineNum">    1181 </span>            :         }
+<span class="lineNum">    1182 </span>            :     }
+<span class="lineNum">    1183 </span><span class="lineCov">    2756955 :   EXECUTE_IF_SET_IN_BITMAP (live_through, FIRST_PSEUDO_REGISTER, regno, bi)</span>
+<span class="lineNum">    1184 </span>            :     {
+<span class="lineNum">    1185 </span><span class="lineCov">    2576172 :       ira_allocno_t to;</span>
+<span class="lineNum">    1186 </span><span class="lineCov">    2576172 :       int nr, i;</span>
+<span class="lineNum">    1187 </span>            : 
+<span class="lineNum">    1188 </span><span class="lineCov">    2576172 :       a = node-&gt;regno_allocno_map[regno];</span>
+<span class="lineNum">    1189 </span><span class="lineCov">    2576172 :       if ((to = ALLOCNO_EMIT_DATA (a)-&gt;mem_optimized_dest) != NULL)</span>
+<span class="lineNum">    1190 </span><span class="lineCov">       2156 :         a = to;</span>
+<span class="lineNum">    1191 </span><span class="lineCov">    2576172 :       nr = ALLOCNO_NUM_OBJECTS (a);</span>
+<span class="lineNum">    1192 </span><span class="lineCov">    5197478 :       for (i = 0; i &lt; nr; i++)</span>
+<span class="lineNum">    1193 </span>            :         {
+<span class="lineNum">    1194 </span><span class="lineCov">    2621306 :           ira_object_t obj = ALLOCNO_OBJECT (a, i);</span>
+<span class="lineNum">    1195 </span><span class="lineCov">    2621306 :           ira_add_live_range_to_object (obj, start, ira_max_point - 1);</span>
+<span class="lineNum">    1196 </span>            :         }
+<span class="lineNum">    1197 </span><span class="lineCov">    2576172 :       if (internal_flag_ira_verbose &gt; 2 &amp;&amp; ira_dump_file != NULL)</span>
+<span class="lineNum">    1198 </span><span class="lineNoCov">          0 :         fprintf</span>
+<span class="lineNum">    1199 </span><span class="lineNoCov">          0 :           (ira_dump_file,</span>
+<span class="lineNum">    1200 </span>            :            &quot;    Adding range [%d..%d] to live through %s allocno a%dr%d\n&quot;,
+<span class="lineNum">    1201 </span>            :            start, ira_max_point - 1,
+<span class="lineNum">    1202 </span>            :            to != NULL ? &quot;upper level&quot; : &quot;&quot;,
+<span class="lineNum">    1203 </span><span class="lineNoCov">          0 :            ALLOCNO_NUM (a), REGNO (allocno_emit_reg (a)));</span>
+<span class="lineNum">    1204 </span>            :     }
+<span class="lineNum">    1205 </span>            : }
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span>            : /* Process all move list to add ranges, conflicts, copies, and modify
+<a name="1208"><span class="lineNum">    1208 </span>            :    costs for allocnos involved in the moves.  */</a>
+<span class="lineNum">    1209 </span>            : static void
+<span class="lineNum">    1210 </span><span class="lineCov">      20998 : add_ranges_and_copies (void)</span>
+<span class="lineNum">    1211 </span>            : {
+<span class="lineNum">    1212 </span><span class="lineCov">      20998 :   basic_block bb;</span>
+<span class="lineNum">    1213 </span><span class="lineCov">      20998 :   edge_iterator ei;</span>
+<span class="lineNum">    1214 </span><span class="lineCov">      20998 :   edge e;</span>
+<span class="lineNum">    1215 </span><span class="lineCov">      20998 :   ira_loop_tree_node_t node;</span>
+<span class="lineNum">    1216 </span><span class="lineCov">      20998 :   bitmap live_through;</span>
+<span class="lineNum">    1217 </span>            : 
+<span class="lineNum">    1218 </span><span class="lineCov">      20998 :   live_through = ira_allocate_bitmap ();</span>
+<span class="lineNum">    1219 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1220 </span>            :     {
+<span class="lineNum">    1221 </span>            :       /* It does not matter what loop_tree_node (of source or
+<span class="lineNum">    1222 </span>            :          destination block) to use for searching allocnos by their
+<span class="lineNum">    1223 </span>            :          regnos because of subsequent IR flattening.  */
+<span class="lineNum">    1224 </span><span class="lineCov">    1345509 :       node = IRA_BB_NODE (bb)-&gt;parent;</span>
+<span class="lineNum">    1225 </span><span class="lineCov">    1345509 :       bitmap_copy (live_through, df_get_live_in (bb));</span>
+<span class="lineNum">    1226 </span><span class="lineCov">    1345509 :       add_range_and_copies_from_move_list</span>
+<span class="lineNum">    1227 </span><span class="lineCov">    1345509 :         (at_bb_start[bb-&gt;index], node, live_through, REG_FREQ_FROM_BB (bb));</span>
+<span class="lineNum">    1228 </span><span class="lineCov">    1345509 :       bitmap_copy (live_through, df_get_live_out (bb));</span>
+<span class="lineNum">    1229 </span><span class="lineCov">    1345509 :       add_range_and_copies_from_move_list</span>
+<span class="lineNum">    1230 </span><span class="lineCov">    1345509 :         (at_bb_end[bb-&gt;index], node, live_through, REG_FREQ_FROM_BB (bb));</span>
+<span class="lineNum">    1231 </span><span class="lineCov">    4737687 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1232 </span>            :         {
+<span class="lineNum">    1233 </span><span class="lineCov">    2046669 :           bitmap_and (live_through,</span>
+<span class="lineNum">    1234 </span><span class="lineCov">    2046669 :                       df_get_live_in (e-&gt;dest), df_get_live_out (bb));</span>
+<span class="lineNum">    1235 </span><span class="lineCov">    2046669 :           add_range_and_copies_from_move_list</span>
+<span class="lineNum">    1236 </span><span class="lineCov">    4093338 :             ((move_t) e-&gt;aux, node, live_through,</span>
+<span class="lineNum">    1237 </span><span class="lineCov">    6140007 :              REG_FREQ_FROM_EDGE_FREQ (EDGE_FREQUENCY (e)));</span>
+<span class="lineNum">    1238 </span>            :         }
+<span class="lineNum">    1239 </span>            :     }
+<span class="lineNum">    1240 </span><span class="lineCov">      20998 :   ira_free_bitmap (live_through);</span>
+<span class="lineNum">    1241 </span><span class="lineCov">      20998 : }</span>
+<span class="lineNum">    1242 </span>            : 
+<span class="lineNum">    1243 </span>            : /* The entry function changes code and generates shuffling allocnos on
+<span class="lineNum">    1244 </span>            :    region borders for the regional (LOOPS_P is TRUE in this case)
+<span class="lineNum">    1245 </span>            :    register allocation.  */
+<span class="lineNum">    1246 </span>            : void
+<span class="lineNum">    1247 </span><span class="lineCov">     832590 : ira_emit (bool loops_p)</span>
+<span class="lineNum">    1248 </span>            : {
+<span class="lineNum">    1249 </span><span class="lineCov">     832590 :   basic_block bb;</span>
+<span class="lineNum">    1250 </span><span class="lineCov">     832590 :   rtx_insn *insn;</span>
+<span class="lineNum">    1251 </span><span class="lineCov">     832590 :   edge_iterator ei;</span>
+<span class="lineNum">    1252 </span><span class="lineCov">     832590 :   edge e;</span>
+<span class="lineNum">    1253 </span><span class="lineCov">     832590 :   ira_allocno_t a;</span>
+<span class="lineNum">    1254 </span><span class="lineCov">     832590 :   ira_allocno_iterator ai;</span>
+<span class="lineNum">    1255 </span><span class="lineCov">     832590 :   size_t sz;</span>
+<span class="lineNum">    1256 </span>            : 
+<span class="lineNum">    1257 </span><span class="lineCov">   20098604 :   FOR_EACH_ALLOCNO (a, ai)</span>
+<span class="lineNum">    1258 </span><span class="lineCov">   19266014 :     ALLOCNO_EMIT_DATA (a)-&gt;reg = regno_reg_rtx[ALLOCNO_REGNO (a)];</span>
+<span class="lineNum">    1259 </span><span class="lineCov">     832590 :   if (! loops_p)</span>
+<span class="lineNum">    1260 </span><span class="lineCov">     811592 :     return;</span>
+<span class="lineNum">    1261 </span><span class="lineCov">      20998 :   sz = sizeof (move_t) * last_basic_block_for_fn (cfun);</span>
+<span class="lineNum">    1262 </span><span class="lineCov">      20998 :   at_bb_start = (move_t *) ira_allocate (sz);</span>
+<span class="lineNum">    1263 </span><span class="lineCov">      20998 :   memset (at_bb_start, 0, sz);</span>
+<span class="lineNum">    1264 </span><span class="lineCov">      20998 :   at_bb_end = (move_t *) ira_allocate (sz);</span>
+<span class="lineNum">    1265 </span><span class="lineCov">      20998 :   memset (at_bb_end, 0, sz);</span>
+<span class="lineNum">    1266 </span><span class="lineCov">      20998 :   local_allocno_bitmap = ira_allocate_bitmap ();</span>
+<span class="lineNum">    1267 </span><span class="lineCov">      20998 :   used_regno_bitmap = ira_allocate_bitmap ();</span>
+<span class="lineNum">    1268 </span><span class="lineCov">      20998 :   renamed_regno_bitmap = ira_allocate_bitmap ();</span>
+<span class="lineNum">    1269 </span><span class="lineCov">      20998 :   max_regno_before_changing = max_reg_num ();</span>
+<span class="lineNum">    1270 </span><span class="lineCov">      20998 :   ira_traverse_loop_tree (true, ira_loop_tree_root, change_loop, NULL);</span>
+<span class="lineNum">    1271 </span><span class="lineCov">      20998 :   set_allocno_somewhere_renamed_p ();</span>
+<span class="lineNum">    1272 </span><span class="lineCov">      20998 :   ira_free_bitmap (used_regno_bitmap);</span>
+<span class="lineNum">    1273 </span><span class="lineCov">      20998 :   ira_free_bitmap (renamed_regno_bitmap);</span>
+<span class="lineNum">    1274 </span><span class="lineCov">      20998 :   ira_free_bitmap (local_allocno_bitmap);</span>
+<span class="lineNum">    1275 </span><span class="lineCov">      20998 :   setup_entered_from_non_parent_p ();</span>
+<span class="lineNum">    1276 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1277 </span>            :     {
+<span class="lineNum">    1278 </span><span class="lineCov">    1345509 :       at_bb_start[bb-&gt;index] = NULL;</span>
+<span class="lineNum">    1279 </span><span class="lineCov">    1345509 :       at_bb_end[bb-&gt;index] = NULL;</span>
+<span class="lineNum">    1280 </span><span class="lineCov">    4737687 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1281 </span><span class="lineCov">    2046669 :         if (e-&gt;dest != EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1282 </span><span class="lineCov">    2025004 :           generate_edge_moves (e);</span>
+<span class="lineNum">    1283 </span>            :     }
+<span class="lineNum">    1284 </span><span class="lineCov">      20998 :   allocno_last_set</span>
+<span class="lineNum">    1285 </span><span class="lineCov">      20998 :     = (move_t *) ira_allocate (sizeof (move_t) * max_reg_num ());</span>
+<span class="lineNum">    1286 </span><span class="lineCov">      20998 :   allocno_last_set_check</span>
+<span class="lineNum">    1287 </span><span class="lineCov">      20998 :     = (int *) ira_allocate (sizeof (int) * max_reg_num ());</span>
+<span class="lineNum">    1288 </span><span class="lineCov">      20998 :   memset (allocno_last_set_check, 0, sizeof (int) * max_reg_num ());</span>
+<span class="lineNum">    1289 </span><span class="lineCov">      20998 :   memset (hard_regno_last_set_check, 0, sizeof (hard_regno_last_set_check));</span>
+<span class="lineNum">    1290 </span><span class="lineCov">      20998 :   curr_tick = 0;</span>
+<span class="lineNum">    1291 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1292 </span><span class="lineCov">    1345509 :     unify_moves (bb, true);</span>
+<span class="lineNum">    1293 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1294 </span><span class="lineCov">    1345509 :     unify_moves (bb, false);</span>
+<span class="lineNum">    1295 </span><span class="lineCov">      20998 :   move_vec.create (ira_allocnos_num);</span>
+<span class="lineNum">    1296 </span><span class="lineCov">      20998 :   emit_moves ();</span>
+<span class="lineNum">    1297 </span><span class="lineCov">      20998 :   add_ranges_and_copies ();</span>
+<span class="lineNum">    1298 </span>            :   /* Clean up: */
+<span class="lineNum">    1299 </span><span class="lineCov">    1366507 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1300 </span>            :     {
+<span class="lineNum">    1301 </span><span class="lineCov">    1345509 :       free_move_list (at_bb_start[bb-&gt;index]);</span>
+<span class="lineNum">    1302 </span><span class="lineCov">    1345509 :       free_move_list (at_bb_end[bb-&gt;index]);</span>
+<span class="lineNum">    1303 </span><span class="lineCov">    4737687 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1304 </span>            :         {
+<span class="lineNum">    1305 </span><span class="lineCov">    2046669 :           free_move_list ((move_t) e-&gt;aux);</span>
+<span class="lineNum">    1306 </span><span class="lineCov">    2046669 :           e-&gt;aux = NULL;</span>
+<span class="lineNum">    1307 </span>            :         }
+<span class="lineNum">    1308 </span>            :     }
+<span class="lineNum">    1309 </span><span class="lineCov">      20998 :   move_vec.release ();</span>
+<span class="lineNum">    1310 </span><span class="lineCov">      20998 :   ira_free (allocno_last_set_check);</span>
+<span class="lineNum">    1311 </span><span class="lineCov">      20998 :   ira_free (allocno_last_set);</span>
+<span class="lineNum">    1312 </span><span class="lineCov">      20998 :   commit_edge_insertions ();</span>
+<span class="lineNum">    1313 </span>            :   /* Fix insn codes.  It is necessary to do it before reload because
+<span class="lineNum">    1314 </span>            :      reload assumes initial insn codes defined.  The insn codes can be
+<span class="lineNum">    1315 </span>            :      invalidated by CFG infrastructure for example in jump
+<span class="lineNum">    1316 </span>            :      redirection.  */
+<span class="lineNum">    1317 </span><span class="lineCov">    1404433 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1318 </span><span class="lineCov">   33174505 :     FOR_BB_INSNS_REVERSE (bb, insn)</span>
+<span class="lineNum">    1319 </span><span class="lineCov">   15895535 :       if (INSN_P (insn))</span>
+<span class="lineNum">    1320 </span><span class="lineCov">   13357506 :         recog_memoized (insn);</span>
+<span class="lineNum">    1321 </span><span class="lineCov">      20998 :   ira_free (at_bb_end);</span>
+<span class="lineNum">    1322 </span><span class="lineCov">      20998 :   ira_free (at_bb_start);</span>
+<span class="lineNum">    1323 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

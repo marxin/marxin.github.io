@@ -1,0 +1,904 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/lra-spills.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - lra-spills.c<span style="font-size: 80%;"> (source / <a href="lra-spills.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">307</td>
+            <td class="headerCovTableEntry">382</td>
+            <td class="headerCovTableEntryMed">80.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Change pseudos by memory.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2010-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Vladimir Makarov &lt;vmakarov@redhat.com&gt;.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.    */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : /* This file contains code for a pass to change spilled pseudos into
+<span class="lineNum">      23 </span>            :    memory.
+<span class="lineNum">      24 </span>            : 
+<span class="lineNum">      25 </span>            :    The pass creates necessary stack slots and assigns spilled pseudos
+<span class="lineNum">      26 </span>            :    to the stack slots in following way:
+<span class="lineNum">      27 </span>            : 
+<span class="lineNum">      28 </span>            :    for all spilled pseudos P most frequently used first do
+<span class="lineNum">      29 </span>            :      for all stack slots S do
+<span class="lineNum">      30 </span>            :        if P doesn't conflict with pseudos assigned to S then
+<span class="lineNum">      31 </span>            :          assign S to P and goto to the next pseudo process
+<span class="lineNum">      32 </span>            :        end
+<span class="lineNum">      33 </span>            :      end
+<span class="lineNum">      34 </span>            :      create new stack slot S and assign P to S
+<span class="lineNum">      35 </span>            :    end
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            :    The actual algorithm is bit more complicated because of different
+<span class="lineNum">      38 </span>            :    pseudo sizes.
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            :    After that the code changes spilled pseudos (except ones created
+<span class="lineNum">      41 </span>            :    from scratches) by corresponding stack slot memory in RTL.
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :    If at least one stack slot was created, we need to run more passes
+<span class="lineNum">      44 </span>            :    because we have new addresses which should be checked and because
+<span class="lineNum">      45 </span>            :    the old address displacements might change and address constraints
+<span class="lineNum">      46 </span>            :    (or insn memory constraints) might not be satisfied any more.
+<span class="lineNum">      47 </span>            : 
+<span class="lineNum">      48 </span>            :    For some targets, the pass can spill some pseudos into hard
+<span class="lineNum">      49 </span>            :    registers of different class (usually into vector registers)
+<span class="lineNum">      50 </span>            :    instead of spilling them into memory if it is possible and
+<span class="lineNum">      51 </span>            :    profitable.  Spilling GENERAL_REGS pseudo into SSE registers for
+<span class="lineNum">      52 </span>            :    Intel Corei7 is an example of such optimization.  And this is
+<span class="lineNum">      53 </span>            :    actually recommended by Intel optimization guide.
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            :    The file also contains code for final change of pseudos on hard
+<span class="lineNum">      56 </span>            :    regs correspondingly assigned to them.  */
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      59 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      60 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      61 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      62 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      63 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      64 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      65 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      66 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      67 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      68 </span>            : #include &quot;ira.h&quot;
+<span class="lineNum">      69 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      70 </span>            : #include &quot;output.h&quot;
+<span class="lineNum">      71 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      72 </span>            : #include &quot;lra.h&quot;
+<span class="lineNum">      73 </span>            : #include &quot;lra-int.h&quot;
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            : /* Max regno at the start of the pass.  */
+<span class="lineNum">      77 </span>            : static int regs_num;
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            : /* Map spilled regno -&gt; hard regno used instead of memory for
+<span class="lineNum">      80 </span>            :    spilling.  */
+<span class="lineNum">      81 </span>            : static rtx *spill_hard_reg;
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            : /* The structure describes stack slot of a spilled pseudo.  */
+<span class="lineNum">      84 </span>            : struct pseudo_slot
+<span class="lineNum">      85 </span>            : {
+<span class="lineNum">      86 </span>            :   /* Number (0, 1, ...) of the stack slot to which given pseudo
+<span class="lineNum">      87 </span>            :      belongs.  */
+<span class="lineNum">      88 </span>            :   int slot_num;
+<span class="lineNum">      89 </span>            :   /* First or next slot with the same slot number.  */
+<span class="lineNum">      90 </span>            :   struct pseudo_slot *next, *first;
+<span class="lineNum">      91 </span>            :   /* Memory representing the spilled pseudo.  */
+<span class="lineNum">      92 </span>            :   rtx mem;
+<span class="lineNum">      93 </span>            : };
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            : /* The stack slots for each spilled pseudo.  Indexed by regnos.  */
+<span class="lineNum">      96 </span>            : static struct pseudo_slot *pseudo_slots;
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : /* The structure describes a register or a stack slot which can be
+<span class="lineNum">      99 </span>            :    used for several spilled pseudos.  */
+<span class="lineNum">     100 </span>            : struct slot
+<span class="lineNum">     101 </span>            : {
+<span class="lineNum">     102 </span>            :   /* First pseudo with given stack slot.  */
+<span class="lineNum">     103 </span>            :   int regno;
+<span class="lineNum">     104 </span>            :   /* Hard reg into which the slot pseudos are spilled.  The value is
+<span class="lineNum">     105 </span>            :      negative for pseudos spilled into memory.  */
+<span class="lineNum">     106 </span>            :   int hard_regno;
+<span class="lineNum">     107 </span>            :   /* Maximum alignment required by all users of the slot.  */
+<span class="lineNum">     108 </span>            :   unsigned int align;
+<span class="lineNum">     109 </span>            :   /* Maximum size required by all users of the slot.  */
+<span class="lineNum">     110 </span>            :   poly_int64 size;
+<span class="lineNum">     111 </span>            :   /* Memory representing the all stack slot.  It can be different from
+<span class="lineNum">     112 </span>            :      memory representing a pseudo belonging to give stack slot because
+<span class="lineNum">     113 </span>            :      pseudo can be placed in a part of the corresponding stack slot.
+<span class="lineNum">     114 </span>            :      The value is NULL for pseudos spilled into a hard reg.  */
+<span class="lineNum">     115 </span>            :   rtx mem;
+<span class="lineNum">     116 </span>            :   /* Combined live ranges of all pseudos belonging to given slot.  It
+<span class="lineNum">     117 </span>            :      is used to figure out that a new spilled pseudo can use given
+<span class="lineNum">     118 </span>            :      stack slot.  */
+<span class="lineNum">     119 </span>            :   lra_live_range_t live_ranges;
+<span class="lineNum">     120 </span>            : };
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            : /* Array containing info about the stack slots.  The array element is
+<span class="lineNum">     123 </span>            :    indexed by the stack slot number in the range [0..slots_num).  */
+<span class="lineNum">     124 </span>            : static struct slot *slots;
+<span class="lineNum">     125 </span>            : /* The number of the stack slots currently existing.  */
+<span class="lineNum">     126 </span>            : static int slots_num;
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span>            : /* Set up memory of the spilled pseudo I.  The function can allocate
+<a name="129"><span class="lineNum">     129 </span>            :    the corresponding stack slot if it is not done yet.  */</a>
+<span class="lineNum">     130 </span>            : static void
+<span class="lineNum">     131 </span><span class="lineCov">     742966 : assign_mem_slot (int i)</span>
+<span class="lineNum">     132 </span>            : {
+<span class="lineNum">     133 </span><span class="lineCov">     742966 :   rtx x = NULL_RTX;</span>
+<span class="lineNum">     134 </span><span class="lineCov">     742966 :   machine_mode mode = GET_MODE (regno_reg_rtx[i]);</span>
+<span class="lineNum">     135 </span><span class="lineCov">    1485932 :   poly_int64 inherent_size = PSEUDO_REGNO_BYTES (i);</span>
+<span class="lineNum">     136 </span><span class="lineCov">     742966 :   machine_mode wider_mode</span>
+<span class="lineNum">     137 </span><span class="lineCov">     742966 :     = wider_subreg_mode (mode, lra_reg_info[i].biggest_mode);</span>
+<span class="lineNum">     138 </span><span class="lineCov">    1485932 :   poly_int64 total_size = GET_MODE_SIZE (wider_mode);</span>
+<span class="lineNum">     139 </span><span class="lineCov">     742966 :   poly_int64 adjust = 0;</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineCov">     742966 :   lra_assert (regno_reg_rtx[i] != NULL_RTX &amp;&amp; REG_P (regno_reg_rtx[i])</span>
+<span class="lineNum">     142 </span>            :               &amp;&amp; lra_reg_info[i].nrefs != 0 &amp;&amp; reg_renumber[i] &lt; 0);
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span><span class="lineCov">     742966 :   unsigned int slot_num = pseudo_slots[i].slot_num;</span>
+<span class="lineNum">     145 </span><span class="lineCov">     742966 :   x = slots[slot_num].mem;</span>
+<span class="lineNum">     146 </span><span class="lineCov">     742966 :   if (!x)</span>
+<span class="lineNum">     147 </span>            :     {
+<span class="lineNum">     148 </span><span class="lineCov">    1253787 :       x = assign_stack_local (BLKmode, slots[slot_num].size,</span>
+<span class="lineNum">     149 </span><span class="lineCov">     417929 :                               slots[slot_num].align);</span>
+<span class="lineNum">     150 </span><span class="lineCov">     417929 :       slots[slot_num].mem = x;</span>
+<span class="lineNum">     151 </span>            :     }
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            :   /* On a big endian machine, the &quot;address&quot; of the slot is the address
+<span class="lineNum">     154 </span>            :      of the low part that fits its inherent mode.  */
+<span class="lineNum">     155 </span><span class="lineCov">    2228898 :   adjust += subreg_size_lowpart_offset (inherent_size, total_size);</span>
+<span class="lineNum">     156 </span><span class="lineCov">    1485932 :   x = adjust_address_nv (x, GET_MODE (regno_reg_rtx[i]), adjust);</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            :   /* Set all of the memory attributes as appropriate for a spill.  */
+<span class="lineNum">     159 </span><span class="lineCov">     742966 :   set_mem_attrs_for_spill (x);</span>
+<span class="lineNum">     160 </span><span class="lineCov">     742966 :   pseudo_slots[i].mem = x;</span>
+<span class="lineNum">     161 </span><span class="lineCov">     742966 : }</span>
+<span class="lineNum">     162 </span>            : 
+<a name="163"><span class="lineNum">     163 </span>            : /* Sort pseudos according their usage frequencies.  */</a>
+<span class="lineNum">     164 </span>            : static int
+<span class="lineNum">     165 </span><span class="lineCov">   17897117 : regno_freq_compare (const void *v1p, const void *v2p)</span>
+<span class="lineNum">     166 </span>            : {
+<span class="lineNum">     167 </span><span class="lineCov">   17897117 :   const int regno1 = *(const int *) v1p;</span>
+<span class="lineNum">     168 </span><span class="lineCov">   17897117 :   const int regno2 = *(const int *) v2p;</span>
+<span class="lineNum">     169 </span><span class="lineCov">   17897117 :   int diff;</span>
+<span class="lineNum">     170 </span>            : 
+<span class="lineNum">     171 </span><span class="lineCov">   17897117 :   if ((diff = lra_reg_info[regno2].freq - lra_reg_info[regno1].freq) != 0)</span>
+<span class="lineNum">     172 </span>            :     return diff;
+<span class="lineNum">     173 </span><span class="lineCov">    7847436 :   return regno1 - regno2;</span>
+<span class="lineNum">     174 </span>            : }
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            : /* Sort pseudos according to their slots, putting the slots in the order
+<span class="lineNum">     177 </span>            :    that they should be allocated.
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            :    First prefer to group slots with variable sizes together and slots
+<span class="lineNum">     180 </span>            :    with constant sizes together, since that usually makes them easier
+<span class="lineNum">     181 </span>            :    to address from a common anchor point.  E.g. loads of polynomial-sized
+<span class="lineNum">     182 </span>            :    registers tend to take polynomial offsets while loads of constant-sized
+<span class="lineNum">     183 </span>            :    registers tend to take constant (non-polynomial) offsets.
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span>            :    Next, slots with lower numbers have the highest priority and should
+<span class="lineNum">     186 </span>            :    get the smallest displacement from the stack or frame pointer
+<span class="lineNum">     187 </span>            :    (whichever is being used).
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            :    The first allocated slot is always closest to the frame pointer,
+<span class="lineNum">     190 </span>            :    so prefer lower slot numbers when frame_pointer_needed.  If the stack
+<span class="lineNum">     191 </span>            :    and frame grow in the same direction, then the first allocated slot is
+<span class="lineNum">     192 </span>            :    always closest to the initial stack pointer and furthest away from the
+<span class="lineNum">     193 </span>            :    final stack pointer, so allocate higher numbers first when using the
+<span class="lineNum">     194 </span>            :    stack pointer in that case.  The reverse is true if the stack and
+<a name="195"><span class="lineNum">     195 </span>            :    frame grow in opposite directions.  */</a>
+<span class="lineNum">     196 </span>            : static int
+<span class="lineNum">     197 </span><span class="lineCov">   18067027 : pseudo_reg_slot_compare (const void *v1p, const void *v2p)</span>
+<span class="lineNum">     198 </span>            : {
+<span class="lineNum">     199 </span><span class="lineCov">   18067027 :   const int regno1 = *(const int *) v1p;</span>
+<span class="lineNum">     200 </span><span class="lineCov">   18067027 :   const int regno2 = *(const int *) v2p;</span>
+<span class="lineNum">     201 </span><span class="lineCov">   18067027 :   int diff, slot_num1, slot_num2;</span>
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span><span class="lineCov">   18067027 :   slot_num1 = pseudo_slots[regno1].slot_num;</span>
+<span class="lineNum">     204 </span><span class="lineCov">   18067027 :   slot_num2 = pseudo_slots[regno2].slot_num;</span>
+<span class="lineNum">     205 </span><span class="lineCov">   36134054 :   diff = (int (slots[slot_num1].size.is_constant ())</span>
+<span class="lineNum">     206 </span><span class="lineCov">   18067027 :           - int (slots[slot_num2].size.is_constant ()));</span>
+<span class="lineNum">     207 </span><span class="lineCov">   18067027 :   if (diff != 0)</span>
+<span class="lineNum">     208 </span>            :     return diff;
+<span class="lineNum">     209 </span><span class="lineCov">   18067027 :   if ((diff = slot_num1 - slot_num2) != 0)</span>
+<span class="lineNum">     210 </span><span class="lineCov">   13253249 :     return (frame_pointer_needed</span>
+<span class="lineNum">     211 </span><span class="lineCov">   13253249 :             || (!FRAME_GROWS_DOWNWARD) == STACK_GROWS_DOWNWARD ? diff : -diff);</span>
+<span class="lineNum">     212 </span><span class="lineCov">    9627556 :   poly_int64 total_size1 = GET_MODE_SIZE (lra_reg_info[regno1].biggest_mode);</span>
+<span class="lineNum">     213 </span><span class="lineCov">    9627556 :   poly_int64 total_size2 = GET_MODE_SIZE (lra_reg_info[regno2].biggest_mode);</span>
+<span class="lineNum">     214 </span><span class="lineCov">    5221945 :   if ((diff = compare_sizes_for_sort (total_size2, total_size1)) != 0)</span>
+<span class="lineNum">     215 </span><span class="lineCov">     744003 :     return diff;</span>
+<span class="lineNum">     216 </span><span class="lineCov">    4069775 :   return regno1 - regno2;</span>
+<span class="lineNum">     217 </span>            : }
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            : /* Assign spill hard registers to N pseudos in PSEUDO_REGNOS which is
+<span class="lineNum">     220 </span>            :    sorted in order of highest frequency first.  Put the pseudos which
+<span class="lineNum">     221 </span>            :    did not get a spill hard register at the beginning of array
+<a name="222"><span class="lineNum">     222 </span>            :    PSEUDO_REGNOS.  Return the number of such pseudos.  */</a>
+<span class="lineNum">     223 </span>            : static int
+<span class="lineNum">     224 </span><span class="lineCov">      83987 : assign_spill_hard_regs (int *pseudo_regnos, int n)</span>
+<span class="lineNum">     225 </span>            : {
+<span class="lineNum">     226 </span><span class="lineCov">      83987 :   int i, k, p, regno, res, spill_class_size, hard_regno, nr;</span>
+<span class="lineNum">     227 </span><span class="lineCov">      83987 :   enum reg_class rclass, spill_class;</span>
+<span class="lineNum">     228 </span><span class="lineCov">      83987 :   machine_mode mode;</span>
+<span class="lineNum">     229 </span><span class="lineCov">      83987 :   lra_live_range_t r;</span>
+<span class="lineNum">     230 </span><span class="lineCov">      83987 :   rtx_insn *insn;</span>
+<span class="lineNum">     231 </span><span class="lineCov">      83987 :   rtx set;</span>
+<span class="lineNum">     232 </span><span class="lineCov">      83987 :   basic_block bb;</span>
+<span class="lineNum">     233 </span><span class="lineCov">      83987 :   HARD_REG_SET conflict_hard_regs;</span>
+<span class="lineNum">     234 </span><span class="lineCov">      83987 :   bitmap setjump_crosses = regstat_get_setjmp_crosses ();</span>
+<span class="lineNum">     235 </span>            :   /* Hard registers which can not be used for any purpose at given
+<span class="lineNum">     236 </span>            :      program point because they are unallocatable or already allocated
+<span class="lineNum">     237 </span>            :      for other pseudos.  */
+<span class="lineNum">     238 </span><span class="lineCov">      83987 :   HARD_REG_SET *reserved_hard_regs;</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span><span class="lineCov">      83987 :   if (! lra_reg_spill_p)</span>
+<span class="lineNum">     241 </span>            :     return n;
+<span class="lineNum">     242 </span>            :   /* Set up reserved hard regs for every program point.  */
+<span class="lineNum">     243 </span><span class="lineNoCov">          0 :   reserved_hard_regs = XNEWVEC (HARD_REG_SET, lra_live_max_point);</span>
+<span class="lineNum">     244 </span><span class="lineNoCov">          0 :   for (p = 0; p &lt; lra_live_max_point; p++)</span>
+<span class="lineNum">     245 </span><span class="lineNoCov">          0 :     COPY_HARD_REG_SET (reserved_hard_regs[p], lra_no_alloc_regs);</span>
+<span class="lineNum">     246 </span><span class="lineNoCov">          0 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; regs_num; i++)</span>
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 :     if (lra_reg_info[i].nrefs != 0</span>
+<span class="lineNum">     248 </span><span class="lineNoCov">          0 :         &amp;&amp; (hard_regno = lra_get_regno_hard_regno (i)) &gt;= 0)</span>
+<span class="lineNum">     249 </span><span class="lineNoCov">          0 :       for (r = lra_reg_info[i].live_ranges; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">     250 </span><span class="lineNoCov">          0 :         for (p = r-&gt;start; p &lt;= r-&gt;finish; p++)</span>
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 :           add_to_hard_reg_set (&amp;reserved_hard_regs[p],</span>
+<span class="lineNum">     252 </span>            :                                lra_reg_info[i].biggest_mode, hard_regno);
+<span class="lineNum">     253 </span><span class="lineNoCov">          0 :   auto_bitmap ok_insn_bitmap (&amp;reg_obstack);</span>
+<span class="lineNum">     254 </span><span class="lineNoCov">          0 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :     FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     256 </span><span class="lineNoCov">          0 :       if (DEBUG_INSN_P (insn)</span>
+<span class="lineNum">     257 </span><span class="lineNoCov">          0 :           || ((set = single_set (insn)) != NULL_RTX</span>
+<span class="lineNum">     258 </span><span class="lineNoCov">          0 :               &amp;&amp; REG_P (SET_SRC (set)) &amp;&amp; REG_P (SET_DEST (set))))</span>
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 :         bitmap_set_bit (ok_insn_bitmap, INSN_UID (insn));</span>
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 :   for (res = i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     261 </span>            :     {
+<span class="lineNum">     262 </span><span class="lineNoCov">          0 :       regno = pseudo_regnos[i];</span>
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 :       rclass = lra_get_allocno_class (regno);</span>
+<span class="lineNum">     264 </span><span class="lineNoCov">          0 :       if (bitmap_bit_p (setjump_crosses, regno)</span>
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 :           || (spill_class</span>
+<span class="lineNum">     266 </span><span class="lineNoCov">          0 :               = ((enum reg_class)</span>
+<span class="lineNum">     267 </span><span class="lineNoCov">          0 :                  targetm.spill_class ((reg_class_t) rclass,</span>
+<span class="lineNum">     268 </span><span class="lineNoCov">          0 :                                       PSEUDO_REGNO_MODE (regno)))) == NO_REGS</span>
+<span class="lineNum">     269 </span><span class="lineNoCov">          0 :           || bitmap_intersect_compl_p (&amp;lra_reg_info[regno].insn_bitmap,</span>
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 :                                        ok_insn_bitmap))</span>
+<span class="lineNum">     271 </span>            :         {
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :           pseudo_regnos[res++] = regno;</span>
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">     274 </span>            :         }
+<span class="lineNum">     275 </span><span class="lineNoCov">          0 :       lra_assert (spill_class != NO_REGS);</span>
+<span class="lineNum">     276 </span><span class="lineNoCov">          0 :       COPY_HARD_REG_SET (conflict_hard_regs,</span>
+<span class="lineNum">     277 </span>            :                          lra_reg_info[regno].conflict_hard_regs);
+<span class="lineNum">     278 </span><span class="lineNoCov">          0 :       for (r = lra_reg_info[regno].live_ranges; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">     279 </span><span class="lineNoCov">          0 :         for (p = r-&gt;start; p &lt;= r-&gt;finish; p++)</span>
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :           IOR_HARD_REG_SET (conflict_hard_regs, reserved_hard_regs[p]);</span>
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :       spill_class_size = ira_class_hard_regs_num[spill_class];</span>
+<span class="lineNum">     282 </span><span class="lineNoCov">          0 :       mode = lra_reg_info[regno].biggest_mode;</span>
+<span class="lineNum">     283 </span><span class="lineNoCov">          0 :       for (k = 0; k &lt; spill_class_size; k++)</span>
+<span class="lineNum">     284 </span>            :         {
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :           hard_regno = ira_class_hard_regs[spill_class][k];</span>
+<span class="lineNum">     286 </span><span class="lineNoCov">          0 :           if (! overlaps_hard_reg_set_p (conflict_hard_regs, mode, hard_regno))</span>
+<span class="lineNum">     287 </span>            :             break;
+<span class="lineNum">     288 </span>            :         }
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :       if (k &gt;= spill_class_size)</span>
+<span class="lineNum">     290 </span>            :         {
+<span class="lineNum">     291 </span>            :            /* There is no available regs -- assign memory later.  */
+<span class="lineNum">     292 </span><span class="lineNoCov">          0 :           pseudo_regnos[res++] = regno;</span>
+<span class="lineNum">     293 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">     294 </span>            :         }
+<span class="lineNum">     295 </span><span class="lineNoCov">          0 :       if (lra_dump_file != NULL)</span>
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 :         fprintf (lra_dump_file, &quot;  Spill r%d into hr%d\n&quot;, regno, hard_regno);</span>
+<span class="lineNum">     297 </span><span class="lineNoCov">          0 :       add_to_hard_reg_set (&amp;hard_regs_spilled_into,</span>
+<span class="lineNum">     298 </span><span class="lineNoCov">          0 :                            lra_reg_info[regno].biggest_mode, hard_regno);</span>
+<span class="lineNum">     299 </span>            :       /* Update reserved_hard_regs.  */
+<span class="lineNum">     300 </span><span class="lineNoCov">          0 :       for (r = lra_reg_info[regno].live_ranges; r != NULL; r = r-&gt;next)</span>
+<span class="lineNum">     301 </span><span class="lineNoCov">          0 :         for (p = r-&gt;start; p &lt;= r-&gt;finish; p++)</span>
+<span class="lineNum">     302 </span><span class="lineNoCov">          0 :           add_to_hard_reg_set (&amp;reserved_hard_regs[p],</span>
+<span class="lineNum">     303 </span>            :                                lra_reg_info[regno].biggest_mode, hard_regno);
+<span class="lineNum">     304 </span><span class="lineNoCov">          0 :       spill_hard_reg[regno]</span>
+<span class="lineNum">     305 </span><span class="lineNoCov">          0 :         = gen_raw_REG (PSEUDO_REGNO_MODE (regno), hard_regno);</span>
+<span class="lineNum">     306 </span><span class="lineNoCov">          0 :       for (nr = 0;</span>
+<span class="lineNum">     307 </span><span class="lineNoCov">          0 :            nr &lt; hard_regno_nregs (hard_regno,</span>
+<span class="lineNum">     308 </span><span class="lineNoCov">          0 :                                   lra_reg_info[regno].biggest_mode);</span>
+<span class="lineNum">     309 </span>            :            nr++)
+<span class="lineNum">     310 </span>            :         /* Just loop.  */
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 :         df_set_regs_ever_live (hard_regno + nr, true);</span>
+<span class="lineNum">     312 </span>            :     }
+<span class="lineNum">     313 </span><span class="lineNoCov">          0 :   free (reserved_hard_regs);</span>
+<span class="lineNum">     314 </span><span class="lineNoCov">          0 :   return res;</span>
+<span class="lineNum">     315 </span>            : }
+<span class="lineNum">     316 </span>            : 
+<a name="317"><span class="lineNum">     317 </span>            : /* Add pseudo REGNO to slot SLOT_NUM.  */</a>
+<span class="lineNum">     318 </span>            : static void
+<span class="lineNum">     319 </span><span class="lineCov">     742966 : add_pseudo_to_slot (int regno, int slot_num)</span>
+<span class="lineNum">     320 </span>            : {
+<span class="lineNum">     321 </span><span class="lineCov">     742966 :   struct pseudo_slot *first;</span>
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span>            :   /* Each pseudo has an inherent size which comes from its own mode,
+<span class="lineNum">     324 </span>            :      and a total size which provides room for paradoxical subregs.
+<span class="lineNum">     325 </span>            :      We need to make sure the size and alignment of the slot are
+<span class="lineNum">     326 </span>            :      sufficient for both.  */
+<span class="lineNum">     327 </span><span class="lineCov">    2228898 :   machine_mode mode = wider_subreg_mode (PSEUDO_REGNO_MODE (regno),</span>
+<span class="lineNum">     328 </span><span class="lineCov">     742966 :                                          lra_reg_info[regno].biggest_mode);</span>
+<span class="lineNum">     329 </span><span class="lineCov">     742966 :   unsigned int align = spill_slot_alignment (mode);</span>
+<span class="lineNum">     330 </span><span class="lineCov">     742966 :   slots[slot_num].align = MAX (slots[slot_num].align, align);</span>
+<span class="lineNum">     331 </span><span class="lineCov">    1485932 :   slots[slot_num].size = upper_bound (slots[slot_num].size,</span>
+<span class="lineNum">     332 </span><span class="lineCov">    1485932 :                                       GET_MODE_SIZE (mode));</span>
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span><span class="lineCov">     742966 :   if (slots[slot_num].regno &lt; 0)</span>
+<span class="lineNum">     335 </span>            :     {
+<span class="lineNum">     336 </span>            :       /* It is the first pseudo in the slot.  */
+<span class="lineNum">     337 </span><span class="lineCov">     417929 :       slots[slot_num].regno = regno;</span>
+<span class="lineNum">     338 </span><span class="lineCov">     417929 :       pseudo_slots[regno].first = &amp;pseudo_slots[regno];</span>
+<span class="lineNum">     339 </span><span class="lineCov">     417929 :       pseudo_slots[regno].next = NULL;</span>
+<span class="lineNum">     340 </span>            :     }
+<span class="lineNum">     341 </span>            :   else
+<span class="lineNum">     342 </span>            :     {
+<span class="lineNum">     343 </span><span class="lineCov">     325037 :       first = pseudo_slots[regno].first = &amp;pseudo_slots[slots[slot_num].regno];</span>
+<span class="lineNum">     344 </span><span class="lineCov">     325037 :       pseudo_slots[regno].next = first-&gt;next;</span>
+<span class="lineNum">     345 </span><span class="lineCov">     325037 :       first-&gt;next = &amp;pseudo_slots[regno];</span>
+<span class="lineNum">     346 </span>            :     }
+<span class="lineNum">     347 </span><span class="lineCov">     742966 :   pseudo_slots[regno].mem = NULL_RTX;</span>
+<span class="lineNum">     348 </span><span class="lineCov">     742966 :   pseudo_slots[regno].slot_num = slot_num;</span>
+<span class="lineNum">     349 </span><span class="lineCov">     742966 :   slots[slot_num].live_ranges</span>
+<span class="lineNum">     350 </span><span class="lineCov">     742966 :     = lra_merge_live_ranges (slots[slot_num].live_ranges,</span>
+<span class="lineNum">     351 </span>            :                              lra_copy_live_range_list
+<span class="lineNum">     352 </span><span class="lineCov">     742966 :                              (lra_reg_info[regno].live_ranges));</span>
+<span class="lineNum">     353 </span><span class="lineCov">     742966 : }</span>
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span>            : /* Assign stack slot numbers to pseudos in array PSEUDO_REGNOS of
+<span class="lineNum">     356 </span>            :    length N.  Sort pseudos in PSEUDO_REGNOS for subsequent assigning
+<a name="357"><span class="lineNum">     357 </span>            :    memory stack slots.  */</a>
+<span class="lineNum">     358 </span>            : static void
+<span class="lineNum">     359 </span><span class="lineCov">      83987 : assign_stack_slot_num_and_sort_pseudos (int *pseudo_regnos, int n)</span>
+<span class="lineNum">     360 </span>            : {
+<span class="lineNum">     361 </span><span class="lineCov">      83987 :   int i, j, regno;</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span><span class="lineCov">      83987 :   slots_num = 0;</span>
+<span class="lineNum">     364 </span>            :   /* Assign stack slot numbers to spilled pseudos, use smaller numbers
+<span class="lineNum">     365 </span>            :      for most frequently used pseudos.  */
+<span class="lineNum">     366 </span><span class="lineCov">     826953 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     367 </span>            :     {
+<span class="lineNum">     368 </span><span class="lineCov">     742966 :       regno = pseudo_regnos[i];</span>
+<span class="lineNum">     369 </span><span class="lineCov">     742966 :       if (! flag_ira_share_spill_slots)</span>
+<span class="lineNum">     370 </span><span class="lineCov">      13752 :         j = slots_num;</span>
+<span class="lineNum">     371 </span>            :       else
+<span class="lineNum">     372 </span>            :         {
+<span class="lineNum">     373 </span><span class="lineCov">     729214 :           machine_mode mode</span>
+<span class="lineNum">     374 </span><span class="lineCov">    1458428 :             = wider_subreg_mode (PSEUDO_REGNO_MODE (regno),</span>
+<span class="lineNum">     375 </span><span class="lineCov">     729214 :                                  lra_reg_info[regno].biggest_mode);</span>
+<span class="lineNum">     376 </span><span class="lineCov">   35106680 :           for (j = 0; j &lt; slots_num; j++)</span>
+<span class="lineNum">     377 </span><span class="lineCov">   34702503 :             if (slots[j].hard_regno &lt; 0</span>
+<span class="lineNum">     378 </span>            :                 /* Although it's possible to share slots between modes
+<span class="lineNum">     379 </span>            :                    with constant and non-constant widths, we usually
+<span class="lineNum">     380 </span>            :                    get better spill code by keeping the constant and
+<span class="lineNum">     381 </span>            :                    non-constant areas separate.  */
+<span class="lineNum">     382 </span><span class="lineCov">   34702503 :                 &amp;&amp; (GET_MODE_SIZE (mode).is_constant ()</span>
+<span class="lineNum">     383 </span><span class="lineCov">   34702503 :                     == slots[j].size.is_constant ())</span>
+<span class="lineNum">     384 </span><span class="lineCov">   69405006 :                 &amp;&amp; ! (lra_intersected_live_ranges_p</span>
+<span class="lineNum">     385 </span><span class="lineCov">   34702503 :                       (slots[j].live_ranges,</span>
+<span class="lineNum">     386 </span><span class="lineCov">   34702503 :                        lra_reg_info[regno].live_ranges)))</span>
+<span class="lineNum">     387 </span>            :               break;
+<span class="lineNum">     388 </span>            :         }
+<span class="lineNum">     389 </span><span class="lineCov">     742966 :       if (j &gt;= slots_num)</span>
+<span class="lineNum">     390 </span>            :         {
+<span class="lineNum">     391 </span>            :           /* New slot.  */
+<span class="lineNum">     392 </span><span class="lineCov">     417929 :           slots[j].live_ranges = NULL;</span>
+<span class="lineNum">     393 </span><span class="lineCov">     417929 :           slots[j].size = 0;</span>
+<span class="lineNum">     394 </span><span class="lineCov">     417929 :           slots[j].align = BITS_PER_UNIT;</span>
+<span class="lineNum">     395 </span><span class="lineCov">     417929 :           slots[j].regno = slots[j].hard_regno = -1;</span>
+<span class="lineNum">     396 </span><span class="lineCov">     417929 :           slots[j].mem = NULL_RTX;</span>
+<span class="lineNum">     397 </span><span class="lineCov">     417929 :           slots_num++;</span>
+<span class="lineNum">     398 </span>            :         }
+<span class="lineNum">     399 </span><span class="lineCov">     742966 :       add_pseudo_to_slot (regno, j);</span>
+<span class="lineNum">     400 </span>            :     }
+<span class="lineNum">     401 </span>            :   /* Sort regnos according to their slot numbers.  */
+<span class="lineNum">     402 </span><span class="lineCov">      83987 :   qsort (pseudo_regnos, n, sizeof (int), pseudo_reg_slot_compare);</span>
+<span class="lineNum">     403 </span><span class="lineCov">      83987 : }</span>
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            : /* Recursively process LOC in INSN and change spilled pseudos to the
+<span class="lineNum">     406 </span>            :    corresponding memory or spilled hard reg.  Ignore spilled pseudos
+<span class="lineNum">     407 </span>            :    created from the scratches.  Return true if the pseudo nrefs equal
+<a name="408"><span class="lineNum">     408 </span>            :    to 0 (don't change the pseudo in this case).  Otherwise return false.  */</a>
+<span class="lineNum">     409 </span>            : static bool
+<span class="lineNum">     410 </span><span class="lineCov">   17767933 : remove_pseudos (rtx *loc, rtx_insn *insn)</span>
+<span class="lineNum">     411 </span>            : {
+<span class="lineNum">     412 </span><span class="lineCov">   17767933 :   int i;</span>
+<span class="lineNum">     413 </span><span class="lineCov">   17767933 :   rtx hard_reg;</span>
+<span class="lineNum">     414 </span><span class="lineCov">   17767933 :   const char *fmt;</span>
+<span class="lineNum">     415 </span><span class="lineCov">   17767933 :   enum rtx_code code;</span>
+<span class="lineNum">     416 </span><span class="lineCov">   17767933 :   bool res = false;</span>
+<span class="lineNum">     417 </span>            :   
+<span class="lineNum">     418 </span><span class="lineCov">   17767933 :   if (*loc == NULL_RTX)</span>
+<span class="lineNum">     419 </span>            :     return res;
+<span class="lineNum">     420 </span><span class="lineCov">   16246096 :   code = GET_CODE (*loc);</span>
+<span class="lineNum">     421 </span><span class="lineCov">   15155944 :   if (code == REG &amp;&amp; (i = REGNO (*loc)) &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     422 </span><span class="lineCov">    4752666 :       &amp;&amp; lra_get_regno_hard_regno (i) &lt; 0</span>
+<span class="lineNum">     423 </span>            :       /* We do not want to assign memory for former scratches because
+<span class="lineNum">     424 </span>            :          it might result in an address reload for some targets.  In
+<span class="lineNum">     425 </span>            :          any case we transform such pseudos not getting hard registers
+<span class="lineNum">     426 </span>            :          into scratches back.  */
+<span class="lineNum">     427 </span><span class="lineCov">   19000299 :       &amp;&amp; ! lra_former_scratch_p (i))</span>
+<span class="lineNum">     428 </span>            :     {
+<span class="lineNum">     429 </span><span class="lineCov">    2754203 :       if (lra_reg_info[i].nrefs == 0</span>
+<span class="lineNum">     430 </span><span class="lineCov">      15435 :           &amp;&amp; pseudo_slots[i].mem == NULL &amp;&amp; spill_hard_reg[i] == NULL)</span>
+<span class="lineNum">     431 </span>            :         return true;
+<span class="lineNum">     432 </span><span class="lineCov">    2754203 :       if ((hard_reg = spill_hard_reg[i]) != NULL_RTX)</span>
+<span class="lineNum">     433 </span><span class="lineNoCov">          0 :         *loc = copy_rtx (hard_reg);</span>
+<span class="lineNum">     434 </span>            :       else
+<span class="lineNum">     435 </span>            :         {
+<span class="lineNum">     436 </span><span class="lineCov">   13771015 :           rtx x = lra_eliminate_regs_1 (insn, pseudo_slots[i].mem,</span>
+<span class="lineNum">     437 </span><span class="lineCov">    2754203 :                                         GET_MODE (pseudo_slots[i].mem),</span>
+<span class="lineNum">     438 </span><span class="lineCov">    2754203 :                                         false, false, 0, true);</span>
+<span class="lineNum">     439 </span><span class="lineCov">    2754203 :           *loc = x != pseudo_slots[i].mem ? x : copy_rtx (x);</span>
+<span class="lineNum">     440 </span>            :         }
+<span class="lineNum">     441 </span><span class="lineCov">    2754203 :       return res;</span>
+<span class="lineNum">     442 </span>            :     }
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span><span class="lineCov">   13491893 :   fmt = GET_RTX_FORMAT (code);</span>
+<span class="lineNum">     445 </span><span class="lineCov">   32738481 :   for (i = GET_RTX_LENGTH (code) - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     446 </span>            :     {
+<span class="lineNum">     447 </span><span class="lineCov">   19246588 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">     448 </span><span class="lineCov">   13282490 :         res = remove_pseudos (&amp;XEXP (*loc, i), insn) || res;</span>
+<span class="lineNum">     449 </span><span class="lineCov">    5964098 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">     450 </span>            :         {
+<span class="lineNum">     451 </span><span class="lineCov">     133533 :           int j;</span>
+<span class="lineNum">     452 </span>            : 
+<span class="lineNum">     453 </span><span class="lineCov">     398733 :           for (j = XVECLEN (*loc, i) - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">     454 </span><span class="lineCov">     530400 :             res = remove_pseudos (&amp;XVECEXP (*loc, i, j), insn) || res;</span>
+<span class="lineNum">     455 </span>            :         }
+<span class="lineNum">     456 </span>            :     }
+<span class="lineNum">     457 </span>            :   return res;
+<span class="lineNum">     458 </span>            : }
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span>            : /* Convert spilled pseudos into their stack slots or spill hard regs,
+<span class="lineNum">     461 </span>            :    put insns to process on the constraint stack (that is all insns in
+<a name="462"><span class="lineNum">     462 </span>            :    which pseudos were changed to memory or spill hard regs).   */</a>
+<span class="lineNum">     463 </span>            : static void
+<span class="lineNum">     464 </span><span class="lineCov">      83987 : spill_pseudos (void)</span>
+<span class="lineNum">     465 </span>            : {
+<span class="lineNum">     466 </span><span class="lineCov">      83987 :   basic_block bb;</span>
+<span class="lineNum">     467 </span><span class="lineCov">      83987 :   rtx_insn *insn, *curr;</span>
+<span class="lineNum">     468 </span><span class="lineCov">      83987 :   int i;</span>
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span><span class="lineCov">      83987 :   auto_bitmap spilled_pseudos (&amp;reg_obstack);</span>
+<span class="lineNum">     471 </span><span class="lineCov">     167974 :   auto_bitmap changed_insns (&amp;reg_obstack);</span>
+<span class="lineNum">     472 </span><span class="lineCov">   17430985 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; regs_num; i++)</span>
+<span class="lineNum">     473 </span>            :     {
+<span class="lineNum">     474 </span><span class="lineCov">    9211696 :       if (lra_reg_info[i].nrefs != 0 &amp;&amp; lra_get_regno_hard_regno (i) &lt; 0</span>
+<span class="lineNum">     475 </span><span class="lineCov">   18091916 :           &amp;&amp; ! lra_former_scratch_p (i))</span>
+<span class="lineNum">     476 </span>            :         {
+<span class="lineNum">     477 </span><span class="lineCov">    1485932 :           bitmap_set_bit (spilled_pseudos, i);</span>
+<span class="lineNum">     478 </span><span class="lineCov">    1485932 :           bitmap_ior_into (changed_insns, &amp;lra_reg_info[i].insn_bitmap);</span>
+<span class="lineNum">     479 </span>            :         }
+<span class="lineNum">     480 </span>            :     }
+<span class="lineNum">     481 </span><span class="lineCov">    3530726 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     482 </span>            :     {
+<span class="lineNum">     483 </span><span class="lineCov">   99464892 :       FOR_BB_INSNS_SAFE (bb, insn, curr)</span>
+<span class="lineNum">     484 </span>            :         {
+<span class="lineNum">     485 </span><span class="lineCov">   46285707 :           bool removed_pseudo_p = false;</span>
+<span class="lineNum">     486 </span>            :           
+<span class="lineNum">     487 </span><span class="lineCov">   46285707 :           if (bitmap_bit_p (changed_insns, INSN_UID (insn)))</span>
+<span class="lineNum">     488 </span>            :             {
+<span class="lineNum">     489 </span><span class="lineCov">    2698406 :               rtx *link_loc, link;</span>
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span><span class="lineCov">    5396812 :               removed_pseudo_p = remove_pseudos (&amp;PATTERN (insn), insn);</span>
+<span class="lineNum">     492 </span><span class="lineCov">    2698406 :               if (CALL_P (insn)</span>
+<span class="lineNum">     493 </span><span class="lineCov">    2698406 :                   &amp;&amp; remove_pseudos (&amp;CALL_INSN_FUNCTION_USAGE (insn), insn))</span>
+<span class="lineNum">     494 </span>            :                 removed_pseudo_p = true;
+<span class="lineNum">     495 </span><span class="lineCov">    2698406 :               for (link_loc = &amp;REG_NOTES (insn);</span>
+<span class="lineNum">     496 </span><span class="lineCov">    4487802 :                    (link = *link_loc) != NULL_RTX;</span>
+<span class="lineNum">     497 </span><span class="lineCov">    1789396 :                    link_loc = &amp;XEXP (link, 1))</span>
+<span class="lineNum">     498 </span>            :                 {
+<span class="lineNum">     499 </span><span class="lineCov">    1789396 :                   switch (REG_NOTE_KIND (link))</span>
+<span class="lineNum">     500 </span>            :                     {
+<span class="lineNum">     501 </span><span class="lineNoCov">          0 :                     case REG_FRAME_RELATED_EXPR:</span>
+<span class="lineNum">     502 </span><span class="lineNoCov">          0 :                     case REG_CFA_DEF_CFA:</span>
+<span class="lineNum">     503 </span><span class="lineNoCov">          0 :                     case REG_CFA_ADJUST_CFA:</span>
+<span class="lineNum">     504 </span><span class="lineNoCov">          0 :                     case REG_CFA_OFFSET:</span>
+<span class="lineNum">     505 </span><span class="lineNoCov">          0 :                     case REG_CFA_REGISTER:</span>
+<span class="lineNum">     506 </span><span class="lineNoCov">          0 :                     case REG_CFA_EXPRESSION:</span>
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 :                     case REG_CFA_RESTORE:</span>
+<span class="lineNum">     508 </span><span class="lineNoCov">          0 :                     case REG_CFA_SET_VDRAP:</span>
+<span class="lineNum">     509 </span><span class="lineNoCov">          0 :                       if (remove_pseudos (&amp;XEXP (link, 0), insn))</span>
+<span class="lineNum">     510 </span><span class="lineNoCov">          0 :                         removed_pseudo_p = true;</span>
+<span class="lineNum">     511 </span>            :                       break;
+<span class="lineNum">     512 </span>            :                     default:
+<span class="lineNum">     513 </span>            :                       break;
+<span class="lineNum">     514 </span>            :                     }
+<span class="lineNum">     515 </span>            :                 }
+<span class="lineNum">     516 </span><span class="lineCov">    2698406 :               if (lra_dump_file != NULL)</span>
+<span class="lineNum">     517 </span><span class="lineCov">         72 :                 fprintf (lra_dump_file,</span>
+<span class="lineNum">     518 </span>            :                          &quot;Changing spilled pseudos to memory in insn #%u\n&quot;,
+<span class="lineNum">     519 </span><span class="lineCov">         36 :                          INSN_UID (insn));</span>
+<span class="lineNum">     520 </span><span class="lineCov">    2698406 :               lra_push_insn (insn);</span>
+<span class="lineNum">     521 </span><span class="lineCov">    2698406 :               if (lra_reg_spill_p || targetm.different_addr_displacement_p ())</span>
+<span class="lineNum">     522 </span><span class="lineNoCov">          0 :                 lra_set_used_insn_alternative (insn, LRA_UNKNOWN_ALT);</span>
+<span class="lineNum">     523 </span>            :             }
+<span class="lineNum">     524 </span><span class="lineCov">   43587301 :           else if (CALL_P (insn)</span>
+<span class="lineNum">     525 </span>            :                    /* Presence of any pseudo in CALL_INSN_FUNCTION_USAGE
+<span class="lineNum">     526 </span>            :                       does not affect value of insn_bitmap of the
+<span class="lineNum">     527 </span>            :                       corresponding lra_reg_info.  That is because we
+<span class="lineNum">     528 </span>            :                       don't need to reload pseudos in
+<span class="lineNum">     529 </span>            :                       CALL_INSN_FUNCTION_USAGEs.  So if we process only
+<span class="lineNum">     530 </span>            :                       insns in the insn_bitmap of given pseudo here, we
+<span class="lineNum">     531 </span>            :                       can miss the pseudo in some
+<span class="lineNum">     532 </span>            :                       CALL_INSN_FUNCTION_USAGEs.  */
+<span class="lineNum">     533 </span><span class="lineCov">   43587301 :                    &amp;&amp; remove_pseudos (&amp;CALL_INSN_FUNCTION_USAGE (insn), insn))</span>
+<span class="lineNum">     534 </span>            :             removed_pseudo_p = true;
+<span class="lineNum">     535 </span><span class="lineCov">    2698406 :           if (removed_pseudo_p)</span>
+<span class="lineNum">     536 </span>            :             {
+<span class="lineNum">     537 </span><span class="lineNoCov">          0 :               lra_assert (DEBUG_INSN_P (insn));</span>
+<span class="lineNum">     538 </span><span class="lineNoCov">          0 :               lra_invalidate_insn_data (insn);</span>
+<span class="lineNum">     539 </span><span class="lineNoCov">          0 :               INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();</span>
+<span class="lineNum">     540 </span><span class="lineNoCov">          0 :               if (lra_dump_file != NULL)</span>
+<span class="lineNum">     541 </span><span class="lineNoCov">          0 :                 fprintf (lra_dump_file,</span>
+<span class="lineNum">     542 </span>            :                          &quot;Debug insn #%u is reset because it referenced &quot;
+<span class="lineNum">     543 </span><span class="lineNoCov">          0 :                          &quot;removed pseudo\n&quot;, INSN_UID (insn));</span>
+<span class="lineNum">     544 </span>            :             }
+<span class="lineNum">     545 </span><span class="lineCov">   92571414 :           bitmap_and_compl_into (df_get_live_in (bb), spilled_pseudos);</span>
+<span class="lineNum">     546 </span><span class="lineCov">   92571414 :           bitmap_and_compl_into (df_get_live_out (bb), spilled_pseudos);</span>
+<span class="lineNum">     547 </span>            :         }
+<span class="lineNum">     548 </span>            :     }
+<span class="lineNum">     549 </span><span class="lineCov">      83987 : }</span>
+<span class="lineNum">     550 </span>            : 
+<a name="551"><span class="lineNum">     551 </span>            : /* Return true if we need to change some pseudos into memory.  */</a>
+<span class="lineNum">     552 </span>            : bool
+<span class="lineNum">     553 </span><span class="lineCov">     918163 : lra_need_for_spills_p (void)</span>
+<span class="lineNum">     554 </span>            : {
+<span class="lineNum">     555 </span><span class="lineCov">     918163 :   int i; max_regno = max_reg_num ();</span>
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span><span class="lineCov">   44726629 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; max_regno; i++)</span>
+<span class="lineNum">     558 </span><span class="lineCov">   19999550 :     if (lra_reg_info[i].nrefs != 0 &amp;&amp; lra_get_regno_hard_regno (i) &lt; 0</span>
+<span class="lineNum">     559 </span><span class="lineCov">   43982205 :         &amp;&amp; ! lra_former_scratch_p (i))</span>
+<span class="lineNum">     560 </span>            :       return true;
+<span class="lineNum">     561 </span>            :   return false;
+<span class="lineNum">     562 </span>            : }
+<span class="lineNum">     563 </span>            : 
+<span class="lineNum">     564 </span>            : /* Change spilled pseudos into memory or spill hard regs.  Put changed
+<span class="lineNum">     565 </span>            :    insns on the constraint stack (these insns will be considered on
+<span class="lineNum">     566 </span>            :    the next constraint pass).  The changed insns are all insns in
+<a name="567"><span class="lineNum">     567 </span>            :    which pseudos were changed.  */</a>
+<span class="lineNum">     568 </span>            : void
+<span class="lineNum">     569 </span><span class="lineCov">      83987 : lra_spill (void)</span>
+<span class="lineNum">     570 </span>            : {
+<span class="lineNum">     571 </span><span class="lineCov">      83987 :   int i, n, curr_regno;</span>
+<span class="lineNum">     572 </span><span class="lineCov">      83987 :   int *pseudo_regnos;</span>
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span><span class="lineCov">      83987 :   regs_num = max_reg_num ();</span>
+<span class="lineNum">     575 </span><span class="lineCov">      83987 :   spill_hard_reg = XNEWVEC (rtx, regs_num);</span>
+<span class="lineNum">     576 </span><span class="lineCov">      83987 :   pseudo_regnos = XNEWVEC (int, regs_num);</span>
+<span class="lineNum">     577 </span><span class="lineCov">   17430985 :   for (n = 0, i = FIRST_PSEUDO_REGISTER; i &lt; regs_num; i++)</span>
+<span class="lineNum">     578 </span><span class="lineCov">    9211696 :     if (lra_reg_info[i].nrefs != 0 &amp;&amp; lra_get_regno_hard_regno (i) &lt; 0</span>
+<span class="lineNum">     579 </span>            :         /* We do not want to assign memory for former scratches.  */
+<span class="lineNum">     580 </span><span class="lineCov">   18091916 :         &amp;&amp; ! lra_former_scratch_p (i))</span>
+<span class="lineNum">     581 </span><span class="lineCov">     742966 :       pseudo_regnos[n++] = i;</span>
+<span class="lineNum">     582 </span><span class="lineCov">      83987 :   lra_assert (n &gt; 0);</span>
+<span class="lineNum">     583 </span><span class="lineCov">      83987 :   pseudo_slots = XNEWVEC (struct pseudo_slot, regs_num);</span>
+<span class="lineNum">     584 </span><span class="lineCov">   17430985 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; regs_num; i++)</span>
+<span class="lineNum">     585 </span>            :     {
+<span class="lineNum">     586 </span><span class="lineCov">   17346998 :       spill_hard_reg[i] = NULL_RTX;</span>
+<span class="lineNum">     587 </span><span class="lineCov">   17346998 :       pseudo_slots[i].mem = NULL_RTX;</span>
+<span class="lineNum">     588 </span>            :     }
+<span class="lineNum">     589 </span><span class="lineCov">      83987 :   slots = XNEWVEC (struct slot, regs_num);</span>
+<span class="lineNum">     590 </span>            :   /* Sort regnos according their usage frequencies.  */
+<span class="lineNum">     591 </span><span class="lineCov">      83987 :   qsort (pseudo_regnos, n, sizeof (int), regno_freq_compare);</span>
+<span class="lineNum">     592 </span><span class="lineCov">      83987 :   n = assign_spill_hard_regs (pseudo_regnos, n);</span>
+<span class="lineNum">     593 </span><span class="lineCov">      83987 :   assign_stack_slot_num_and_sort_pseudos (pseudo_regnos, n);</span>
+<span class="lineNum">     594 </span><span class="lineCov">     826953 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     595 </span><span class="lineCov">     742966 :     if (pseudo_slots[pseudo_regnos[i]].mem == NULL_RTX)</span>
+<span class="lineNum">     596 </span><span class="lineCov">     742966 :       assign_mem_slot (pseudo_regnos[i]);</span>
+<span class="lineNum">     597 </span><span class="lineCov">      83987 :   if (n &gt; 0 &amp;&amp; crtl-&gt;stack_alignment_needed)</span>
+<span class="lineNum">     598 </span>            :     /* If we have a stack frame, we must align it now.  The stack size
+<span class="lineNum">     599 </span>            :        may be a part of the offset computation for register
+<span class="lineNum">     600 </span>            :        elimination.  */
+<span class="lineNum">     601 </span><span class="lineCov">     167974 :     assign_stack_local (BLKmode, 0, crtl-&gt;stack_alignment_needed);</span>
+<span class="lineNum">     602 </span><span class="lineCov">      83987 :   if (lra_dump_file != NULL)</span>
+<span class="lineNum">     603 </span>            :     {
+<span class="lineNum">     604 </span><span class="lineCov">         29 :       for (i = 0; i &lt; slots_num; i++)</span>
+<span class="lineNum">     605 </span>            :         {
+<span class="lineNum">     606 </span><span class="lineCov">         18 :           fprintf (lra_dump_file, &quot;  Slot %d regnos (width = &quot;, i);</span>
+<span class="lineNum">     607 </span><span class="lineCov">         36 :           print_dec (GET_MODE_SIZE (GET_MODE (slots[i].mem)),</span>
+<span class="lineNum">     608 </span>            :                      lra_dump_file, SIGNED);
+<span class="lineNum">     609 </span><span class="lineCov">         18 :           fprintf (lra_dump_file, &quot;):&quot;);</span>
+<span class="lineNum">     610 </span><span class="lineCov">         18 :           for (curr_regno = slots[i].regno;;</span>
+<span class="lineNum">     611 </span><span class="lineNoCov">          0 :                curr_regno = pseudo_slots[curr_regno].next - pseudo_slots)</span>
+<span class="lineNum">     612 </span>            :             {
+<span class="lineNum">     613 </span><span class="lineCov">         18 :               fprintf (lra_dump_file, &quot;     %d&quot;, curr_regno);</span>
+<span class="lineNum">     614 </span><span class="lineCov">         18 :               if (pseudo_slots[curr_regno].next == NULL)</span>
+<span class="lineNum">     615 </span>            :                 break;
+<span class="lineNum">     616 </span>            :             }
+<span class="lineNum">     617 </span><span class="lineCov">         18 :           fprintf (lra_dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     618 </span>            :         }
+<span class="lineNum">     619 </span>            :     }
+<span class="lineNum">     620 </span><span class="lineCov">      83987 :   spill_pseudos ();</span>
+<span class="lineNum">     621 </span><span class="lineCov">      83987 :   free (slots);</span>
+<span class="lineNum">     622 </span><span class="lineCov">      83987 :   free (pseudo_slots);</span>
+<span class="lineNum">     623 </span><span class="lineCov">      83987 :   free (pseudo_regnos);</span>
+<span class="lineNum">     624 </span><span class="lineCov">      83987 :   free (spill_hard_reg);</span>
+<span class="lineNum">     625 </span><span class="lineCov">      83987 : }</span>
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            : /* Apply alter_subreg for subregs of regs in *LOC.  Use FINAL_P for
+<span class="lineNum">     628 </span>            :    alter_subreg calls. Return true if any subreg of reg is
+<a name="629"><span class="lineNum">     629 </span>            :    processed.  */</a>
+<span class="lineNum">     630 </span>            : static bool
+<span class="lineNum">     631 </span><span class="lineCov">  181369911 : alter_subregs (rtx *loc, bool final_p)</span>
+<span class="lineNum">     632 </span>            : {
+<span class="lineNum">     633 </span><span class="lineCov">  181369911 :   int i;</span>
+<span class="lineNum">     634 </span><span class="lineCov">  181369911 :   rtx x = *loc;</span>
+<span class="lineNum">     635 </span><span class="lineCov">  181369911 :   bool res;</span>
+<span class="lineNum">     636 </span><span class="lineCov">  181369911 :   const char *fmt;</span>
+<span class="lineNum">     637 </span><span class="lineCov">  181369911 :   enum rtx_code code;</span>
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span><span class="lineCov">  181369911 :   if (x == NULL_RTX)</span>
+<span class="lineNum">     640 </span>            :     return false;
+<span class="lineNum">     641 </span><span class="lineCov">  181369911 :   code = GET_CODE (x);</span>
+<span class="lineNum">     642 </span><span class="lineCov">  181369911 :   if (code == SUBREG &amp;&amp; REG_P (SUBREG_REG (x)))</span>
+<span class="lineNum">     643 </span>            :     {
+<span class="lineNum">     644 </span><span class="lineCov">    2270268 :       lra_assert (REGNO (SUBREG_REG (x)) &lt; FIRST_PSEUDO_REGISTER);</span>
+<span class="lineNum">     645 </span><span class="lineCov">    1135134 :       alter_subreg (loc, final_p);</span>
+<span class="lineNum">     646 </span><span class="lineCov">    1135134 :       return true;</span>
+<span class="lineNum">     647 </span>            :     }
+<span class="lineNum">     648 </span><span class="lineCov">  180234777 :   fmt = GET_RTX_FORMAT (code);</span>
+<span class="lineNum">     649 </span><span class="lineCov">  180234777 :   res = false;</span>
+<span class="lineNum">     650 </span><span class="lineCov">  437037184 :   for (i = GET_RTX_LENGTH (code) - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     651 </span>            :     {
+<span class="lineNum">     652 </span><span class="lineCov">  256802407 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">     653 </span>            :         {
+<span class="lineNum">     654 </span><span class="lineCov">   66359125 :           if (alter_subregs (&amp;XEXP (x, i), final_p))</span>
+<span class="lineNum">     655 </span><span class="lineCov">      22843 :             res = true;</span>
+<span class="lineNum">     656 </span>            :         }
+<span class="lineNum">     657 </span><span class="lineCov">  190443282 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">     658 </span>            :         {
+<span class="lineNum">     659 </span><span class="lineCov">     230031 :           int j;</span>
+<span class="lineNum">     660 </span>            : 
+<span class="lineNum">     661 </span><span class="lineCov">     682229 :           for (j = XVECLEN (x, i) - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">     662 </span><span class="lineCov">     452198 :             if (alter_subregs (&amp;XVECEXP (x, i, j), final_p))</span>
+<span class="lineNum">     663 </span><span class="lineCov">         16 :               res = true;</span>
+<span class="lineNum">     664 </span>            :         }
+<span class="lineNum">     665 </span>            :     }
+<span class="lineNum">     666 </span>            :   return res;
+<span class="lineNum">     667 </span>            : }
+<span class="lineNum">     668 </span>            : 
+<span class="lineNum">     669 </span>            : /* Return true if REGNO is used for return in the current
+<a name="670"><span class="lineNum">     670 </span>            :    function.  */</a>
+<span class="lineNum">     671 </span>            : static bool
+<span class="lineNum">     672 </span><span class="lineCov">    5597620 : return_regno_p (unsigned int regno)</span>
+<span class="lineNum">     673 </span>            : {
+<span class="lineNum">     674 </span><span class="lineCov">    5597620 :   rtx outgoing = crtl-&gt;return_rtx;</span>
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span><span class="lineCov">    5597620 :   if (! outgoing)</span>
+<span class="lineNum">     677 </span>            :     return false;
+<span class="lineNum">     678 </span>            : 
+<span class="lineNum">     679 </span><span class="lineCov">    2540618 :   if (REG_P (outgoing))</span>
+<span class="lineNum">     680 </span><span class="lineCov">    5061370 :     return REGNO (outgoing) == regno;</span>
+<span class="lineNum">     681 </span><span class="lineCov">       9933 :   else if (GET_CODE (outgoing) == PARALLEL)</span>
+<span class="lineNum">     682 </span>            :     {
+<span class="lineNum">     683 </span>            :       int i;
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span><span class="lineCov">      18612 :       for (i = 0; i &lt; XVECLEN (outgoing, 0); i++)</span>
+<span class="lineNum">     686 </span>            :         {
+<span class="lineNum">     687 </span><span class="lineCov">      14866 :           rtx x = XEXP (XVECEXP (outgoing, 0, i), 0);</span>
+<span class="lineNum">     688 </span>            : 
+<span class="lineNum">     689 </span><span class="lineCov">      14866 :           if (REG_P (x) &amp;&amp; REGNO (x) == regno)</span>
+<span class="lineNum">     690 </span>            :             return true;
+<span class="lineNum">     691 </span>            :         }
+<span class="lineNum">     692 </span>            :     }
+<span class="lineNum">     693 </span>            :   return false;
+<span class="lineNum">     694 </span>            : }
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span>            : /* Return true if REGNO is in one of subsequent USE after INSN in the
+<a name="697"><span class="lineNum">     697 </span>            :    same BB.  */</a>
+<span class="lineNum">     698 </span>            : static bool
+<span class="lineNum">     699 </span><span class="lineCov">    1064285 : regno_in_use_p (rtx_insn *insn, unsigned int regno)</span>
+<span class="lineNum">     700 </span>            : {
+<span class="lineNum">     701 </span><span class="lineCov">    1064285 :   static lra_insn_recog_data_t id;</span>
+<span class="lineNum">     702 </span><span class="lineCov">    1064285 :   static struct lra_static_insn_data *static_id;</span>
+<span class="lineNum">     703 </span><span class="lineCov">    1064285 :   struct lra_insn_reg *reg;</span>
+<span class="lineNum">     704 </span><span class="lineCov">    1064285 :   int i, arg_regno;</span>
+<span class="lineNum">     705 </span><span class="lineCov">    2128570 :   basic_block bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">     706 </span>            : 
+<span class="lineNum">     707 </span><span class="lineCov">    6300833 :   while ((insn = next_nondebug_insn (insn)) != NULL_RTX)</span>
+<span class="lineNum">     708 </span>            :     {
+<span class="lineNum">     709 </span><span class="lineCov">    6300833 :       if (BARRIER_P (insn) || bb != BLOCK_FOR_INSN (insn))</span>
+<span class="lineNum">     710 </span>            :         return false;
+<span class="lineNum">     711 </span><span class="lineCov">    5806831 :       if (! INSN_P (insn))</span>
+<span class="lineNum">     712 </span>            :         continue;
+<span class="lineNum">     713 </span><span class="lineCov">    5362433 :       if (GET_CODE (PATTERN (insn)) == USE</span>
+<span class="lineNum">     714 </span><span class="lineCov">     555446 :           &amp;&amp; REG_P (XEXP (PATTERN (insn), 0))</span>
+<span class="lineNum">     715 </span><span class="lineCov">    6195602 :           &amp;&amp; regno == REGNO (XEXP (PATTERN (insn), 0)))</span>
+<span class="lineNum">     716 </span>            :         return true;
+<span class="lineNum">     717 </span>            :       /* Check that the regno is not modified.  */
+<span class="lineNum">     718 </span><span class="lineCov">    5086136 :       id = lra_get_insn_recog_data (insn);</span>
+<span class="lineNum">     719 </span><span class="lineCov">   13199355 :       for (reg = id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     720 </span><span class="lineCov">    8407118 :         if (reg-&gt;type != OP_IN &amp;&amp; reg-&gt;regno == (int) regno)</span>
+<span class="lineNum">     721 </span>            :           return false;
+<span class="lineNum">     722 </span><span class="lineCov">    4792237 :       static_id = id-&gt;insn_static_data;</span>
+<span class="lineNum">     723 </span><span class="lineCov">    6613438 :       for (reg = static_id-&gt;hard_regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     724 </span><span class="lineCov">    1821288 :         if (reg-&gt;type != OP_IN &amp;&amp; reg-&gt;regno == (int) regno)</span>
+<span class="lineNum">     725 </span>            :           return false;
+<span class="lineNum">     726 </span><span class="lineCov">    4792150 :       if (id-&gt;arg_hard_regs != NULL)</span>
+<span class="lineNum">     727 </span><span class="lineCov">     155841 :         for (i = 0; (arg_regno = id-&gt;arg_hard_regs[i]) &gt;= 0; i++)</span>
+<span class="lineNum">     728 </span><span class="lineCov">     108261 :           if ((int) regno == (arg_regno &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     729 </span><span class="lineCov">     108261 :                               ? arg_regno : arg_regno - FIRST_PSEUDO_REGISTER))</span>
+<span class="lineNum">     730 </span>            :             return false;
+<span class="lineNum">     731 </span>            :     }
+<span class="lineNum">     732 </span>            :   return false;
+<span class="lineNum">     733 </span>            : }
+<span class="lineNum">     734 </span>            : 
+<span class="lineNum">     735 </span>            : /* Final change of pseudos got hard registers into the corresponding
+<a name="736"><span class="lineNum">     736 </span>            :    hard registers and removing temporary clobbers.  */</a>
+<span class="lineNum">     737 </span>            : void
+<span class="lineNum">     738 </span><span class="lineCov">     832590 : lra_final_code_change (void)</span>
+<span class="lineNum">     739 </span>            : {
+<span class="lineNum">     740 </span><span class="lineCov">     832590 :   int i, hard_regno;</span>
+<span class="lineNum">     741 </span><span class="lineCov">     832590 :   basic_block bb;</span>
+<span class="lineNum">     742 </span><span class="lineCov">     832590 :   rtx_insn *insn, *curr;</span>
+<span class="lineNum">     743 </span><span class="lineCov">     832590 :   int max_regno = max_reg_num ();</span>
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineCov">   40373759 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; max_regno; i++)</span>
+<span class="lineNum">     746 </span><span class="lineCov">   39541169 :     if (lra_reg_info[i].nrefs != 0</span>
+<span class="lineNum">     747 </span><span class="lineCov">   39541169 :         &amp;&amp; (hard_regno = lra_get_regno_hard_regno (i)) &gt;= 0)</span>
+<span class="lineNum">     748 </span><span class="lineCov">   18064213 :       SET_REGNO (regno_reg_rtx[i], hard_regno);</span>
+<span class="lineNum">     749 </span><span class="lineCov">    8885959 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     750 </span><span class="lineCov">  204132672 :     FOR_BB_INSNS_SAFE (bb, insn, curr)</span>
+<span class="lineNum">     751 </span><span class="lineCov">   94012967 :       if (INSN_P (insn))</span>
+<span class="lineNum">     752 </span>            :         {
+<span class="lineNum">     753 </span><span class="lineCov">   78149413 :           rtx pat = PATTERN (insn);</span>
+<span class="lineNum">     754 </span>            : 
+<span class="lineNum">     755 </span><span class="lineCov">   78149413 :           if (GET_CODE (pat) == CLOBBER &amp;&amp; LRA_TEMP_CLOBBER_P (pat))</span>
+<span class="lineNum">     756 </span>            :             {
+<span class="lineNum">     757 </span>            :               /* Remove clobbers temporarily created in LRA.  We don't
+<span class="lineNum">     758 </span>            :                  need them anymore and don't want to waste compiler
+<span class="lineNum">     759 </span>            :                  time processing them in a few subsequent passes.  */
+<span class="lineNum">     760 </span><span class="lineCov">      30745 :               lra_invalidate_insn_data (insn);</span>
+<span class="lineNum">     761 </span><span class="lineCov">      30745 :               delete_insn (insn);</span>
+<span class="lineNum">     762 </span><span class="lineCov">      30745 :               continue;</span>
+<span class="lineNum">     763 </span>            :             }
+<span class="lineNum">     764 </span>            : 
+<span class="lineNum">     765 </span>            :           /* IRA can generate move insns involving pseudos.  It is
+<span class="lineNum">     766 </span>            :              better remove them earlier to speed up compiler a bit.
+<span class="lineNum">     767 </span>            :              It is also better to do it here as they might not pass
+<span class="lineNum">     768 </span>            :              final RTL check in LRA, (e.g. insn moving a control
+<span class="lineNum">     769 </span>            :              register into itself).  So remove an useless move insn
+<span class="lineNum">     770 </span>            :              unless next insn is USE marking the return reg (we should
+<span class="lineNum">     771 </span>            :              save this as some subsequent optimizations assume that
+<span class="lineNum">     772 </span>            :              such original insns are saved).  */
+<span class="lineNum">     773 </span><span class="lineCov">   42855911 :           if (NONJUMP_INSN_P (insn) &amp;&amp; GET_CODE (pat) == SET</span>
+<span class="lineNum">     774 </span><span class="lineCov">   35943391 :               &amp;&amp; REG_P (SET_SRC (pat)) &amp;&amp; REG_P (SET_DEST (pat))</span>
+<span class="lineNum">     775 </span><span class="lineCov">   27134202 :               &amp;&amp; REGNO (SET_SRC (pat)) == REGNO (SET_DEST (pat))</span>
+<span class="lineNum">     776 </span><span class="lineCov">   89313908 :               &amp;&amp; (! return_regno_p (REGNO (SET_SRC (pat)))</span>
+<span class="lineNum">     777 </span><span class="lineCov">    2128570 :                   || ! regno_in_use_p (insn, REGNO (SET_SRC (pat)))))</span>
+<span class="lineNum">     778 </span>            :             {
+<span class="lineNum">     779 </span><span class="lineCov">    5321323 :               lra_invalidate_insn_data (insn);</span>
+<span class="lineNum">     780 </span><span class="lineCov">    5321323 :               delete_insn (insn);</span>
+<span class="lineNum">     781 </span><span class="lineCov">    5321323 :               continue;</span>
+<span class="lineNum">     782 </span>            :             }
+<span class="lineNum">     783 </span>            :         
+<span class="lineNum">     784 </span><span class="lineCov">   72797345 :           lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);</span>
+<span class="lineNum">     785 </span><span class="lineCov">   72797345 :           struct lra_insn_reg *reg;</span>
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span><span class="lineCov">  143915382 :           for (reg = id-&gt;regs; reg != NULL; reg = reg-&gt;next)</span>
+<span class="lineNum">     788 </span><span class="lineCov">   71118192 :             if (reg-&gt;regno &gt;= FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     789 </span><span class="lineCov">   43666279 :                 &amp;&amp; lra_reg_info [reg-&gt;regno].nrefs == 0)</span>
+<span class="lineNum">     790 </span>            :               break;
+<span class="lineNum">     791 </span>            :           
+<span class="lineNum">     792 </span><span class="lineCov">   72797345 :           if (reg != NULL)</span>
+<span class="lineNum">     793 </span>            :             {
+<span class="lineNum">     794 </span>            :               /* Pseudos still can be in debug insns in some very rare
+<span class="lineNum">     795 </span>            :                  and complicated cases, e.g. the pseudo was removed by
+<span class="lineNum">     796 </span>            :                  inheritance and the debug insn is not EBBs where the
+<span class="lineNum">     797 </span>            :                  inheritance happened.  It is difficult and time
+<span class="lineNum">     798 </span>            :                  consuming to find what hard register corresponds the
+<span class="lineNum">     799 </span>            :                  pseudo -- so just remove the debug insn.  Another
+<span class="lineNum">     800 </span>            :                  solution could be assigning hard reg/memory but it
+<span class="lineNum">     801 </span>            :                  would be a misleading info.  It is better not to have
+<span class="lineNum">     802 </span>            :                  info than have it wrong.  */
+<span class="lineNum">     803 </span><span class="lineCov">        155 :               lra_assert (DEBUG_INSN_P (insn));</span>
+<span class="lineNum">     804 </span><span class="lineCov">        155 :               lra_invalidate_insn_data (insn);</span>
+<span class="lineNum">     805 </span><span class="lineCov">        155 :               delete_insn (insn);</span>
+<span class="lineNum">     806 </span><span class="lineCov">        155 :               continue;</span>
+<span class="lineNum">     807 </span>            :             }
+<span class="lineNum">     808 </span>            :           
+<span class="lineNum">     809 </span><span class="lineCov">   72797190 :           struct lra_static_insn_data *static_id = id-&gt;insn_static_data;</span>
+<span class="lineNum">     810 </span><span class="lineCov">   72797190 :           bool insn_change_p = false;</span>
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span><span class="lineCov">  191471874 :           for (i = id-&gt;insn_static_data-&gt;n_operands - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     813 </span><span class="lineCov">   97410861 :             if ((DEBUG_INSN_P (insn) || ! static_id-&gt;operand[i].is_operator)</span>
+<span class="lineNum">     814 </span><span class="lineCov">  211969449 :                 &amp;&amp; alter_subregs (id-&gt;operand_loc[i], ! DEBUG_INSN_P (insn)))</span>
+<span class="lineNum">     815 </span>            :               {
+<span class="lineNum">     816 </span><span class="lineCov">    1133909 :                 lra_update_dup (id, i);</span>
+<span class="lineNum">     817 </span><span class="lineCov">    1133909 :                 insn_change_p = true;</span>
+<span class="lineNum">     818 </span>            :               }
+<span class="lineNum">     819 </span><span class="lineCov">   72797190 :           if (insn_change_p)</span>
+<span class="lineNum">     820 </span><span class="lineCov">    1074608 :             lra_update_operator_dups (id);</span>
+<span class="lineNum">     821 </span>            :         }
+<span class="lineNum">     822 </span><span class="lineCov">     832590 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

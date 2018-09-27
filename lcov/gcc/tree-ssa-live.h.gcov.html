@@ -1,0 +1,408 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-live.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-live.h<span style="font-size: 80%;"> (source / <a href="tree-ssa-live.h.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">44</td>
+            <td class="headerCovTableEntryLo">45.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntryLo">27.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Routines for liveness in SSA trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Andrew MacLeod  &lt;amacleod@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #ifndef _TREE_SSA_LIVE_H
+<span class="lineNum">      23 </span>            : #define _TREE_SSA_LIVE_H 1
+<span class="lineNum">      24 </span>            : 
+<span class="lineNum">      25 </span>            : #include &quot;partition.h&quot;
+<span class="lineNum">      26 </span>            : 
+<span class="lineNum">      27 </span>            : /* Used to create the variable mapping when we go out of SSA form.
+<span class="lineNum">      28 </span>            : 
+<span class="lineNum">      29 </span>            :    Mapping from an ssa_name to a partition number is maintained, as well as
+<span class="lineNum">      30 </span>            :    partition number back to ssa_name.
+<span class="lineNum">      31 </span>            : 
+<span class="lineNum">      32 </span>            :    This data structure also supports &quot;views&quot;, which work on a subset of all
+<span class="lineNum">      33 </span>            :    partitions.  This allows the coalescer to decide what partitions are
+<span class="lineNum">      34 </span>            :    interesting to it, and only work with those partitions.  Whenever the view
+<span class="lineNum">      35 </span>            :    is changed, the partition numbers change, but none of the partition groupings
+<span class="lineNum">      36 </span>            :    change. (ie, it is truly a view since it doesn't change anything)
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            :    The final component of the data structure is the basevar map.  This provides
+<span class="lineNum">      39 </span>            :    a list of all the different base variables which occur in a partition view,
+<span class="lineNum">      40 </span>            :    and a unique index for each one. Routines are provided to quickly produce
+<span class="lineNum">      41 </span>            :    the base variable of a partition.
+<span class="lineNum">      42 </span>            : 
+<span class="lineNum">      43 </span>            :    Note that members of a partition MUST all have the same base variable.  */
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : typedef struct _var_map
+<span class="lineNum">      46 </span>            : {
+<span class="lineNum">      47 </span>            :   /* The partition manager of all variables.  */
+<span class="lineNum">      48 </span>            :   partition var_partition;
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :   /* Vector for managing partitions views.  */
+<span class="lineNum">      51 </span>            :   int *partition_to_view;
+<span class="lineNum">      52 </span>            :   int *view_to_partition;
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :   /* Current number of partitions in var_map based on the current view.  */
+<span class="lineNum">      55 </span>            :   unsigned int num_partitions;
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            :   /* Original full partition size.  */
+<span class="lineNum">      58 </span>            :   unsigned int partition_size;
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :   /* Number of base variables in the base var list.  */
+<span class="lineNum">      61 </span>            :   int num_basevars;
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :   /* Map of partitions numbers to base variable table indexes.  */
+<span class="lineNum">      64 </span>            :   int *partition_to_base_index;
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :   /* Bitmap of basic block.  It describes the region within which the analysis
+<span class="lineNum">      67 </span>            :      is done.  Using pointer avoids allocating memory in out-of-ssa case.  */
+<span class="lineNum">      68 </span>            :   bitmap bmp_bbs;
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            :   /* Vector of basic block in the region.  */
+<span class="lineNum">      71 </span>            :   vec&lt;basic_block&gt; vec_bbs;
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            :   /* True if this map is for out-of-ssa, otherwise for live range
+<span class="lineNum">      74 </span>            :      computation.  When for out-of-ssa, it also means the var map is computed
+<span class="lineNum">      75 </span>            :      for whole current function.  */
+<span class="lineNum">      76 </span>            :   bool outofssa_p;
+<span class="lineNum">      77 </span>            : } *var_map;
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : /* Value used to represent no partition number.  */
+<span class="lineNum">      81 </span>            : #define NO_PARTITION            -1
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            : extern var_map init_var_map (int, struct loop* = NULL);
+<span class="lineNum">      84 </span>            : extern void delete_var_map (var_map);
+<span class="lineNum">      85 </span>            : extern int var_union (var_map, tree, tree);
+<span class="lineNum">      86 </span>            : extern void partition_view_normal (var_map);
+<span class="lineNum">      87 </span>            : extern void partition_view_bitmap (var_map, bitmap);
+<span class="lineNum">      88 </span>            : extern void dump_scope_blocks (FILE *, dump_flags_t);
+<span class="lineNum">      89 </span>            : extern void debug_scope_block (tree, dump_flags_t);
+<span class="lineNum">      90 </span>            : extern void debug_scope_blocks (dump_flags_t);
+<span class="lineNum">      91 </span>            : extern void remove_unused_locals (void);
+<span class="lineNum">      92 </span>            : extern void dump_var_map (FILE *, var_map);
+<span class="lineNum">      93 </span>            : extern void debug (_var_map &amp;ref);
+<span class="lineNum">      94 </span>            : extern void debug (_var_map *ptr);
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            : /* Return TRUE if region of the MAP contains basic block BB.  */
+<a name="98"><span class="lineNum">      98 </span>            : </a>
+<span class="lineNum">      99 </span>            : inline bool
+<span class="lineNum">     100 </span><span class="lineNoCov">          0 : region_contains_p (var_map map, basic_block bb)</span>
+<span class="lineNum">     101 </span>            : {
+<span class="lineNum">     102 </span>            :   /* It's possible that the function is called with ENTRY_BLOCK/EXIT_BLOCK.  */
+<span class="lineNum">     103 </span><span class="lineCov">   39359712 :   if (map-&gt;outofssa_p)</span>
+<span class="lineNum">     104 </span><span class="lineCov">   39359712 :     return (bb-&gt;index != ENTRY_BLOCK &amp;&amp; bb-&gt;index != EXIT_BLOCK);</span>
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span><span class="lineNoCov">          0 :   return bitmap_bit_p (map-&gt;bmp_bbs, bb-&gt;index);</span>
+<span class="lineNum">     107 </span>            : }
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span>            : /* Return number of partitions in MAP.  */
+<a name="111"><span class="lineNum">     111 </span>            : </a>
+<span class="lineNum">     112 </span>            : static inline unsigned
+<span class="lineNum">     113 </span><span class="lineNoCov">          0 : num_var_partitions (var_map map)</span>
+<span class="lineNum">     114 </span>            : {
+<span class="lineNum">     115 </span><span class="lineCov">   28731878 :   return map-&gt;num_partitions;</span>
+<span class="lineNum">     116 </span>            : }
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            : /* Given partition index I from MAP, return the variable which represents that
+<span class="lineNum">     120 </span>            :    partition.  */
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            : static inline tree
+<span class="lineNum">     123 </span><span class="lineNoCov">          0 : partition_to_var (var_map map, int i)</span>
+<span class="lineNum">     124 </span>            : {
+<span class="lineNum">     125 </span><span class="lineNoCov">          0 :   tree name;</span>
+<span class="lineNum">     126 </span><span class="lineNoCov">          0 :   if (map-&gt;view_to_partition)</span>
+<span class="lineNum">     127 </span><span class="lineNoCov">          0 :     i = map-&gt;view_to_partition[i];</span>
+<span class="lineNum">     128 </span><span class="lineNoCov">          0 :   i = partition_find (map-&gt;var_partition, i);</span>
+<span class="lineNum">     129 </span><span class="lineNoCov">          0 :   name = ssa_name (i);</span>
+<span class="lineNum">     130 </span><span class="lineNoCov">          0 :   return name;</span>
+<span class="lineNum">     131 </span>            : }
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span>            : /* Given ssa_name VERSION, if it has a partition in MAP,  return the var it
+<span class="lineNum">     135 </span>            :    is associated with.  Otherwise return NULL.  */
+<a name="136"><span class="lineNum">     136 </span>            : </a>
+<span class="lineNum">     137 </span>            : static inline tree
+<span class="lineNum">     138 </span><span class="lineCov">       1198 : version_to_var (var_map map, int version)</span>
+<span class="lineNum">     139 </span>            : {
+<span class="lineNum">     140 </span><span class="lineCov">       1198 :   int part;</span>
+<span class="lineNum">     141 </span><span class="lineCov">       1198 :   part = partition_find (map-&gt;var_partition, version);</span>
+<span class="lineNum">     142 </span><span class="lineCov">       1198 :   if (map-&gt;partition_to_view)</span>
+<span class="lineNum">     143 </span><span class="lineCov">       1198 :     part = map-&gt;partition_to_view[part];</span>
+<span class="lineNum">     144 </span><span class="lineCov">       1198 :   if (part == NO_PARTITION)</span>
+<span class="lineNum">     145 </span>            :     return NULL_TREE;
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span><span class="lineCov">        360 :   return partition_to_var (map, part);</span>
+<span class="lineNum">     148 </span>            : }
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span>            : /* Given VAR, return the partition number in MAP which contains it.
+<span class="lineNum">     152 </span>            :    NO_PARTITION is returned if it's not in any partition.  */
+<a name="153"><span class="lineNum">     153 </span>            : </a>
+<span class="lineNum">     154 </span>            : static inline int
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 : var_to_partition (var_map map, tree var)</span>
+<span class="lineNum">     156 </span>            : {
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :   int part;</span>
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineNoCov">          0 :   part = partition_find (map-&gt;var_partition, SSA_NAME_VERSION (var));</span>
+<span class="lineNum">     160 </span><span class="lineNoCov">          0 :   if (map-&gt;partition_to_view)</span>
+<span class="lineNum">     161 </span><span class="lineNoCov">          0 :     part = map-&gt;partition_to_view[part];</span>
+<span class="lineNum">     162 </span><span class="lineNoCov">          0 :   return part;</span>
+<span class="lineNum">     163 </span>            : }
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span>            : /* Given VAR, return the variable which represents the entire partition
+<span class="lineNum">     167 </span>            :    it is a member of in MAP.  NULL is returned if it is not in a partition.  */
+<a name="168"><span class="lineNum">     168 </span>            : </a>
+<span class="lineNum">     169 </span>            : static inline tree
+<span class="lineNum">     170 </span><span class="lineCov">    1390367 : var_to_partition_to_var (var_map map, tree var)</span>
+<span class="lineNum">     171 </span>            : {
+<span class="lineNum">     172 </span><span class="lineCov">    1390367 :   int part;</span>
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span><span class="lineCov">    1390367 :   part = var_to_partition (map, var);</span>
+<span class="lineNum">     175 </span><span class="lineCov">    1390367 :   if (part == NO_PARTITION)</span>
+<span class="lineNum">     176 </span>            :     return NULL_TREE;
+<span class="lineNum">     177 </span><span class="lineCov">    1390367 :   return partition_to_var (map, part);</span>
+<span class="lineNum">     178 </span>            : }
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            : /* Return the index into the basevar table for PARTITION's base in MAP.  */
+<a name="182"><span class="lineNum">     182 </span>            : </a>
+<span class="lineNum">     183 </span>            : static inline int
+<span class="lineNum">     184 </span><span class="lineCov">   35671941 : basevar_index (var_map map, int partition)</span>
+<span class="lineNum">     185 </span>            : {
+<span class="lineNum">     186 </span><span class="lineCov">   35671941 :   gcc_checking_assert (partition &gt;= 0</span>
+<span class="lineNum">     187 </span>            :                        &amp;&amp; partition &lt;= (int) num_var_partitions (map));
+<span class="lineNum">     188 </span><span class="lineCov">   35671941 :   return map-&gt;partition_to_base_index[partition];</span>
+<span class="lineNum">     189 </span>            : }
+<span class="lineNum">     190 </span>            : 
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span>            : /* Return the number of different base variables in MAP.  */
+<a name="193"><span class="lineNum">     193 </span>            : </a>
+<span class="lineNum">     194 </span>            : static inline int
+<span class="lineNum">     195 </span><span class="lineNoCov">          0 : num_basevars (var_map map)</span>
+<span class="lineNum">     196 </span>            : {
+<span class="lineNum">     197 </span><span class="lineCov">     738165 :   return map-&gt;num_basevars;</span>
+<span class="lineNum">     198 </span>            : }
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span>            : /*  ---------------- live on entry/exit info ------------------------------
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span>            :     This structure is used to represent live range information on SSA based
+<span class="lineNum">     204 </span>            :     trees. A partition map must be provided, and based on the active partitions,
+<span class="lineNum">     205 </span>            :     live-on-entry information and live-on-exit information can be calculated.
+<span class="lineNum">     206 </span>            :     As well, partitions are marked as to whether they are global (live
+<span class="lineNum">     207 </span>            :     outside the basic block they are defined in).
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span>            :     The live-on-entry information is per block.  It provide a bitmap for
+<span class="lineNum">     210 </span>            :     each block which has a bit set for each partition that is live on entry to
+<span class="lineNum">     211 </span>            :     that block.
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span>            :     The live-on-exit information is per block.  It provides a bitmap for each
+<span class="lineNum">     214 </span>            :     block indicating which partitions are live on exit from the block.
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :     For the purposes of this implementation, we treat the elements of a PHI
+<span class="lineNum">     217 </span>            :     as follows:
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :        Uses in a PHI are considered LIVE-ON-EXIT to the block from which they
+<span class="lineNum">     220 </span>            :        originate. They are *NOT* considered live on entry to the block
+<span class="lineNum">     221 </span>            :        containing the PHI node.
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            :        The Def of a PHI node is *not* considered live on entry to the block.
+<span class="lineNum">     224 </span>            :        It is considered to be &quot;define early&quot; in the block. Picture it as each
+<span class="lineNum">     225 </span>            :        block having a stmt (or block-preheader) before the first real stmt in
+<span class="lineNum">     226 </span>            :        the block which defines all the variables that are defined by PHIs.
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span>            :     -----------------------------------------------------------------------  */
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            : typedef struct tree_live_info_d
+<span class="lineNum">     232 </span>            : {
+<span class="lineNum">     233 </span>            :   /* Var map this relates to.  */
+<span class="lineNum">     234 </span>            :   var_map map;
+<span class="lineNum">     235 </span>            : 
+<span class="lineNum">     236 </span>            :   /* Bitmap indicating which partitions are global.  */
+<span class="lineNum">     237 </span>            :   bitmap global;
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span>            :   /* Bitmaps of live on entry blocks for partition elements.  */
+<span class="lineNum">     240 </span>            :   bitmap_head *livein;
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span>            :   /* Bitmaps of what variables are live on exit for a basic blocks.  */
+<span class="lineNum">     243 </span>            :   bitmap_head *liveout;
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            :   /* Number of basic blocks when live on exit calculated.  */
+<span class="lineNum">     246 </span>            :   int num_blocks;
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            :   /* Vector used when creating live ranges as a visited stack.  */
+<span class="lineNum">     249 </span>            :   int *work_stack;
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            :   /* Top of workstack.  */
+<span class="lineNum">     252 </span>            :   int *stack_top;
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            :   /* Obstacks to allocate the bitmaps on.  */
+<span class="lineNum">     255 </span>            :   bitmap_obstack livein_obstack;
+<span class="lineNum">     256 </span>            :   bitmap_obstack liveout_obstack;
+<span class="lineNum">     257 </span>            : } *tree_live_info_p;
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : #define LIVEDUMP_ENTRY  0x01
+<span class="lineNum">     261 </span>            : #define LIVEDUMP_EXIT   0x02
+<span class="lineNum">     262 </span>            : #define LIVEDUMP_ALL    (LIVEDUMP_ENTRY | LIVEDUMP_EXIT)
+<span class="lineNum">     263 </span>            : extern void delete_tree_live_info (tree_live_info_p);
+<span class="lineNum">     264 </span>            : extern tree_live_info_p calculate_live_ranges (var_map, bool);
+<span class="lineNum">     265 </span>            : extern void debug (tree_live_info_d &amp;ref);
+<span class="lineNum">     266 </span>            : extern void debug (tree_live_info_d *ptr);
+<span class="lineNum">     267 </span>            : extern void dump_live_info (FILE *, tree_live_info_p, int);
+<span class="lineNum">     268 </span>            : 
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : /*  Return TRUE if P is marked as a global in LIVE.  */
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : static inline int
+<span class="lineNum">     273 </span>            : partition_is_global (tree_live_info_p live, int p)
+<span class="lineNum">     274 </span>            : {
+<span class="lineNum">     275 </span>            :   gcc_checking_assert (live-&gt;global);
+<span class="lineNum">     276 </span>            :   return bitmap_bit_p (live-&gt;global, p);
+<span class="lineNum">     277 </span>            : }
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span>            : /* Return the bitmap from LIVE representing the live on entry blocks for
+<span class="lineNum">     281 </span>            :    partition P.  */
+<a name="282"><span class="lineNum">     282 </span>            : </a>
+<span class="lineNum">     283 </span>            : static inline bitmap
+<span class="lineNum">     284 </span><span class="lineNoCov">          0 : live_on_entry (tree_live_info_p live, basic_block bb)</span>
+<span class="lineNum">     285 </span>            : {
+<span class="lineNum">     286 </span><span class="lineNoCov">          0 :   gcc_checking_assert (live-&gt;livein</span>
+<span class="lineNum">     287 </span>            :                        &amp;&amp; bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
+<span class="lineNum">     288 </span>            :                        &amp;&amp; bb != EXIT_BLOCK_PTR_FOR_FN (cfun));
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span><span class="lineNoCov">          0 :   return &amp;live-&gt;livein[bb-&gt;index];</span>
+<span class="lineNum">     291 </span>            : }
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span>            : 
+<span class="lineNum">     294 </span>            : /* Return the bitmap from LIVE representing the live on exit partitions from
+<span class="lineNum">     295 </span>            :    block BB.  */
+<a name="296"><span class="lineNum">     296 </span>            : </a>
+<span class="lineNum">     297 </span>            : static inline bitmap
+<span class="lineNum">     298 </span><span class="lineNoCov">          0 : live_on_exit (tree_live_info_p live, basic_block bb)</span>
+<span class="lineNum">     299 </span>            : {
+<span class="lineNum">     300 </span><span class="lineNoCov">          0 :   gcc_checking_assert (live-&gt;liveout</span>
+<span class="lineNum">     301 </span>            :                        &amp;&amp; bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
+<span class="lineNum">     302 </span>            :                        &amp;&amp; bb != EXIT_BLOCK_PTR_FOR_FN (cfun));
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span><span class="lineNoCov">          0 :   return &amp;live-&gt;liveout[bb-&gt;index];</span>
+<span class="lineNum">     305 </span>            : }
+<span class="lineNum">     306 </span>            : 
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : /* Return the partition map which the information in LIVE utilizes.  */
+<a name="309"><span class="lineNum">     309 </span>            : </a>
+<span class="lineNum">     310 </span>            : static inline var_map
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 : live_var_map (tree_live_info_p live)</span>
+<span class="lineNum">     312 </span>            : {
+<span class="lineNum">     313 </span><span class="lineCov">     738165 :   return live-&gt;map;</span>
+<span class="lineNum">     314 </span>            : }
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span>            : 
+<span class="lineNum">     317 </span>            : /* Mark partition P as live on entry to basic block BB in LIVE.  */
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span>            : static inline void
+<span class="lineNum">     320 </span>            : make_live_on_entry (tree_live_info_p live, basic_block bb , int p)
+<span class="lineNum">     321 </span>            : {
+<span class="lineNum">     322 </span>            :   bitmap_set_bit (&amp;live-&gt;livein[bb-&gt;index], p);
+<span class="lineNum">     323 </span>            :   bitmap_set_bit (live-&gt;global, p);
+<span class="lineNum">     324 </span>            : }
+<span class="lineNum">     325 </span>            : 
+<span class="lineNum">     326 </span>            : #endif /* _TREE_SSA_LIVE_H  */
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

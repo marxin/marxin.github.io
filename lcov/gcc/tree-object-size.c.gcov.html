@@ -1,0 +1,1474 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-object-size.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-object-size.c<span style="font-size: 80%;"> (source / <a href="tree-object-size.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">537</td>
+            <td class="headerCovTableEntry">633</td>
+            <td class="headerCovTableEntryMed">84.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntryHi">90.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* __builtin_object_size (ptr, object_size_type) computation</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Jakub Jelinek &lt;jakub@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-object-size.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;gimple-fold.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : struct object_size_info
+<span class="lineNum">      39 </span>            : {
+<span class="lineNum">      40 </span>            :   int object_size_type;
+<span class="lineNum">      41 </span>            :   unsigned char pass;
+<span class="lineNum">      42 </span>            :   bool changed;
+<span class="lineNum">      43 </span>            :   bitmap visited, reexamine;
+<span class="lineNum">      44 </span>            :   unsigned int *depths;
+<span class="lineNum">      45 </span>            :   unsigned int *stack, *tos;
+<span class="lineNum">      46 </span>            : };
+<span class="lineNum">      47 </span>            : 
+<span class="lineNum">      48 </span>            : static const unsigned HOST_WIDE_INT unknown[4] = {
+<span class="lineNum">      49 </span>            :   HOST_WIDE_INT_M1U,
+<span class="lineNum">      50 </span>            :   HOST_WIDE_INT_M1U,
+<span class="lineNum">      51 </span>            :   0,
+<span class="lineNum">      52 </span>            :   0
+<span class="lineNum">      53 </span>            : };
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            : static tree compute_object_offset (const_tree, const_tree);
+<span class="lineNum">      56 </span>            : static bool addr_object_size (struct object_size_info *,
+<span class="lineNum">      57 </span>            :                               const_tree, int, unsigned HOST_WIDE_INT *);
+<span class="lineNum">      58 </span>            : static unsigned HOST_WIDE_INT alloc_object_size (const gcall *, int);
+<span class="lineNum">      59 </span>            : static tree pass_through_call (const gcall *);
+<span class="lineNum">      60 </span>            : static void collect_object_sizes_for (struct object_size_info *, tree);
+<span class="lineNum">      61 </span>            : static void expr_object_size (struct object_size_info *, tree, tree);
+<span class="lineNum">      62 </span>            : static bool merge_object_sizes (struct object_size_info *, tree, tree,
+<span class="lineNum">      63 </span>            :                                 unsigned HOST_WIDE_INT);
+<span class="lineNum">      64 </span>            : static bool plus_stmt_object_size (struct object_size_info *, tree, gimple *);
+<span class="lineNum">      65 </span>            : static bool cond_expr_object_size (struct object_size_info *, tree, gimple *);
+<span class="lineNum">      66 </span>            : static void init_offset_limit (void);
+<span class="lineNum">      67 </span>            : static void check_for_plus_in_loops (struct object_size_info *, tree);
+<span class="lineNum">      68 </span>            : static void check_for_plus_in_loops_1 (struct object_size_info *, tree,
+<span class="lineNum">      69 </span>            :                                        unsigned int);
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            : /* object_sizes[0] is upper bound for number of bytes till the end of
+<span class="lineNum">      72 </span>            :    the object.
+<span class="lineNum">      73 </span>            :    object_sizes[1] is upper bound for number of bytes till the end of
+<span class="lineNum">      74 </span>            :    the subobject (innermost array or field with address taken).
+<span class="lineNum">      75 </span>            :    object_sizes[2] is lower bound for number of bytes till the end of
+<span class="lineNum">      76 </span>            :    the object and object_sizes[3] lower bound for subobject.  */
+<span class="lineNum">      77 </span>            : static vec&lt;unsigned HOST_WIDE_INT&gt; object_sizes[4];
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            : /* Bitmaps what object sizes have been computed already.  */
+<span class="lineNum">      80 </span>            : static bitmap computed[4];
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            : /* Maximum value of offset we consider to be addition.  */
+<span class="lineNum">      83 </span>            : static unsigned HOST_WIDE_INT offset_limit;
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            : 
+<a name="86"><span class="lineNum">      86 </span>            : /* Initialize OFFSET_LIMIT variable.  */</a>
+<span class="lineNum">      87 </span>            : static void
+<span class="lineNum">      88 </span><span class="lineCov">      19133 : init_offset_limit (void)</span>
+<span class="lineNum">      89 </span>            : {
+<span class="lineNum">      90 </span><span class="lineCov">      19133 :   if (tree_fits_uhwi_p (TYPE_MAX_VALUE (sizetype)))</span>
+<span class="lineNum">      91 </span><span class="lineCov">      19133 :     offset_limit = tree_to_uhwi (TYPE_MAX_VALUE (sizetype));</span>
+<span class="lineNum">      92 </span>            :   else
+<span class="lineNum">      93 </span><span class="lineNoCov">          0 :     offset_limit = -1;</span>
+<span class="lineNum">      94 </span><span class="lineCov">      19133 :   offset_limit /= 2;</span>
+<span class="lineNum">      95 </span><span class="lineCov">      19133 : }</span>
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : /* Compute offset of EXPR within VAR.  Return error_mark_node
+<span class="lineNum">      99 </span>            :    if unknown.  */
+<span class="lineNum">     100 </span>            : 
+<span class="lineNum">     101 </span>            : static tree
+<span class="lineNum">     102 </span><span class="lineCov">      59095 : compute_object_offset (const_tree expr, const_tree var)</span>
+<span class="lineNum">     103 </span>            : {
+<span class="lineNum">     104 </span><span class="lineCov">      59095 :   enum tree_code code = PLUS_EXPR;</span>
+<span class="lineNum">     105 </span><span class="lineCov">      59095 :   tree base, off, t;</span>
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span><span class="lineCov">      59095 :   if (expr == var)</span>
+<span class="lineNum">     108 </span><span class="lineCov">      27414 :     return size_zero_node;</span>
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span><span class="lineCov">      31681 :   switch (TREE_CODE (expr))</span>
+<span class="lineNum">     111 </span>            :     {
+<span class="lineNum">     112 </span><span class="lineCov">      12261 :     case COMPONENT_REF:</span>
+<span class="lineNum">     113 </span><span class="lineCov">      12261 :       base = compute_object_offset (TREE_OPERAND (expr, 0), var);</span>
+<span class="lineNum">     114 </span><span class="lineCov">      12261 :       if (base == error_mark_node)</span>
+<span class="lineNum">     115 </span>            :         return base;
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span><span class="lineCov">      12261 :       t = TREE_OPERAND (expr, 1);</span>
+<span class="lineNum">     118 </span><span class="lineCov">      12261 :       off = size_binop (PLUS_EXPR, DECL_FIELD_OFFSET (t),</span>
+<span class="lineNum">     119 </span>            :                         size_int (tree_to_uhwi (DECL_FIELD_BIT_OFFSET (t))
+<span class="lineNum">     120 </span>            :                                   / BITS_PER_UNIT));
+<span class="lineNum">     121 </span><span class="lineCov">      12261 :       break;</span>
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span><span class="lineCov">          4 :     case REALPART_EXPR:</span>
+<span class="lineNum">     124 </span><span class="lineCov">          4 :     CASE_CONVERT:</span>
+<span class="lineNum">     125 </span><span class="lineCov">          4 :     case VIEW_CONVERT_EXPR:</span>
+<span class="lineNum">     126 </span><span class="lineCov">          4 :     case NON_LVALUE_EXPR:</span>
+<span class="lineNum">     127 </span><span class="lineCov">          4 :       return compute_object_offset (TREE_OPERAND (expr, 0), var);</span>
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span><span class="lineCov">          4 :     case IMAGPART_EXPR:</span>
+<span class="lineNum">     130 </span><span class="lineCov">          4 :       base = compute_object_offset (TREE_OPERAND (expr, 0), var);</span>
+<span class="lineNum">     131 </span><span class="lineCov">          4 :       if (base == error_mark_node)</span>
+<span class="lineNum">     132 </span>            :         return base;
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span><span class="lineCov">          4 :       off = TYPE_SIZE_UNIT (TREE_TYPE (expr));</span>
+<span class="lineNum">     135 </span><span class="lineCov">          4 :       break;</span>
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span><span class="lineCov">      19412 :     case ARRAY_REF:</span>
+<span class="lineNum">     138 </span><span class="lineCov">      19412 :       base = compute_object_offset (TREE_OPERAND (expr, 0), var);</span>
+<span class="lineNum">     139 </span><span class="lineCov">      19412 :       if (base == error_mark_node)</span>
+<span class="lineNum">     140 </span>            :         return base;
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span><span class="lineCov">      19412 :       t = TREE_OPERAND (expr, 1);</span>
+<span class="lineNum">     143 </span><span class="lineCov">      19412 :       tree low_bound, unit_size;</span>
+<span class="lineNum">     144 </span><span class="lineCov">      19412 :       low_bound = array_ref_low_bound (CONST_CAST_TREE (expr));</span>
+<span class="lineNum">     145 </span><span class="lineCov">      19412 :       unit_size = array_ref_element_size (CONST_CAST_TREE (expr));</span>
+<span class="lineNum">     146 </span><span class="lineCov">      19412 :       if (! integer_zerop (low_bound))</span>
+<span class="lineNum">     147 </span><span class="lineCov">      12730 :         t = fold_build2 (MINUS_EXPR, TREE_TYPE (t), t, low_bound);</span>
+<span class="lineNum">     148 </span><span class="lineCov">      19412 :       if (TREE_CODE (t) == INTEGER_CST &amp;&amp; tree_int_cst_sgn (t) &lt; 0)</span>
+<span class="lineNum">     149 </span>            :         {
+<span class="lineNum">     150 </span><span class="lineCov">         12 :           code = MINUS_EXPR;</span>
+<span class="lineNum">     151 </span><span class="lineCov">         12 :           t = fold_build1 (NEGATE_EXPR, TREE_TYPE (t), t);</span>
+<span class="lineNum">     152 </span>            :         }
+<span class="lineNum">     153 </span><span class="lineCov">      19412 :       t = fold_convert (sizetype, t);</span>
+<span class="lineNum">     154 </span><span class="lineCov">      19412 :       off = size_binop (MULT_EXPR, unit_size, t);</span>
+<span class="lineNum">     155 </span><span class="lineCov">      19412 :       break;</span>
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span><span class="lineNoCov">          0 :     case MEM_REF:</span>
+<span class="lineNum">     158 </span><span class="lineNoCov">          0 :       gcc_assert (TREE_CODE (TREE_OPERAND (expr, 0)) == ADDR_EXPR);</span>
+<span class="lineNum">     159 </span><span class="lineNoCov">          0 :       return wide_int_to_tree (sizetype, mem_ref_offset (expr));</span>
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     162 </span><span class="lineNoCov">          0 :       return error_mark_node;</span>
+<span class="lineNum">     163 </span>            :     }
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineCov">      31677 :   return size_binop (code, base, off);</span>
+<span class="lineNum">     166 </span>            : }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            : 
+<span class="lineNum">     169 </span>            : /* Compute __builtin_object_size for PTR, which is a ADDR_EXPR.
+<span class="lineNum">     170 </span>            :    OBJECT_SIZE_TYPE is the second argument from __builtin_object_size.
+<span class="lineNum">     171 </span>            :    If unknown, return unknown[object_size_type].  */
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span>            : static bool
+<span class="lineNum">     174 </span><span class="lineCov">     182183 : addr_object_size (struct object_size_info *osi, const_tree ptr,</span>
+<span class="lineNum">     175 </span>            :                   int object_size_type, unsigned HOST_WIDE_INT *psize)
+<span class="lineNum">     176 </span>            : {
+<span class="lineNum">     177 </span><span class="lineCov">     182183 :   tree pt_var, pt_var_size = NULL_TREE, var_size, bytes;</span>
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span><span class="lineCov">     182183 :   gcc_assert (TREE_CODE (ptr) == ADDR_EXPR);</span>
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            :   /* Set to unknown and overwrite just before returning if the size
+<span class="lineNum">     182 </span>            :      could be determined.  */
+<span class="lineNum">     183 </span><span class="lineCov">     182183 :   *psize = unknown[object_size_type];</span>
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span><span class="lineCov">     182183 :   pt_var = TREE_OPERAND (ptr, 0);</span>
+<span class="lineNum">     186 </span><span class="lineCov">     219136 :   while (handled_component_p (pt_var))</span>
+<span class="lineNum">     187 </span><span class="lineCov">      36953 :     pt_var = TREE_OPERAND (pt_var, 0);</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span><span class="lineCov">     182183 :   if (pt_var</span>
+<span class="lineNum">     190 </span><span class="lineCov">     182183 :       &amp;&amp; TREE_CODE (pt_var) == MEM_REF)</span>
+<span class="lineNum">     191 </span>            :     {
+<span class="lineNum">     192 </span><span class="lineCov">      13620 :       unsigned HOST_WIDE_INT sz;</span>
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span><span class="lineCov">       2202 :       if (!osi || (object_size_type &amp; 1) != 0</span>
+<span class="lineNum">     195 </span><span class="lineCov">      14313 :           || TREE_CODE (TREE_OPERAND (pt_var, 0)) != SSA_NAME)</span>
+<span class="lineNum">     196 </span>            :         {
+<span class="lineNum">     197 </span><span class="lineCov">      12944 :           compute_builtin_object_size (TREE_OPERAND (pt_var, 0),</span>
+<span class="lineNum">     198 </span>            :                                        object_size_type &amp; ~1, &amp;sz);
+<span class="lineNum">     199 </span>            :         }
+<span class="lineNum">     200 </span>            :       else
+<span class="lineNum">     201 </span>            :         {
+<span class="lineNum">     202 </span><span class="lineCov">        676 :           tree var = TREE_OPERAND (pt_var, 0);</span>
+<span class="lineNum">     203 </span><span class="lineCov">        676 :           if (osi-&gt;pass == 0)</span>
+<span class="lineNum">     204 </span><span class="lineCov">        676 :             collect_object_sizes_for (osi, var);</span>
+<span class="lineNum">     205 </span><span class="lineCov">        676 :           if (bitmap_bit_p (computed[object_size_type],</span>
+<span class="lineNum">     206 </span><span class="lineCov">        676 :                             SSA_NAME_VERSION (var)))</span>
+<span class="lineNum">     207 </span><span class="lineCov">        676 :             sz = object_sizes[object_size_type][SSA_NAME_VERSION (var)];</span>
+<span class="lineNum">     208 </span>            :           else
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :             sz = unknown[object_size_type];</span>
+<span class="lineNum">     210 </span>            :         }
+<span class="lineNum">     211 </span><span class="lineCov">      13620 :       if (sz != unknown[object_size_type])</span>
+<span class="lineNum">     212 </span>            :         {
+<span class="lineNum">     213 </span><span class="lineCov">      10134 :           offset_int mem_offset;</span>
+<span class="lineNum">     214 </span><span class="lineCov">      10134 :           if (mem_ref_offset (pt_var).is_constant (&amp;mem_offset))</span>
+<span class="lineNum">     215 </span>            :             {
+<span class="lineNum">     216 </span><span class="lineCov">      10134 :               offset_int dsz = wi::sub (sz, mem_offset);</span>
+<span class="lineNum">     217 </span><span class="lineCov">      10134 :               if (wi::neg_p (dsz))</span>
+<span class="lineNum">     218 </span><span class="lineCov">         20 :                 sz = 0;</span>
+<span class="lineNum">     219 </span><span class="lineCov">      10114 :               else if (wi::fits_uhwi_p (dsz))</span>
+<span class="lineNum">     220 </span><span class="lineCov">      20228 :                 sz = dsz.to_uhwi ();</span>
+<span class="lineNum">     221 </span>            :               else
+<span class="lineNum">     222 </span><span class="lineNoCov">          0 :                 sz = unknown[object_size_type];</span>
+<span class="lineNum">     223 </span>            :             }
+<span class="lineNum">     224 </span>            :           else
+<span class="lineNum">     225 </span>            :             sz = unknown[object_size_type];
+<span class="lineNum">     226 </span>            :         }
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span><span class="lineCov">      13620 :       if (sz != unknown[object_size_type] &amp;&amp; sz &lt; offset_limit)</span>
+<span class="lineNum">     229 </span><span class="lineCov">      23745 :         pt_var_size = size_int (sz);</span>
+<span class="lineNum">     230 </span>            :     }
+<span class="lineNum">     231 </span><span class="lineCov">     168563 :   else if (pt_var</span>
+<span class="lineNum">     232 </span><span class="lineCov">     168563 :            &amp;&amp; DECL_P (pt_var)</span>
+<span class="lineNum">     233 </span><span class="lineCov">     138922 :            &amp;&amp; tree_fits_uhwi_p (DECL_SIZE_UNIT (pt_var))</span>
+<span class="lineNum">     234 </span><span class="lineCov">     276996 :            &amp;&amp; tree_to_uhwi (DECL_SIZE_UNIT (pt_var)) &lt; offset_limit)</span>
+<span class="lineNum">     235 </span><span class="lineCov">     138498 :     pt_var_size = DECL_SIZE_UNIT (pt_var);</span>
+<span class="lineNum">     236 </span><span class="lineCov">      30065 :   else if (pt_var</span>
+<span class="lineNum">     237 </span><span class="lineCov">      30065 :            &amp;&amp; TREE_CODE (pt_var) == STRING_CST</span>
+<span class="lineNum">     238 </span><span class="lineCov">      29641 :            &amp;&amp; TYPE_SIZE_UNIT (TREE_TYPE (pt_var))</span>
+<span class="lineNum">     239 </span><span class="lineCov">      88923 :            &amp;&amp; tree_fits_uhwi_p (TYPE_SIZE_UNIT (TREE_TYPE (pt_var)))</span>
+<span class="lineNum">     240 </span><span class="lineCov">      88923 :            &amp;&amp; tree_to_uhwi (TYPE_SIZE_UNIT (TREE_TYPE (pt_var)))</span>
+<span class="lineNum">     241 </span><span class="lineCov">      29641 :               &lt; offset_limit)</span>
+<span class="lineNum">     242 </span><span class="lineCov">      29641 :     pt_var_size = TYPE_SIZE_UNIT (TREE_TYPE (pt_var));</span>
+<span class="lineNum">     243 </span>            :   else
+<span class="lineNum">     244 </span><span class="lineCov">        424 :     return false;</span>
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span><span class="lineCov">     181759 :   if (pt_var != TREE_OPERAND (ptr, 0))</span>
+<span class="lineNum">     247 </span>            :     {
+<span class="lineNum">     248 </span><span class="lineCov">      29587 :       tree var;</span>
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span><span class="lineCov">      29587 :       if (object_size_type &amp; 1)</span>
+<span class="lineNum">     251 </span>            :         {
+<span class="lineNum">     252 </span><span class="lineCov">       2502 :           var = TREE_OPERAND (ptr, 0);</span>
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span><span class="lineCov">       2502 :           while (var != pt_var</span>
+<span class="lineNum">     255 </span><span class="lineCov">       2502 :                  &amp;&amp; TREE_CODE (var) != BIT_FIELD_REF</span>
+<span class="lineNum">     256 </span><span class="lineCov">       2502 :                  &amp;&amp; TREE_CODE (var) != COMPONENT_REF</span>
+<span class="lineNum">     257 </span><span class="lineCov">       1357 :                  &amp;&amp; TREE_CODE (var) != ARRAY_REF</span>
+<span class="lineNum">     258 </span><span class="lineCov">         16 :                  &amp;&amp; TREE_CODE (var) != ARRAY_RANGE_REF</span>
+<span class="lineNum">     259 </span><span class="lineCov">         16 :                  &amp;&amp; TREE_CODE (var) != REALPART_EXPR</span>
+<span class="lineNum">     260 </span><span class="lineCov">       2510 :                  &amp;&amp; TREE_CODE (var) != IMAGPART_EXPR)</span>
+<span class="lineNum">     261 </span><span class="lineNoCov">          0 :             var = TREE_OPERAND (var, 0);</span>
+<span class="lineNum">     262 </span><span class="lineCov">       2502 :           if (var != pt_var &amp;&amp; TREE_CODE (var) == ARRAY_REF)</span>
+<span class="lineNum">     263 </span><span class="lineCov">       1341 :             var = TREE_OPERAND (var, 0);</span>
+<span class="lineNum">     264 </span><span class="lineCov">       2502 :           if (! TYPE_SIZE_UNIT (TREE_TYPE (var))</span>
+<span class="lineNum">     265 </span><span class="lineCov">       7488 :               || ! tree_fits_uhwi_p (TYPE_SIZE_UNIT (TREE_TYPE (var)))</span>
+<span class="lineNum">     266 </span><span class="lineCov">       4989 :               || (pt_var_size</span>
+<span class="lineNum">     267 </span><span class="lineCov">       1456 :                   &amp;&amp; tree_int_cst_lt (pt_var_size,</span>
+<span class="lineNum">     268 </span><span class="lineCov">       4368 :                                       TYPE_SIZE_UNIT (TREE_TYPE (var)))))</span>
+<span class="lineNum">     269 </span>            :             var = pt_var;
+<span class="lineNum">     270 </span><span class="lineCov">       2429 :           else if (var != pt_var &amp;&amp; TREE_CODE (pt_var) == MEM_REF)</span>
+<span class="lineNum">     271 </span>            :             {
+<span class="lineNum">     272 </span>            :               tree v = var;
+<span class="lineNum">     273 </span>            :               /* For &amp;X-&gt;fld, compute object size only if fld isn't the last
+<span class="lineNum">     274 </span>            :                  field, as struct { int i; char c[1]; } is often used instead
+<span class="lineNum">     275 </span>            :                  of flexible array member.  */
+<span class="lineNum">     276 </span><span class="lineCov">       2137 :               while (v &amp;&amp; v != pt_var)</span>
+<span class="lineNum">     277 </span><span class="lineCov">       1592 :                 switch (TREE_CODE (v))</span>
+<span class="lineNum">     278 </span>            :                   {
+<span class="lineNum">     279 </span><span class="lineNoCov">          0 :                   case ARRAY_REF:</span>
+<span class="lineNum">     280 </span><span class="lineNoCov">          0 :                     if (TYPE_SIZE_UNIT (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :                         &amp;&amp; TREE_CODE (TREE_OPERAND (v, 1)) == INTEGER_CST)</span>
+<span class="lineNum">     282 </span>            :                       {
+<span class="lineNum">     283 </span><span class="lineNoCov">          0 :                         tree domain</span>
+<span class="lineNum">     284 </span><span class="lineNoCov">          0 :                           = TYPE_DOMAIN (TREE_TYPE (TREE_OPERAND (v, 0)));</span>
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :                         if (domain</span>
+<span class="lineNum">     286 </span><span class="lineNoCov">          0 :                             &amp;&amp; TYPE_MAX_VALUE (domain)</span>
+<span class="lineNum">     287 </span><span class="lineNoCov">          0 :                             &amp;&amp; TREE_CODE (TYPE_MAX_VALUE (domain))</span>
+<span class="lineNum">     288 </span>            :                                == INTEGER_CST
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :                             &amp;&amp; tree_int_cst_lt (TREE_OPERAND (v, 1),</span>
+<span class="lineNum">     290 </span><span class="lineNoCov">          0 :                                                 TYPE_MAX_VALUE (domain)))</span>
+<span class="lineNum">     291 </span>            :                           {
+<span class="lineNum">     292 </span>            :                             v = NULL_TREE;
+<span class="lineNum">     293 </span>            :                             break;
+<span class="lineNum">     294 </span>            :                           }
+<span class="lineNum">     295 </span>            :                       }
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 :                     v = TREE_OPERAND (v, 0);</span>
+<span class="lineNum">     297 </span><span class="lineNoCov">          0 :                     break;</span>
+<span class="lineNum">     298 </span>            :                   case REALPART_EXPR:
+<span class="lineNum">     299 </span>            :                   case IMAGPART_EXPR:
+<span class="lineNum">     300 </span>            :                     v = NULL_TREE;
+<span class="lineNum">     301 </span>            :                     break;
+<span class="lineNum">     302 </span><span class="lineCov">       1592 :                   case COMPONENT_REF:</span>
+<span class="lineNum">     303 </span><span class="lineCov">       1592 :                     if (TREE_CODE (TREE_TYPE (v)) != ARRAY_TYPE)</span>
+<span class="lineNum">     304 </span>            :                       {
+<span class="lineNum">     305 </span>            :                         v = NULL_TREE;
+<span class="lineNum">     306 </span>            :                         break;
+<span class="lineNum">     307 </span>            :                       }
+<span class="lineNum">     308 </span><span class="lineCov">       1673 :                     while (v != pt_var &amp;&amp; TREE_CODE (v) == COMPONENT_REF)</span>
+<span class="lineNum">     309 </span><span class="lineCov">       1551 :                       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     310 </span>            :                           != UNION_TYPE
+<span class="lineNum">     311 </span><span class="lineCov">       1551 :                           &amp;&amp; TREE_CODE (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     312 </span>            :                           != QUAL_UNION_TYPE)
+<span class="lineNum">     313 </span>            :                         break;
+<span class="lineNum">     314 </span>            :                       else
+<span class="lineNum">     315 </span><span class="lineCov">        522 :                         v = TREE_OPERAND (v, 0);</span>
+<span class="lineNum">     316 </span><span class="lineCov">       1151 :                     if (TREE_CODE (v) == COMPONENT_REF</span>
+<span class="lineNum">     317 </span><span class="lineCov">       1151 :                         &amp;&amp; TREE_CODE (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     318 </span>            :                            == RECORD_TYPE)
+<span class="lineNum">     319 </span>            :                       {
+<span class="lineNum">     320 </span><span class="lineCov">       1029 :                         tree fld_chain = DECL_CHAIN (TREE_OPERAND (v, 1));</span>
+<span class="lineNum">     321 </span><span class="lineCov">       1371 :                         for (; fld_chain; fld_chain = DECL_CHAIN (fld_chain))</span>
+<span class="lineNum">     322 </span><span class="lineCov">        806 :                           if (TREE_CODE (fld_chain) == FIELD_DECL)</span>
+<span class="lineNum">     323 </span>            :                             break;
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span><span class="lineCov">       1029 :                         if (fld_chain)</span>
+<span class="lineNum">     326 </span>            :                           {
+<span class="lineNum">     327 </span>            :                             v = NULL_TREE;
+<span class="lineNum">     328 </span>            :                             break;
+<span class="lineNum">     329 </span>            :                           }
+<span class="lineNum">     330 </span><span class="lineCov">        565 :                         v = TREE_OPERAND (v, 0);</span>
+<span class="lineNum">     331 </span>            :                       }
+<span class="lineNum">     332 </span><span class="lineCov">        835 :                     while (v != pt_var &amp;&amp; TREE_CODE (v) == COMPONENT_REF)</span>
+<span class="lineNum">     333 </span><span class="lineCov">        216 :                       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     334 </span>            :                           != UNION_TYPE
+<span class="lineNum">     335 </span><span class="lineCov">        216 :                           &amp;&amp; TREE_CODE (TREE_TYPE (TREE_OPERAND (v, 0)))</span>
+<span class="lineNum">     336 </span>            :                           != QUAL_UNION_TYPE)
+<span class="lineNum">     337 </span>            :                         break;
+<span class="lineNum">     338 </span>            :                       else
+<span class="lineNum">     339 </span><span class="lineCov">        148 :                         v = TREE_OPERAND (v, 0);</span>
+<span class="lineNum">     340 </span><span class="lineCov">        687 :                     if (v != pt_var)</span>
+<span class="lineNum">     341 </span>            :                       v = NULL_TREE;
+<span class="lineNum">     342 </span>            :                     else
+<span class="lineNum">     343 </span>            :                       v = pt_var;
+<span class="lineNum">     344 </span>            :                     break;
+<span class="lineNum">     345 </span>            :                   default:
+<span class="lineNum">     346 </span>            :                     v = pt_var;
+<span class="lineNum">     347 </span>            :                     break;
+<span class="lineNum">     348 </span>            :                   }
+<span class="lineNum">     349 </span><span class="lineCov">       1592 :               if (v == pt_var)</span>
+<span class="lineNum">     350 </span><span class="lineCov">        545 :                 var = pt_var;</span>
+<span class="lineNum">     351 </span>            :             }
+<span class="lineNum">     352 </span>            :         }
+<span class="lineNum">     353 </span>            :       else
+<span class="lineNum">     354 </span>            :         var = pt_var;
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span><span class="lineCov">      29587 :       if (var != pt_var)</span>
+<span class="lineNum">     357 </span><span class="lineCov">       1626 :         var_size = TYPE_SIZE_UNIT (TREE_TYPE (var));</span>
+<span class="lineNum">     358 </span><span class="lineCov">      27961 :       else if (!pt_var_size)</span>
+<span class="lineNum">     359 </span>            :         return false;
+<span class="lineNum">     360 </span>            :       else
+<span class="lineNum">     361 </span>            :         var_size = pt_var_size;
+<span class="lineNum">     362 </span><span class="lineCov">      27036 :       bytes = compute_object_offset (TREE_OPERAND (ptr, 0), var);</span>
+<span class="lineNum">     363 </span><span class="lineCov">      27036 :       if (bytes != error_mark_node)</span>
+<span class="lineNum">     364 </span>            :         {
+<span class="lineNum">     365 </span><span class="lineCov">      27036 :           if (TREE_CODE (bytes) == INTEGER_CST</span>
+<span class="lineNum">     366 </span><span class="lineCov">      27036 :               &amp;&amp; tree_int_cst_lt (var_size, bytes))</span>
+<span class="lineNum">     367 </span><span class="lineCov">         40 :             bytes = size_zero_node;</span>
+<span class="lineNum">     368 </span>            :           else
+<span class="lineNum">     369 </span><span class="lineCov">      26996 :             bytes = size_binop (MINUS_EXPR, var_size, bytes);</span>
+<span class="lineNum">     370 </span>            :         }
+<span class="lineNum">     371 </span><span class="lineCov">      27036 :       if (var != pt_var</span>
+<span class="lineNum">     372 </span><span class="lineCov">       1626 :           &amp;&amp; pt_var_size</span>
+<span class="lineNum">     373 </span><span class="lineCov">        957 :           &amp;&amp; TREE_CODE (pt_var) == MEM_REF</span>
+<span class="lineNum">     374 </span><span class="lineCov">        378 :           &amp;&amp; bytes != error_mark_node)</span>
+<span class="lineNum">     375 </span>            :         {
+<span class="lineNum">     376 </span><span class="lineCov">        378 :           tree bytes2 = compute_object_offset (TREE_OPERAND (ptr, 0), pt_var);</span>
+<span class="lineNum">     377 </span><span class="lineCov">        378 :           if (bytes2 != error_mark_node)</span>
+<span class="lineNum">     378 </span>            :             {
+<span class="lineNum">     379 </span><span class="lineCov">        378 :               if (TREE_CODE (bytes2) == INTEGER_CST</span>
+<span class="lineNum">     380 </span><span class="lineCov">        378 :                   &amp;&amp; tree_int_cst_lt (pt_var_size, bytes2))</span>
+<span class="lineNum">     381 </span><span class="lineCov">          7 :                 bytes2 = size_zero_node;</span>
+<span class="lineNum">     382 </span>            :               else
+<span class="lineNum">     383 </span><span class="lineCov">        371 :                 bytes2 = size_binop (MINUS_EXPR, pt_var_size, bytes2);</span>
+<span class="lineNum">     384 </span><span class="lineCov">        378 :               bytes = size_binop (MIN_EXPR, bytes, bytes2);</span>
+<span class="lineNum">     385 </span>            :             }
+<span class="lineNum">     386 </span>            :         }
+<span class="lineNum">     387 </span>            :     }
+<span class="lineNum">     388 </span><span class="lineCov">     152172 :   else if (!pt_var_size)</span>
+<span class="lineNum">     389 </span>            :     return false;
+<span class="lineNum">     390 </span>            :   else
+<span class="lineNum">     391 </span>            :     bytes = pt_var_size;
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span><span class="lineCov">     178933 :   if (tree_fits_uhwi_p (bytes))</span>
+<span class="lineNum">     394 </span>            :     {
+<span class="lineNum">     395 </span><span class="lineCov">     178927 :       *psize = tree_to_uhwi (bytes);</span>
+<span class="lineNum">     396 </span><span class="lineCov">     178927 :       return true;</span>
+<span class="lineNum">     397 </span>            :     }
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span>            :   return false;
+<span class="lineNum">     400 </span>            : }
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            : /* Compute __builtin_object_size for CALL, which is a GIMPLE_CALL.
+<span class="lineNum">     404 </span>            :    Handles various allocation calls.  OBJECT_SIZE_TYPE is the second
+<span class="lineNum">     405 </span>            :    argument from __builtin_object_size.  If unknown, return
+<span class="lineNum">     406 </span>            :    unknown[object_size_type].  */
+<a name="407"><span class="lineNum">     407 </span>            : </a>
+<span class="lineNum">     408 </span>            : static unsigned HOST_WIDE_INT
+<span class="lineNum">     409 </span><span class="lineCov">       1246 : alloc_object_size (const gcall *call, int object_size_type)</span>
+<span class="lineNum">     410 </span>            : {
+<span class="lineNum">     411 </span><span class="lineCov">       1246 :   tree callee, bytes = NULL_TREE;</span>
+<span class="lineNum">     412 </span><span class="lineCov">       1246 :   tree alloc_size;</span>
+<span class="lineNum">     413 </span><span class="lineCov">       1246 :   int arg1 = -1, arg2 = -1;</span>
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span><span class="lineCov">       2492 :   gcc_assert (is_gimple_call (call));</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span><span class="lineCov">       1246 :   callee = gimple_call_fndecl (call);</span>
+<span class="lineNum">     418 </span><span class="lineCov">       1246 :   if (!callee)</span>
+<span class="lineNum">     419 </span><span class="lineNoCov">          0 :     return unknown[object_size_type];</span>
+<span class="lineNum">     420 </span>            : 
+<span class="lineNum">     421 </span><span class="lineCov">       3738 :   alloc_size = lookup_attribute (&quot;alloc_size&quot;,</span>
+<span class="lineNum">     422 </span><span class="lineCov">       1246 :                                  TYPE_ATTRIBUTES (TREE_TYPE (callee)));</span>
+<span class="lineNum">     423 </span><span class="lineCov">       1246 :   if (alloc_size &amp;&amp; TREE_VALUE (alloc_size))</span>
+<span class="lineNum">     424 </span>            :     {
+<span class="lineNum">     425 </span><span class="lineCov">       1192 :       tree p = TREE_VALUE (alloc_size);</span>
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span><span class="lineCov">       1192 :       arg1 = TREE_INT_CST_LOW (TREE_VALUE (p))-1;</span>
+<span class="lineNum">     428 </span><span class="lineCov">       1192 :       if (TREE_CHAIN (p))</span>
+<span class="lineNum">     429 </span><span class="lineCov">        226 :         arg2 = TREE_INT_CST_LOW (TREE_VALUE (TREE_CHAIN (p)))-1;</span>
+<span class="lineNum">     430 </span>            :     }
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">       1246 :   if (DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)</span>
+<span class="lineNum">     433 </span><span class="lineCov">       2400 :     switch (DECL_FUNCTION_CODE (callee))</span>
+<span class="lineNum">     434 </span>            :       {
+<span class="lineNum">     435 </span><span class="lineCov">        111 :       case BUILT_IN_CALLOC:</span>
+<span class="lineNum">     436 </span><span class="lineCov">        111 :         arg2 = 1;</span>
+<span class="lineNum">     437 </span>            :         /* fall through */
+<span class="lineNum">     438 </span>            :       case BUILT_IN_MALLOC:
+<span class="lineNum">     439 </span>            :       CASE_BUILT_IN_ALLOCA:
+<span class="lineNum">     440 </span>            :         arg1 = 0;
+<span class="lineNum">     441 </span>            :       default:
+<span class="lineNum">     442 </span>            :         break;
+<span class="lineNum">     443 </span>            :       }
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span><span class="lineCov">       2462 :   if (arg1 &lt; 0 || arg1 &gt;= (int)gimple_call_num_args (call)</span>
+<span class="lineNum">     446 </span><span class="lineCov">       1231 :       || TREE_CODE (gimple_call_arg (call, arg1)) != INTEGER_CST</span>
+<span class="lineNum">     447 </span><span class="lineCov">       1077 :       || (arg2 &gt;= 0</span>
+<span class="lineNum">     448 </span><span class="lineCov">        226 :           &amp;&amp; (arg2 &gt;= (int)gimple_call_num_args (call)</span>
+<span class="lineNum">     449 </span><span class="lineCov">        113 :               || TREE_CODE (gimple_call_arg (call, arg2)) != INTEGER_CST)))</span>
+<span class="lineNum">     450 </span><span class="lineCov">        226 :     return unknown[object_size_type];</span>
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span><span class="lineCov">       1020 :   if (arg2 &gt;= 0)</span>
+<span class="lineNum">     453 </span><span class="lineCov">        113 :     bytes = size_binop (MULT_EXPR,</span>
+<span class="lineNum">     454 </span>            :         fold_convert (sizetype, gimple_call_arg (call, arg1)),
+<span class="lineNum">     455 </span>            :         fold_convert (sizetype, gimple_call_arg (call, arg2)));
+<span class="lineNum">     456 </span><span class="lineCov">        907 :   else if (arg1 &gt;= 0)</span>
+<span class="lineNum">     457 </span><span class="lineCov">       1814 :     bytes = fold_convert (sizetype, gimple_call_arg (call, arg1));</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span><span class="lineCov">       1020 :   if (bytes &amp;&amp; tree_fits_uhwi_p (bytes))</span>
+<span class="lineNum">     460 </span><span class="lineCov">       1020 :     return tree_to_uhwi (bytes);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineNoCov">          0 :   return unknown[object_size_type];</span>
+<span class="lineNum">     463 </span>            : }
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            : /* If object size is propagated from one of function's arguments directly
+<span class="lineNum">     467 </span>            :    to its return value, return that argument for GIMPLE_CALL statement CALL.
+<span class="lineNum">     468 </span>            :    Otherwise return NULL.  */
+<a name="469"><span class="lineNum">     469 </span>            : </a>
+<span class="lineNum">     470 </span>            : static tree
+<span class="lineNum">     471 </span><span class="lineCov">       1283 : pass_through_call (const gcall *call)</span>
+<span class="lineNum">     472 </span>            : {
+<span class="lineNum">     473 </span><span class="lineCov">       1283 :   unsigned rf = gimple_call_return_flags (call);</span>
+<span class="lineNum">     474 </span><span class="lineCov">       1283 :   if (rf &amp; ERF_RETURNS_ARG)</span>
+<span class="lineNum">     475 </span>            :     {
+<span class="lineNum">     476 </span><span class="lineCov">         37 :       unsigned argnum = rf &amp; ERF_RETURN_ARG_MASK;</span>
+<span class="lineNum">     477 </span><span class="lineCov">         74 :       if (argnum &lt; gimple_call_num_args (call))</span>
+<span class="lineNum">     478 </span><span class="lineCov">         37 :         return gimple_call_arg (call, argnum);</span>
+<span class="lineNum">     479 </span>            :     }
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            :   /* __builtin_assume_aligned is intentionally not marked RET1.  */
+<span class="lineNum">     482 </span><span class="lineCov">       1246 :   if (gimple_call_builtin_p (call, BUILT_IN_ASSUME_ALIGNED))</span>
+<span class="lineNum">     483 </span><span class="lineNoCov">          0 :     return gimple_call_arg (call, 0);</span>
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span>            :   return NULL_TREE;
+<span class="lineNum">     486 </span>            : }
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span>            : /* Compute __builtin_object_size value for PTR and set *PSIZE to
+<span class="lineNum">     490 </span>            :    the resulting value.  OBJECT_SIZE_TYPE is the second argument
+<span class="lineNum">     491 </span>            :    to __builtin_object_size.  Return true on success and false
+<span class="lineNum">     492 </span>            :    when the object size could not be determined.  */
+<a name="493"><span class="lineNum">     493 </span>            : </a>
+<span class="lineNum">     494 </span>            : bool
+<span class="lineNum">     495 </span><span class="lineCov">     399681 : compute_builtin_object_size (tree ptr, int object_size_type,</span>
+<span class="lineNum">     496 </span>            :                              unsigned HOST_WIDE_INT *psize)
+<span class="lineNum">     497 </span>            : {
+<span class="lineNum">     498 </span><span class="lineCov">     399681 :   gcc_assert (object_size_type &gt;= 0 &amp;&amp; object_size_type &lt;= 3);</span>
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span>            :   /* Set to unknown and overwrite just before returning if the size
+<span class="lineNum">     501 </span>            :      could be determined.  */
+<span class="lineNum">     502 </span><span class="lineCov">     399681 :   *psize = unknown[object_size_type];</span>
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span><span class="lineCov">     399681 :   if (! offset_limit)</span>
+<span class="lineNum">     505 </span><span class="lineCov">      14680 :     init_offset_limit ();</span>
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineCov">     399681 :   if (TREE_CODE (ptr) == ADDR_EXPR)</span>
+<span class="lineNum">     508 </span><span class="lineCov">     176653 :     return addr_object_size (NULL, ptr, object_size_type, psize);</span>
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span><span class="lineCov">     223028 :   if (TREE_CODE (ptr) != SSA_NAME</span>
+<span class="lineNum">     511 </span><span class="lineCov">     223028 :       || !POINTER_TYPE_P (TREE_TYPE (ptr)))</span>
+<span class="lineNum">     512 </span>            :       return false;
+<span class="lineNum">     513 </span>            : 
+<span class="lineNum">     514 </span><span class="lineCov">     216010 :   if (computed[object_size_type] == NULL)</span>
+<span class="lineNum">     515 </span>            :     {
+<span class="lineNum">     516 </span><span class="lineCov">     202417 :       if (optimize || object_size_type &amp; 1)</span>
+<span class="lineNum">     517 </span>            :         return false;
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span>            :       /* When not optimizing, rather than failing, make a small effort
+<span class="lineNum">     520 </span>            :          to determine the object size without the full benefit of
+<span class="lineNum">     521 </span>            :          the (costly) computation below.  */
+<span class="lineNum">     522 </span><span class="lineCov">      11325 :       gimple *def = SSA_NAME_DEF_STMT (ptr);</span>
+<span class="lineNum">     523 </span><span class="lineCov">      22650 :       if (gimple_code (def) == GIMPLE_ASSIGN)</span>
+<span class="lineNum">     524 </span>            :         {
+<span class="lineNum">     525 </span><span class="lineCov">       9153 :           tree_code code = gimple_assign_rhs_code (def);</span>
+<span class="lineNum">     526 </span><span class="lineCov">       9153 :           if (code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     527 </span>            :             {
+<span class="lineNum">     528 </span><span class="lineCov">       2432 :               tree offset = gimple_assign_rhs2 (def);</span>
+<span class="lineNum">     529 </span><span class="lineCov">       2432 :               ptr = gimple_assign_rhs1 (def);</span>
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span><span class="lineCov">       2432 :               if (tree_fits_shwi_p (offset)</span>
+<span class="lineNum">     532 </span><span class="lineCov">       2432 :                   &amp;&amp; compute_builtin_object_size (ptr, object_size_type, psize))</span>
+<span class="lineNum">     533 </span>            :                 {
+<span class="lineNum">     534 </span>            :                   /* Return zero when the offset is out of bounds.  */
+<span class="lineNum">     535 </span><span class="lineCov">        600 :                   unsigned HOST_WIDE_INT off = tree_to_shwi (offset);</span>
+<span class="lineNum">     536 </span><span class="lineCov">        600 :                   *psize = off &lt; *psize ? *psize - off : 0;</span>
+<span class="lineNum">     537 </span><span class="lineCov">        600 :                   return true;</span>
+<span class="lineNum">     538 </span>            :                 }
+<span class="lineNum">     539 </span>            :             }
+<span class="lineNum">     540 </span>            :         }
+<span class="lineNum">     541 </span><span class="lineCov">      10725 :       return false;</span>
+<span class="lineNum">     542 </span>            :     }
+<span class="lineNum">     543 </span>            : 
+<span class="lineNum">     544 </span><span class="lineCov">      27186 :   if (!bitmap_bit_p (computed[object_size_type], SSA_NAME_VERSION (ptr)))</span>
+<span class="lineNum">     545 </span>            :     {
+<span class="lineNum">     546 </span><span class="lineCov">       7058 :       struct object_size_info osi;</span>
+<span class="lineNum">     547 </span><span class="lineCov">       7058 :       bitmap_iterator bi;</span>
+<span class="lineNum">     548 </span><span class="lineCov">       7058 :       unsigned int i;</span>
+<span class="lineNum">     549 </span>            : 
+<span class="lineNum">     550 </span><span class="lineCov">      21174 :       if (num_ssa_names &gt; object_sizes[object_size_type].length ())</span>
+<span class="lineNum">     551 </span><span class="lineCov">        940 :         object_sizes[object_size_type].safe_grow (num_ssa_names);</span>
+<span class="lineNum">     552 </span><span class="lineCov">       7058 :       if (dump_file)</span>
+<span class="lineNum">     553 </span>            :         {
+<span class="lineNum">     554 </span><span class="lineCov">          2 :           fprintf (dump_file, &quot;Computing %s %sobject size for &quot;,</span>
+<span class="lineNum">     555 </span><span class="lineCov">          2 :                    (object_size_type &amp; 2) ? &quot;minimum&quot; : &quot;maximum&quot;,</span>
+<span class="lineNum">     556 </span><span class="lineCov">          2 :                    (object_size_type &amp; 1) ? &quot;sub&quot; : &quot;&quot;);</span>
+<span class="lineNum">     557 </span><span class="lineCov">          2 :           print_generic_expr (dump_file, ptr, dump_flags);</span>
+<span class="lineNum">     558 </span><span class="lineCov">          2 :           fprintf (dump_file, &quot;:\n&quot;);</span>
+<span class="lineNum">     559 </span>            :         }
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span><span class="lineCov">       7058 :       osi.visited = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     562 </span><span class="lineCov">       7058 :       osi.reexamine = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     563 </span><span class="lineCov">       7058 :       osi.object_size_type = object_size_type;</span>
+<span class="lineNum">     564 </span><span class="lineCov">       7058 :       osi.depths = NULL;</span>
+<span class="lineNum">     565 </span><span class="lineCov">       7058 :       osi.stack = NULL;</span>
+<span class="lineNum">     566 </span><span class="lineCov">       7058 :       osi.tos = NULL;</span>
+<span class="lineNum">     567 </span>            : 
+<span class="lineNum">     568 </span>            :       /* First pass: walk UD chains, compute object sizes that
+<span class="lineNum">     569 </span>            :          can be computed.  osi.reexamine bitmap at the end will
+<span class="lineNum">     570 </span>            :          contain what variables were found in dependency cycles
+<span class="lineNum">     571 </span>            :          and therefore need to be reexamined.  */
+<span class="lineNum">     572 </span><span class="lineCov">       7058 :       osi.pass = 0;</span>
+<span class="lineNum">     573 </span><span class="lineCov">       7058 :       osi.changed = false;</span>
+<span class="lineNum">     574 </span><span class="lineCov">       7058 :       collect_object_sizes_for (&amp;osi, ptr);</span>
+<span class="lineNum">     575 </span>            : 
+<span class="lineNum">     576 </span>            :       /* Second pass: keep recomputing object sizes of variables
+<span class="lineNum">     577 </span>            :          that need reexamination, until no object sizes are
+<span class="lineNum">     578 </span>            :          increased or all object sizes are computed.  */
+<span class="lineNum">     579 </span><span class="lineCov">      14116 :       if (! bitmap_empty_p (osi.reexamine))</span>
+<span class="lineNum">     580 </span>            :         {
+<span class="lineNum">     581 </span><span class="lineCov">        288 :           bitmap reexamine = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span>            :           /* If looking for minimum instead of maximum object size,
+<span class="lineNum">     584 </span>            :              detect cases where a pointer is increased in a loop.
+<span class="lineNum">     585 </span>            :              Although even without this detection pass 2 would eventually
+<span class="lineNum">     586 </span>            :              terminate, it could take a long time.  If a pointer is
+<span class="lineNum">     587 </span>            :              increasing this way, we need to assume 0 object size.
+<span class="lineNum">     588 </span>            :              E.g. p = &amp;buf[0]; while (cond) p = p + 4;  */
+<span class="lineNum">     589 </span><span class="lineCov">        288 :           if (object_size_type &amp; 2)</span>
+<span class="lineNum">     590 </span>            :             {
+<span class="lineNum">     591 </span><span class="lineCov">         32 :               osi.depths = XCNEWVEC (unsigned int, num_ssa_names);</span>
+<span class="lineNum">     592 </span><span class="lineCov">         32 :               osi.stack = XNEWVEC (unsigned int, num_ssa_names);</span>
+<span class="lineNum">     593 </span><span class="lineCov">         16 :               osi.tos = osi.stack;</span>
+<span class="lineNum">     594 </span><span class="lineCov">         16 :               osi.pass = 1;</span>
+<span class="lineNum">     595 </span>            :               /* collect_object_sizes_for is changing
+<span class="lineNum">     596 </span>            :                  osi.reexamine bitmap, so iterate over a copy.  */
+<span class="lineNum">     597 </span><span class="lineCov">         16 :               bitmap_copy (reexamine, osi.reexamine);</span>
+<span class="lineNum">     598 </span><span class="lineCov">         46 :               EXECUTE_IF_SET_IN_BITMAP (reexamine, 0, i, bi)</span>
+<span class="lineNum">     599 </span><span class="lineCov">         30 :                 if (bitmap_bit_p (osi.reexamine, i))</span>
+<span class="lineNum">     600 </span><span class="lineCov">         30 :                   check_for_plus_in_loops (&amp;osi, ssa_name (i));</span>
+<span class="lineNum">     601 </span>            : 
+<span class="lineNum">     602 </span><span class="lineCov">         16 :               free (osi.depths);</span>
+<span class="lineNum">     603 </span><span class="lineCov">         16 :               osi.depths = NULL;</span>
+<span class="lineNum">     604 </span><span class="lineCov">         16 :               free (osi.stack);</span>
+<span class="lineNum">     605 </span><span class="lineCov">         16 :               osi.stack = NULL;</span>
+<span class="lineNum">     606 </span><span class="lineCov">         16 :               osi.tos = NULL;</span>
+<span class="lineNum">     607 </span>            :             }
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span><span class="lineCov">        320 :           do</span>
+<span class="lineNum">     610 </span>            :             {
+<span class="lineNum">     611 </span><span class="lineCov">        320 :               osi.pass = 2;</span>
+<span class="lineNum">     612 </span><span class="lineCov">        320 :               osi.changed = false;</span>
+<span class="lineNum">     613 </span>            :               /* collect_object_sizes_for is changing
+<span class="lineNum">     614 </span>            :                  osi.reexamine bitmap, so iterate over a copy.  */
+<span class="lineNum">     615 </span><span class="lineCov">        320 :               bitmap_copy (reexamine, osi.reexamine);</span>
+<span class="lineNum">     616 </span><span class="lineCov">        996 :               EXECUTE_IF_SET_IN_BITMAP (reexamine, 0, i, bi)</span>
+<span class="lineNum">     617 </span><span class="lineCov">        676 :                 if (bitmap_bit_p (osi.reexamine, i))</span>
+<span class="lineNum">     618 </span>            :                   {
+<span class="lineNum">     619 </span><span class="lineCov">        676 :                     collect_object_sizes_for (&amp;osi, ssa_name (i));</span>
+<span class="lineNum">     620 </span><span class="lineCov">        676 :                     if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     621 </span>            :                       {
+<span class="lineNum">     622 </span><span class="lineNoCov">          0 :                         fprintf (dump_file, &quot;Reexamining &quot;);</span>
+<span class="lineNum">     623 </span><span class="lineNoCov">          0 :                         print_generic_expr (dump_file, ssa_name (i),</span>
+<span class="lineNum">     624 </span>            :                                             dump_flags);
+<span class="lineNum">     625 </span><span class="lineNoCov">          0 :                         fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     626 </span>            :                       }
+<span class="lineNum">     627 </span>            :                   }
+<span class="lineNum">     628 </span>            :             }
+<span class="lineNum">     629 </span><span class="lineCov">        320 :           while (osi.changed);</span>
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span><span class="lineCov">        288 :           BITMAP_FREE (reexamine);</span>
+<span class="lineNum">     632 </span>            :         }
+<span class="lineNum">     633 </span><span class="lineCov">       7649 :       EXECUTE_IF_SET_IN_BITMAP (osi.reexamine, 0, i, bi)</span>
+<span class="lineNum">     634 </span><span class="lineCov">        591 :         bitmap_set_bit (computed[object_size_type], i);</span>
+<span class="lineNum">     635 </span>            : 
+<span class="lineNum">     636 </span>            :       /* Debugging dumps.  */
+<span class="lineNum">     637 </span><span class="lineCov">       7058 :       if (dump_file)</span>
+<span class="lineNum">     638 </span>            :         {
+<span class="lineNum">     639 </span><span class="lineCov">          5 :           EXECUTE_IF_SET_IN_BITMAP (osi.visited, 0, i, bi)</span>
+<span class="lineNum">     640 </span><span class="lineCov">          3 :             if (object_sizes[object_size_type][i]</span>
+<span class="lineNum">     641 </span><span class="lineCov">          3 :                 != unknown[object_size_type])</span>
+<span class="lineNum">     642 </span>            :               {
+<span class="lineNum">     643 </span><span class="lineCov">          3 :                 print_generic_expr (dump_file, ssa_name (i),</span>
+<span class="lineNum">     644 </span>            :                                     dump_flags);
+<span class="lineNum">     645 </span><span class="lineCov">          3 :                 fprintf (dump_file,</span>
+<span class="lineNum">     646 </span>            :                          &quot;: %s %sobject size &quot;
+<span class="lineNum">     647 </span>            :                          HOST_WIDE_INT_PRINT_UNSIGNED &quot;\n&quot;,
+<span class="lineNum">     648 </span><span class="lineCov">          3 :                          (object_size_type &amp; 2) ? &quot;minimum&quot; : &quot;maximum&quot;,</span>
+<span class="lineNum">     649 </span><span class="lineCov">          3 :                          (object_size_type &amp; 1) ? &quot;sub&quot; : &quot;&quot;,</span>
+<span class="lineNum">     650 </span><span class="lineCov">          3 :                          object_sizes[object_size_type][i]);</span>
+<span class="lineNum">     651 </span>            :               }
+<span class="lineNum">     652 </span>            :         }
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span><span class="lineCov">       7058 :       BITMAP_FREE (osi.reexamine);</span>
+<span class="lineNum">     655 </span><span class="lineCov">       7058 :       BITMAP_FREE (osi.visited);</span>
+<span class="lineNum">     656 </span>            :     }
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span><span class="lineCov">      13593 :   *psize = object_sizes[object_size_type][SSA_NAME_VERSION (ptr)];</span>
+<span class="lineNum">     659 </span><span class="lineCov">      13593 :   return *psize != unknown[object_size_type];</span>
+<span class="lineNum">     660 </span>            : }
+<span class="lineNum">     661 </span>            : 
+<span class="lineNum">     662 </span>            : /* Compute object_sizes for PTR, defined to VALUE, which is not an SSA_NAME.  */
+<a name="663"><span class="lineNum">     663 </span>            : </a>
+<span class="lineNum">     664 </span>            : static void
+<span class="lineNum">     665 </span><span class="lineCov">       5913 : expr_object_size (struct object_size_info *osi, tree ptr, tree value)</span>
+<span class="lineNum">     666 </span>            : {
+<span class="lineNum">     667 </span><span class="lineCov">       5913 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     668 </span><span class="lineCov">       5913 :   unsigned int varno = SSA_NAME_VERSION (ptr);</span>
+<span class="lineNum">     669 </span><span class="lineCov">       5913 :   unsigned HOST_WIDE_INT bytes;</span>
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span><span class="lineCov">       5913 :   gcc_assert (object_sizes[object_size_type][varno]</span>
+<span class="lineNum">     672 </span>            :               != unknown[object_size_type]);
+<span class="lineNum">     673 </span><span class="lineCov">       5913 :   gcc_assert (osi-&gt;pass == 0);</span>
+<span class="lineNum">     674 </span>            : 
+<span class="lineNum">     675 </span><span class="lineCov">       5913 :   if (TREE_CODE (value) == WITH_SIZE_EXPR)</span>
+<span class="lineNum">     676 </span><span class="lineNoCov">          0 :     value = TREE_OPERAND (value, 0);</span>
+<span class="lineNum">     677 </span>            : 
+<span class="lineNum">     678 </span>            :   /* Pointer variables should have been handled by merge_object_sizes.  */
+<span class="lineNum">     679 </span><span class="lineCov">       5913 :   gcc_assert (TREE_CODE (value) != SSA_NAME</span>
+<span class="lineNum">     680 </span>            :               || !POINTER_TYPE_P (TREE_TYPE (value)));
+<span class="lineNum">     681 </span>            : 
+<span class="lineNum">     682 </span><span class="lineCov">       5913 :   if (TREE_CODE (value) == ADDR_EXPR)</span>
+<span class="lineNum">     683 </span><span class="lineCov">       4335 :     addr_object_size (osi, value, object_size_type, &amp;bytes);</span>
+<span class="lineNum">     684 </span>            :   else
+<span class="lineNum">     685 </span><span class="lineCov">       1578 :     bytes = unknown[object_size_type];</span>
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span><span class="lineCov">       5913 :   if ((object_size_type &amp; 2) == 0)</span>
+<span class="lineNum">     688 </span>            :     {
+<span class="lineNum">     689 </span><span class="lineCov">       4855 :       if (object_sizes[object_size_type][varno] &lt; bytes)</span>
+<span class="lineNum">     690 </span><span class="lineCov">       7344 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     691 </span>            :     }
+<span class="lineNum">     692 </span>            :   else
+<span class="lineNum">     693 </span>            :     {
+<span class="lineNum">     694 </span><span class="lineCov">       1058 :       if (object_sizes[object_size_type][varno] &gt; bytes)</span>
+<span class="lineNum">     695 </span><span class="lineCov">       2078 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     696 </span>            :     }
+<span class="lineNum">     697 </span><span class="lineCov">       5913 : }</span>
+<span class="lineNum">     698 </span>            : 
+<span class="lineNum">     699 </span>            : 
+<span class="lineNum">     700 </span>            : /* Compute object_sizes for PTR, defined to the result of a call.  */
+<a name="701"><span class="lineNum">     701 </span>            : </a>
+<span class="lineNum">     702 </span>            : static void
+<span class="lineNum">     703 </span><span class="lineCov">       1246 : call_object_size (struct object_size_info *osi, tree ptr, gcall *call)</span>
+<span class="lineNum">     704 </span>            : {
+<span class="lineNum">     705 </span><span class="lineCov">       1246 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     706 </span><span class="lineCov">       1246 :   unsigned int varno = SSA_NAME_VERSION (ptr);</span>
+<span class="lineNum">     707 </span><span class="lineCov">       1246 :   unsigned HOST_WIDE_INT bytes;</span>
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span><span class="lineCov">       2492 :   gcc_assert (is_gimple_call (call));</span>
+<span class="lineNum">     710 </span>            : 
+<span class="lineNum">     711 </span><span class="lineCov">       1246 :   gcc_assert (object_sizes[object_size_type][varno]</span>
+<span class="lineNum">     712 </span>            :               != unknown[object_size_type]);
+<span class="lineNum">     713 </span><span class="lineCov">       1246 :   gcc_assert (osi-&gt;pass == 0);</span>
+<span class="lineNum">     714 </span>            : 
+<span class="lineNum">     715 </span><span class="lineCov">       1246 :   bytes = alloc_object_size (call, object_size_type);</span>
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span><span class="lineCov">       1246 :   if ((object_size_type &amp; 2) == 0)</span>
+<span class="lineNum">     718 </span>            :     {
+<span class="lineNum">     719 </span><span class="lineCov">       1055 :       if (object_sizes[object_size_type][varno] &lt; bytes)</span>
+<span class="lineNum">     720 </span><span class="lineCov">       2066 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     721 </span>            :     }
+<span class="lineNum">     722 </span>            :   else
+<span class="lineNum">     723 </span>            :     {
+<span class="lineNum">     724 </span><span class="lineCov">        191 :       if (object_sizes[object_size_type][varno] &gt; bytes)</span>
+<span class="lineNum">     725 </span><span class="lineCov">        382 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     726 </span>            :     }
+<span class="lineNum">     727 </span><span class="lineCov">       1246 : }</span>
+<span class="lineNum">     728 </span>            : 
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span>            : /* Compute object_sizes for PTR, defined to an unknown value.  */
+<a name="731"><span class="lineNum">     731 </span>            : </a>
+<span class="lineNum">     732 </span>            : static void
+<span class="lineNum">     733 </span><span class="lineNoCov">          0 : unknown_object_size (struct object_size_info *osi, tree ptr)</span>
+<span class="lineNum">     734 </span>            : {
+<span class="lineNum">     735 </span><span class="lineNoCov">          0 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     736 </span><span class="lineNoCov">          0 :   unsigned int varno = SSA_NAME_VERSION (ptr);</span>
+<span class="lineNum">     737 </span><span class="lineNoCov">          0 :   unsigned HOST_WIDE_INT bytes;</span>
+<span class="lineNum">     738 </span>            : 
+<span class="lineNum">     739 </span><span class="lineNoCov">          0 :   gcc_assert (object_sizes[object_size_type][varno]</span>
+<span class="lineNum">     740 </span>            :               != unknown[object_size_type]);
+<span class="lineNum">     741 </span><span class="lineNoCov">          0 :   gcc_assert (osi-&gt;pass == 0);</span>
+<span class="lineNum">     742 </span>            : 
+<span class="lineNum">     743 </span><span class="lineNoCov">          0 :   bytes = unknown[object_size_type];</span>
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineNoCov">          0 :   if ((object_size_type &amp; 2) == 0)</span>
+<span class="lineNum">     746 </span>            :     {
+<span class="lineNum">     747 </span><span class="lineNoCov">          0 :       if (object_sizes[object_size_type][varno] &lt; bytes)</span>
+<span class="lineNum">     748 </span><span class="lineNoCov">          0 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     749 </span>            :     }
+<span class="lineNum">     750 </span>            :   else
+<span class="lineNum">     751 </span>            :     {
+<span class="lineNum">     752 </span><span class="lineNoCov">          0 :       if (object_sizes[object_size_type][varno] &gt; bytes)</span>
+<span class="lineNum">     753 </span><span class="lineNoCov">          0 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     754 </span>            :     }
+<span class="lineNum">     755 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     756 </span>            : 
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : /* Merge object sizes of ORIG + OFFSET into DEST.  Return true if
+<span class="lineNum">     759 </span>            :    the object size might need reexamination later.  */
+<a name="760"><span class="lineNum">     760 </span>            : </a>
+<span class="lineNum">     761 </span>            : static bool
+<span class="lineNum">     762 </span><span class="lineCov">       2282 : merge_object_sizes (struct object_size_info *osi, tree dest, tree orig,</span>
+<span class="lineNum">     763 </span>            :                     unsigned HOST_WIDE_INT offset)
+<span class="lineNum">     764 </span>            : {
+<span class="lineNum">     765 </span><span class="lineCov">       2282 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     766 </span><span class="lineCov">       2282 :   unsigned int varno = SSA_NAME_VERSION (dest);</span>
+<span class="lineNum">     767 </span><span class="lineCov">       2282 :   unsigned HOST_WIDE_INT orig_bytes;</span>
+<span class="lineNum">     768 </span>            : 
+<span class="lineNum">     769 </span><span class="lineCov">       2282 :   if (object_sizes[object_size_type][varno] == unknown[object_size_type])</span>
+<span class="lineNum">     770 </span>            :     return false;
+<span class="lineNum">     771 </span><span class="lineCov">       2282 :   if (offset &gt;= offset_limit)</span>
+<span class="lineNum">     772 </span>            :     {
+<span class="lineNum">     773 </span><span class="lineCov">          2 :       object_sizes[object_size_type][varno] = unknown[object_size_type];</span>
+<span class="lineNum">     774 </span><span class="lineCov">          2 :       return false;</span>
+<span class="lineNum">     775 </span>            :     }
+<span class="lineNum">     776 </span>            : 
+<span class="lineNum">     777 </span><span class="lineCov">       2280 :   if (osi-&gt;pass == 0)</span>
+<span class="lineNum">     778 </span><span class="lineCov">       1566 :     collect_object_sizes_for (osi, orig);</span>
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span><span class="lineCov">       2280 :   orig_bytes = object_sizes[object_size_type][SSA_NAME_VERSION (orig)];</span>
+<span class="lineNum">     781 </span><span class="lineCov">       2280 :   if (orig_bytes != unknown[object_size_type])</span>
+<span class="lineNum">     782 </span><span class="lineCov">       1989 :     orig_bytes = (offset &gt; orig_bytes)</span>
+<span class="lineNum">     783 </span><span class="lineCov">       1989 :                  ? HOST_WIDE_INT_0U : orig_bytes - offset;</span>
+<span class="lineNum">     784 </span>            : 
+<span class="lineNum">     785 </span><span class="lineCov">       2280 :   if ((object_size_type &amp; 2) == 0)</span>
+<span class="lineNum">     786 </span>            :     {
+<span class="lineNum">     787 </span><span class="lineCov">       2133 :       if (object_sizes[object_size_type][varno] &lt; orig_bytes)</span>
+<span class="lineNum">     788 </span>            :         {
+<span class="lineNum">     789 </span><span class="lineCov">       1171 :           object_sizes[object_size_type][varno] = orig_bytes;</span>
+<span class="lineNum">     790 </span><span class="lineCov">       1171 :           osi-&gt;changed = true;</span>
+<span class="lineNum">     791 </span>            :         }
+<span class="lineNum">     792 </span>            :     }
+<span class="lineNum">     793 </span>            :   else
+<span class="lineNum">     794 </span>            :     {
+<span class="lineNum">     795 </span><span class="lineCov">        147 :       if (object_sizes[object_size_type][varno] &gt; orig_bytes)</span>
+<span class="lineNum">     796 </span>            :         {
+<span class="lineNum">     797 </span><span class="lineCov">        105 :           object_sizes[object_size_type][varno] = orig_bytes;</span>
+<span class="lineNum">     798 </span><span class="lineCov">        105 :           osi-&gt;changed = true;</span>
+<span class="lineNum">     799 </span>            :         }
+<span class="lineNum">     800 </span>            :     }
+<span class="lineNum">     801 </span><span class="lineCov">       2280 :   return bitmap_bit_p (osi-&gt;reexamine, SSA_NAME_VERSION (orig));</span>
+<span class="lineNum">     802 </span>            : }
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span>            : 
+<span class="lineNum">     805 </span>            : /* Compute object_sizes for VAR, defined to the result of an assignment
+<span class="lineNum">     806 </span>            :    with operator POINTER_PLUS_EXPR.  Return true if the object size might
+<span class="lineNum">     807 </span>            :    need reexamination  later.  */
+<a name="808"><span class="lineNum">     808 </span>            : </a>
+<span class="lineNum">     809 </span>            : static bool
+<span class="lineNum">     810 </span><span class="lineCov">       1937 : plus_stmt_object_size (struct object_size_info *osi, tree var, gimple *stmt)</span>
+<span class="lineNum">     811 </span>            : {
+<span class="lineNum">     812 </span><span class="lineCov">       1937 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     813 </span><span class="lineCov">       1937 :   unsigned int varno = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">     814 </span><span class="lineCov">       1937 :   unsigned HOST_WIDE_INT bytes;</span>
+<span class="lineNum">     815 </span><span class="lineCov">       1937 :   tree op0, op1;</span>
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span><span class="lineCov">       1937 :   if (gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     818 </span>            :     {
+<span class="lineNum">     819 </span><span class="lineCov">       1927 :       op0 = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     820 </span><span class="lineCov">       1927 :       op1 = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     821 </span>            :     }
+<span class="lineNum">     822 </span><span class="lineCov">         10 :   else if (gimple_assign_rhs_code (stmt) == ADDR_EXPR)</span>
+<span class="lineNum">     823 </span>            :     {
+<span class="lineNum">     824 </span><span class="lineCov">         10 :       tree rhs = TREE_OPERAND (gimple_assign_rhs1 (stmt), 0);</span>
+<span class="lineNum">     825 </span><span class="lineCov">         10 :       gcc_assert (TREE_CODE (rhs) == MEM_REF);</span>
+<span class="lineNum">     826 </span><span class="lineCov">         10 :       op0 = TREE_OPERAND (rhs, 0);</span>
+<span class="lineNum">     827 </span><span class="lineCov">         10 :       op1 = TREE_OPERAND (rhs, 1);</span>
+<span class="lineNum">     828 </span>            :     }
+<span class="lineNum">     829 </span>            :   else
+<span class="lineNum">     830 </span><span class="lineNoCov">          0 :     gcc_unreachable ();</span>
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span><span class="lineCov">       1937 :   if (object_sizes[object_size_type][varno] == unknown[object_size_type])</span>
+<span class="lineNum">     833 </span>            :     return false;
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span>            :   /* Handle PTR + OFFSET here.  */
+<span class="lineNum">     836 </span><span class="lineCov">       1937 :   if (TREE_CODE (op1) == INTEGER_CST</span>
+<span class="lineNum">     837 </span><span class="lineCov">       1714 :       &amp;&amp; (TREE_CODE (op0) == SSA_NAME</span>
+<span class="lineNum">     838 </span><span class="lineCov">       1203 :           || TREE_CODE (op0) == ADDR_EXPR))</span>
+<span class="lineNum">     839 </span>            :     {
+<span class="lineNum">     840 </span><span class="lineCov">       1706 :       if (! tree_fits_uhwi_p (op1))</span>
+<span class="lineNum">     841 </span><span class="lineNoCov">          0 :         bytes = unknown[object_size_type];</span>
+<span class="lineNum">     842 </span><span class="lineCov">       1706 :       else if (TREE_CODE (op0) == SSA_NAME)</span>
+<span class="lineNum">     843 </span><span class="lineCov">        511 :         return merge_object_sizes (osi, var, op0, tree_to_uhwi (op1));</span>
+<span class="lineNum">     844 </span>            :       else
+<span class="lineNum">     845 </span>            :         {
+<span class="lineNum">     846 </span><span class="lineCov">       1195 :           unsigned HOST_WIDE_INT off = tree_to_uhwi (op1);</span>
+<span class="lineNum">     847 </span>            : 
+<span class="lineNum">     848 </span>            :           /* op0 will be ADDR_EXPR here.  */
+<span class="lineNum">     849 </span><span class="lineCov">       1195 :           addr_object_size (osi, op0, object_size_type, &amp;bytes);</span>
+<span class="lineNum">     850 </span><span class="lineCov">       1195 :           if (bytes == unknown[object_size_type])</span>
+<span class="lineNum">     851 </span>            :             ;
+<span class="lineNum">     852 </span><span class="lineCov">       1189 :           else if (off &gt; offset_limit)</span>
+<span class="lineNum">     853 </span><span class="lineNoCov">          0 :             bytes = unknown[object_size_type];</span>
+<span class="lineNum">     854 </span><span class="lineCov">       1189 :           else if (off &gt; bytes)</span>
+<span class="lineNum">     855 </span><span class="lineNoCov">          0 :             bytes = 0;</span>
+<span class="lineNum">     856 </span>            :           else
+<span class="lineNum">     857 </span><span class="lineCov">       1189 :             bytes -= off;</span>
+<span class="lineNum">     858 </span>            :         }
+<span class="lineNum">     859 </span>            :     }
+<span class="lineNum">     860 </span>            :   else
+<span class="lineNum">     861 </span><span class="lineCov">        231 :     bytes = unknown[object_size_type];</span>
+<span class="lineNum">     862 </span>            : 
+<span class="lineNum">     863 </span><span class="lineCov">       1426 :   if ((object_size_type &amp; 2) == 0)</span>
+<span class="lineNum">     864 </span>            :     {
+<span class="lineNum">     865 </span><span class="lineCov">       1421 :       if (object_sizes[object_size_type][varno] &lt; bytes)</span>
+<span class="lineNum">     866 </span><span class="lineCov">       2578 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     867 </span>            :     }
+<span class="lineNum">     868 </span>            :   else
+<span class="lineNum">     869 </span>            :     {
+<span class="lineNum">     870 </span><span class="lineCov">          5 :       if (object_sizes[object_size_type][varno] &gt; bytes)</span>
+<span class="lineNum">     871 </span><span class="lineCov">         10 :         object_sizes[object_size_type][varno] = bytes;</span>
+<span class="lineNum">     872 </span>            :     }
+<span class="lineNum">     873 </span>            :   return false;
+<span class="lineNum">     874 </span>            : }
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span>            : /* Compute object_sizes for VAR, defined at STMT, which is
+<span class="lineNum">     878 </span>            :    a COND_EXPR.  Return true if the object size might need reexamination
+<span class="lineNum">     879 </span>            :    later.  */
+<a name="880"><span class="lineNum">     880 </span>            : </a>
+<span class="lineNum">     881 </span>            : static bool
+<span class="lineNum">     882 </span><span class="lineNoCov">          0 : cond_expr_object_size (struct object_size_info *osi, tree var, gimple *stmt)</span>
+<span class="lineNum">     883 </span>            : {
+<span class="lineNum">     884 </span><span class="lineNoCov">          0 :   tree then_, else_;</span>
+<span class="lineNum">     885 </span><span class="lineNoCov">          0 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     886 </span><span class="lineNoCov">          0 :   unsigned int varno = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">     887 </span><span class="lineNoCov">          0 :   bool reexamine = false;</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span><span class="lineNoCov">          0 :   gcc_assert (gimple_assign_rhs_code (stmt) == COND_EXPR);</span>
+<span class="lineNum">     890 </span>            : 
+<span class="lineNum">     891 </span><span class="lineNoCov">          0 :   if (object_sizes[object_size_type][varno] == unknown[object_size_type])</span>
+<span class="lineNum">     892 </span>            :     return false;
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span><span class="lineNoCov">          0 :   then_ = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     895 </span><span class="lineNoCov">          0 :   else_ = gimple_assign_rhs3 (stmt);</span>
+<span class="lineNum">     896 </span>            : 
+<span class="lineNum">     897 </span><span class="lineNoCov">          0 :   if (TREE_CODE (then_) == SSA_NAME)</span>
+<span class="lineNum">     898 </span><span class="lineNoCov">          0 :     reexamine |= merge_object_sizes (osi, var, then_, 0);</span>
+<span class="lineNum">     899 </span>            :   else
+<span class="lineNum">     900 </span><span class="lineNoCov">          0 :     expr_object_size (osi, var, then_);</span>
+<span class="lineNum">     901 </span>            : 
+<span class="lineNum">     902 </span><span class="lineNoCov">          0 :   if (TREE_CODE (else_) == SSA_NAME)</span>
+<span class="lineNum">     903 </span><span class="lineNoCov">          0 :     reexamine |= merge_object_sizes (osi, var, else_, 0);</span>
+<span class="lineNum">     904 </span>            :   else
+<span class="lineNum">     905 </span><span class="lineNoCov">          0 :     expr_object_size (osi, var, else_);</span>
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span>            :   return reexamine;
+<span class="lineNum">     908 </span>            : }
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span>            : /* Compute object sizes for VAR.
+<span class="lineNum">     911 </span>            :    For ADDR_EXPR an object size is the number of remaining bytes
+<span class="lineNum">     912 </span>            :    to the end of the object (where what is considered an object depends on
+<span class="lineNum">     913 </span>            :    OSI-&gt;object_size_type).
+<span class="lineNum">     914 </span>            :    For allocation GIMPLE_CALL like malloc or calloc object size is the size
+<span class="lineNum">     915 </span>            :    of the allocation.
+<span class="lineNum">     916 </span>            :    For POINTER_PLUS_EXPR where second operand is a constant integer,
+<span class="lineNum">     917 </span>            :    object size is object size of the first operand minus the constant.
+<span class="lineNum">     918 </span>            :    If the constant is bigger than the number of remaining bytes until the
+<span class="lineNum">     919 </span>            :    end of the object, object size is 0, but if it is instead a pointer
+<span class="lineNum">     920 </span>            :    subtraction, object size is unknown[object_size_type].
+<span class="lineNum">     921 </span>            :    To differentiate addition from subtraction, ADDR_EXPR returns
+<span class="lineNum">     922 </span>            :    unknown[object_size_type] for all objects bigger than half of the address
+<span class="lineNum">     923 </span>            :    space, and constants less than half of the address space are considered
+<span class="lineNum">     924 </span>            :    addition, while bigger constants subtraction.
+<span class="lineNum">     925 </span>            :    For a memcpy like GIMPLE_CALL that always returns one of its arguments, the
+<span class="lineNum">     926 </span>            :    object size is object size of that argument.
+<span class="lineNum">     927 </span>            :    Otherwise, object size is the maximum of object sizes of variables
+<span class="lineNum">     928 </span>            :    that it might be set to.  */
+<a name="929"><span class="lineNum">     929 </span>            : </a>
+<span class="lineNum">     930 </span>            : static void
+<span class="lineNum">     931 </span><span class="lineCov">       9976 : collect_object_sizes_for (struct object_size_info *osi, tree var)</span>
+<span class="lineNum">     932 </span>            : {
+<span class="lineNum">     933 </span><span class="lineCov">       9976 :   int object_size_type = osi-&gt;object_size_type;</span>
+<span class="lineNum">     934 </span><span class="lineCov">       9976 :   unsigned int varno = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">     935 </span><span class="lineCov">       9976 :   gimple *stmt;</span>
+<span class="lineNum">     936 </span><span class="lineCov">       9976 :   bool reexamine;</span>
+<span class="lineNum">     937 </span>            : 
+<span class="lineNum">     938 </span><span class="lineCov">       9976 :   if (bitmap_bit_p (computed[object_size_type], varno))</span>
+<span class="lineNum">     939 </span>            :     return;
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span><span class="lineCov">       9224 :   if (osi-&gt;pass == 0)</span>
+<span class="lineNum">     942 </span>            :     {
+<span class="lineNum">     943 </span><span class="lineCov">       8548 :       if (bitmap_set_bit (osi-&gt;visited, varno))</span>
+<span class="lineNum">     944 </span>            :         {
+<span class="lineNum">     945 </span><span class="lineCov">       8254 :           object_sizes[object_size_type][varno]</span>
+<span class="lineNum">     946 </span><span class="lineCov">      16508 :             = (object_size_type &amp; 2) ? -1 : 0;</span>
+<span class="lineNum">     947 </span>            :         }
+<span class="lineNum">     948 </span>            :       else
+<span class="lineNum">     949 </span>            :         {
+<span class="lineNum">     950 </span>            :           /* Found a dependency loop.  Mark the variable for later
+<span class="lineNum">     951 </span>            :              re-examination.  */
+<span class="lineNum">     952 </span><span class="lineCov">        294 :           bitmap_set_bit (osi-&gt;reexamine, varno);</span>
+<span class="lineNum">     953 </span><span class="lineCov">        294 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     954 </span>            :             {
+<span class="lineNum">     955 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;Found a dependency loop at &quot;);</span>
+<span class="lineNum">     956 </span><span class="lineNoCov">          0 :               print_generic_expr (dump_file, var, dump_flags);</span>
+<span class="lineNum">     957 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     958 </span>            :             }
+<span class="lineNum">     959 </span><span class="lineCov">        294 :           return;</span>
+<span class="lineNum">     960 </span>            :         }
+<span class="lineNum">     961 </span>            :     }
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span><span class="lineCov">       8930 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     964 </span>            :     {
+<span class="lineNum">     965 </span><span class="lineCov">          3 :       fprintf (dump_file, &quot;Visiting use-def links for &quot;);</span>
+<span class="lineNum">     966 </span><span class="lineCov">          3 :       print_generic_expr (dump_file, var, dump_flags);</span>
+<span class="lineNum">     967 </span><span class="lineCov">          3 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     968 </span>            :     }
+<span class="lineNum">     969 </span>            : 
+<span class="lineNum">     970 </span><span class="lineCov">       8930 :   stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">     971 </span><span class="lineCov">       8930 :   reexamine = false;</span>
+<span class="lineNum">     972 </span>            : 
+<span class="lineNum">     973 </span><span class="lineCov">      17860 :   switch (gimple_code (stmt))</span>
+<span class="lineNum">     974 </span>            :     {
+<span class="lineNum">     975 </span><span class="lineCov">       4802 :     case GIMPLE_ASSIGN:</span>
+<span class="lineNum">     976 </span><span class="lineCov">       4802 :       {</span>
+<span class="lineNum">     977 </span><span class="lineCov">       4802 :         tree rhs = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     978 </span><span class="lineCov">       4802 :         if (gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR</span>
+<span class="lineNum">     979 </span><span class="lineCov">       4802 :             || (gimple_assign_rhs_code (stmt) == ADDR_EXPR</span>
+<span class="lineNum">     980 </span><span class="lineCov">       2313 :                 &amp;&amp; TREE_CODE (TREE_OPERAND (rhs, 0)) == MEM_REF))</span>
+<span class="lineNum">     981 </span><span class="lineCov">       1937 :           reexamine = plus_stmt_object_size (osi, var, stmt);</span>
+<span class="lineNum">     982 </span><span class="lineCov">       2865 :         else if (gimple_assign_rhs_code (stmt) == COND_EXPR)</span>
+<span class="lineNum">     983 </span><span class="lineNoCov">          0 :           reexamine = cond_expr_object_size (osi, var, stmt);</span>
+<span class="lineNum">     984 </span><span class="lineCov">       2865 :         else if (gimple_assign_single_p (stmt)</span>
+<span class="lineNum">     985 </span><span class="lineCov">         10 :                  || gimple_assign_unary_nop_p (stmt))</span>
+<span class="lineNum">     986 </span>            :           {
+<span class="lineNum">     987 </span><span class="lineCov">       2865 :             if (TREE_CODE (rhs) == SSA_NAME</span>
+<span class="lineNum">     988 </span><span class="lineCov">       2865 :                 &amp;&amp; POINTER_TYPE_P (TREE_TYPE (rhs)))</span>
+<span class="lineNum">     989 </span><span class="lineCov">         45 :               reexamine = merge_object_sizes (osi, var, rhs, 0);</span>
+<span class="lineNum">     990 </span>            :             else
+<span class="lineNum">     991 </span><span class="lineCov">       2820 :               expr_object_size (osi, var, rhs);</span>
+<span class="lineNum">     992 </span>            :           }
+<span class="lineNum">     993 </span>            :         else
+<span class="lineNum">     994 </span><span class="lineNoCov">          0 :           unknown_object_size (osi, var);</span>
+<span class="lineNum">     995 </span><span class="lineCov">       2820 :         break;</span>
+<span class="lineNum">     996 </span>            :       }
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span><span class="lineCov">       1283 :     case GIMPLE_CALL:</span>
+<span class="lineNum">     999 </span><span class="lineCov">       1283 :       {</span>
+<span class="lineNum">    1000 </span><span class="lineCov">       1283 :         gcall *call_stmt = as_a &lt;gcall *&gt; (stmt);</span>
+<span class="lineNum">    1001 </span><span class="lineCov">       1283 :         tree arg = pass_through_call (call_stmt);</span>
+<span class="lineNum">    1002 </span><span class="lineCov">       1283 :         if (arg)</span>
+<span class="lineNum">    1003 </span>            :           {
+<span class="lineNum">    1004 </span><span class="lineCov">         37 :             if (TREE_CODE (arg) == SSA_NAME</span>
+<span class="lineNum">    1005 </span><span class="lineCov">         37 :                 &amp;&amp; POINTER_TYPE_P (TREE_TYPE (arg)))</span>
+<span class="lineNum">    1006 </span><span class="lineCov">         28 :               reexamine = merge_object_sizes (osi, var, arg, 0);</span>
+<span class="lineNum">    1007 </span>            :             else
+<span class="lineNum">    1008 </span><span class="lineCov">          9 :               expr_object_size (osi, var, arg);</span>
+<span class="lineNum">    1009 </span>            :           }
+<span class="lineNum">    1010 </span>            :         else
+<span class="lineNum">    1011 </span><span class="lineCov">       1246 :           call_object_size (osi, var, call_stmt);</span>
+<span class="lineNum">    1012 </span><span class="lineCov">         28 :         break;</span>
+<span class="lineNum">    1013 </span>            :       }
+<span class="lineNum">    1014 </span>            : 
+<span class="lineNum">    1015 </span><span class="lineNoCov">          0 :     case GIMPLE_ASM:</span>
+<span class="lineNum">    1016 </span>            :       /* Pointers defined by __asm__ statements can point anywhere.  */
+<span class="lineNum">    1017 </span><span class="lineNoCov">          0 :       object_sizes[object_size_type][varno] = unknown[object_size_type];</span>
+<span class="lineNum">    1018 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1019 </span>            : 
+<span class="lineNum">    1020 </span><span class="lineCov">       1076 :     case GIMPLE_NOP:</span>
+<span class="lineNum">    1021 </span><span class="lineCov">       1076 :       if (SSA_NAME_VAR (var)</span>
+<span class="lineNum">    1022 </span><span class="lineCov">       3228 :           &amp;&amp; TREE_CODE (SSA_NAME_VAR (var)) == PARM_DECL)</span>
+<span class="lineNum">    1023 </span><span class="lineCov">       1061 :         expr_object_size (osi, var, SSA_NAME_VAR (var));</span>
+<span class="lineNum">    1024 </span>            :       else
+<span class="lineNum">    1025 </span>            :         /* Uninitialized SSA names point nowhere.  */
+<span class="lineNum">    1026 </span><span class="lineCov">         15 :         object_sizes[object_size_type][varno] = unknown[object_size_type];</span>
+<span class="lineNum">    1027 </span>            :       break;
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span>            :     case GIMPLE_PHI:
+<span class="lineNum">    1030 </span>            :       {
+<span class="lineNum">    1031 </span>            :         unsigned i;
+<span class="lineNum">    1032 </span>            : 
+<span class="lineNum">    1033 </span><span class="lineCov">       6857 :         for (i = 0; i &lt; gimple_phi_num_args (stmt); i++)</span>
+<span class="lineNum">    1034 </span>            :           {
+<span class="lineNum">    1035 </span><span class="lineCov">       5136 :             tree rhs = gimple_phi_arg (stmt, i)-&gt;def;</span>
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span><span class="lineCov">       5136 :             if (object_sizes[object_size_type][varno]</span>
+<span class="lineNum">    1038 </span><span class="lineCov">       5136 :                 == unknown[object_size_type])</span>
+<span class="lineNum">    1039 </span>            :               break;
+<span class="lineNum">    1040 </span>            : 
+<span class="lineNum">    1041 </span><span class="lineCov">       5088 :             if (TREE_CODE (rhs) == SSA_NAME)</span>
+<span class="lineNum">    1042 </span><span class="lineCov">       1698 :               reexamine |= merge_object_sizes (osi, var, rhs, 0);</span>
+<span class="lineNum">    1043 </span><span class="lineCov">       3390 :             else if (osi-&gt;pass == 0)</span>
+<span class="lineNum">    1044 </span><span class="lineCov">       2023 :               expr_object_size (osi, var, rhs);</span>
+<span class="lineNum">    1045 </span>            :           }
+<span class="lineNum">    1046 </span>            :         break;
+<span class="lineNum">    1047 </span>            :       }
+<span class="lineNum">    1048 </span>            : 
+<span class="lineNum">    1049 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1050 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">    1051 </span>            :     }
+<span class="lineNum">    1052 </span>            : 
+<span class="lineNum">    1053 </span><span class="lineCov">       5151 :   if (! reexamine</span>
+<span class="lineNum">    1054 </span><span class="lineCov">       3779 :       || object_sizes[object_size_type][varno] == unknown[object_size_type])</span>
+<span class="lineNum">    1055 </span>            :     {
+<span class="lineNum">    1056 </span><span class="lineCov">       7649 :       bitmap_set_bit (computed[object_size_type], varno);</span>
+<span class="lineNum">    1057 </span><span class="lineCov">       7649 :       bitmap_clear_bit (osi-&gt;reexamine, varno);</span>
+<span class="lineNum">    1058 </span>            :     }
+<span class="lineNum">    1059 </span>            :   else
+<span class="lineNum">    1060 </span>            :     {
+<span class="lineNum">    1061 </span><span class="lineCov">       1281 :       bitmap_set_bit (osi-&gt;reexamine, varno);</span>
+<span class="lineNum">    1062 </span><span class="lineCov">       1281 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1063 </span>            :         {
+<span class="lineNum">    1064 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;Need to reexamine &quot;);</span>
+<span class="lineNum">    1065 </span><span class="lineNoCov">          0 :           print_generic_expr (dump_file, var, dump_flags);</span>
+<span class="lineNum">    1066 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1067 </span>            :         }
+<span class="lineNum">    1068 </span>            :     }
+<span class="lineNum">    1069 </span>            : }
+<span class="lineNum">    1070 </span>            : 
+<span class="lineNum">    1071 </span>            : 
+<span class="lineNum">    1072 </span>            : /* Helper function for check_for_plus_in_loops.  Called recursively
+<span class="lineNum">    1073 </span>            :    to detect loops.  */
+<a name="1074"><span class="lineNum">    1074 </span>            : </a>
+<span class="lineNum">    1075 </span>            : static void
+<span class="lineNum">    1076 </span><span class="lineCov">         14 : check_for_plus_in_loops_1 (struct object_size_info *osi, tree var,</span>
+<span class="lineNum">    1077 </span>            :                            unsigned int depth)
+<span class="lineNum">    1078 </span>            : {
+<span class="lineNum">    1079 </span><span class="lineCov">         14 :   gimple *stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">    1080 </span><span class="lineCov">         14 :   unsigned int varno = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">    1081 </span>            : 
+<span class="lineNum">    1082 </span><span class="lineCov">         14 :   if (osi-&gt;depths[varno])</span>
+<span class="lineNum">    1083 </span>            :     {
+<span class="lineNum">    1084 </span><span class="lineCov">          7 :       if (osi-&gt;depths[varno] != depth)</span>
+<span class="lineNum">    1085 </span>            :         {
+<span class="lineNum">    1086 </span><span class="lineCov">          7 :           unsigned int *sp;</span>
+<span class="lineNum">    1087 </span>            : 
+<span class="lineNum">    1088 </span>            :           /* Found a loop involving pointer addition.  */
+<span class="lineNum">    1089 </span><span class="lineCov">         14 :           for (sp = osi-&gt;tos; sp &gt; osi-&gt;stack; )</span>
+<span class="lineNum">    1090 </span>            :             {
+<span class="lineNum">    1091 </span><span class="lineCov">         14 :               --sp;</span>
+<span class="lineNum">    1092 </span><span class="lineCov">         14 :               bitmap_clear_bit (osi-&gt;reexamine, *sp);</span>
+<span class="lineNum">    1093 </span><span class="lineCov">         14 :               bitmap_set_bit (computed[osi-&gt;object_size_type], *sp);</span>
+<span class="lineNum">    1094 </span><span class="lineCov">         14 :               object_sizes[osi-&gt;object_size_type][*sp] = 0;</span>
+<span class="lineNum">    1095 </span><span class="lineCov">         14 :               if (*sp == varno)</span>
+<span class="lineNum">    1096 </span>            :                 break;
+<span class="lineNum">    1097 </span>            :             }
+<span class="lineNum">    1098 </span>            :         }
+<span class="lineNum">    1099 </span><span class="lineCov">          7 :       return;</span>
+<span class="lineNum">    1100 </span>            :     }
+<span class="lineNum">    1101 </span><span class="lineCov">          7 :   else if (! bitmap_bit_p (osi-&gt;reexamine, varno))</span>
+<span class="lineNum">    1102 </span>            :     return;
+<span class="lineNum">    1103 </span>            : 
+<span class="lineNum">    1104 </span><span class="lineCov">          7 :   osi-&gt;depths[varno] = depth;</span>
+<span class="lineNum">    1105 </span><span class="lineCov">          7 :   *osi-&gt;tos++ = varno;</span>
+<span class="lineNum">    1106 </span>            : 
+<span class="lineNum">    1107 </span><span class="lineCov">         14 :   switch (gimple_code (stmt))</span>
+<span class="lineNum">    1108 </span>            :     {
+<span class="lineNum">    1109 </span>            : 
+<span class="lineNum">    1110 </span><span class="lineCov">          7 :     case GIMPLE_ASSIGN:</span>
+<span class="lineNum">    1111 </span><span class="lineCov">          7 :       {</span>
+<span class="lineNum">    1112 </span><span class="lineCov">          7 :         if ((gimple_assign_single_p (stmt)</span>
+<span class="lineNum">    1113 </span><span class="lineCov">          7 :              || gimple_assign_unary_nop_p (stmt))</span>
+<span class="lineNum">    1114 </span><span class="lineNoCov">          0 :             &amp;&amp; TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME)</span>
+<span class="lineNum">    1115 </span>            :           {
+<span class="lineNum">    1116 </span><span class="lineNoCov">          0 :             tree rhs = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1117 </span>            : 
+<span class="lineNum">    1118 </span><span class="lineNoCov">          0 :             check_for_plus_in_loops_1 (osi, rhs, depth);</span>
+<span class="lineNum">    1119 </span>            :           }
+<span class="lineNum">    1120 </span><span class="lineCov">          7 :         else if (gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">    1121 </span>            :           {
+<span class="lineNum">    1122 </span><span class="lineCov">          7 :             tree basevar = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1123 </span><span class="lineCov">          7 :             tree cst = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">    1124 </span>            : 
+<span class="lineNum">    1125 </span><span class="lineCov">          7 :             gcc_assert (TREE_CODE (cst) == INTEGER_CST);</span>
+<span class="lineNum">    1126 </span>            : 
+<span class="lineNum">    1127 </span><span class="lineCov">         14 :             check_for_plus_in_loops_1 (osi, basevar,</span>
+<span class="lineNum">    1128 </span><span class="lineCov">          7 :                                        depth + !integer_zerop (cst));</span>
+<span class="lineNum">    1129 </span>            :           }
+<span class="lineNum">    1130 </span>            :         else
+<span class="lineNum">    1131 </span><span class="lineNoCov">          0 :           gcc_unreachable ();</span>
+<span class="lineNum">    1132 </span>            :         break;
+<span class="lineNum">    1133 </span>            :       }
+<span class="lineNum">    1134 </span>            : 
+<span class="lineNum">    1135 </span><span class="lineNoCov">          0 :     case GIMPLE_CALL:</span>
+<span class="lineNum">    1136 </span><span class="lineNoCov">          0 :       {</span>
+<span class="lineNum">    1137 </span><span class="lineNoCov">          0 :         gcall *call_stmt = as_a &lt;gcall *&gt; (stmt);</span>
+<span class="lineNum">    1138 </span><span class="lineNoCov">          0 :         tree arg = pass_through_call (call_stmt);</span>
+<span class="lineNum">    1139 </span><span class="lineNoCov">          0 :         if (arg)</span>
+<span class="lineNum">    1140 </span>            :           {
+<span class="lineNum">    1141 </span><span class="lineNoCov">          0 :             if (TREE_CODE (arg) == SSA_NAME)</span>
+<span class="lineNum">    1142 </span><span class="lineNoCov">          0 :               check_for_plus_in_loops_1 (osi, arg, depth);</span>
+<span class="lineNum">    1143 </span>            :             else
+<span class="lineNum">    1144 </span><span class="lineNoCov">          0 :               gcc_unreachable ();</span>
+<span class="lineNum">    1145 </span>            :           }
+<span class="lineNum">    1146 </span>            :         break;
+<span class="lineNum">    1147 </span>            :       }
+<span class="lineNum">    1148 </span>            : 
+<span class="lineNum">    1149 </span>            :     case GIMPLE_PHI:
+<span class="lineNum">    1150 </span>            :       {
+<span class="lineNum">    1151 </span>            :         unsigned i;
+<span class="lineNum">    1152 </span>            : 
+<span class="lineNum">    1153 </span><span class="lineNoCov">          0 :         for (i = 0; i &lt; gimple_phi_num_args (stmt); i++)</span>
+<span class="lineNum">    1154 </span>            :           {
+<span class="lineNum">    1155 </span><span class="lineNoCov">          0 :             tree rhs = gimple_phi_arg (stmt, i)-&gt;def;</span>
+<span class="lineNum">    1156 </span>            : 
+<span class="lineNum">    1157 </span><span class="lineNoCov">          0 :             if (TREE_CODE (rhs) == SSA_NAME)</span>
+<span class="lineNum">    1158 </span><span class="lineNoCov">          0 :               check_for_plus_in_loops_1 (osi, rhs, depth);</span>
+<span class="lineNum">    1159 </span>            :           }
+<span class="lineNum">    1160 </span>            :         break;
+<span class="lineNum">    1161 </span>            :       }
+<span class="lineNum">    1162 </span>            : 
+<span class="lineNum">    1163 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1164 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">    1165 </span>            :     }
+<span class="lineNum">    1166 </span>            : 
+<span class="lineNum">    1167 </span><span class="lineCov">          7 :   osi-&gt;depths[varno] = 0;</span>
+<span class="lineNum">    1168 </span><span class="lineCov">          7 :   osi-&gt;tos--;</span>
+<span class="lineNum">    1169 </span>            : }
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span>            : /* Check if some pointer we are computing object size of is being increased
+<span class="lineNum">    1173 </span>            :    within a loop.  If yes, assume all the SSA variables participating in
+<span class="lineNum">    1174 </span>            :    that loop have minimum object sizes 0.  */
+<a name="1175"><span class="lineNum">    1175 </span>            : </a>
+<span class="lineNum">    1176 </span>            : static void
+<span class="lineNum">    1177 </span><span class="lineCov">         30 : check_for_plus_in_loops (struct object_size_info *osi, tree var)</span>
+<span class="lineNum">    1178 </span>            : {
+<span class="lineNum">    1179 </span><span class="lineCov">         30 :   gimple *stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">    1180 </span>            : 
+<span class="lineNum">    1181 </span>            :   /* NOTE: In the pre-tuples code, we handled a CALL_EXPR here,
+<span class="lineNum">    1182 </span>            :      and looked for a POINTER_PLUS_EXPR in the pass-through
+<span class="lineNum">    1183 </span>            :      argument, if any.  In GIMPLE, however, such an expression
+<span class="lineNum">    1184 </span>            :      is not a valid call operand.  */
+<span class="lineNum">    1185 </span>            : 
+<span class="lineNum">    1186 </span><span class="lineCov">         30 :   if (is_gimple_assign (stmt)</span>
+<span class="lineNum">    1187 </span><span class="lineCov">         30 :       &amp;&amp; gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">    1188 </span>            :     {
+<span class="lineNum">    1189 </span><span class="lineCov">          7 :       tree basevar = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1190 </span><span class="lineCov">          7 :       tree cst = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">    1191 </span>            : 
+<span class="lineNum">    1192 </span><span class="lineCov">          7 :       gcc_assert (TREE_CODE (cst) == INTEGER_CST);</span>
+<span class="lineNum">    1193 </span>            : 
+<span class="lineNum">    1194 </span><span class="lineCov">          7 :       if (integer_zerop (cst))</span>
+<span class="lineNum">    1195 </span>            :         return;
+<span class="lineNum">    1196 </span>            : 
+<span class="lineNum">    1197 </span><span class="lineCov">          7 :       osi-&gt;depths[SSA_NAME_VERSION (basevar)] = 1;</span>
+<span class="lineNum">    1198 </span><span class="lineCov">          7 :       *osi-&gt;tos++ = SSA_NAME_VERSION (basevar);</span>
+<span class="lineNum">    1199 </span><span class="lineCov">          7 :       check_for_plus_in_loops_1 (osi, var, 2);</span>
+<span class="lineNum">    1200 </span><span class="lineCov">          7 :       osi-&gt;depths[SSA_NAME_VERSION (basevar)] = 0;</span>
+<span class="lineNum">    1201 </span><span class="lineCov">          7 :       osi-&gt;tos--;</span>
+<span class="lineNum">    1202 </span>            :     }
+<span class="lineNum">    1203 </span>            : }
+<span class="lineNum">    1204 </span>            : 
+<span class="lineNum">    1205 </span>            : 
+<span class="lineNum">    1206 </span>            : /* Initialize data structures for the object size computation.  */
+<a name="1207"><span class="lineNum">    1207 </span>            : </a>
+<span class="lineNum">    1208 </span>            : void
+<span class="lineNum">    1209 </span><span class="lineCov">      21824 : init_object_sizes (void)</span>
+<span class="lineNum">    1210 </span>            : {
+<span class="lineNum">    1211 </span><span class="lineCov">      21824 :   int object_size_type;</span>
+<span class="lineNum">    1212 </span>            : 
+<span class="lineNum">    1213 </span><span class="lineCov">      21824 :   if (computed[0])</span>
+<span class="lineNum">    1214 </span>            :     return;
+<span class="lineNum">    1215 </span>            : 
+<span class="lineNum">    1216 </span><span class="lineCov">      22265 :   for (object_size_type = 0; object_size_type &lt;= 3; object_size_type++)</span>
+<span class="lineNum">    1217 </span>            :     {
+<span class="lineNum">    1218 </span><span class="lineCov">      35624 :       object_sizes[object_size_type].safe_grow (num_ssa_names);</span>
+<span class="lineNum">    1219 </span><span class="lineCov">      17812 :       computed[object_size_type] = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">    1220 </span>            :     }
+<span class="lineNum">    1221 </span>            : 
+<span class="lineNum">    1222 </span><span class="lineCov">       4453 :   init_offset_limit ();</span>
+<span class="lineNum">    1223 </span>            : }
+<span class="lineNum">    1224 </span>            : 
+<span class="lineNum">    1225 </span>            : 
+<span class="lineNum">    1226 </span>            : /* Destroy data structures after the object size computation.  */
+<a name="1227"><span class="lineNum">    1227 </span>            : </a>
+<span class="lineNum">    1228 </span>            : void
+<span class="lineNum">    1229 </span><span class="lineCov">    2881556 : fini_object_sizes (void)</span>
+<span class="lineNum">    1230 </span>            : {
+<span class="lineNum">    1231 </span><span class="lineCov">    2881556 :   int object_size_type;</span>
+<span class="lineNum">    1232 </span>            : 
+<span class="lineNum">    1233 </span><span class="lineCov">   14407780 :   for (object_size_type = 0; object_size_type &lt;= 3; object_size_type++)</span>
+<span class="lineNum">    1234 </span>            :     {
+<span class="lineNum">    1235 </span><span class="lineCov">   11526224 :       object_sizes[object_size_type].release ();</span>
+<span class="lineNum">    1236 </span><span class="lineCov">   11526224 :       BITMAP_FREE (computed[object_size_type]);</span>
+<span class="lineNum">    1237 </span>            :     }
+<span class="lineNum">    1238 </span><span class="lineCov">    2881556 : }</span>
+<span class="lineNum">    1239 </span>            : 
+<span class="lineNum">    1240 </span>            : 
+<span class="lineNum">    1241 </span>            : /* Simple pass to optimize all __builtin_object_size () builtins.  */
+<span class="lineNum">    1242 </span>            : 
+<span class="lineNum">    1243 </span>            : namespace {
+<span class="lineNum">    1244 </span>            : 
+<span class="lineNum">    1245 </span>            : const pass_data pass_data_object_sizes =
+<span class="lineNum">    1246 </span>            : {
+<span class="lineNum">    1247 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">    1248 </span>            :   &quot;objsz&quot;, /* name */
+<span class="lineNum">    1249 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1250 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">    1251 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">    1252 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1253 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1254 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1255 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">    1256 </span>            : };
+<span class="lineNum">    1257 </span>            : 
+<span class="lineNum">    1258 </span>            : class pass_object_sizes : public gimple_opt_pass
+<span class="lineNum">    1259 </span>            : {
+<span class="lineNum">    1260 </span>            : public:
+<span class="lineNum">    1261 </span>            :   pass_object_sizes (gcc::context *ctxt)
+<span class="lineNum">    1262 </span><span class="lineCov">    1021872 :     : gimple_opt_pass (pass_data_object_sizes, ctxt), insert_min_max_p (false)</span>
+<span class="lineNum">    1263 </span>            :   {}
+<a name="1264"><span class="lineNum">    1264 </span>            : </a>
+<a name="1265"><span class="lineNum">    1265 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1266 </span><span class="lineCov">     340624 :   opt_pass * clone () { return new pass_object_sizes (m_ctxt); }</span>
+<span class="lineNum">    1267 </span><span class="lineCov">     340624 :   void set_pass_param (unsigned int n, bool param)</span>
+<span class="lineNum">    1268 </span>            :     {
+<span class="lineNum">    1269 </span><span class="lineCov">     340624 :       gcc_assert (n == 0);</span>
+<span class="lineNum">    1270 </span><span class="lineCov">     340624 :       insert_min_max_p = param;</span>
+<span class="lineNum">    1271 </span><span class="lineCov">     340624 :     }</span>
+<span class="lineNum">    1272 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">    1273 </span>            : 
+<span class="lineNum">    1274 </span>            :  private:
+<span class="lineNum">    1275 </span>            :   /* Determines whether the pass instance creates MIN/MAX_EXPRs.  */
+<span class="lineNum">    1276 </span>            :   bool insert_min_max_p;
+<span class="lineNum">    1277 </span>            : }; // class pass_object_sizes
+<span class="lineNum">    1278 </span>            : 
+<span class="lineNum">    1279 </span>            : /* Dummy valueize function.  */
+<a name="1280"><span class="lineNum">    1280 </span>            : </a>
+<span class="lineNum">    1281 </span>            : static tree
+<span class="lineNum">    1282 </span><span class="lineCov">      26551 : do_valueize (tree t)</span>
+<span class="lineNum">    1283 </span>            : {
+<span class="lineNum">    1284 </span><span class="lineCov">      26551 :   return t;</span>
+<span class="lineNum">    1285 </span>            : }
+<a name="1286"><span class="lineNum">    1286 </span>            : </a>
+<span class="lineNum">    1287 </span>            : unsigned int
+<span class="lineNum">    1288 </span><span class="lineCov">    2031928 : pass_object_sizes::execute (function *fun)</span>
+<span class="lineNum">    1289 </span>            : {
+<span class="lineNum">    1290 </span><span class="lineCov">    2031928 :   basic_block bb;</span>
+<span class="lineNum">    1291 </span><span class="lineCov">   16933859 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">    1292 </span>            :     {
+<span class="lineNum">    1293 </span><span class="lineCov">   14901931 :       gimple_stmt_iterator i;</span>
+<span class="lineNum">    1294 </span><span class="lineCov">  140355780 :       for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&amp;i))</span>
+<span class="lineNum">    1295 </span>            :         {
+<span class="lineNum">    1296 </span><span class="lineCov">  110551918 :           tree result;</span>
+<span class="lineNum">    1297 </span><span class="lineCov">  110551918 :           gimple *call = gsi_stmt (i);</span>
+<span class="lineNum">    1298 </span><span class="lineCov">  110551918 :           if (!gimple_call_builtin_p (call, BUILT_IN_OBJECT_SIZE))</span>
+<span class="lineNum">    1299 </span>            :             continue;
+<span class="lineNum">    1300 </span>            : 
+<span class="lineNum">    1301 </span><span class="lineCov">      15456 :           init_object_sizes ();</span>
+<span class="lineNum">    1302 </span>            : 
+<span class="lineNum">    1303 </span>            :           /* If insert_min_max_p, only attempt to fold
+<span class="lineNum">    1304 </span>            :              __builtin_object_size (x, 1) and __builtin_object_size (x, 3),
+<span class="lineNum">    1305 </span>            :              and rather than folding the builtin to the constant if any,
+<span class="lineNum">    1306 </span>            :              create a MIN_EXPR or MAX_EXPR of the __builtin_object_size
+<span class="lineNum">    1307 </span>            :              call result and the computed constant.  */
+<span class="lineNum">    1308 </span><span class="lineCov">      15456 :           if (insert_min_max_p)</span>
+<span class="lineNum">    1309 </span>            :             {
+<span class="lineNum">    1310 </span><span class="lineCov">       8812 :               tree ost = gimple_call_arg (call, 1);</span>
+<span class="lineNum">    1311 </span><span class="lineCov">       8812 :               if (tree_fits_uhwi_p (ost))</span>
+<span class="lineNum">    1312 </span>            :                 {
+<span class="lineNum">    1313 </span><span class="lineCov">       8812 :                   unsigned HOST_WIDE_INT object_size_type = tree_to_uhwi (ost);</span>
+<span class="lineNum">    1314 </span><span class="lineCov">       8812 :                   tree ptr = gimple_call_arg (call, 0);</span>
+<span class="lineNum">    1315 </span><span class="lineCov">       8812 :                   tree lhs = gimple_call_lhs (call);</span>
+<span class="lineNum">    1316 </span><span class="lineCov">       8812 :                   if ((object_size_type == 1 || object_size_type == 3)</span>
+<span class="lineNum">    1317 </span><span class="lineCov">       4144 :                       &amp;&amp; (TREE_CODE (ptr) == ADDR_EXPR</span>
+<span class="lineNum">    1318 </span><span class="lineCov">       2072 :                           || TREE_CODE (ptr) == SSA_NAME)</span>
+<span class="lineNum">    1319 </span><span class="lineCov">       2072 :                       &amp;&amp; lhs)</span>
+<span class="lineNum">    1320 </span>            :                     {
+<span class="lineNum">    1321 </span><span class="lineCov">       2072 :                       tree type = TREE_TYPE (lhs);</span>
+<span class="lineNum">    1322 </span><span class="lineCov">       2072 :                       unsigned HOST_WIDE_INT bytes;</span>
+<span class="lineNum">    1323 </span><span class="lineCov">       2072 :                       if (compute_builtin_object_size (ptr, object_size_type,</span>
+<span class="lineNum">    1324 </span>            :                                                        &amp;bytes)
+<span class="lineNum">    1325 </span><span class="lineCov">       2072 :                           &amp;&amp; wi::fits_to_tree_p (bytes, type))</span>
+<span class="lineNum">    1326 </span>            :                         {
+<span class="lineNum">    1327 </span><span class="lineCov">        962 :                           tree tem = make_ssa_name (type);</span>
+<span class="lineNum">    1328 </span><span class="lineCov">        962 :                           gimple_call_set_lhs (call, tem);</span>
+<span class="lineNum">    1329 </span><span class="lineCov">       1924 :                           enum tree_code code</span>
+<span class="lineNum">    1330 </span><span class="lineCov">        962 :                             = object_size_type == 1 ? MIN_EXPR : MAX_EXPR;</span>
+<span class="lineNum">    1331 </span><span class="lineCov">       1924 :                           tree cst = build_int_cstu (type, bytes);</span>
+<span class="lineNum">    1332 </span><span class="lineCov">        962 :                           gimple *g</span>
+<span class="lineNum">    1333 </span><span class="lineCov">        962 :                             = gimple_build_assign (lhs, code, tem, cst);</span>
+<span class="lineNum">    1334 </span><span class="lineCov">        962 :                           gsi_insert_after (&amp;i, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1335 </span><span class="lineCov">        962 :                           update_stmt (call);</span>
+<span class="lineNum">    1336 </span>            :                         }
+<span class="lineNum">    1337 </span>            :                     }
+<span class="lineNum">    1338 </span>            :                 }
+<span class="lineNum">    1339 </span><span class="lineCov">       8812 :               continue;</span>
+<span class="lineNum">    1340 </span>            :             }
+<span class="lineNum">    1341 </span>            : 
+<span class="lineNum">    1342 </span><span class="lineCov">       6644 :           tree lhs = gimple_call_lhs (call);</span>
+<span class="lineNum">    1343 </span><span class="lineCov">       6644 :           if (!lhs)</span>
+<span class="lineNum">    1344 </span>            :             continue;
+<span class="lineNum">    1345 </span>            : 
+<span class="lineNum">    1346 </span><span class="lineCov">       6644 :           result = gimple_fold_stmt_to_constant (call, do_valueize);</span>
+<span class="lineNum">    1347 </span><span class="lineCov">       6644 :           if (!result)</span>
+<span class="lineNum">    1348 </span>            :             {
+<span class="lineNum">    1349 </span><span class="lineCov">       4088 :               tree ost = gimple_call_arg (call, 1);</span>
+<span class="lineNum">    1350 </span>            : 
+<span class="lineNum">    1351 </span><span class="lineCov">       4088 :               if (tree_fits_uhwi_p (ost))</span>
+<span class="lineNum">    1352 </span>            :                 {
+<span class="lineNum">    1353 </span><span class="lineCov">       4088 :                   unsigned HOST_WIDE_INT object_size_type = tree_to_uhwi (ost);</span>
+<span class="lineNum">    1354 </span>            : 
+<span class="lineNum">    1355 </span><span class="lineCov">       4088 :                   if (object_size_type &lt; 2)</span>
+<span class="lineNum">    1356 </span><span class="lineCov">       3982 :                     result = fold_convert (size_type_node,</span>
+<span class="lineNum">    1357 </span>            :                                            integer_minus_one_node);
+<span class="lineNum">    1358 </span><span class="lineCov">        106 :                   else if (object_size_type &lt; 4)</span>
+<span class="lineNum">    1359 </span><span class="lineCov">        106 :                     result = build_zero_cst (size_type_node);</span>
+<span class="lineNum">    1360 </span>            :                 }
+<span class="lineNum">    1361 </span>            : 
+<span class="lineNum">    1362 </span><span class="lineCov">       4088 :               if (!result)</span>
+<span class="lineNum">    1363 </span>            :                 continue;
+<span class="lineNum">    1364 </span>            :             }
+<span class="lineNum">    1365 </span>            : 
+<span class="lineNum">    1366 </span><span class="lineCov">       6644 :           gcc_assert (TREE_CODE (result) == INTEGER_CST);</span>
+<span class="lineNum">    1367 </span>            : 
+<span class="lineNum">    1368 </span><span class="lineCov">       6644 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1369 </span>            :             {
+<span class="lineNum">    1370 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;Simplified\n  &quot;);</span>
+<span class="lineNum">    1371 </span><span class="lineNoCov">          0 :               print_gimple_stmt (dump_file, call, 0, dump_flags);</span>
+<span class="lineNum">    1372 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot; to &quot;);</span>
+<span class="lineNum">    1373 </span><span class="lineNoCov">          0 :               print_generic_expr (dump_file, result);</span>
+<span class="lineNum">    1374 </span><span class="lineNoCov">          0 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1375 </span>            :             }
+<span class="lineNum">    1376 </span>            : 
+<span class="lineNum">    1377 </span>            :           /* Propagate into all uses and fold those stmts.  */
+<span class="lineNum">    1378 </span><span class="lineCov">       6644 :           replace_uses_by (lhs, result);</span>
+<span class="lineNum">    1379 </span>            :         }
+<span class="lineNum">    1380 </span>            :     }
+<span class="lineNum">    1381 </span>            : 
+<span class="lineNum">    1382 </span><span class="lineCov">    2031928 :   fini_object_sizes ();</span>
+<span class="lineNum">    1383 </span><span class="lineCov">    2031928 :   return 0;</span>
+<span class="lineNum">    1384 </span>            : }
+<span class="lineNum">    1385 </span>            : 
+<span class="lineNum">    1386 </span>            : } // anon namespace
+<a name="1387"><span class="lineNum">    1387 </span>            : </a>
+<span class="lineNum">    1388 </span>            : gimple_opt_pass *
+<span class="lineNum">    1389 </span><span class="lineCov">     170312 : make_pass_object_sizes (gcc::context *ctxt)</span>
+<span class="lineNum">    1390 </span>            : {
+<span class="lineNum">    1391 </span><span class="lineCov">     170312 :   return new pass_object_sizes (ctxt);</span>
+<span class="lineNum">    1392 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

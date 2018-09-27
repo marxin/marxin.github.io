@@ -1,0 +1,1856 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-coalesce.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-coalesce.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-coalesce.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">704</td>
+            <td class="headerCovTableEntry">745</td>
+            <td class="headerCovTableEntryHi">94.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">39</td>
+            <td class="headerCovTableEntry">46</td>
+            <td class="headerCovTableEntryMed">84.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Coalesce SSA_NAMES together for the out-of-ssa pass.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Andrew MacLeod &lt;amacleod@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-ssa-live.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;tree-ssa-coalesce.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;explow.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* This set of routines implements a coalesce_list.  This is an object which
+<span class="lineNum">      43 </span>            :    is used to track pairs of ssa_names which are desirable to coalesce
+<span class="lineNum">      44 </span>            :    together to avoid copies.  Costs are associated with each pair, and when
+<span class="lineNum">      45 </span>            :    all desired information has been collected, the object can be used to
+<span class="lineNum">      46 </span>            :    order the pairs for processing.  */
+<span class="lineNum">      47 </span>            : 
+<span class="lineNum">      48 </span>            : /* This structure defines a pair entry.  */
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            : struct coalesce_pair
+<span class="lineNum">      51 </span>            : {
+<span class="lineNum">      52 </span>            :   int first_element;
+<span class="lineNum">      53 </span>            :   int second_element;
+<span class="lineNum">      54 </span>            :   int cost;
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            :   /* A count of the number of unique partitions this pair would conflict
+<span class="lineNum">      57 </span>            :      with if coalescing was successful.  This is the secondary sort key,
+<span class="lineNum">      58 </span>            :      given two pairs with equal costs, we will prefer the pair with a smaller
+<span class="lineNum">      59 </span>            :      conflict set.
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            :      This is lazily initialized when we discover two coalescing pairs have
+<span class="lineNum">      62 </span>            :      the same primary cost.
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            :      Note this is not updated and propagated as pairs are coalesced.  */
+<span class="lineNum">      65 </span>            :   int conflict_count;
+<span class="lineNum">      66 </span>            : 
+<span class="lineNum">      67 </span>            :   /* The order in which coalescing pairs are discovered is recorded in this
+<span class="lineNum">      68 </span>            :      field, which is used as the final tie breaker when sorting coalesce
+<span class="lineNum">      69 </span>            :      pairs.  */
+<span class="lineNum">      70 </span>            :   int index;
+<span class="lineNum">      71 </span>            : };
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            : /* This represents a conflict graph.  Implemented as an array of bitmaps.
+<span class="lineNum">      74 </span>            :    A full matrix is used for conflicts rather than just upper triangular form.
+<span class="lineNum">      75 </span>            :    this makes it much simpler and faster to perform conflict merges.  */
+<span class="lineNum">      76 </span>            : 
+<span class="lineNum">      77 </span>            : struct ssa_conflicts
+<span class="lineNum">      78 </span>            : {
+<span class="lineNum">      79 </span>            :   bitmap_obstack obstack;       /* A place to allocate our bitmaps.  */
+<span class="lineNum">      80 </span>            :   vec&lt;bitmap&gt; conflicts;
+<span class="lineNum">      81 </span>            : };
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            : /* The narrow API of the qsort comparison function doesn't allow easy
+<span class="lineNum">      84 </span>            :    access to additional arguments.  So we have two globals (ick) to hold
+<span class="lineNum">      85 </span>            :    the data we need.  They're initialized before the call to qsort and
+<span class="lineNum">      86 </span>            :    wiped immediately after.  */
+<span class="lineNum">      87 </span>            : static ssa_conflicts *conflicts_;
+<span class="lineNum">      88 </span>            : static var_map map_;
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            : /* Coalesce pair hashtable helpers.  */
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            : struct coalesce_pair_hasher : nofree_ptr_hash &lt;coalesce_pair&gt;
+<span class="lineNum">      93 </span>            : {
+<span class="lineNum">      94 </span>            :   static inline hashval_t hash (const coalesce_pair *);
+<span class="lineNum">      95 </span>            :   static inline bool equal (const coalesce_pair *, const coalesce_pair *);
+<span class="lineNum">      96 </span>            : };
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : /* Hash function for coalesce list.  Calculate hash for PAIR.   */
+<a name="99"><span class="lineNum">      99 </span>            : </a>
+<span class="lineNum">     100 </span>            : inline hashval_t
+<span class="lineNum">     101 </span><span class="lineNoCov">          0 : coalesce_pair_hasher::hash (const coalesce_pair *pair)</span>
+<span class="lineNum">     102 </span>            : {
+<span class="lineNum">     103 </span><span class="lineCov">    3249679 :   hashval_t a = (hashval_t)(pair-&gt;first_element);</span>
+<span class="lineNum">     104 </span><span class="lineCov">    3249679 :   hashval_t b = (hashval_t)(pair-&gt;second_element);</span>
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span><span class="lineNoCov">          0 :   return b * (b - 1) / 2 + a;</span>
+<span class="lineNum">     107 </span>            : }
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            : /* Equality function for coalesce list hash table.  Compare PAIR1 and PAIR2,
+<span class="lineNum">     110 </span>            :    returning TRUE if the two pairs are equivalent.  */
+<a name="111"><span class="lineNum">     111 </span>            : </a>
+<span class="lineNum">     112 </span>            : inline bool
+<span class="lineNum">     113 </span><span class="lineNoCov">          0 : coalesce_pair_hasher::equal (const coalesce_pair *p1, const coalesce_pair *p2)</span>
+<span class="lineNum">     114 </span>            : {
+<span class="lineNum">     115 </span><span class="lineCov">     422208 :   return (p1-&gt;first_element == p2-&gt;first_element</span>
+<span class="lineNum">     116 </span><span class="lineCov">     422208 :           &amp;&amp; p1-&gt;second_element == p2-&gt;second_element);</span>
+<span class="lineNum">     117 </span>            : }
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            : typedef hash_table&lt;coalesce_pair_hasher&gt; coalesce_table_type;
+<span class="lineNum">     120 </span>            : typedef coalesce_table_type::iterator coalesce_iterator_type;
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span>            : struct cost_one_pair
+<span class="lineNum">     124 </span>            : {
+<span class="lineNum">     125 </span>            :   int first_element;
+<span class="lineNum">     126 </span>            :   int second_element;
+<span class="lineNum">     127 </span>            :   cost_one_pair *next;
+<span class="lineNum">     128 </span>            : };
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            : /* This structure maintains the list of coalesce pairs.  */
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            : struct coalesce_list
+<span class="lineNum">     133 </span>            : {
+<span class="lineNum">     134 </span>            :   coalesce_table_type *list;    /* Hash table.  */
+<span class="lineNum">     135 </span>            :   coalesce_pair **sorted;       /* List when sorted.  */
+<span class="lineNum">     136 </span>            :   int num_sorted;               /* Number in the sorted list.  */
+<span class="lineNum">     137 </span>            :   cost_one_pair *cost_one_list;/* Single use coalesces with cost 1.  */
+<span class="lineNum">     138 </span>            : };
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            : #define NO_BEST_COALESCE        -1
+<span class="lineNum">     141 </span>            : #define MUST_COALESCE_COST      INT_MAX
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            : /* Return cost of execution of copy instruction with FREQUENCY.  */
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            : static inline int
+<span class="lineNum">     147 </span>            : coalesce_cost (int frequency, bool optimize_for_size)
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span>            :   /* Base costs on BB frequencies bounded by 1.  */
+<span class="lineNum">     150 </span><span class="lineCov">    3099891 :   int cost = frequency;</span>
+<span class="lineNum">     151 </span>            : 
+<span class="lineNum">     152 </span><span class="lineCov">    3099891 :   if (!cost)</span>
+<span class="lineNum">     153 </span><span class="lineCov">     223825 :     cost = 1;</span>
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span><span class="lineCov">    3096763 :   if (optimize_for_size)</span>
+<span class="lineNum">     156 </span><span class="lineCov">     302604 :     cost = 1;</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span><span class="lineCov">    3099891 :   return cost;</span>
+<span class="lineNum">     159 </span>            : }
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span>            : /* Return the cost of executing a copy instruction in basic block BB.  */
+<a name="163"><span class="lineNum">     163 </span>            : </a>
+<span class="lineNum">     164 </span>            : static inline int
+<span class="lineNum">     165 </span><span class="lineCov">     471732 : coalesce_cost_bb (basic_block bb)</span>
+<span class="lineNum">     166 </span>            : {
+<span class="lineNum">     167 </span><span class="lineCov">     471732 :   return coalesce_cost (bb-&gt;count.to_frequency (cfun),</span>
+<span class="lineNum">     168 </span><span class="lineCov">     471732 :                         optimize_bb_for_size_p (bb));</span>
+<span class="lineNum">     169 </span>            : }
+<span class="lineNum">     170 </span>            : 
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span>            : /* Return the cost of executing a copy instruction on edge E.  */
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span>            : static inline int
+<span class="lineNum">     175 </span><span class="lineCov">    2625031 : coalesce_cost_edge (edge e)</span>
+<span class="lineNum">     176 </span>            : {
+<span class="lineNum">     177 </span><span class="lineCov">    2625031 :   int mult = 1;</span>
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            :   /* Inserting copy on critical edge costs more than inserting it elsewhere.  */
+<span class="lineNum">     180 </span><span class="lineCov">    2625031 :   if (EDGE_CRITICAL_P (e))</span>
+<span class="lineNum">     181 </span>            :     mult = 2;
+<span class="lineNum">     182 </span><span class="lineCov">    2625031 :   if (e-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">     183 </span>            :     return MUST_COALESCE_COST;
+<span class="lineNum">     184 </span><span class="lineCov">    2625031 :   if (e-&gt;flags &amp; EDGE_EH)</span>
+<span class="lineNum">     185 </span>            :     {
+<span class="lineNum">     186 </span><span class="lineCov">      17739 :       edge e2;</span>
+<span class="lineNum">     187 </span><span class="lineCov">      17739 :       edge_iterator ei;</span>
+<span class="lineNum">     188 </span><span class="lineCov">      37263 :       FOR_EACH_EDGE (e2, ei, e-&gt;dest-&gt;preds)</span>
+<span class="lineNum">     189 </span><span class="lineCov">      19378 :         if (e2 != e)</span>
+<span class="lineNum">     190 </span>            :           {
+<span class="lineNum">     191 </span>            :             /* Putting code on EH edge that leads to BB
+<span class="lineNum">     192 </span>            :                with multiple predecestors imply splitting of
+<span class="lineNum">     193 </span>            :                edge too.  */
+<span class="lineNum">     194 </span><span class="lineCov">      18036 :             if (mult &lt; 2)</span>
+<span class="lineNum">     195 </span><span class="lineCov">       1692 :               mult = 2;</span>
+<span class="lineNum">     196 </span>            :             /* If there are multiple EH predecestors, we
+<span class="lineNum">     197 </span>            :                also copy EH regions and produce separate
+<span class="lineNum">     198 </span>            :                landing pad.  This is expensive.  */
+<span class="lineNum">     199 </span><span class="lineCov">      18036 :             if (e2-&gt;flags &amp; EDGE_EH)</span>
+<span class="lineNum">     200 </span>            :               {
+<span class="lineNum">     201 </span>            :                 mult = 5;
+<span class="lineNum">     202 </span>            :                 break;
+<span class="lineNum">     203 </span>            :               }
+<span class="lineNum">     204 </span>            :           }
+<span class="lineNum">     205 </span>            :     }
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span><span class="lineCov">    2625031 :   return coalesce_cost (EDGE_FREQUENCY (e),</span>
+<span class="lineNum">     208 </span><span class="lineCov">    5250062 :                         optimize_edge_for_size_p (e)) * mult;</span>
+<span class="lineNum">     209 </span>            : }
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span>            : /* Retrieve a pair to coalesce from the cost_one_list in CL.  Returns the
+<span class="lineNum">     213 </span>            :    2 elements via P1 and P2.  1 is returned by the function if there is a pair,
+<span class="lineNum">     214 </span>            :    NO_BEST_COALESCE is returned if there aren't any.  */
+<a name="215"><span class="lineNum">     215 </span>            : </a>
+<span class="lineNum">     216 </span>            : static inline int
+<span class="lineNum">     217 </span><span class="lineNoCov">          0 : pop_cost_one_pair (coalesce_list *cl, int *p1, int *p2)</span>
+<span class="lineNum">     218 </span>            : {
+<span class="lineNum">     219 </span><span class="lineCov">     885088 :   cost_one_pair *ptr;</span>
+<span class="lineNum">     220 </span>            : 
+<span class="lineNum">     221 </span><span class="lineCov">     885088 :   ptr = cl-&gt;cost_one_list;</span>
+<span class="lineNum">     222 </span><span class="lineNoCov">          0 :   if (!ptr)</span>
+<span class="lineNum">     223 </span><span class="lineNoCov">          0 :     return NO_BEST_COALESCE;</span>
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span><span class="lineCov">     146923 :   *p1 = ptr-&gt;first_element;</span>
+<span class="lineNum">     226 </span><span class="lineCov">     146923 :   *p2 = ptr-&gt;second_element;</span>
+<span class="lineNum">     227 </span><span class="lineCov">     146923 :   cl-&gt;cost_one_list = ptr-&gt;next;</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">     146923 :   free (ptr);</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">     146923 :   return 1;</span>
+<span class="lineNum">     232 </span>            : }
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            : /* Retrieve the most expensive remaining pair to coalesce from CL.  Returns the
+<span class="lineNum">     235 </span>            :    2 elements via P1 and P2.  Their calculated cost is returned by the function.
+<span class="lineNum">     236 </span>            :    NO_BEST_COALESCE is returned if the coalesce list is empty.  */
+<a name="237"><span class="lineNum">     237 </span>            : </a>
+<span class="lineNum">     238 </span>            : static inline int
+<span class="lineNum">     239 </span><span class="lineCov">    3801137 : pop_best_coalesce (coalesce_list *cl, int *p1, int *p2)</span>
+<span class="lineNum">     240 </span>            : {
+<span class="lineNum">     241 </span><span class="lineCov">    3801137 :   coalesce_pair *node;</span>
+<span class="lineNum">     242 </span><span class="lineCov">    3801137 :   int ret;</span>
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span><span class="lineCov">    3801137 :   if (cl-&gt;sorted == NULL)</span>
+<span class="lineNum">     245 </span><span class="lineCov">     348829 :     return pop_cost_one_pair (cl, p1, p2);</span>
+<span class="lineNum">     246 </span>            : 
+<span class="lineNum">     247 </span><span class="lineCov">    3452308 :   if (cl-&gt;num_sorted == 0)</span>
+<span class="lineNum">     248 </span><span class="lineCov">     536259 :     return pop_cost_one_pair (cl, p1, p2);</span>
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span><span class="lineCov">    2916049 :   node = cl-&gt;sorted[--(cl-&gt;num_sorted)];</span>
+<span class="lineNum">     251 </span><span class="lineCov">    2916049 :   *p1 = node-&gt;first_element;</span>
+<span class="lineNum">     252 </span><span class="lineCov">    2916049 :   *p2 = node-&gt;second_element;</span>
+<span class="lineNum">     253 </span><span class="lineCov">    2916049 :   ret = node-&gt;cost;</span>
+<span class="lineNum">     254 </span><span class="lineCov">    2916049 :   free (node);</span>
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">    2916049 :   return ret;</span>
+<span class="lineNum">     257 </span>            : }
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : /* Create a new empty coalesce list object and return it.  */
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span>            : static inline coalesce_list *
+<span class="lineNum">     263 </span><span class="lineCov">     832898 : create_coalesce_list (void)</span>
+<span class="lineNum">     264 </span>            : {
+<span class="lineNum">     265 </span><span class="lineCov">     832898 :   coalesce_list *list;</span>
+<span class="lineNum">     266 </span><span class="lineCov">     832898 :   unsigned size = num_ssa_names * 3;</span>
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span><span class="lineCov">     832898 :   if (size &lt; 40)</span>
+<span class="lineNum">     269 </span><span class="lineCov">     473829 :     size = 40;</span>
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span><span class="lineCov">     832898 :   list = (coalesce_list *) xmalloc (sizeof (struct coalesce_list));</span>
+<span class="lineNum">     272 </span><span class="lineCov">     832898 :   list-&gt;list = new coalesce_table_type (size);</span>
+<span class="lineNum">     273 </span><span class="lineCov">     832898 :   list-&gt;sorted = NULL;</span>
+<span class="lineNum">     274 </span><span class="lineCov">     832898 :   list-&gt;num_sorted = 0;</span>
+<span class="lineNum">     275 </span><span class="lineCov">     832898 :   list-&gt;cost_one_list = NULL;</span>
+<span class="lineNum">     276 </span><span class="lineCov">     832898 :   return list;</span>
+<span class="lineNum">     277 </span>            : }
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span>            : /* Delete coalesce list CL.  */
+<a name="281"><span class="lineNum">     281 </span>            : </a>
+<span class="lineNum">     282 </span>            : static inline void
+<span class="lineNum">     283 </span><span class="lineCov">     832898 : delete_coalesce_list (coalesce_list *cl)</span>
+<span class="lineNum">     284 </span>            : {
+<span class="lineNum">     285 </span><span class="lineCov">     832898 :   gcc_assert (cl-&gt;cost_one_list == NULL);</span>
+<span class="lineNum">     286 </span><span class="lineCov">     832898 :   delete cl-&gt;list;</span>
+<span class="lineNum">     287 </span><span class="lineCov">     832898 :   cl-&gt;list = NULL;</span>
+<span class="lineNum">     288 </span><span class="lineCov">     832898 :   free (cl-&gt;sorted);</span>
+<span class="lineNum">     289 </span><span class="lineCov">     832898 :   gcc_assert (cl-&gt;num_sorted == 0);</span>
+<span class="lineNum">     290 </span><span class="lineCov">     832898 :   free (cl);</span>
+<span class="lineNum">     291 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span>            : /* Return the number of unique coalesce pairs in CL.  */
+<a name="294"><span class="lineNum">     294 </span>            : </a>
+<span class="lineNum">     295 </span>            : static inline int
+<span class="lineNum">     296 </span><span class="lineNoCov">          0 : num_coalesce_pairs (coalesce_list *cl)</span>
+<span class="lineNum">     297 </span>            : {
+<span class="lineNum">     298 </span><span class="lineCov">    7308428 :   return cl-&gt;list-&gt;elements ();</span>
+<span class="lineNum">     299 </span>            : }
+<span class="lineNum">     300 </span>            : 
+<span class="lineNum">     301 </span>            : /* Find a matching coalesce pair object in CL for the pair P1 and P2.  If
+<span class="lineNum">     302 </span>            :    one isn't found, return NULL if CREATE is false, otherwise create a new
+<span class="lineNum">     303 </span>            :    coalesce pair object and return it.  */
+<a name="304"><span class="lineNum">     304 </span>            : </a>
+<span class="lineNum">     305 </span>            : static coalesce_pair *
+<span class="lineNum">     306 </span><span class="lineCov">    3249679 : find_coalesce_pair (coalesce_list *cl, int p1, int p2, bool create)</span>
+<span class="lineNum">     307 </span>            : {
+<span class="lineNum">     308 </span><span class="lineCov">    3249679 :   struct coalesce_pair p;</span>
+<span class="lineNum">     309 </span><span class="lineCov">    3249679 :   coalesce_pair **slot;</span>
+<span class="lineNum">     310 </span><span class="lineCov">    3249679 :   unsigned int hash;</span>
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            :   /* Normalize so that p1 is the smaller value.  */
+<span class="lineNum">     313 </span><span class="lineCov">    3249679 :   if (p2 &lt; p1)</span>
+<span class="lineNum">     314 </span>            :     {
+<span class="lineNum">     315 </span><span class="lineCov">    1968891 :       p.first_element = p2;</span>
+<span class="lineNum">     316 </span><span class="lineCov">    1968891 :       p.second_element = p1;</span>
+<span class="lineNum">     317 </span>            :     }
+<span class="lineNum">     318 </span>            :   else
+<span class="lineNum">     319 </span>            :     {
+<span class="lineNum">     320 </span><span class="lineCov">    1280788 :       p.first_element = p1;</span>
+<span class="lineNum">     321 </span><span class="lineCov">    1280788 :       p.second_element = p2;</span>
+<span class="lineNum">     322 </span>            :     }
+<span class="lineNum">     323 </span>            : 
+<span class="lineNum">     324 </span><span class="lineCov">    6499358 :   hash = coalesce_pair_hasher::hash (&amp;p);</span>
+<span class="lineNum">     325 </span><span class="lineCov">    3249679 :   slot = cl-&gt;list-&gt;find_slot_with_hash (&amp;p, hash, create ? INSERT : NO_INSERT);</span>
+<span class="lineNum">     326 </span><span class="lineCov">    3249679 :   if (!slot)</span>
+<span class="lineNum">     327 </span>            :     return NULL;
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span><span class="lineCov">    3249679 :   if (!*slot)</span>
+<span class="lineNum">     330 </span>            :     {
+<span class="lineNum">     331 </span><span class="lineCov">    2916049 :       struct coalesce_pair * pair = XNEW (struct coalesce_pair);</span>
+<span class="lineNum">     332 </span><span class="lineCov">    2916049 :       gcc_assert (cl-&gt;sorted == NULL);</span>
+<span class="lineNum">     333 </span><span class="lineCov">    2916049 :       pair-&gt;first_element = p.first_element;</span>
+<span class="lineNum">     334 </span><span class="lineCov">    2916049 :       pair-&gt;second_element = p.second_element;</span>
+<span class="lineNum">     335 </span><span class="lineCov">    2916049 :       pair-&gt;cost = 0;</span>
+<span class="lineNum">     336 </span><span class="lineCov">    2916049 :       pair-&gt;index = num_coalesce_pairs (cl);</span>
+<span class="lineNum">     337 </span><span class="lineCov">    2916049 :       pair-&gt;conflict_count = 0;</span>
+<span class="lineNum">     338 </span><span class="lineCov">    2916049 :       *slot = pair;</span>
+<span class="lineNum">     339 </span>            :     }
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineCov">    3249679 :   return (struct coalesce_pair *) *slot;</span>
+<span class="lineNum">     342 </span>            : }
+<a name="343"><span class="lineNum">     343 </span>            : </a>
+<span class="lineNum">     344 </span>            : static inline void
+<span class="lineNum">     345 </span><span class="lineNoCov">          0 : add_cost_one_coalesce (coalesce_list *cl, int p1, int p2)</span>
+<span class="lineNum">     346 </span>            : {
+<span class="lineNum">     347 </span><span class="lineCov">     146923 :   cost_one_pair *pair;</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span><span class="lineNoCov">          0 :   pair = XNEW (cost_one_pair);</span>
+<span class="lineNum">     350 </span><span class="lineCov">     146923 :   pair-&gt;first_element = p1;</span>
+<span class="lineNum">     351 </span><span class="lineCov">     146923 :   pair-&gt;second_element = p2;</span>
+<span class="lineNum">     352 </span><span class="lineCov">     146923 :   pair-&gt;next = cl-&gt;cost_one_list;</span>
+<span class="lineNum">     353 </span><span class="lineCov">     146331 :   cl-&gt;cost_one_list = pair;</span>
+<span class="lineNum">     354 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            : /* Add a coalesce between P1 and P2 in list CL with a cost of VALUE.  */
+<a name="358"><span class="lineNum">     358 </span>            : </a>
+<span class="lineNum">     359 </span>            : static inline void
+<span class="lineNum">     360 </span><span class="lineCov">    3254177 : add_coalesce (coalesce_list *cl, int p1, int p2, int value)</span>
+<span class="lineNum">     361 </span>            : {
+<span class="lineNum">     362 </span><span class="lineCov">    3254177 :   coalesce_pair *node;</span>
+<span class="lineNum">     363 </span>            : 
+<span class="lineNum">     364 </span><span class="lineCov">    3254177 :   gcc_assert (cl-&gt;sorted == NULL);</span>
+<span class="lineNum">     365 </span><span class="lineCov">    3254177 :   if (p1 == p2)</span>
+<span class="lineNum">     366 </span>            :     return;
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineCov">    3249679 :   node = find_coalesce_pair (cl, p1, p2, true);</span>
+<span class="lineNum">     369 </span>            : 
+<span class="lineNum">     370 </span>            :   /* Once the value is at least MUST_COALESCE_COST - 1, leave it that way.  */
+<span class="lineNum">     371 </span><span class="lineCov">    3249679 :   if (node-&gt;cost &lt; MUST_COALESCE_COST - 1)</span>
+<span class="lineNum">     372 </span>            :     {
+<span class="lineNum">     373 </span><span class="lineCov">    3249679 :       if (value &lt; MUST_COALESCE_COST - 1)</span>
+<span class="lineNum">     374 </span><span class="lineCov">    2949062 :         node-&gt;cost += value;</span>
+<span class="lineNum">     375 </span>            :       else
+<span class="lineNum">     376 </span><span class="lineCov">     300617 :         node-&gt;cost = value;</span>
+<span class="lineNum">     377 </span>            :     }
+<span class="lineNum">     378 </span>            : }
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            : /* Compute and record how many unique conflicts would exist for the
+<span class="lineNum">     381 </span>            :    representative partition for each coalesce pair in CL.
+<span class="lineNum">     382 </span>            : 
+<span class="lineNum">     383 </span>            :    CONFLICTS is the conflict graph and MAP is the current partition view.  */
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span>            : static void
+<span class="lineNum">     386 </span><span class="lineCov">   26830488 : initialize_conflict_count (coalesce_pair *p,</span>
+<span class="lineNum">     387 </span>            :                            ssa_conflicts *conflicts,
+<span class="lineNum">     388 </span>            :                            var_map map)
+<span class="lineNum">     389 </span>            : {
+<span class="lineNum">     390 </span><span class="lineCov">   26830488 :   int p1 = var_to_partition (map, ssa_name (p-&gt;first_element));</span>
+<span class="lineNum">     391 </span><span class="lineCov">   26830488 :   int p2 = var_to_partition (map, ssa_name (p-&gt;second_element));</span>
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span>            :   /* 4 cases.  If both P1 and P2 have conflicts, then build their
+<span class="lineNum">     394 </span>            :      union and count the members.  Else handle the degenerate cases
+<span class="lineNum">     395 </span>            :      in the obvious ways.  */
+<span class="lineNum">     396 </span><span class="lineCov">   26830488 :   if (conflicts-&gt;conflicts[p1] &amp;&amp; conflicts-&gt;conflicts[p2])</span>
+<span class="lineNum">     397 </span><span class="lineCov">     356337 :     p-&gt;conflict_count = bitmap_count_unique_bits (conflicts-&gt;conflicts[p1],</span>
+<span class="lineNum">     398 </span><span class="lineCov">     712674 :                                                   conflicts-&gt;conflicts[p2]);</span>
+<span class="lineNum">     399 </span><span class="lineCov">   52948302 :   else if (conflicts-&gt;conflicts[p1])</span>
+<span class="lineNum">     400 </span><span class="lineCov">     130322 :     p-&gt;conflict_count = bitmap_count_bits (conflicts-&gt;conflicts[p1]);</span>
+<span class="lineNum">     401 </span><span class="lineCov">   26408990 :   else if (conflicts-&gt;conflicts[p2])</span>
+<span class="lineNum">     402 </span><span class="lineCov">     136764 :     p-&gt;conflict_count = bitmap_count_bits (conflicts-&gt;conflicts[p2]);</span>
+<span class="lineNum">     403 </span>            :   else
+<span class="lineNum">     404 </span><span class="lineCov">   26340608 :     p-&gt;conflict_count = 0;</span>
+<span class="lineNum">     405 </span><span class="lineCov">   26830488 : }</span>
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span>            : /* Comparison function to allow qsort to sort P1 and P2 in Ascending order.  */
+<a name="409"><span class="lineNum">     409 </span>            : </a>
+<span class="lineNum">     410 </span>            : static int
+<span class="lineNum">     411 </span><span class="lineCov">   80909297 : compare_pairs (const void *p1, const void *p2)</span>
+<span class="lineNum">     412 </span>            : {
+<span class="lineNum">     413 </span><span class="lineCov">   80909297 :   coalesce_pair *const *const pp1 = (coalesce_pair *const *) p1;</span>
+<span class="lineNum">     414 </span><span class="lineCov">   80909297 :   coalesce_pair *const *const pp2 = (coalesce_pair *const *) p2;</span>
+<span class="lineNum">     415 </span><span class="lineCov">   80909297 :   int result;</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span><span class="lineCov">   80909297 :   result = (* pp1)-&gt;cost - (* pp2)-&gt;cost;</span>
+<span class="lineNum">     418 </span>            :   /* We use the size of the resulting conflict set as the secondary sort key.
+<span class="lineNum">     419 </span>            :      Given two equal costing coalesce pairs, we want to prefer the pair that
+<span class="lineNum">     420 </span>            :      has the smaller conflict set.  */
+<span class="lineNum">     421 </span><span class="lineCov">   80909297 :   if (result == 0)</span>
+<span class="lineNum">     422 </span>            :     {
+<span class="lineNum">     423 </span><span class="lineCov">   38467054 :       if (flag_expensive_optimizations)</span>
+<span class="lineNum">     424 </span>            :         {
+<span class="lineNum">     425 </span>            :           /* Lazily initialize the conflict counts as it's fairly expensive
+<span class="lineNum">     426 </span>            :              to compute.  */
+<span class="lineNum">     427 </span><span class="lineCov">   18539280 :           if ((*pp2)-&gt;conflict_count == 0)</span>
+<span class="lineNum">     428 </span><span class="lineCov">   13491960 :             initialize_conflict_count (*pp2, conflicts_, map_);</span>
+<span class="lineNum">     429 </span><span class="lineCov">   18539280 :           if ((*pp1)-&gt;conflict_count == 0)</span>
+<span class="lineNum">     430 </span><span class="lineCov">   13338528 :             initialize_conflict_count (*pp1, conflicts_, map_);</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">   18539280 :           result = (*pp2)-&gt;conflict_count - (*pp1)-&gt;conflict_count;</span>
+<span class="lineNum">     433 </span>            :         }
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span>            :       /* And if everything else is equal, then sort based on which
+<span class="lineNum">     436 </span>            :          coalesce pair was found first.  */
+<span class="lineNum">     437 </span><span class="lineCov">   38467054 :       if (result == 0)</span>
+<span class="lineNum">     438 </span><span class="lineCov">   33858487 :         result = (*pp2)-&gt;index - (*pp1)-&gt;index;</span>
+<span class="lineNum">     439 </span>            :     }
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span><span class="lineCov">   80909297 :   return result;</span>
+<span class="lineNum">     442 </span>            : }
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span>            : /* Iterate over CL using ITER, returning values in PAIR.  */
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span>            : #define FOR_EACH_PARTITION_PAIR(PAIR, ITER, CL)         \
+<span class="lineNum">     447 </span>            :   FOR_EACH_HASH_TABLE_ELEMENT (*(CL)-&gt;list, (PAIR), coalesce_pair_p, (ITER))
+<span class="lineNum">     448 </span>            : 
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span>            : /* Prepare CL for removal of preferred pairs.  When finished they are sorted
+<span class="lineNum">     451 </span>            :    in order from most important coalesce to least important.  */
+<a name="452"><span class="lineNum">     452 </span>            : </a>
+<span class="lineNum">     453 </span>            : static void
+<span class="lineNum">     454 </span><span class="lineCov">     738165 : sort_coalesce_list (coalesce_list *cl, ssa_conflicts *conflicts, var_map map)</span>
+<span class="lineNum">     455 </span>            : {
+<span class="lineNum">     456 </span><span class="lineCov">     738165 :   unsigned x, num;</span>
+<span class="lineNum">     457 </span><span class="lineCov">     738165 :   coalesce_pair *p;</span>
+<span class="lineNum">     458 </span><span class="lineCov">     738165 :   coalesce_iterator_type ppi;</span>
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span><span class="lineCov">     738165 :   gcc_assert (cl-&gt;sorted == NULL);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineCov">     738165 :   num = num_coalesce_pairs (cl);</span>
+<span class="lineNum">     463 </span><span class="lineCov">     738165 :   cl-&gt;num_sorted = num;</span>
+<span class="lineNum">     464 </span><span class="lineCov">     738165 :   if (num == 0)</span>
+<span class="lineNum">     465 </span>            :     return;
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            :   /* Allocate a vector for the pair pointers.  */
+<span class="lineNum">     468 </span><span class="lineCov">     392467 :   cl-&gt;sorted = XNEWVEC (coalesce_pair *, num);</span>
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span>            :   /* Populate the vector with pointers to the pairs.  */
+<span class="lineNum">     471 </span><span class="lineCov">     392467 :   x = 0;</span>
+<span class="lineNum">     472 </span><span class="lineCov">    7009499 :   FOR_EACH_PARTITION_PAIR (p, ppi, cl)</span>
+<span class="lineNum">     473 </span><span class="lineCov">    2916049 :     cl-&gt;sorted[x++] = p;</span>
+<span class="lineNum">     474 </span><span class="lineCov">     392467 :   gcc_assert (x == num);</span>
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span>            :   /* Already sorted.  */
+<span class="lineNum">     477 </span><span class="lineCov">     392467 :   if (num == 1)</span>
+<span class="lineNum">     478 </span>            :     return;
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            :   /* We don't want to depend on qsort_r, so we have to stuff away
+<span class="lineNum">     481 </span>            :      additional data into globals so it can be referenced in
+<span class="lineNum">     482 </span>            :      compare_pairs.  */
+<span class="lineNum">     483 </span><span class="lineCov">     204642 :   conflicts_ = conflicts;</span>
+<span class="lineNum">     484 </span><span class="lineCov">     204642 :   map_ = map;</span>
+<span class="lineNum">     485 </span><span class="lineCov">     204642 :   qsort (cl-&gt;sorted, num, sizeof (coalesce_pair *), compare_pairs);</span>
+<span class="lineNum">     486 </span><span class="lineCov">     204642 :   conflicts_ = NULL;</span>
+<span class="lineNum">     487 </span><span class="lineCov">     204642 :   map_ = NULL;</span>
+<span class="lineNum">     488 </span>            : }
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span>            : /* Send debug info for coalesce list CL to file F.  */
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : static void
+<span class="lineNum">     494 </span><span class="lineCov">         28 : dump_coalesce_list (FILE *f, coalesce_list *cl)</span>
+<span class="lineNum">     495 </span>            : {
+<span class="lineNum">     496 </span><span class="lineCov">         28 :   coalesce_pair *node;</span>
+<span class="lineNum">     497 </span><span class="lineCov">         28 :   coalesce_iterator_type ppi;</span>
+<span class="lineNum">     498 </span>            : 
+<span class="lineNum">     499 </span><span class="lineCov">         28 :   int x;</span>
+<span class="lineNum">     500 </span><span class="lineCov">         28 :   tree var;</span>
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineCov">         28 :   if (cl-&gt;sorted == NULL)</span>
+<span class="lineNum">     503 </span>            :     {
+<span class="lineNum">     504 </span><span class="lineCov">         20 :       fprintf (f, &quot;Coalesce List:\n&quot;);</span>
+<span class="lineNum">     505 </span><span class="lineCov">         60 :       FOR_EACH_PARTITION_PAIR (node, ppi, cl)</span>
+<span class="lineNum">     506 </span>            :         {
+<span class="lineNum">     507 </span><span class="lineNoCov">          0 :           tree var1 = ssa_name (node-&gt;first_element);</span>
+<span class="lineNum">     508 </span><span class="lineNoCov">          0 :           tree var2 = ssa_name (node-&gt;second_element);</span>
+<span class="lineNum">     509 </span><span class="lineNoCov">          0 :           print_generic_expr (f, var1, TDF_SLIM);</span>
+<span class="lineNum">     510 </span><span class="lineNoCov">          0 :           fprintf (f, &quot; &lt;-&gt; &quot;);</span>
+<span class="lineNum">     511 </span><span class="lineNoCov">          0 :           print_generic_expr (f, var2, TDF_SLIM);</span>
+<span class="lineNum">     512 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;  (%1d, %1d), &quot;, node-&gt;cost, node-&gt;conflict_count);</span>
+<span class="lineNum">     513 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">     514 </span>            :         }
+<span class="lineNum">     515 </span>            :     }
+<span class="lineNum">     516 </span>            :   else
+<span class="lineNum">     517 </span>            :     {
+<span class="lineNum">     518 </span><span class="lineCov">          8 :       fprintf (f, &quot;Sorted Coalesce list:\n&quot;);</span>
+<span class="lineNum">     519 </span><span class="lineCov">         32 :       for (x = cl-&gt;num_sorted - 1 ; x &gt;=0; x--)</span>
+<span class="lineNum">     520 </span>            :         {
+<span class="lineNum">     521 </span><span class="lineCov">         24 :           node = cl-&gt;sorted[x];</span>
+<span class="lineNum">     522 </span><span class="lineCov">         24 :           fprintf (f, &quot;(%d, %d) &quot;, node-&gt;cost, node-&gt;conflict_count);</span>
+<span class="lineNum">     523 </span><span class="lineCov">         24 :           var = ssa_name (node-&gt;first_element);</span>
+<span class="lineNum">     524 </span><span class="lineCov">         24 :           print_generic_expr (f, var, TDF_SLIM);</span>
+<span class="lineNum">     525 </span><span class="lineCov">         24 :           fprintf (f, &quot; &lt;-&gt; &quot;);</span>
+<span class="lineNum">     526 </span><span class="lineCov">         24 :           var = ssa_name (node-&gt;second_element);</span>
+<span class="lineNum">     527 </span><span class="lineCov">         24 :           print_generic_expr (f, var, TDF_SLIM);</span>
+<span class="lineNum">     528 </span><span class="lineCov">         24 :           fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">     529 </span>            :         }
+<span class="lineNum">     530 </span>            :     }
+<span class="lineNum">     531 </span><span class="lineCov">         28 : }</span>
+<span class="lineNum">     532 </span>            : 
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span>            : /* Return an empty new conflict graph for SIZE elements.  */
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span>            : static inline ssa_conflicts *
+<span class="lineNum">     537 </span><span class="lineCov">     738165 : ssa_conflicts_new (unsigned size)</span>
+<span class="lineNum">     538 </span>            : {
+<span class="lineNum">     539 </span><span class="lineCov">     738165 :   ssa_conflicts *ptr;</span>
+<span class="lineNum">     540 </span>            : 
+<span class="lineNum">     541 </span><span class="lineCov">     738165 :   ptr = XNEW (ssa_conflicts);</span>
+<span class="lineNum">     542 </span><span class="lineCov">     738165 :   bitmap_obstack_initialize (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     543 </span><span class="lineCov">     738165 :   ptr-&gt;conflicts.create (size);</span>
+<span class="lineNum">     544 </span><span class="lineCov">     738165 :   ptr-&gt;conflicts.safe_grow_cleared (size);</span>
+<span class="lineNum">     545 </span><span class="lineCov">     738165 :   return ptr;</span>
+<span class="lineNum">     546 </span>            : }
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span>            : 
+<span class="lineNum">     549 </span>            : /* Free storage for conflict graph PTR.  */
+<span class="lineNum">     550 </span>            : 
+<span class="lineNum">     551 </span>            : static inline void
+<span class="lineNum">     552 </span><span class="lineCov">     738165 : ssa_conflicts_delete (ssa_conflicts *ptr)</span>
+<span class="lineNum">     553 </span>            : {
+<span class="lineNum">     554 </span><span class="lineCov">     738165 :   bitmap_obstack_release (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     555 </span><span class="lineCov">     738165 :   ptr-&gt;conflicts.release ();</span>
+<span class="lineNum">     556 </span><span class="lineCov">     738165 :   free (ptr);</span>
+<span class="lineNum">     557 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">     558 </span>            : 
+<span class="lineNum">     559 </span>            : 
+<span class="lineNum">     560 </span>            : /* Test if elements X and Y conflict in graph PTR.  */
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span>            : static inline bool
+<span class="lineNum">     563 </span><span class="lineCov">    2890828 : ssa_conflicts_test_p (ssa_conflicts *ptr, unsigned x, unsigned y)</span>
+<span class="lineNum">     564 </span>            : {
+<span class="lineNum">     565 </span><span class="lineCov">    2890828 :   bitmap bx = ptr-&gt;conflicts[x];</span>
+<span class="lineNum">     566 </span><span class="lineCov">    2890828 :   bitmap by = ptr-&gt;conflicts[y];</span>
+<span class="lineNum">     567 </span>            : 
+<span class="lineNum">     568 </span><span class="lineCov">    2890828 :   gcc_checking_assert (x != y);</span>
+<span class="lineNum">     569 </span>            : 
+<span class="lineNum">     570 </span><span class="lineCov">    2890828 :   if (bx)</span>
+<span class="lineNum">     571 </span>            :     /* Avoid the lookup if Y has no conflicts.  */
+<span class="lineNum">     572 </span><span class="lineCov">     602665 :     return by ? bitmap_bit_p (bx, y) : false;</span>
+<span class="lineNum">     573 </span>            :   else
+<span class="lineNum">     574 </span>            :     return false;
+<span class="lineNum">     575 </span>            : }
+<span class="lineNum">     576 </span>            : 
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span>            : /* Add a conflict with Y to the bitmap for X in graph PTR.  */
+<span class="lineNum">     579 </span>            : 
+<span class="lineNum">     580 </span>            : static inline void
+<span class="lineNum">     581 </span><span class="lineCov">    1237486 : ssa_conflicts_add_one (ssa_conflicts *ptr, unsigned x, unsigned y)</span>
+<span class="lineNum">     582 </span>            : {
+<span class="lineNum">     583 </span><span class="lineCov">    1237486 :   bitmap bx = ptr-&gt;conflicts[x];</span>
+<span class="lineNum">     584 </span>            :   /* If there are no conflicts yet, allocate the bitmap and set bit.  */
+<span class="lineNum">     585 </span><span class="lineCov">    1237486 :   if (! bx)</span>
+<span class="lineNum">     586 </span><span class="lineCov">    1231526 :     bx = ptr-&gt;conflicts[x] = BITMAP_ALLOC (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     587 </span><span class="lineCov">    1237486 :   bitmap_set_bit (bx, y);</span>
+<span class="lineNum">     588 </span><span class="lineCov">    1237486 : }</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            : /* Add conflicts between X and Y in graph PTR.  */
+<a name="592"><span class="lineNum">     592 </span>            : </a>
+<span class="lineNum">     593 </span>            : static inline void
+<span class="lineNum">     594 </span><span class="lineCov">     618743 : ssa_conflicts_add (ssa_conflicts *ptr, unsigned x, unsigned y)</span>
+<span class="lineNum">     595 </span>            : {
+<span class="lineNum">     596 </span><span class="lineCov">     618743 :   gcc_checking_assert (x != y);</span>
+<span class="lineNum">     597 </span><span class="lineCov">     618743 :   ssa_conflicts_add_one (ptr, x, y);</span>
+<span class="lineNum">     598 </span><span class="lineCov">     618743 :   ssa_conflicts_add_one (ptr, y, x);</span>
+<span class="lineNum">     599 </span><span class="lineCov">     618743 : }</span>
+<span class="lineNum">     600 </span>            : 
+<span class="lineNum">     601 </span>            : 
+<span class="lineNum">     602 </span>            : /* Merge all Y's conflict into X in graph PTR.  */
+<span class="lineNum">     603 </span>            : 
+<span class="lineNum">     604 </span>            : static inline void
+<span class="lineNum">     605 </span><span class="lineCov">    2652773 : ssa_conflicts_merge (ssa_conflicts *ptr, unsigned x, unsigned y)</span>
+<span class="lineNum">     606 </span>            : {
+<span class="lineNum">     607 </span><span class="lineCov">    2652773 :   unsigned z;</span>
+<span class="lineNum">     608 </span><span class="lineCov">    2652773 :   bitmap_iterator bi;</span>
+<span class="lineNum">     609 </span><span class="lineCov">    2652773 :   bitmap bx = ptr-&gt;conflicts[x];</span>
+<span class="lineNum">     610 </span><span class="lineCov">    2652773 :   bitmap by = ptr-&gt;conflicts[y];</span>
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span><span class="lineCov">    2652773 :   gcc_checking_assert (x != y);</span>
+<span class="lineNum">     613 </span><span class="lineCov">    2652773 :   if (! by)</span>
+<span class="lineNum">     614 </span><span class="lineCov">    2330005 :     return;</span>
+<span class="lineNum">     615 </span>            : 
+<span class="lineNum">     616 </span>            :   /* Add a conflict between X and every one Y has.  If the bitmap doesn't
+<span class="lineNum">     617 </span>            :      exist, then it has already been coalesced, and we don't need to add a
+<span class="lineNum">     618 </span>            :      conflict.  */
+<span class="lineNum">     619 </span><span class="lineCov">     918563 :   EXECUTE_IF_SET_IN_BITMAP (by, 0, z, bi)</span>
+<span class="lineNum">     620 </span>            :     {
+<span class="lineNum">     621 </span><span class="lineCov">     595795 :       bitmap bz = ptr-&gt;conflicts[z];</span>
+<span class="lineNum">     622 </span><span class="lineCov">     595795 :       if (bz)</span>
+<span class="lineNum">     623 </span>            :         {
+<span class="lineNum">     624 </span><span class="lineCov">     595795 :           bool was_there = bitmap_clear_bit (bz, y);</span>
+<span class="lineNum">     625 </span><span class="lineCov">     595795 :           gcc_checking_assert (was_there);</span>
+<span class="lineNum">     626 </span><span class="lineCov">     595795 :           bitmap_set_bit (bz, x);</span>
+<span class="lineNum">     627 </span>            :         }
+<span class="lineNum">     628 </span>            :     }
+<span class="lineNum">     629 </span>            : 
+<span class="lineNum">     630 </span><span class="lineCov">     322768 :   if (bx)</span>
+<span class="lineNum">     631 </span>            :     {
+<span class="lineNum">     632 </span>            :       /* If X has conflicts, add Y's to X.  */
+<span class="lineNum">     633 </span><span class="lineCov">     271322 :       bitmap_ior_into (bx, by);</span>
+<span class="lineNum">     634 </span><span class="lineCov">     271322 :       BITMAP_FREE (by);</span>
+<span class="lineNum">     635 </span><span class="lineCov">     271322 :       ptr-&gt;conflicts[y] = NULL;</span>
+<span class="lineNum">     636 </span>            :     }
+<span class="lineNum">     637 </span>            :   else
+<span class="lineNum">     638 </span>            :     {
+<span class="lineNum">     639 </span>            :       /* If X has no conflicts, simply use Y's.  */
+<span class="lineNum">     640 </span><span class="lineCov">      51446 :       ptr-&gt;conflicts[x] = by;</span>
+<span class="lineNum">     641 </span><span class="lineCov">      51446 :       ptr-&gt;conflicts[y] = NULL;</span>
+<span class="lineNum">     642 </span>            :     }
+<span class="lineNum">     643 </span>            : }
+<span class="lineNum">     644 </span>            : 
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span>            : /* Dump a conflicts graph.  */
+<span class="lineNum">     647 </span>            : 
+<span class="lineNum">     648 </span>            : static void
+<span class="lineNum">     649 </span><span class="lineCov">         28 : ssa_conflicts_dump (FILE *file, ssa_conflicts *ptr)</span>
+<span class="lineNum">     650 </span>            : {
+<span class="lineNum">     651 </span><span class="lineCov">         28 :   unsigned x;</span>
+<span class="lineNum">     652 </span><span class="lineCov">         28 :   bitmap b;</span>
+<span class="lineNum">     653 </span>            : 
+<span class="lineNum">     654 </span><span class="lineCov">         28 :   fprintf (file, &quot;\nConflict graph:\n&quot;);</span>
+<span class="lineNum">     655 </span>            : 
+<span class="lineNum">     656 </span><span class="lineCov">         98 :   FOR_EACH_VEC_ELT (ptr-&gt;conflicts, x, b)</span>
+<span class="lineNum">     657 </span><span class="lineCov">         70 :     if (b)</span>
+<span class="lineNum">     658 </span>            :       {
+<span class="lineNum">     659 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;%d: &quot;, x);</span>
+<span class="lineNum">     660 </span><span class="lineNoCov">          0 :         dump_bitmap (file, b);</span>
+<span class="lineNum">     661 </span>            :       }
+<span class="lineNum">     662 </span><span class="lineCov">         28 : }</span>
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span>            : 
+<span class="lineNum">     665 </span>            : /* This structure is used to efficiently record the current status of live
+<span class="lineNum">     666 </span>            :    SSA_NAMES when building a conflict graph.
+<span class="lineNum">     667 </span>            :    LIVE_BASE_VAR has a bit set for each base variable which has at least one
+<span class="lineNum">     668 </span>            :    ssa version live.
+<span class="lineNum">     669 </span>            :    LIVE_BASE_PARTITIONS is an array of bitmaps using the basevar table as an
+<span class="lineNum">     670 </span>            :    index, and is used to track what partitions of each base variable are
+<span class="lineNum">     671 </span>            :    live.  This makes it easy to add conflicts between just live partitions
+<span class="lineNum">     672 </span>            :    with the same base variable.
+<span class="lineNum">     673 </span>            :    The values in LIVE_BASE_PARTITIONS are only valid if the base variable is
+<span class="lineNum">     674 </span>            :    marked as being live.  This delays clearing of these bitmaps until
+<span class="lineNum">     675 </span>            :    they are actually needed again.  */
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span>            : struct live_track
+<span class="lineNum">     678 </span>            : {
+<span class="lineNum">     679 </span>            :   bitmap_obstack obstack;       /* A place to allocate our bitmaps.  */
+<span class="lineNum">     680 </span>            :   bitmap live_base_var;         /* Indicates if a basevar is live.  */
+<span class="lineNum">     681 </span>            :   bitmap *live_base_partitions; /* Live partitions for each basevar.  */
+<span class="lineNum">     682 </span>            :   var_map map;                  /* Var_map being used for partition mapping.  */
+<span class="lineNum">     683 </span>            : };
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span>            : /* This routine will create a new live track structure based on the partitions
+<span class="lineNum">     687 </span>            :    in MAP.  */
+<a name="688"><span class="lineNum">     688 </span>            : </a>
+<span class="lineNum">     689 </span>            : static live_track *
+<span class="lineNum">     690 </span><span class="lineCov">     738165 : new_live_track (var_map map)</span>
+<span class="lineNum">     691 </span>            : {
+<span class="lineNum">     692 </span><span class="lineCov">     738165 :   live_track *ptr;</span>
+<span class="lineNum">     693 </span><span class="lineCov">     738165 :   int lim, x;</span>
+<span class="lineNum">     694 </span>            : 
+<span class="lineNum">     695 </span>            :   /* Make sure there is a partition view in place.  */
+<span class="lineNum">     696 </span><span class="lineCov">     738165 :   gcc_assert (map-&gt;partition_to_base_index != NULL);</span>
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span><span class="lineCov">     738165 :   ptr = (live_track *) xmalloc (sizeof (live_track));</span>
+<span class="lineNum">     699 </span><span class="lineCov">     738165 :   ptr-&gt;map = map;</span>
+<span class="lineNum">     700 </span><span class="lineCov">     738165 :   lim = num_basevars (map);</span>
+<span class="lineNum">     701 </span><span class="lineCov">     738165 :   bitmap_obstack_initialize (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     702 </span><span class="lineCov">     738165 :   ptr-&gt;live_base_partitions = (bitmap *) xmalloc (sizeof (bitmap *) * lim);</span>
+<span class="lineNum">     703 </span><span class="lineCov">     738165 :   ptr-&gt;live_base_var = BITMAP_ALLOC (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     704 </span><span class="lineCov">    3798577 :   for (x = 0; x &lt; lim; x++)</span>
+<span class="lineNum">     705 </span><span class="lineCov">    3060412 :     ptr-&gt;live_base_partitions[x] = BITMAP_ALLOC (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     706 </span><span class="lineCov">     738165 :   return ptr;</span>
+<span class="lineNum">     707 </span>            : }
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span>            : /* This routine will free the memory associated with PTR.  */
+<a name="711"><span class="lineNum">     711 </span>            : </a>
+<span class="lineNum">     712 </span>            : static void
+<span class="lineNum">     713 </span><span class="lineCov">     738165 : delete_live_track (live_track *ptr)</span>
+<span class="lineNum">     714 </span>            : {
+<span class="lineNum">     715 </span><span class="lineCov">     738165 :   bitmap_obstack_release (&amp;ptr-&gt;obstack);</span>
+<span class="lineNum">     716 </span><span class="lineCov">     738165 :   free (ptr-&gt;live_base_partitions);</span>
+<span class="lineNum">     717 </span><span class="lineCov">     738165 :   free (ptr);</span>
+<span class="lineNum">     718 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">     719 </span>            : 
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span>            : /* This function will remove PARTITION from the live list in PTR.  */
+<a name="722"><span class="lineNum">     722 </span>            : </a>
+<span class="lineNum">     723 </span>            : static inline void
+<span class="lineNum">     724 </span><span class="lineCov">    5793217 : live_track_remove_partition (live_track *ptr, int partition)</span>
+<span class="lineNum">     725 </span>            : {
+<span class="lineNum">     726 </span><span class="lineCov">    5793217 :   int root;</span>
+<span class="lineNum">     727 </span>            : 
+<span class="lineNum">     728 </span><span class="lineCov">    5793217 :   root = basevar_index (ptr-&gt;map, partition);</span>
+<span class="lineNum">     729 </span><span class="lineCov">    5793217 :   bitmap_clear_bit (ptr-&gt;live_base_partitions[root], partition);</span>
+<span class="lineNum">     730 </span>            :   /* If the element list is empty, make the base variable not live either.  */
+<span class="lineNum">     731 </span><span class="lineCov">   11586434 :   if (bitmap_empty_p (ptr-&gt;live_base_partitions[root]))</span>
+<span class="lineNum">     732 </span><span class="lineCov">    5087136 :     bitmap_clear_bit (ptr-&gt;live_base_var, root);</span>
+<span class="lineNum">     733 </span><span class="lineCov">    5793217 : }</span>
+<span class="lineNum">     734 </span>            : 
+<span class="lineNum">     735 </span>            : 
+<span class="lineNum">     736 </span>            : /* This function will adds PARTITION to the live list in PTR.  */
+<a name="737"><span class="lineNum">     737 </span>            : </a>
+<span class="lineNum">     738 </span>            : static inline void
+<span class="lineNum">     739 </span><span class="lineCov">   23042082 : live_track_add_partition (live_track *ptr, int partition)</span>
+<span class="lineNum">     740 </span>            : {
+<span class="lineNum">     741 </span><span class="lineCov">   23042082 :   int root;</span>
+<span class="lineNum">     742 </span>            : 
+<span class="lineNum">     743 </span><span class="lineCov">   23042082 :   root = basevar_index (ptr-&gt;map, partition);</span>
+<span class="lineNum">     744 </span>            :   /* If this base var wasn't live before, it is now.  Clear the element list
+<span class="lineNum">     745 </span>            :      since it was delayed until needed.  */
+<span class="lineNum">     746 </span><span class="lineCov">   23042082 :   if (bitmap_set_bit (ptr-&gt;live_base_var, root))</span>
+<span class="lineNum">     747 </span><span class="lineCov">   17336063 :     bitmap_clear (ptr-&gt;live_base_partitions[root]);</span>
+<span class="lineNum">     748 </span><span class="lineCov">   23042082 :   bitmap_set_bit (ptr-&gt;live_base_partitions[root], partition);</span>
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span><span class="lineCov">   23042082 : }</span>
+<span class="lineNum">     751 </span>            : 
+<span class="lineNum">     752 </span>            : 
+<span class="lineNum">     753 </span>            : /* Clear the live bit for VAR in PTR.  */
+<a name="754"><span class="lineNum">     754 </span>            : </a>
+<span class="lineNum">     755 </span>            : static inline void
+<span class="lineNum">     756 </span><span class="lineCov">     359072 : live_track_clear_var (live_track *ptr, tree var)</span>
+<span class="lineNum">     757 </span>            : {
+<span class="lineNum">     758 </span><span class="lineCov">     359072 :   int p;</span>
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span><span class="lineCov">     359072 :   p = var_to_partition (ptr-&gt;map, var);</span>
+<span class="lineNum">     761 </span><span class="lineCov">     359072 :   if (p != NO_PARTITION)</span>
+<span class="lineNum">     762 </span><span class="lineCov">     334446 :     live_track_remove_partition (ptr, p);</span>
+<span class="lineNum">     763 </span><span class="lineCov">     359072 : }</span>
+<span class="lineNum">     764 </span>            : 
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span>            : /* Return TRUE if VAR is live in PTR.  */
+<a name="767"><span class="lineNum">     767 </span>            : </a>
+<span class="lineNum">     768 </span>            : static inline bool
+<span class="lineNum">     769 </span><span class="lineCov">    1390059 : live_track_live_p (live_track *ptr, tree var)</span>
+<span class="lineNum">     770 </span>            : {
+<span class="lineNum">     771 </span><span class="lineCov">    1390059 :   int p, root;</span>
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span><span class="lineCov">    1390059 :   p = var_to_partition (ptr-&gt;map, var);</span>
+<span class="lineNum">     774 </span><span class="lineCov">    1390059 :   if (p != NO_PARTITION)</span>
+<span class="lineNum">     775 </span>            :     {
+<span class="lineNum">     776 </span><span class="lineCov">    1377871 :       root = basevar_index (ptr-&gt;map, p);</span>
+<span class="lineNum">     777 </span><span class="lineCov">    1377871 :       if (bitmap_bit_p (ptr-&gt;live_base_var, root))</span>
+<span class="lineNum">     778 </span><span class="lineCov">    1377871 :         return bitmap_bit_p (ptr-&gt;live_base_partitions[root], p);</span>
+<span class="lineNum">     779 </span>            :     }
+<span class="lineNum">     780 </span>            :   return false;
+<span class="lineNum">     781 </span>            : }
+<span class="lineNum">     782 </span>            : 
+<span class="lineNum">     783 </span>            : 
+<span class="lineNum">     784 </span>            : /* This routine will add USE to PTR.  USE will be marked as live in both the
+<span class="lineNum">     785 </span>            :    ssa live map and the live bitmap for the root of USE.  */
+<a name="786"><span class="lineNum">     786 </span>            : </a>
+<span class="lineNum">     787 </span>            : static inline void
+<span class="lineNum">     788 </span><span class="lineCov">   21697262 : live_track_process_use (live_track *ptr, tree use)</span>
+<span class="lineNum">     789 </span>            : {
+<span class="lineNum">     790 </span><span class="lineCov">   21697262 :   int p;</span>
+<span class="lineNum">     791 </span>            : 
+<span class="lineNum">     792 </span><span class="lineCov">   21697262 :   p = var_to_partition (ptr-&gt;map, use);</span>
+<span class="lineNum">     793 </span><span class="lineCov">   21697262 :   if (p == NO_PARTITION)</span>
+<span class="lineNum">     794 </span>            :     return;
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span>            :   /* Mark as live in the appropriate live list.  */
+<span class="lineNum">     797 </span><span class="lineCov">    8571785 :   live_track_add_partition (ptr, p);</span>
+<span class="lineNum">     798 </span>            : }
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span>            : 
+<span class="lineNum">     801 </span>            : /* This routine will process a DEF in PTR.  DEF will be removed from the live
+<span class="lineNum">     802 </span>            :    lists, and if there are any other live partitions with the same base
+<span class="lineNum">     803 </span>            :    variable, conflicts will be added to GRAPH.  */
+<a name="804"><span class="lineNum">     804 </span>            : </a>
+<span class="lineNum">     805 </span>            : static inline void
+<span class="lineNum">     806 </span><span class="lineCov">   15373498 : live_track_process_def (live_track *ptr, tree def, ssa_conflicts *graph)</span>
+<span class="lineNum">     807 </span>            : {
+<span class="lineNum">     808 </span><span class="lineCov">   15373498 :   int p, root;</span>
+<span class="lineNum">     809 </span><span class="lineCov">   15373498 :   bitmap b;</span>
+<span class="lineNum">     810 </span><span class="lineCov">   15373498 :   unsigned x;</span>
+<span class="lineNum">     811 </span><span class="lineCov">   15373498 :   bitmap_iterator bi;</span>
+<span class="lineNum">     812 </span>            : 
+<span class="lineNum">     813 </span><span class="lineCov">   15373498 :   p = var_to_partition (ptr-&gt;map, def);</span>
+<span class="lineNum">     814 </span><span class="lineCov">   15373498 :   if (p == NO_PARTITION)</span>
+<span class="lineNum">     815 </span><span class="lineCov">    9914727 :     return;</span>
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span>            :   /* Clear the liveness bit.  */
+<span class="lineNum">     818 </span><span class="lineCov">    5458771 :   live_track_remove_partition (ptr, p);</span>
+<span class="lineNum">     819 </span>            : 
+<span class="lineNum">     820 </span>            :   /* If the bitmap isn't empty now, conflicts need to be added.  */
+<span class="lineNum">     821 </span><span class="lineCov">    5458771 :   root = basevar_index (ptr-&gt;map, p);</span>
+<span class="lineNum">     822 </span><span class="lineCov">    5458771 :   if (bitmap_bit_p (ptr-&gt;live_base_var, root))</span>
+<span class="lineNum">     823 </span>            :     {
+<span class="lineNum">     824 </span><span class="lineCov">     449342 :       b = ptr-&gt;live_base_partitions[root];</span>
+<span class="lineNum">     825 </span><span class="lineCov">    1068085 :       EXECUTE_IF_SET_IN_BITMAP (b, 0, x, bi)</span>
+<span class="lineNum">     826 </span><span class="lineCov">     618743 :         ssa_conflicts_add (graph, p, x);</span>
+<span class="lineNum">     827 </span>            :     }
+<span class="lineNum">     828 </span>            : }
+<span class="lineNum">     829 </span>            : 
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span>            : /* Initialize PTR with the partitions set in INIT.  */
+<a name="832"><span class="lineNum">     832 </span>            : </a>
+<span class="lineNum">     833 </span>            : static inline void
+<span class="lineNum">     834 </span><span class="lineCov">    6452457 : live_track_init (live_track *ptr, bitmap init)</span>
+<span class="lineNum">     835 </span>            : {
+<span class="lineNum">     836 </span><span class="lineCov">    6452457 :   unsigned p;</span>
+<span class="lineNum">     837 </span><span class="lineCov">    6452457 :   bitmap_iterator bi;</span>
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :   /* Mark all live on exit partitions.  */
+<span class="lineNum">     840 </span><span class="lineCov">   20922754 :   EXECUTE_IF_SET_IN_BITMAP (init, 0, p, bi)</span>
+<span class="lineNum">     841 </span><span class="lineCov">   14470297 :     live_track_add_partition (ptr, p);</span>
+<span class="lineNum">     842 </span><span class="lineCov">    6452457 : }</span>
+<span class="lineNum">     843 </span>            : 
+<span class="lineNum">     844 </span>            : 
+<span class="lineNum">     845 </span>            : /* This routine will clear all live partitions in PTR.   */
+<a name="846"><span class="lineNum">     846 </span>            : </a>
+<span class="lineNum">     847 </span>            : static inline void
+<span class="lineNum">     848 </span><span class="lineNoCov">          0 : live_track_clear_base_vars (live_track *ptr)</span>
+<span class="lineNum">     849 </span>            : {
+<span class="lineNum">     850 </span>            :   /* Simply clear the live base list.  Anything marked as live in the element
+<span class="lineNum">     851 </span>            :      lists will be cleared later if/when the base variable ever comes alive
+<span class="lineNum">     852 </span>            :      again.  */
+<span class="lineNum">     853 </span><span class="lineNoCov">          0 :   bitmap_clear (ptr-&gt;live_base_var);</span>
+<span class="lineNum">     854 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     855 </span>            : 
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span>            : /* Build a conflict graph based on LIVEINFO.  Any partitions which are in the
+<span class="lineNum">     858 </span>            :    partition view of the var_map liveinfo is based on get entries in the
+<span class="lineNum">     859 </span>            :    conflict graph.  Only conflicts between ssa_name partitions with the same
+<span class="lineNum">     860 </span>            :    base variable are added.  */
+<span class="lineNum">     861 </span>            : 
+<span class="lineNum">     862 </span>            : static ssa_conflicts *
+<span class="lineNum">     863 </span><span class="lineCov">     738165 : build_ssa_conflict_graph (tree_live_info_p liveinfo)</span>
+<span class="lineNum">     864 </span>            : {
+<span class="lineNum">     865 </span><span class="lineCov">     738165 :   ssa_conflicts *graph;</span>
+<span class="lineNum">     866 </span><span class="lineCov">     738165 :   var_map map;</span>
+<span class="lineNum">     867 </span><span class="lineCov">     738165 :   basic_block bb;</span>
+<span class="lineNum">     868 </span><span class="lineCov">     738165 :   ssa_op_iter iter;</span>
+<span class="lineNum">     869 </span><span class="lineCov">     738165 :   live_track *live;</span>
+<span class="lineNum">     870 </span><span class="lineCov">     738165 :   basic_block entry;</span>
+<span class="lineNum">     871 </span>            : 
+<span class="lineNum">     872 </span>            :   /* If inter-variable coalescing is enabled, we may attempt to
+<span class="lineNum">     873 </span>            :      coalesce variables from different base variables, including
+<span class="lineNum">     874 </span>            :      different parameters, so we have to make sure default defs live
+<span class="lineNum">     875 </span>            :      at the entry block conflict with each other.  */
+<span class="lineNum">     876 </span><span class="lineCov">     738165 :   if (flag_tree_coalesce_vars)</span>
+<span class="lineNum">     877 </span><span class="lineCov">     555596 :     entry = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     878 </span>            :   else
+<span class="lineNum">     879 </span>            :     entry = NULL;
+<span class="lineNum">     880 </span>            : 
+<span class="lineNum">     881 </span><span class="lineCov">     738165 :   map = live_var_map (liveinfo);</span>
+<span class="lineNum">     882 </span><span class="lineCov">    1476330 :   graph = ssa_conflicts_new (num_var_partitions (map));</span>
+<span class="lineNum">     883 </span>            : 
+<span class="lineNum">     884 </span><span class="lineCov">     738165 :   live = new_live_track (map);</span>
+<span class="lineNum">     885 </span>            : 
+<span class="lineNum">     886 </span><span class="lineCov">    7190622 :   for (unsigned i = 0; liveinfo-&gt;map-&gt;vec_bbs.iterate (i, &amp;bb); ++i)</span>
+<span class="lineNum">     887 </span>            :     {
+<span class="lineNum">     888 </span>            :       /* Start with live on exit temporaries.  */
+<span class="lineNum">     889 </span><span class="lineCov">    6452457 :       live_track_init (live, live_on_exit (liveinfo, bb));</span>
+<span class="lineNum">     890 </span>            : 
+<span class="lineNum">     891 </span><span class="lineCov">  125340565 :       for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);</span>
+<span class="lineNum">     892 </span><span class="lineCov">   52991597 :            gsi_prev (&amp;gsi))</span>
+<span class="lineNum">     893 </span>            :         {
+<span class="lineNum">     894 </span><span class="lineCov">   52991597 :           tree var;</span>
+<span class="lineNum">     895 </span><span class="lineCov">   52991597 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     896 </span>            : 
+<span class="lineNum">     897 </span>            :           /* A copy between 2 partitions does not introduce an interference
+<span class="lineNum">     898 </span>            :              by itself.  If they did, you would never be able to coalesce
+<span class="lineNum">     899 </span>            :              two things which are copied.  If the two variables really do
+<span class="lineNum">     900 </span>            :              conflict, they will conflict elsewhere in the program.
+<span class="lineNum">     901 </span>            : 
+<span class="lineNum">     902 </span>            :              This is handled by simply removing the SRC of the copy from the
+<span class="lineNum">     903 </span>            :              live list, and processing the stmt normally.  */
+<span class="lineNum">     904 </span><span class="lineCov">  105983194 :           if (is_gimple_assign (stmt))</span>
+<span class="lineNum">     905 </span>            :             {
+<span class="lineNum">     906 </span><span class="lineCov">   16315807 :               tree lhs = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     907 </span><span class="lineCov">   16315807 :               tree rhs1 = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     908 </span><span class="lineCov">   16315807 :               if (gimple_assign_copy_p (stmt)</span>
+<span class="lineNum">     909 </span><span class="lineCov">    5028163 :                   &amp;&amp; TREE_CODE (lhs) == SSA_NAME</span>
+<span class="lineNum">     910 </span><span class="lineCov">   16941859 :                   &amp;&amp; TREE_CODE (rhs1) == SSA_NAME)</span>
+<span class="lineNum">     911 </span><span class="lineCov">     359072 :                 live_track_clear_var (live, rhs1);</span>
+<span class="lineNum">     912 </span>            :             }
+<span class="lineNum">     913 </span><span class="lineCov">   73351580 :           else if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     914 </span>            :             continue;
+<span class="lineNum">     915 </span>            : 
+<span class="lineNum">     916 </span>            :           /* For stmts with more than one SSA_NAME definition pretend all the
+<span class="lineNum">     917 </span>            :              SSA_NAME outputs but the first one are live at this point, so
+<span class="lineNum">     918 </span>            :              that conflicts are added in between all those even when they are
+<span class="lineNum">     919 </span>            :              actually not really live after the asm, because expansion might
+<span class="lineNum">     920 </span>            :              copy those into pseudos after the asm and if multiple outputs
+<span class="lineNum">     921 </span>            :              share the same partition, it might overwrite those that should
+<span class="lineNum">     922 </span>            :              be live.  E.g.
+<span class="lineNum">     923 </span>            :              asm volatile (&quot;..&quot; : &quot;=r&quot; (a) : &quot;=r&quot; (b) : &quot;0&quot; (a), &quot;1&quot; (a));
+<span class="lineNum">     924 </span>            :              return a;
+<span class="lineNum">     925 </span>            :              See PR70593.  */
+<span class="lineNum">     926 </span><span class="lineCov">   23868471 :           bool first = true;</span>
+<span class="lineNum">     927 </span><span class="lineCov">   36159766 :           FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_DEF)</span>
+<span class="lineNum">     928 </span><span class="lineCov">   12291295 :             if (first)</span>
+<span class="lineNum">     929 </span>            :               first = false;
+<span class="lineNum">     930 </span>            :             else
+<span class="lineNum">     931 </span><span class="lineCov">      24610 :               live_track_process_use (live, var);</span>
+<span class="lineNum">     932 </span>            : 
+<span class="lineNum">     933 </span><span class="lineCov">   36159766 :           FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_DEF)</span>
+<span class="lineNum">     934 </span><span class="lineCov">   12291295 :             live_track_process_def (live, var, graph);</span>
+<span class="lineNum">     935 </span>            : 
+<span class="lineNum">     936 </span><span class="lineCov">   43836791 :           FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_USE)</span>
+<span class="lineNum">     937 </span><span class="lineCov">   19968320 :             live_track_process_use (live, var);</span>
+<span class="lineNum">     938 </span>            :         }
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span>            :       /* If result of a PHI is unused, looping over the statements will not
+<span class="lineNum">     941 </span>            :          record any conflicts since the def was never live.  Since the PHI node
+<span class="lineNum">     942 </span>            :          is going to be translated out of SSA form, it will insert a copy.
+<span class="lineNum">     943 </span>            :          There must be a conflict recorded between the result of the PHI and
+<span class="lineNum">     944 </span>            :          any variables that are live.  Otherwise the out-of-ssa translation
+<span class="lineNum">     945 </span>            :          may create incorrect code.  */
+<span class="lineNum">     946 </span><span class="lineCov">    9232575 :       for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi);</span>
+<span class="lineNum">     947 </span><span class="lineCov">    1390059 :            gsi_next (&amp;gsi))</span>
+<span class="lineNum">     948 </span>            :         {
+<span class="lineNum">     949 </span><span class="lineCov">    1390059 :           gphi *phi = gsi.phi ();</span>
+<span class="lineNum">     950 </span><span class="lineCov">    2780118 :           tree result = PHI_RESULT (phi);</span>
+<span class="lineNum">     951 </span><span class="lineCov">    2780118 :           if (virtual_operand_p (result))</span>
+<span class="lineNum">     952 </span>            :             continue;
+<span class="lineNum">     953 </span><span class="lineCov">    1390059 :           if (live_track_live_p (live, result))</span>
+<span class="lineNum">     954 </span><span class="lineCov">    1377871 :             live_track_process_def (live, result, graph);</span>
+<span class="lineNum">     955 </span>            :         }
+<span class="lineNum">     956 </span>            : 
+<span class="lineNum">     957 </span>            :       /* Pretend there are defs for params' default defs at the start
+<span class="lineNum">     958 </span>            :          of the (post-)entry block.  This will prevent PARM_DECLs from
+<span class="lineNum">     959 </span>            :          coalescing into the same partition.  Although RESULT_DECLs'
+<span class="lineNum">     960 </span>            :          default defs don't have a useful initial value, we have to
+<span class="lineNum">     961 </span>            :          prevent them from coalescing with PARM_DECLs' default defs
+<span class="lineNum">     962 </span>            :          too, otherwise assign_parms would attempt to assign different
+<span class="lineNum">     963 </span>            :          RTL to the same partition.  */
+<span class="lineNum">     964 </span><span class="lineCov">    6452457 :       if (bb == entry)</span>
+<span class="lineNum">     965 </span>            :         {
+<span class="lineNum">     966 </span>            :           unsigned i;
+<span class="lineNum">     967 </span>            :           tree var;
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span><span class="lineCov">   29529075 :           FOR_EACH_SSA_NAME (i, var, cfun)</span>
+<span class="lineNum">     970 </span>            :             {
+<span class="lineNum">     971 </span><span class="lineCov">   19310815 :               if (!SSA_NAME_IS_DEFAULT_DEF (var)</span>
+<span class="lineNum">     972 </span><span class="lineCov">    4807566 :                   || !SSA_NAME_VAR (var)</span>
+<span class="lineNum">     973 </span><span class="lineCov">   24118381 :                   || VAR_P (SSA_NAME_VAR (var)))</span>
+<span class="lineNum">     974 </span>            :                 continue;
+<span class="lineNum">     975 </span>            : 
+<span class="lineNum">     976 </span><span class="lineCov">    1704332 :               live_track_process_def (live, var, graph);</span>
+<span class="lineNum">     977 </span>            :               /* Process a use too, so that it remains live and
+<span class="lineNum">     978 </span>            :                  conflicts with other parms' default defs, even unused
+<span class="lineNum">     979 </span>            :                  ones.  */
+<span class="lineNum">     980 </span><span class="lineCov">    1704332 :               live_track_process_use (live, var);</span>
+<span class="lineNum">     981 </span>            :             }
+<span class="lineNum">     982 </span>            :         }
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span><span class="lineCov">    6452457 :      live_track_clear_base_vars (live);</span>
+<span class="lineNum">     985 </span>            :     }
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span><span class="lineCov">     738165 :   delete_live_track (live);</span>
+<span class="lineNum">     988 </span><span class="lineCov">     738165 :   return graph;</span>
+<span class="lineNum">     989 </span>            : }
+<span class="lineNum">     990 </span>            : 
+<span class="lineNum">     991 </span>            : 
+<span class="lineNum">     992 </span>            : /* Shortcut routine to print messages to file F of the form:
+<span class="lineNum">     993 </span>            :    &quot;STR1 EXPR1 STR2 EXPR2 STR3.&quot;  */
+<span class="lineNum">     994 </span>            : 
+<span class="lineNum">     995 </span>            : static inline void
+<span class="lineNum">     996 </span>            : print_exprs (FILE *f, const char *str1, tree expr1, const char *str2,
+<span class="lineNum">     997 </span>            :              tree expr2, const char *str3)
+<span class="lineNum">     998 </span>            : {
+<span class="lineNum">     999 </span>            :   fprintf (f, &quot;%s&quot;, str1);
+<span class="lineNum">    1000 </span>            :   print_generic_expr (f, expr1, TDF_SLIM);
+<span class="lineNum">    1001 </span>            :   fprintf (f, &quot;%s&quot;, str2);
+<span class="lineNum">    1002 </span>            :   print_generic_expr (f, expr2, TDF_SLIM);
+<span class="lineNum">    1003 </span>            :   fprintf (f, &quot;%s&quot;, str3);
+<span class="lineNum">    1004 </span>            : }
+<span class="lineNum">    1005 </span>            : 
+<span class="lineNum">    1006 </span>            : 
+<span class="lineNum">    1007 </span>            : /* Print a failure to coalesce a MUST_COALESCE pair X and Y.  */
+<span class="lineNum">    1008 </span>            : 
+<span class="lineNum">    1009 </span>            : static inline void
+<span class="lineNum">    1010 </span><span class="lineNoCov">          0 : fail_abnormal_edge_coalesce (int x, int y)</span>
+<span class="lineNum">    1011 </span>            : {
+<span class="lineNum">    1012 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;\nUnable to coalesce ssa_names %d and %d&quot;,x, y);</span>
+<span class="lineNum">    1013 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot; which are marked as MUST COALESCE.\n&quot;);</span>
+<span class="lineNum">    1014 </span><span class="lineNoCov">          0 :   print_generic_expr (stderr, ssa_name (x), TDF_SLIM);</span>
+<span class="lineNum">    1015 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot; and  &quot;);</span>
+<span class="lineNum">    1016 </span><span class="lineNoCov">          0 :   print_generic_stmt (stderr, ssa_name (y), TDF_SLIM);</span>
+<span class="lineNum">    1017 </span>            : 
+<span class="lineNum">    1018 </span><span class="lineNoCov">          0 :   internal_error (&quot;SSA corruption&quot;);</span>
+<span class="lineNum">    1019 </span>            : }
+<span class="lineNum">    1020 </span>            : 
+<span class="lineNum">    1021 </span>            : /* If VAR is an SSA_NAME associated with a PARM_DECL or a RESULT_DECL,
+<span class="lineNum">    1022 </span>            :    and the DECL's default def is unused (i.e., it was introduced by
+<span class="lineNum">    1023 </span>            :    create_default_def for out-of-ssa), mark VAR and the default def for
+<span class="lineNum">    1024 </span>            :    coalescing.  */
+<a name="1025"><span class="lineNum">    1025 </span>            : </a>
+<span class="lineNum">    1026 </span>            : static void
+<span class="lineNum">    1027 </span><span class="lineCov">   16861882 : coalesce_with_default (tree var, coalesce_list *cl, bitmap used_in_copy)</span>
+<span class="lineNum">    1028 </span>            : {
+<span class="lineNum">    1029 </span><span class="lineCov">   16861882 :   if (SSA_NAME_IS_DEFAULT_DEF (var)</span>
+<span class="lineNum">    1030 </span><span class="lineCov">   29121698 :       || !SSA_NAME_VAR (var)</span>
+<span class="lineNum">    1031 </span><span class="lineCov">   23631064 :       || VAR_P (SSA_NAME_VAR (var)))</span>
+<span class="lineNum">    1032 </span>            :     return;
+<span class="lineNum">    1033 </span>            : 
+<span class="lineNum">    1034 </span><span class="lineCov">      97206 :   tree ssa = ssa_default_def (cfun, SSA_NAME_VAR (var));</span>
+<span class="lineNum">    1035 </span><span class="lineCov">      48603 :   if (!has_zero_uses (ssa))</span>
+<span class="lineNum">    1036 </span>            :     return;
+<span class="lineNum">    1037 </span>            : 
+<span class="lineNum">    1038 </span><span class="lineCov">        592 :   add_cost_one_coalesce (cl, SSA_NAME_VERSION (ssa), SSA_NAME_VERSION (var));</span>
+<span class="lineNum">    1039 </span><span class="lineCov">        592 :   bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (var));</span>
+<span class="lineNum">    1040 </span>            :   /* Default defs will have their used_in_copy bits set at the beginning of
+<span class="lineNum">    1041 </span>            :      populate_coalesce_list_for_outofssa.  */
+<span class="lineNum">    1042 </span>            : }
+<span class="lineNum">    1043 </span>            : 
+<span class="lineNum">    1044 </span>            : 
+<span class="lineNum">    1045 </span>            : /* Given var_map MAP for a region, this function creates and returns a coalesce
+<span class="lineNum">    1046 </span>            :    list as well as recording related ssa names in USED_IN_COPIES for use later
+<span class="lineNum">    1047 </span>            :    in the out-of-ssa or live range computation process.  */
+<span class="lineNum">    1048 </span>            : 
+<span class="lineNum">    1049 </span>            : static coalesce_list *
+<span class="lineNum">    1050 </span><span class="lineCov">     832898 : create_coalesce_list_for_region (var_map map, bitmap used_in_copy)</span>
+<span class="lineNum">    1051 </span>            : {
+<span class="lineNum">    1052 </span><span class="lineCov">     832898 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">    1053 </span><span class="lineCov">     832898 :   basic_block bb;</span>
+<span class="lineNum">    1054 </span><span class="lineCov">     832898 :   coalesce_list *cl = create_coalesce_list ();</span>
+<span class="lineNum">    1055 </span><span class="lineCov">     832898 :   gimple *stmt;</span>
+<span class="lineNum">    1056 </span><span class="lineCov">     832898 :   int v1, v2, cost;</span>
+<span class="lineNum">    1057 </span>            : 
+<span class="lineNum">    1058 </span><span class="lineCov">    7800109 :   for (unsigned j = 0; map-&gt;vec_bbs.iterate (j, &amp;bb); ++j)</span>
+<span class="lineNum">    1059 </span>            :     {
+<span class="lineNum">    1060 </span><span class="lineCov">    6967211 :       tree arg;</span>
+<span class="lineNum">    1061 </span>            : 
+<span class="lineNum">    1062 </span><span class="lineCov">    6967211 :       for (gphi_iterator gpi = gsi_start_phis (bb);</span>
+<span class="lineNum">    1063 </span><span class="lineCov">   16715240 :            !gsi_end_p (gpi);</span>
+<span class="lineNum">    1064 </span><span class="lineCov">    1390409 :            gsi_next (&amp;gpi))</span>
+<span class="lineNum">    1065 </span>            :         {
+<span class="lineNum">    1066 </span><span class="lineCov">    1390409 :           gphi *phi = gpi.phi ();</span>
+<span class="lineNum">    1067 </span><span class="lineCov">    1390409 :           size_t i;</span>
+<span class="lineNum">    1068 </span><span class="lineCov">    1390409 :           int ver;</span>
+<span class="lineNum">    1069 </span><span class="lineCov">    1390409 :           tree res;</span>
+<span class="lineNum">    1070 </span><span class="lineCov">    1390409 :           bool saw_copy = false;</span>
+<span class="lineNum">    1071 </span>            : 
+<span class="lineNum">    1072 </span><span class="lineCov">    1390409 :           res = gimple_phi_result (phi);</span>
+<span class="lineNum">    1073 </span><span class="lineCov">    2780818 :           if (virtual_operand_p (res))</span>
+<span class="lineNum">    1074 </span>            :             continue;
+<span class="lineNum">    1075 </span><span class="lineCov">    1390409 :           ver = SSA_NAME_VERSION (res);</span>
+<span class="lineNum">    1076 </span>            : 
+<span class="lineNum">    1077 </span>            :           /* Register ssa_names and coalesces between the args and the result
+<span class="lineNum">    1078 </span>            :              of all PHI.  */
+<span class="lineNum">    1079 </span><span class="lineCov">    4773938 :           for (i = 0; i &lt; gimple_phi_num_args (phi); i++)</span>
+<span class="lineNum">    1080 </span>            :             {
+<span class="lineNum">    1081 </span><span class="lineCov">    3383529 :               edge e = gimple_phi_arg_edge (phi, i);</span>
+<span class="lineNum">    1082 </span><span class="lineCov">    3383529 :               arg = PHI_ARG_DEF (phi, i);</span>
+<span class="lineNum">    1083 </span><span class="lineCov">    3383529 :               if (TREE_CODE (arg) != SSA_NAME)</span>
+<span class="lineNum">    1084 </span>            :                 continue;
+<span class="lineNum">    1085 </span>            : 
+<span class="lineNum">    1086 </span><span class="lineCov">    2817913 :               if (gimple_can_coalesce_p (arg, res)</span>
+<span class="lineNum">    1087 </span><span class="lineCov">    2817913 :                   || (e-&gt;flags &amp; EDGE_ABNORMAL))</span>
+<span class="lineNum">    1088 </span>            :                 {
+<span class="lineNum">    1089 </span><span class="lineCov">    2817738 :                   saw_copy = true;</span>
+<span class="lineNum">    1090 </span><span class="lineCov">    2817738 :                   bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (arg));</span>
+<span class="lineNum">    1091 </span><span class="lineCov">    2817738 :                   if ((e-&gt;flags &amp; EDGE_ABNORMAL) == 0)</span>
+<span class="lineNum">    1092 </span>            :                     {
+<span class="lineNum">    1093 </span><span class="lineCov">    2625031 :                       int cost = coalesce_cost_edge (e);</span>
+<span class="lineNum">    1094 </span><span class="lineCov">    2625031 :                       if (cost == 1 &amp;&amp; has_single_use (arg))</span>
+<span class="lineNum">    1095 </span><span class="lineCov">     146331 :                         add_cost_one_coalesce (cl, ver, SSA_NAME_VERSION (arg));</span>
+<span class="lineNum">    1096 </span>            :                       else
+<span class="lineNum">    1097 </span><span class="lineCov">    2478700 :                         add_coalesce (cl, ver, SSA_NAME_VERSION (arg), cost);</span>
+<span class="lineNum">    1098 </span>            :                     }
+<span class="lineNum">    1099 </span>            :                 }
+<span class="lineNum">    1100 </span>            :             }
+<span class="lineNum">    1101 </span><span class="lineCov">    1390409 :           if (saw_copy)</span>
+<span class="lineNum">    1102 </span><span class="lineCov">    1367532 :             bitmap_set_bit (used_in_copy, ver);</span>
+<span class="lineNum">    1103 </span>            :         }
+<span class="lineNum">    1104 </span>            : 
+<span class="lineNum">    1105 </span><span class="lineCov">   70877406 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1106 </span>            :         {
+<span class="lineNum">    1107 </span><span class="lineCov">   56942984 :           stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">    1108 </span>            : 
+<span class="lineNum">    1109 </span><span class="lineCov">  113885968 :           if (is_gimple_debug (stmt))</span>
+<span class="lineNum">    1110 </span>            :             continue;
+<span class="lineNum">    1111 </span>            : 
+<span class="lineNum">    1112 </span>            :           /* Check for copy coalesces.  */
+<span class="lineNum">    1113 </span><span class="lineCov">   52542950 :           switch (gimple_code (stmt))</span>
+<span class="lineNum">    1114 </span>            :             {
+<span class="lineNum">    1115 </span><span class="lineCov">   17745471 :             case GIMPLE_ASSIGN:</span>
+<span class="lineNum">    1116 </span><span class="lineCov">   17745471 :               {</span>
+<span class="lineNum">    1117 </span><span class="lineCov">   17745471 :                 tree lhs = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">    1118 </span><span class="lineCov">   17745471 :                 tree rhs1 = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1119 </span><span class="lineCov">   17745471 :                 if (gimple_assign_ssa_name_copy_p (stmt)</span>
+<span class="lineNum">    1120 </span><span class="lineCov">   17745471 :                     &amp;&amp; gimple_can_coalesce_p (lhs, rhs1))</span>
+<span class="lineNum">    1121 </span>            :                   {
+<span class="lineNum">    1122 </span><span class="lineCov">     256548 :                     v1 = SSA_NAME_VERSION (lhs);</span>
+<span class="lineNum">    1123 </span><span class="lineCov">     256548 :                     v2 = SSA_NAME_VERSION (rhs1);</span>
+<span class="lineNum">    1124 </span><span class="lineCov">     256548 :                     cost = coalesce_cost_bb (bb);</span>
+<span class="lineNum">    1125 </span><span class="lineCov">     256548 :                     add_coalesce (cl, v1, v2, cost);</span>
+<span class="lineNum">    1126 </span><span class="lineCov">     256548 :                     bitmap_set_bit (used_in_copy, v1);</span>
+<span class="lineNum">    1127 </span><span class="lineCov">     256548 :                     bitmap_set_bit (used_in_copy, v2);</span>
+<span class="lineNum">    1128 </span>            :                   }
+<span class="lineNum">    1129 </span>            :               }
+<span class="lineNum">    1130 </span>            :               break;
+<span class="lineNum">    1131 </span>            : 
+<span class="lineNum">    1132 </span><span class="lineCov">     814597 :             case GIMPLE_RETURN:</span>
+<span class="lineNum">    1133 </span><span class="lineCov">     814597 :               {</span>
+<span class="lineNum">    1134 </span><span class="lineCov">     814597 :                 tree res = DECL_RESULT (current_function_decl);</span>
+<span class="lineNum">    1135 </span><span class="lineCov">     814597 :                 if (VOID_TYPE_P (TREE_TYPE (res))</span>
+<span class="lineNum">    1136 </span><span class="lineCov">     814597 :                     || !is_gimple_reg (res))</span>
+<span class="lineNum">    1137 </span>            :                   break;
+<span class="lineNum">    1138 </span><span class="lineCov">     382494 :                 tree rhs1 = gimple_return_retval (as_a &lt;greturn *&gt; (stmt));</span>
+<span class="lineNum">    1139 </span><span class="lineCov">     382494 :                 if (!rhs1)</span>
+<span class="lineNum">    1140 </span>            :                   break;
+<span class="lineNum">    1141 </span><span class="lineCov">     376517 :                 tree lhs = ssa_default_def (cfun, res);</span>
+<span class="lineNum">    1142 </span><span class="lineCov">     376517 :                 gcc_assert (lhs);</span>
+<span class="lineNum">    1143 </span><span class="lineCov">     376517 :                 if (TREE_CODE (rhs1) == SSA_NAME</span>
+<span class="lineNum">    1144 </span><span class="lineCov">     376517 :                     &amp;&amp; gimple_can_coalesce_p (lhs, rhs1))</span>
+<span class="lineNum">    1145 </span>            :                   {
+<span class="lineNum">    1146 </span><span class="lineCov">     215184 :                     v1 = SSA_NAME_VERSION (lhs);</span>
+<span class="lineNum">    1147 </span><span class="lineCov">     215184 :                     v2 = SSA_NAME_VERSION (rhs1);</span>
+<span class="lineNum">    1148 </span><span class="lineCov">     215184 :                     cost = coalesce_cost_bb (bb);</span>
+<span class="lineNum">    1149 </span><span class="lineCov">     215184 :                     add_coalesce (cl, v1, v2, cost);</span>
+<span class="lineNum">    1150 </span><span class="lineCov">     215184 :                     bitmap_set_bit (used_in_copy, v1);</span>
+<span class="lineNum">    1151 </span><span class="lineCov">     215184 :                     bitmap_set_bit (used_in_copy, v2);</span>
+<span class="lineNum">    1152 </span>            :                   }
+<span class="lineNum">    1153 </span>            :                 break;
+<span class="lineNum">    1154 </span>            :               }
+<span class="lineNum">    1155 </span>            : 
+<span class="lineNum">    1156 </span><span class="lineCov">      87421 :             case GIMPLE_ASM:</span>
+<span class="lineNum">    1157 </span><span class="lineCov">      87421 :               {</span>
+<span class="lineNum">    1158 </span><span class="lineCov">      87421 :                 gasm *asm_stmt = as_a &lt;gasm *&gt; (stmt);</span>
+<span class="lineNum">    1159 </span><span class="lineCov">      87421 :                 unsigned long noutputs, i;</span>
+<span class="lineNum">    1160 </span><span class="lineCov">      87421 :                 unsigned long ninputs;</span>
+<span class="lineNum">    1161 </span><span class="lineCov">      87421 :                 tree *outputs, link;</span>
+<span class="lineNum">    1162 </span><span class="lineCov">      87421 :                 noutputs = gimple_asm_noutputs (asm_stmt);</span>
+<span class="lineNum">    1163 </span><span class="lineCov">      87421 :                 ninputs = gimple_asm_ninputs (asm_stmt);</span>
+<span class="lineNum">    1164 </span><span class="lineCov">      87421 :                 outputs = (tree *) alloca (noutputs * sizeof (tree));</span>
+<span class="lineNum">    1165 </span><span class="lineCov">     153509 :                 for (i = 0; i &lt; noutputs; ++i)</span>
+<span class="lineNum">    1166 </span>            :                   {
+<span class="lineNum">    1167 </span><span class="lineCov">      66088 :                     link = gimple_asm_output_op (asm_stmt, i);</span>
+<span class="lineNum">    1168 </span><span class="lineCov">      66088 :                     outputs[i] = TREE_VALUE (link);</span>
+<span class="lineNum">    1169 </span>            :                   }
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span><span class="lineCov">     129536 :                 for (i = 0; i &lt; ninputs; ++i)</span>
+<span class="lineNum">    1172 </span>            :                   {
+<span class="lineNum">    1173 </span><span class="lineCov">      42115 :                     const char *constraint;</span>
+<span class="lineNum">    1174 </span><span class="lineCov">      42115 :                     tree input;</span>
+<span class="lineNum">    1175 </span><span class="lineCov">      42115 :                     char *end;</span>
+<span class="lineNum">    1176 </span><span class="lineCov">      42115 :                     unsigned long match;</span>
+<span class="lineNum">    1177 </span>            : 
+<span class="lineNum">    1178 </span><span class="lineCov">      42115 :                     link = gimple_asm_input_op (asm_stmt, i);</span>
+<span class="lineNum">    1179 </span><span class="lineCov">      42115 :                     constraint</span>
+<span class="lineNum">    1180 </span><span class="lineCov">      42115 :                       = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));</span>
+<span class="lineNum">    1181 </span><span class="lineCov">      42115 :                     input = TREE_VALUE (link);</span>
+<span class="lineNum">    1182 </span>            : 
+<span class="lineNum">    1183 </span><span class="lineCov">      42115 :                     if (TREE_CODE (input) != SSA_NAME)</span>
+<span class="lineNum">    1184 </span><span class="lineCov">      38827 :                       continue;</span>
+<span class="lineNum">    1185 </span>            : 
+<span class="lineNum">    1186 </span><span class="lineCov">       9847 :                     match = strtoul (constraint, &amp;end, 10);</span>
+<span class="lineNum">    1187 </span><span class="lineCov">       9847 :                     if (match &gt;= noutputs || end == constraint)</span>
+<span class="lineNum">    1188 </span>            :                       continue;
+<span class="lineNum">    1189 </span>            : 
+<span class="lineNum">    1190 </span><span class="lineCov">       4395 :                     if (TREE_CODE (outputs[match]) != SSA_NAME)</span>
+<span class="lineNum">    1191 </span>            :                       continue;
+<span class="lineNum">    1192 </span>            : 
+<span class="lineNum">    1193 </span><span class="lineCov">       3288 :                     v1 = SSA_NAME_VERSION (outputs[match]);</span>
+<span class="lineNum">    1194 </span><span class="lineCov">       3288 :                     v2 = SSA_NAME_VERSION (input);</span>
+<span class="lineNum">    1195 </span>            : 
+<span class="lineNum">    1196 </span><span class="lineCov">       3288 :                     if (gimple_can_coalesce_p (outputs[match], input))</span>
+<span class="lineNum">    1197 </span>            :                       {
+<span class="lineNum">    1198 </span><span class="lineCov">       3128 :                         cost = coalesce_cost (REG_BR_PROB_BASE,</span>
+<span class="lineNum">    1199 </span><span class="lineCov">       3128 :                                               optimize_bb_for_size_p (bb));</span>
+<span class="lineNum">    1200 </span><span class="lineCov">       3128 :                         add_coalesce (cl, v1, v2, cost);</span>
+<span class="lineNum">    1201 </span><span class="lineCov">       3128 :                         bitmap_set_bit (used_in_copy, v1);</span>
+<span class="lineNum">    1202 </span><span class="lineCov">       3128 :                         bitmap_set_bit (used_in_copy, v2);</span>
+<span class="lineNum">    1203 </span>            :                       }
+<span class="lineNum">    1204 </span>            :                   }
+<span class="lineNum">    1205 </span>            :                 break;
+<span class="lineNum">    1206 </span>            :               }
+<span class="lineNum">    1207 </span>            : 
+<span class="lineNum">    1208 </span>            :             default:
+<span class="lineNum">    1209 </span>            :               break;
+<span class="lineNum">    1210 </span>            :             }
+<span class="lineNum">    1211 </span>            :         }
+<span class="lineNum">    1212 </span>            :     }
+<span class="lineNum">    1213 </span>            : 
+<span class="lineNum">    1214 </span><span class="lineCov">     832898 :   return cl;</span>
+<span class="lineNum">    1215 </span>            : }
+<span class="lineNum">    1216 </span>            : 
+<span class="lineNum">    1217 </span>            : 
+<span class="lineNum">    1218 </span>            : /* Hashtable support for storing SSA names hashed by their SSA_NAME_VAR.  */
+<span class="lineNum">    1219 </span>            : 
+<span class="lineNum">    1220 </span>            : struct ssa_name_var_hash : nofree_ptr_hash &lt;tree_node&gt;
+<span class="lineNum">    1221 </span>            : {
+<span class="lineNum">    1222 </span>            :   static inline hashval_t hash (const tree_node *);
+<span class="lineNum">    1223 </span>            :   static inline int equal (const tree_node *, const tree_node *);
+<span class="lineNum">    1224 </span>            : };
+<a name="1225"><span class="lineNum">    1225 </span>            : </a>
+<span class="lineNum">    1226 </span>            : inline hashval_t
+<span class="lineNum">    1227 </span><span class="lineCov">    1113957 : ssa_name_var_hash::hash (const_tree n)</span>
+<span class="lineNum">    1228 </span>            : {
+<span class="lineNum">    1229 </span><span class="lineCov">    1113957 :   return DECL_UID (SSA_NAME_VAR (n));</span>
+<span class="lineNum">    1230 </span>            : }
+<a name="1231"><span class="lineNum">    1231 </span>            : </a>
+<span class="lineNum">    1232 </span>            : inline int
+<span class="lineNum">    1233 </span><span class="lineCov">     451021 : ssa_name_var_hash::equal (const tree_node *n1, const tree_node *n2)</span>
+<span class="lineNum">    1234 </span>            : {
+<span class="lineNum">    1235 </span><span class="lineCov">     451021 :   return SSA_NAME_VAR (n1) == SSA_NAME_VAR (n2);</span>
+<span class="lineNum">    1236 </span>            : }
+<span class="lineNum">    1237 </span>            : 
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span>            : /* This function populates coalesce list CL as well as recording related ssa
+<span class="lineNum">    1240 </span>            :    names in USED_IN_COPIES for use later in the out-of-ssa process.  */
+<span class="lineNum">    1241 </span>            : 
+<span class="lineNum">    1242 </span>            : static void
+<span class="lineNum">    1243 </span><span class="lineCov">     832898 : populate_coalesce_list_for_outofssa (coalesce_list *cl, bitmap used_in_copy)</span>
+<span class="lineNum">    1244 </span>            : {
+<span class="lineNum">    1245 </span><span class="lineCov">     832898 :   tree var;</span>
+<span class="lineNum">    1246 </span><span class="lineCov">     832898 :   tree first;</span>
+<span class="lineNum">    1247 </span><span class="lineCov">     832898 :   int v1, v2, cost;</span>
+<span class="lineNum">    1248 </span><span class="lineCov">     832898 :   unsigned i;</span>
+<span class="lineNum">    1249 </span>            : 
+<span class="lineNum">    1250 </span>            :   /* Process result decls and live on entry variables for entry into the
+<span class="lineNum">    1251 </span>            :      coalesce list.  */
+<span class="lineNum">    1252 </span><span class="lineCov">     832898 :   first = NULL_TREE;</span>
+<span class="lineNum">    1253 </span><span class="lineCov">   39177204 :   FOR_EACH_SSA_NAME (i, var, cfun)</span>
+<span class="lineNum">    1254 </span>            :     {
+<span class="lineNum">    1255 </span><span class="lineCov">   55062008 :       if (!virtual_operand_p (var))</span>
+<span class="lineNum">    1256 </span>            :         {
+<span class="lineNum">    1257 </span><span class="lineCov">   16861882 :           coalesce_with_default (var, cl, used_in_copy);</span>
+<span class="lineNum">    1258 </span>            : 
+<span class="lineNum">    1259 </span>            :           /* Add coalesces between all the result decls.  */
+<span class="lineNum">    1260 </span><span class="lineCov">   24668752 :           if (SSA_NAME_VAR (var)</span>
+<span class="lineNum">    1261 </span><span class="lineCov">   28233130 :               &amp;&amp; TREE_CODE (SSA_NAME_VAR (var)) == RESULT_DECL)</span>
+<span class="lineNum">    1262 </span>            :             {
+<span class="lineNum">    1263 </span><span class="lineCov">     785462 :               bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (var));</span>
+<span class="lineNum">    1264 </span><span class="lineCov">     392731 :               if (first == NULL_TREE)</span>
+<span class="lineNum">    1265 </span>            :                 first = var;
+<span class="lineNum">    1266 </span>            :               else
+<span class="lineNum">    1267 </span>            :                 {
+<span class="lineNum">    1268 </span><span class="lineNoCov">          0 :                   gcc_assert (gimple_can_coalesce_p (var, first));</span>
+<span class="lineNum">    1269 </span><span class="lineNoCov">          0 :                   v1 = SSA_NAME_VERSION (first);</span>
+<span class="lineNum">    1270 </span><span class="lineNoCov">          0 :                   v2 = SSA_NAME_VERSION (var);</span>
+<span class="lineNum">    1271 </span><span class="lineNoCov">          0 :                   cost = coalesce_cost_bb (EXIT_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1272 </span><span class="lineNoCov">          0 :                   add_coalesce (cl, v1, v2, cost);</span>
+<span class="lineNum">    1273 </span>            :                 }
+<span class="lineNum">    1274 </span>            :             }
+<span class="lineNum">    1275 </span>            :           /* Mark any default_def variables as being in the coalesce list
+<span class="lineNum">    1276 </span>            :              since they will have to be coalesced with the base variable.  If
+<span class="lineNum">    1277 </span>            :              not marked as present, they won't be in the coalesce view. */
+<span class="lineNum">    1278 </span><span class="lineCov">   16861882 :           if (SSA_NAME_IS_DEFAULT_DEF (var)</span>
+<span class="lineNum">    1279 </span><span class="lineCov">    2301033 :               &amp;&amp; (!has_zero_uses (var)</span>
+<span class="lineNum">    1280 </span><span class="lineCov">    2548734 :                   || (SSA_NAME_VAR (var)</span>
+<span class="lineNum">    1281 </span><span class="lineCov">   19410616 :                       &amp;&amp; !VAR_P (SSA_NAME_VAR (var)))))</span>
+<span class="lineNum">    1282 </span><span class="lineCov">    4329720 :             bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (var));</span>
+<span class="lineNum">    1283 </span>            :         }
+<span class="lineNum">    1284 </span>            :     }
+<span class="lineNum">    1285 </span>            : 
+<span class="lineNum">    1286 </span>            :   /* If this optimization is disabled, we need to coalesce all the
+<span class="lineNum">    1287 </span>            :      names originating from the same SSA_NAME_VAR so debug info
+<span class="lineNum">    1288 </span>            :      remains undisturbed.  */
+<span class="lineNum">    1289 </span><span class="lineCov">     832898 :   if (!flag_tree_coalesce_vars)</span>
+<span class="lineNum">    1290 </span>            :     {
+<span class="lineNum">    1291 </span><span class="lineCov">     210352 :       tree a;</span>
+<span class="lineNum">    1292 </span><span class="lineCov">     420704 :       hash_table&lt;ssa_name_var_hash&gt; ssa_name_hash (10);</span>
+<span class="lineNum">    1293 </span>            : 
+<span class="lineNum">    1294 </span><span class="lineCov">    7183468 :       FOR_EACH_SSA_NAME (i, a, cfun)</span>
+<span class="lineNum">    1295 </span>            :         {
+<span class="lineNum">    1296 </span><span class="lineCov">   10782159 :           if (SSA_NAME_VAR (a)</span>
+<span class="lineNum">    1297 </span><span class="lineCov">    6968682 :               &amp;&amp; !DECL_IGNORED_P (SSA_NAME_VAR (a))</span>
+<span class="lineNum">    1298 </span><span class="lineCov">    7267211 :               &amp;&amp; (!has_zero_uses (a) || !SSA_NAME_IS_DEFAULT_DEF (a)</span>
+<span class="lineNum">    1299 </span><span class="lineCov">     270196 :                   || !VAR_P (SSA_NAME_VAR (a))))</span>
+<span class="lineNum">    1300 </span>            :             {
+<span class="lineNum">    1301 </span><span class="lineCov">     818048 :               tree *slot = ssa_name_hash.find_slot (a, INSERT);</span>
+<span class="lineNum">    1302 </span>            : 
+<span class="lineNum">    1303 </span><span class="lineCov">     818048 :               if (!*slot)</span>
+<span class="lineNum">    1304 </span><span class="lineCov">     517431 :                 *slot = a;</span>
+<span class="lineNum">    1305 </span>            :               else
+<span class="lineNum">    1306 </span>            :                 {
+<span class="lineNum">    1307 </span>            :                   /* If the variable is a PARM_DECL or a RESULT_DECL, we
+<span class="lineNum">    1308 </span>            :                      _require_ that all the names originating from it be
+<span class="lineNum">    1309 </span>            :                      coalesced, because there must be a single partition
+<span class="lineNum">    1310 </span>            :                      containing all the names so that it can be assigned
+<span class="lineNum">    1311 </span>            :                      the canonical RTL location of the DECL safely.
+<span class="lineNum">    1312 </span>            :                      If in_lto_p, a function could have been compiled
+<span class="lineNum">    1313 </span>            :                      originally with optimizations and only the link
+<span class="lineNum">    1314 </span>            :                      performed at -O0, so we can't actually require it.  */
+<span class="lineNum">    1315 </span><span class="lineCov">     300617 :                   const int cost</span>
+<span class="lineNum">    1316 </span><span class="lineCov">     309546 :                     = (TREE_CODE (SSA_NAME_VAR (a)) == VAR_DECL || in_lto_p)</span>
+<span class="lineNum">    1317 </span><span class="lineCov">     300617 :                       ? MUST_COALESCE_COST - 1 : MUST_COALESCE_COST;</span>
+<span class="lineNum">    1318 </span><span class="lineCov">     300617 :                   add_coalesce (cl, SSA_NAME_VERSION (a),</span>
+<span class="lineNum">    1319 </span><span class="lineCov">     300617 :                                 SSA_NAME_VERSION (*slot), cost);</span>
+<span class="lineNum">    1320 </span><span class="lineCov">     300617 :                   bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (a));</span>
+<span class="lineNum">    1321 </span><span class="lineCov">     300617 :                   bitmap_set_bit (used_in_copy, SSA_NAME_VERSION (*slot));</span>
+<span class="lineNum">    1322 </span>            :                 }
+<span class="lineNum">    1323 </span>            :             }
+<span class="lineNum">    1324 </span>            :         }
+<span class="lineNum">    1325 </span>            :     }
+<span class="lineNum">    1326 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">    1327 </span>            : 
+<span class="lineNum">    1328 </span>            : 
+<span class="lineNum">    1329 </span>            : /* Attempt to coalesce ssa versions X and Y together using the partition
+<span class="lineNum">    1330 </span>            :    mapping in MAP and checking conflicts in GRAPH.  Output any debug info to
+<span class="lineNum">    1331 </span>            :    DEBUG, if it is nun-NULL.  */
+<span class="lineNum">    1332 </span>            : 
+<span class="lineNum">    1333 </span>            : static inline bool
+<span class="lineNum">    1334 </span><span class="lineCov">    3254957 : attempt_coalesce (var_map map, ssa_conflicts *graph, int x, int y,</span>
+<span class="lineNum">    1335 </span>            :                   FILE *debug)
+<span class="lineNum">    1336 </span>            : {
+<span class="lineNum">    1337 </span><span class="lineCov">    3254957 :   int z;</span>
+<span class="lineNum">    1338 </span><span class="lineCov">    3254957 :   tree var1, var2;</span>
+<span class="lineNum">    1339 </span><span class="lineCov">    3254957 :   int p1, p2;</span>
+<span class="lineNum">    1340 </span>            : 
+<span class="lineNum">    1341 </span><span class="lineCov">    3254957 :   p1 = var_to_partition (map, ssa_name (x));</span>
+<span class="lineNum">    1342 </span><span class="lineCov">    3254957 :   p2 = var_to_partition (map, ssa_name (y));</span>
+<span class="lineNum">    1343 </span>            : 
+<span class="lineNum">    1344 </span><span class="lineCov">    3254957 :   if (debug)</span>
+<span class="lineNum">    1345 </span>            :     {
+<span class="lineNum">    1346 </span><span class="lineCov">         24 :       fprintf (debug, &quot;(%d)&quot;, x);</span>
+<span class="lineNum">    1347 </span><span class="lineCov">         24 :       print_generic_expr (debug, partition_to_var (map, p1), TDF_SLIM);</span>
+<span class="lineNum">    1348 </span><span class="lineCov">         24 :       fprintf (debug, &quot; &amp; (%d)&quot;, y);</span>
+<span class="lineNum">    1349 </span><span class="lineCov">         24 :       print_generic_expr (debug, partition_to_var (map, p2), TDF_SLIM);</span>
+<span class="lineNum">    1350 </span>            :     }
+<span class="lineNum">    1351 </span>            : 
+<span class="lineNum">    1352 </span><span class="lineCov">    3254957 :   if (p1 == p2)</span>
+<span class="lineNum">    1353 </span>            :     {
+<span class="lineNum">    1354 </span><span class="lineCov">     364129 :       if (debug)</span>
+<span class="lineNum">    1355 </span><span class="lineCov">          1 :         fprintf (debug, &quot;: Already Coalesced.\n&quot;);</span>
+<span class="lineNum">    1356 </span><span class="lineCov">     364129 :       return true;</span>
+<span class="lineNum">    1357 </span>            :     }
+<span class="lineNum">    1358 </span>            : 
+<span class="lineNum">    1359 </span><span class="lineCov">    2890828 :   if (debug)</span>
+<span class="lineNum">    1360 </span><span class="lineCov">         23 :     fprintf (debug, &quot; [map: %d, %d] &quot;, p1, p2);</span>
+<span class="lineNum">    1361 </span>            : 
+<span class="lineNum">    1362 </span>            : 
+<span class="lineNum">    1363 </span><span class="lineCov">    2890828 :   if (!ssa_conflicts_test_p (graph, p1, p2))</span>
+<span class="lineNum">    1364 </span>            :     {
+<span class="lineNum">    1365 </span><span class="lineCov">    2652773 :       var1 = partition_to_var (map, p1);</span>
+<span class="lineNum">    1366 </span><span class="lineCov">    2652773 :       var2 = partition_to_var (map, p2);</span>
+<span class="lineNum">    1367 </span>            : 
+<span class="lineNum">    1368 </span><span class="lineCov">    2652773 :       z = var_union (map, var1, var2);</span>
+<span class="lineNum">    1369 </span><span class="lineCov">    2652773 :       if (z == NO_PARTITION)</span>
+<span class="lineNum">    1370 </span>            :         {
+<span class="lineNum">    1371 </span><span class="lineNoCov">          0 :           if (debug)</span>
+<span class="lineNum">    1372 </span><span class="lineNoCov">          0 :             fprintf (debug, &quot;: Unable to perform partition union.\n&quot;);</span>
+<span class="lineNum">    1373 </span><span class="lineNoCov">          0 :           return false;</span>
+<span class="lineNum">    1374 </span>            :         }
+<span class="lineNum">    1375 </span>            : 
+<span class="lineNum">    1376 </span>            :       /* z is the new combined partition.  Remove the other partition from
+<span class="lineNum">    1377 </span>            :          the list, and merge the conflicts.  */
+<span class="lineNum">    1378 </span><span class="lineCov">    2652773 :       if (z == p1)</span>
+<span class="lineNum">    1379 </span><span class="lineCov">    2225152 :         ssa_conflicts_merge (graph, p1, p2);</span>
+<span class="lineNum">    1380 </span>            :       else
+<span class="lineNum">    1381 </span><span class="lineCov">     427621 :         ssa_conflicts_merge (graph, p2, p1);</span>
+<span class="lineNum">    1382 </span>            : 
+<span class="lineNum">    1383 </span><span class="lineCov">    2652773 :       if (debug)</span>
+<span class="lineNum">    1384 </span><span class="lineCov">         23 :         fprintf (debug, &quot;: Success -&gt; %d\n&quot;, z);</span>
+<span class="lineNum">    1385 </span>            : 
+<span class="lineNum">    1386 </span><span class="lineCov">    2652773 :       return true;</span>
+<span class="lineNum">    1387 </span>            :     }
+<span class="lineNum">    1388 </span>            : 
+<span class="lineNum">    1389 </span><span class="lineCov">     238055 :   if (debug)</span>
+<span class="lineNum">    1390 </span><span class="lineNoCov">          0 :     fprintf (debug, &quot;: Fail due to conflict\n&quot;);</span>
+<span class="lineNum">    1391 </span>            : 
+<span class="lineNum">    1392 </span>            :   return false;
+<span class="lineNum">    1393 </span>            : }
+<span class="lineNum">    1394 </span>            : 
+<span class="lineNum">    1395 </span>            : 
+<span class="lineNum">    1396 </span>            : /* Attempt to Coalesce partitions in MAP which occur in the list CL using
+<span class="lineNum">    1397 </span>            :    GRAPH.  Debug output is sent to DEBUG if it is non-NULL.  */
+<span class="lineNum">    1398 </span>            : 
+<span class="lineNum">    1399 </span>            : static void
+<span class="lineNum">    1400 </span><span class="lineCov">     738165 : coalesce_partitions (var_map map, ssa_conflicts *graph, coalesce_list *cl,</span>
+<span class="lineNum">    1401 </span>            :                      FILE *debug)
+<span class="lineNum">    1402 </span>            : {
+<span class="lineNum">    1403 </span><span class="lineCov">     738165 :   int x = 0, y = 0;</span>
+<span class="lineNum">    1404 </span><span class="lineCov">     738165 :   tree var1, var2;</span>
+<span class="lineNum">    1405 </span><span class="lineCov">     738165 :   int cost;</span>
+<span class="lineNum">    1406 </span><span class="lineCov">     738165 :   basic_block bb;</span>
+<span class="lineNum">    1407 </span><span class="lineCov">     738165 :   edge e;</span>
+<span class="lineNum">    1408 </span><span class="lineCov">     738165 :   edge_iterator ei;</span>
+<span class="lineNum">    1409 </span>            : 
+<span class="lineNum">    1410 </span>            :   /* First, coalesce all the copies across abnormal edges.  These are not placed
+<span class="lineNum">    1411 </span>            :      in the coalesce list because they do not need to be sorted, and simply
+<span class="lineNum">    1412 </span>            :      consume extra memory/compilation time in large programs.  */
+<span class="lineNum">    1413 </span>            : 
+<span class="lineNum">    1414 </span><span class="lineCov">    7190622 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1415 </span>            :     {
+<span class="lineNum">    1416 </span><span class="lineCov">   22298449 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1417 </span><span class="lineCov">    9393535 :         if (e-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">    1418 </span>            :           {
+<span class="lineNum">    1419 </span><span class="lineCov">       7287 :             gphi_iterator gsi;</span>
+<span class="lineNum">    1420 </span><span class="lineCov">     392701 :             for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi);</span>
+<span class="lineNum">    1421 </span><span class="lineCov">     192707 :                  gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1422 </span>            :               {
+<span class="lineNum">    1423 </span><span class="lineCov">     192707 :                 gphi *phi = gsi.phi ();</span>
+<span class="lineNum">    1424 </span><span class="lineCov">     385414 :                 tree res = PHI_RESULT (phi);</span>
+<span class="lineNum">    1425 </span><span class="lineCov">     385414 :                 if (virtual_operand_p (res))</span>
+<span class="lineNum">    1426 </span>            :                   continue;
+<span class="lineNum">    1427 </span><span class="lineCov">     192707 :                 tree arg = PHI_ARG_DEF (phi, e-&gt;dest_idx);</span>
+<span class="lineNum">    1428 </span><span class="lineCov">     192707 :                 if (SSA_NAME_IS_DEFAULT_DEF (arg)</span>
+<span class="lineNum">    1429 </span><span class="lineCov">       1554 :                     &amp;&amp; (!SSA_NAME_VAR (arg)</span>
+<span class="lineNum">    1430 </span><span class="lineCov">     194261 :                         || TREE_CODE (SSA_NAME_VAR (arg)) != PARM_DECL))</span>
+<span class="lineNum">    1431 </span>            :                   continue;
+<span class="lineNum">    1432 </span>            : 
+<span class="lineNum">    1433 </span><span class="lineCov">     191985 :                 int v1 = SSA_NAME_VERSION (res);</span>
+<span class="lineNum">    1434 </span><span class="lineCov">     191985 :                 int v2 = SSA_NAME_VERSION (arg);</span>
+<span class="lineNum">    1435 </span>            : 
+<span class="lineNum">    1436 </span><span class="lineCov">     191985 :                 if (debug)</span>
+<span class="lineNum">    1437 </span><span class="lineNoCov">          0 :                   fprintf (debug, &quot;Abnormal coalesce: &quot;);</span>
+<span class="lineNum">    1438 </span>            : 
+<span class="lineNum">    1439 </span><span class="lineCov">     191985 :                 if (!attempt_coalesce (map, graph, v1, v2, debug))</span>
+<span class="lineNum">    1440 </span><span class="lineNoCov">          0 :                   fail_abnormal_edge_coalesce (v1, v2);</span>
+<span class="lineNum">    1441 </span>            :               }
+<span class="lineNum">    1442 </span>            :           }
+<span class="lineNum">    1443 </span>            :     }
+<span class="lineNum">    1444 </span>            : 
+<span class="lineNum">    1445 </span>            :   /* Now process the items in the coalesce list.  */
+<span class="lineNum">    1446 </span>            : 
+<span class="lineNum">    1447 </span><span class="lineCov">    3801137 :   while ((cost = pop_best_coalesce (cl, &amp;x, &amp;y)) != NO_BEST_COALESCE)</span>
+<span class="lineNum">    1448 </span>            :     {
+<span class="lineNum">    1449 </span><span class="lineCov">    3062972 :       var1 = ssa_name (x);</span>
+<span class="lineNum">    1450 </span><span class="lineCov">    3062972 :       var2 = ssa_name (y);</span>
+<span class="lineNum">    1451 </span>            : 
+<span class="lineNum">    1452 </span>            :       /* Assert the coalesces have the same base variable.  */
+<span class="lineNum">    1453 </span><span class="lineCov">    3062972 :       gcc_assert (gimple_can_coalesce_p (var1, var2));</span>
+<span class="lineNum">    1454 </span>            : 
+<span class="lineNum">    1455 </span><span class="lineCov">    3062972 :       if (debug)</span>
+<span class="lineNum">    1456 </span><span class="lineCov">         24 :         fprintf (debug, &quot;Coalesce list: &quot;);</span>
+<span class="lineNum">    1457 </span><span class="lineCov">    3062972 :       attempt_coalesce (map, graph, x, y, debug);</span>
+<span class="lineNum">    1458 </span>            :     }
+<span class="lineNum">    1459 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">    1460 </span>            : 
+<span class="lineNum">    1461 </span>            : 
+<span class="lineNum">    1462 </span>            : /* Output partition map MAP with coalescing plan PART to file F.  */
+<span class="lineNum">    1463 </span>            : 
+<span class="lineNum">    1464 </span>            : void
+<span class="lineNum">    1465 </span><span class="lineCov">         32 : dump_part_var_map (FILE *f, partition part, var_map map)</span>
+<span class="lineNum">    1466 </span>            : {
+<span class="lineNum">    1467 </span><span class="lineCov">         32 :   int t;</span>
+<span class="lineNum">    1468 </span><span class="lineCov">         32 :   unsigned x, y;</span>
+<span class="lineNum">    1469 </span><span class="lineCov">         32 :   int p;</span>
+<span class="lineNum">    1470 </span>            : 
+<span class="lineNum">    1471 </span><span class="lineCov">         32 :   fprintf (f, &quot;\nCoalescible Partition map \n\n&quot;);</span>
+<span class="lineNum">    1472 </span>            : 
+<span class="lineNum">    1473 </span><span class="lineCov">        102 :   for (x = 0; x &lt; map-&gt;num_partitions; x++)</span>
+<span class="lineNum">    1474 </span>            :     {
+<span class="lineNum">    1475 </span><span class="lineCov">         70 :       if (map-&gt;view_to_partition != NULL)</span>
+<span class="lineNum">    1476 </span><span class="lineCov">         70 :         p = map-&gt;view_to_partition[x];</span>
+<span class="lineNum">    1477 </span>            :       else
+<span class="lineNum">    1478 </span><span class="lineNoCov">          0 :         p = x;</span>
+<span class="lineNum">    1479 </span>            : 
+<span class="lineNum">    1480 </span><span class="lineCov">         70 :       if (ssa_name (p) == NULL_TREE</span>
+<span class="lineNum">    1481 </span><span class="lineCov">        140 :           || virtual_operand_p (ssa_name (p)))</span>
+<span class="lineNum">    1482 </span>            :         continue;
+<span class="lineNum">    1483 </span>            : 
+<span class="lineNum">    1484 </span>            :       t = 0;
+<span class="lineNum">    1485 </span><span class="lineCov">       2536 :       for (y = 1; y &lt; num_ssa_names; y++)</span>
+<span class="lineNum">    1486 </span>            :         {
+<span class="lineNum">    1487 </span><span class="lineCov">       1198 :           tree var = version_to_var (map, y);</span>
+<span class="lineNum">    1488 </span><span class="lineCov">       1198 :           if (!var)</span>
+<span class="lineNum">    1489 </span>            :             continue;
+<span class="lineNum">    1490 </span><span class="lineCov">        360 :           int q = var_to_partition (map, var);</span>
+<span class="lineNum">    1491 </span><span class="lineCov">        360 :           p = partition_find (part, q);</span>
+<span class="lineNum">    1492 </span><span class="lineCov">        360 :           gcc_assert (map-&gt;partition_to_base_index[q]</span>
+<span class="lineNum">    1493 </span>            :                       == map-&gt;partition_to_base_index[p]);
+<span class="lineNum">    1494 </span>            : 
+<span class="lineNum">    1495 </span><span class="lineCov">        360 :           if (p == (int)x)</span>
+<span class="lineNum">    1496 </span>            :             {
+<span class="lineNum">    1497 </span><span class="lineCov">         70 :               if (t++ == 0)</span>
+<span class="lineNum">    1498 </span>            :                 {
+<span class="lineNum">    1499 </span><span class="lineCov">         47 :                   fprintf (f, &quot;Partition %d, base %d (&quot;, x,</span>
+<span class="lineNum">    1500 </span>            :                            map-&gt;partition_to_base_index[q]);
+<span class="lineNum">    1501 </span><span class="lineCov">         47 :                   print_generic_expr (f, partition_to_var (map, q), TDF_SLIM);</span>
+<span class="lineNum">    1502 </span><span class="lineCov">         47 :                   fprintf (f, &quot; - &quot;);</span>
+<span class="lineNum">    1503 </span>            :                 }
+<span class="lineNum">    1504 </span><span class="lineCov">         70 :               fprintf (f, &quot;%d &quot;, y);</span>
+<span class="lineNum">    1505 </span>            :             }
+<span class="lineNum">    1506 </span>            :         }
+<span class="lineNum">    1507 </span><span class="lineCov">         70 :       if (t != 0)</span>
+<span class="lineNum">    1508 </span><span class="lineCov">         47 :         fprintf (f, &quot;)\n&quot;);</span>
+<span class="lineNum">    1509 </span>            :     }
+<span class="lineNum">    1510 </span><span class="lineCov">         32 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1511 </span><span class="lineCov">         32 : }</span>
+<span class="lineNum">    1512 </span>            : 
+<span class="lineNum">    1513 </span>            : /* Given SSA_NAMEs NAME1 and NAME2, return true if they are candidates for
+<span class="lineNum">    1514 </span>            :    coalescing together, false otherwise.
+<span class="lineNum">    1515 </span>            : 
+<span class="lineNum">    1516 </span>            :    This must stay consistent with compute_samebase_partition_bases and 
+<span class="lineNum">    1517 </span>            :    compute_optimized_partition_bases.  */
+<a name="1518"><span class="lineNum">    1518 </span>            : </a>
+<span class="lineNum">    1519 </span>            : bool
+<span class="lineNum">    1520 </span><span class="lineCov">   11819959 : gimple_can_coalesce_p (tree name1, tree name2)</span>
+<span class="lineNum">    1521 </span>            : {
+<span class="lineNum">    1522 </span>            :   /* First check the SSA_NAME's associated DECL.  Without
+<span class="lineNum">    1523 </span>            :      optimization, we only want to coalesce if they have the same DECL
+<span class="lineNum">    1524 </span>            :      or both have no associated DECL.  */
+<span class="lineNum">    1525 </span><span class="lineCov">   11819959 :   tree var1 = SSA_NAME_VAR (name1);</span>
+<span class="lineNum">    1526 </span><span class="lineCov">   11819959 :   tree var2 = SSA_NAME_VAR (name2);</span>
+<span class="lineNum">    1527 </span><span class="lineCov">   11819959 :   var1 = (var1 &amp;&amp; (!VAR_P (var1) || !DECL_IGNORED_P (var1))) ? var1 : NULL_TREE;</span>
+<span class="lineNum">    1528 </span><span class="lineCov">   11819959 :   var2 = (var2 &amp;&amp; (!VAR_P (var2) || !DECL_IGNORED_P (var2))) ? var2 : NULL_TREE;</span>
+<span class="lineNum">    1529 </span><span class="lineCov">   11819959 :   if (var1 != var2 &amp;&amp; !flag_tree_coalesce_vars)</span>
+<span class="lineNum">    1530 </span>            :     return false;
+<span class="lineNum">    1531 </span>            : 
+<span class="lineNum">    1532 </span>            :   /* Now check the types.  If the types are the same, then we should
+<span class="lineNum">    1533 </span>            :      try to coalesce V1 and V2.  */
+<span class="lineNum">    1534 </span><span class="lineCov">   11630822 :   tree t1 = TREE_TYPE (name1);</span>
+<span class="lineNum">    1535 </span><span class="lineCov">   11630822 :   tree t2 = TREE_TYPE (name2);</span>
+<span class="lineNum">    1536 </span><span class="lineCov">   11630822 :   if (t1 == t2)</span>
+<span class="lineNum">    1537 </span>            :     {
+<span class="lineNum">    1538 </span><span class="lineCov">   11122920 :     check_modes:</span>
+<span class="lineNum">    1539 </span>            :       /* If the base variables are the same, we're good: none of the
+<span class="lineNum">    1540 </span>            :          other tests below could possibly fail.  */
+<span class="lineNum">    1541 </span><span class="lineCov">   11630322 :       var1 = SSA_NAME_VAR (name1);</span>
+<span class="lineNum">    1542 </span><span class="lineCov">   11630322 :       var2 = SSA_NAME_VAR (name2);</span>
+<span class="lineNum">    1543 </span><span class="lineCov">   11630322 :       if (var1 == var2)</span>
+<span class="lineNum">    1544 </span>            :         return true;
+<span class="lineNum">    1545 </span>            : 
+<span class="lineNum">    1546 </span>            :       /* We don't want to coalesce two SSA names if one of the base
+<span class="lineNum">    1547 </span>            :          variables is supposed to be a register while the other is
+<span class="lineNum">    1548 </span>            :          supposed to be on the stack.  Anonymous SSA names most often
+<span class="lineNum">    1549 </span>            :          take registers, but when not optimizing, user variables
+<span class="lineNum">    1550 </span>            :          should go on the stack, so coalescing them with the anonymous
+<span class="lineNum">    1551 </span>            :          variable as the partition leader would end up assigning the
+<span class="lineNum">    1552 </span>            :          user variable to a register.  Don't do that!  */
+<span class="lineNum">    1553 </span><span class="lineCov">    2064061 :       bool reg1 = use_register_for_decl (name1);</span>
+<span class="lineNum">    1554 </span><span class="lineCov">    2064061 :       bool reg2 = use_register_for_decl (name2);</span>
+<span class="lineNum">    1555 </span><span class="lineCov">    2064061 :       if (reg1 != reg2)</span>
+<span class="lineNum">    1556 </span>            :         return false;
+<span class="lineNum">    1557 </span>            : 
+<span class="lineNum">    1558 </span>            :       /* Check that the promoted modes and unsignedness are the same.
+<span class="lineNum">    1559 </span>            :          We don't want to coalesce if the promoted modes would be
+<span class="lineNum">    1560 </span>            :          different, or if they would sign-extend differently.  Only
+<span class="lineNum">    1561 </span>            :          PARM_DECLs and RESULT_DECLs have different promotion rules,
+<span class="lineNum">    1562 </span>            :          so skip the test if both are variables, or both are anonymous
+<span class="lineNum">    1563 </span>            :          SSA_NAMEs.  */
+<span class="lineNum">    1564 </span><span class="lineCov">    2063998 :       int unsigned1, unsigned2;</span>
+<span class="lineNum">    1565 </span><span class="lineCov">    2063998 :       return ((!var1 || VAR_P (var1)) &amp;&amp; (!var2 || VAR_P (var2)))</span>
+<span class="lineNum">    1566 </span><span class="lineCov">    3055772 :         || ((promote_ssa_mode (name1, &amp;unsigned1)</span>
+<span class="lineNum">    1567 </span><span class="lineCov">     495887 :              == promote_ssa_mode (name2, &amp;unsigned2))</span>
+<span class="lineNum">    1568 </span><span class="lineCov">     495887 :             &amp;&amp; unsigned1 == unsigned2);</span>
+<span class="lineNum">    1569 </span>            :     }
+<span class="lineNum">    1570 </span>            : 
+<span class="lineNum">    1571 </span>            :   /* If alignment requirements are different, we can't coalesce.  */
+<span class="lineNum">    1572 </span><span class="lineCov">    1015804 :   if (MINIMUM_ALIGNMENT (t1,</span>
+<span class="lineNum">    1573 </span>            :                          var1 ? DECL_MODE (var1) : TYPE_MODE (t1),
+<span class="lineNum">    1574 </span>            :                          var1 ? LOCAL_DECL_ALIGNMENT (var1) : TYPE_ALIGN (t1))
+<span class="lineNum">    1575 </span><span class="lineCov">     507902 :       != MINIMUM_ALIGNMENT (t2,</span>
+<span class="lineNum">    1576 </span>            :                             var2 ? DECL_MODE (var2) : TYPE_MODE (t2),
+<span class="lineNum">    1577 </span>            :                             var2 ? LOCAL_DECL_ALIGNMENT (var2) : TYPE_ALIGN (t2)))
+<span class="lineNum">    1578 </span>            :     return false;
+<span class="lineNum">    1579 </span>            : 
+<span class="lineNum">    1580 </span>            :   /* If the types are not the same, see whether they are compatible.  This
+<span class="lineNum">    1581 </span>            :      (for example) allows coalescing when the types are fundamentally the
+<span class="lineNum">    1582 </span>            :      same, but just have different names.  */
+<span class="lineNum">    1583 </span><span class="lineCov">     507428 :   if (types_compatible_p (t1, t2))</span>
+<span class="lineNum">    1584 </span>            :     goto check_modes;
+<span class="lineNum">    1585 </span>            : 
+<span class="lineNum">    1586 </span>            :   return false;
+<span class="lineNum">    1587 </span>            : }
+<span class="lineNum">    1588 </span>            : 
+<span class="lineNum">    1589 </span>            : /* Fill in MAP's partition_to_base_index, with one index for each
+<span class="lineNum">    1590 </span>            :    partition of SSA names USED_IN_COPIES and related by CL coalesce
+<span class="lineNum">    1591 </span>            :    possibilities.  This must match gimple_can_coalesce_p in the
+<span class="lineNum">    1592 </span>            :    optimized case.  */
+<span class="lineNum">    1593 </span>            : 
+<span class="lineNum">    1594 </span>            : static void
+<span class="lineNum">    1595 </span><span class="lineCov">     832898 : compute_optimized_partition_bases (var_map map, bitmap used_in_copies,</span>
+<span class="lineNum">    1596 </span>            :                                    coalesce_list *cl)
+<span class="lineNum">    1597 </span>            : {
+<span class="lineNum">    1598 </span><span class="lineCov">     832898 :   int parts = num_var_partitions (map);</span>
+<span class="lineNum">    1599 </span><span class="lineCov">     832898 :   partition tentative = partition_new (parts);</span>
+<span class="lineNum">    1600 </span>            : 
+<span class="lineNum">    1601 </span>            :   /* Partition the SSA versions so that, for each coalescible
+<span class="lineNum">    1602 </span>            :      pair, both of its members are in the same partition in
+<span class="lineNum">    1603 </span>            :      TENTATIVE.  */
+<span class="lineNum">    1604 </span><span class="lineCov">     832898 :   gcc_assert (!cl-&gt;sorted);</span>
+<span class="lineNum">    1605 </span><span class="lineCov">     832898 :   coalesce_pair *node;</span>
+<span class="lineNum">    1606 </span><span class="lineCov">     832898 :   coalesce_iterator_type ppi;</span>
+<span class="lineNum">    1607 </span><span class="lineCov">   11246841 :   FOR_EACH_PARTITION_PAIR (node, ppi, cl)</span>
+<span class="lineNum">    1608 </span>            :     {
+<span class="lineNum">    1609 </span><span class="lineCov">    2916049 :       tree v1 = ssa_name (node-&gt;first_element);</span>
+<span class="lineNum">    1610 </span><span class="lineCov">    2916049 :       int p1 = partition_find (tentative, var_to_partition (map, v1));</span>
+<span class="lineNum">    1611 </span><span class="lineCov">    2916049 :       tree v2 = ssa_name (node-&gt;second_element);</span>
+<span class="lineNum">    1612 </span><span class="lineCov">    2916049 :       int p2 = partition_find (tentative, var_to_partition (map, v2));</span>
+<span class="lineNum">    1613 </span>            : 
+<span class="lineNum">    1614 </span><span class="lineCov">    2916049 :       if (p1 == p2)</span>
+<span class="lineNum">    1615 </span>            :         continue;
+<span class="lineNum">    1616 </span>            : 
+<span class="lineNum">    1617 </span><span class="lineCov">    2717499 :       partition_union (tentative, p1, p2);</span>
+<span class="lineNum">    1618 </span>            :     }
+<span class="lineNum">    1619 </span>            : 
+<span class="lineNum">    1620 </span>            :   /* We have to deal with cost one pairs too.  */
+<span class="lineNum">    1621 </span><span class="lineCov">     979821 :   for (cost_one_pair *co = cl-&gt;cost_one_list; co; co = co-&gt;next)</span>
+<span class="lineNum">    1622 </span>            :     {
+<span class="lineNum">    1623 </span><span class="lineCov">     146923 :       tree v1 = ssa_name (co-&gt;first_element);</span>
+<span class="lineNum">    1624 </span><span class="lineCov">     146923 :       int p1 = partition_find (tentative, var_to_partition (map, v1));</span>
+<span class="lineNum">    1625 </span><span class="lineCov">     146923 :       tree v2 = ssa_name (co-&gt;second_element);</span>
+<span class="lineNum">    1626 </span><span class="lineCov">     146923 :       int p2 = partition_find (tentative, var_to_partition (map, v2));</span>
+<span class="lineNum">    1627 </span>            : 
+<span class="lineNum">    1628 </span><span class="lineCov">     146923 :       if (p1 == p2)</span>
+<span class="lineNum">    1629 </span>            :         continue;
+<span class="lineNum">    1630 </span>            : 
+<span class="lineNum">    1631 </span><span class="lineCov">     140391 :       partition_union (tentative, p1, p2);</span>
+<span class="lineNum">    1632 </span>            :     }
+<span class="lineNum">    1633 </span>            : 
+<span class="lineNum">    1634 </span>            :   /* And also with abnormal edges.  */
+<span class="lineNum">    1635 </span><span class="lineCov">     832898 :   basic_block bb;</span>
+<span class="lineNum">    1636 </span><span class="lineCov">     832898 :   edge e;</span>
+<span class="lineNum">    1637 </span><span class="lineCov">     832898 :   unsigned i;</span>
+<span class="lineNum">    1638 </span><span class="lineCov">     832898 :   edge_iterator ei;</span>
+<span class="lineNum">    1639 </span><span class="lineCov">    7800109 :   for (i = 0; map-&gt;vec_bbs.iterate (i, &amp;bb); ++i)</span>
+<span class="lineNum">    1640 </span>            :     {
+<span class="lineNum">    1641 </span><span class="lineCov">   24020729 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1642 </span><span class="lineCov">   10086307 :         if (e-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">    1643 </span>            :           {
+<span class="lineNum">    1644 </span><span class="lineCov">       8956 :             gphi_iterator gsi;</span>
+<span class="lineNum">    1645 </span><span class="lineCov">     394370 :             for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi);</span>
+<span class="lineNum">    1646 </span><span class="lineCov">     192707 :                  gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1647 </span>            :               {
+<span class="lineNum">    1648 </span><span class="lineCov">     192707 :                 gphi *phi = gsi.phi ();</span>
+<span class="lineNum">    1649 </span><span class="lineCov">     385414 :                 tree res = PHI_RESULT (phi);</span>
+<span class="lineNum">    1650 </span><span class="lineCov">     385414 :                 if (virtual_operand_p (res))</span>
+<span class="lineNum">    1651 </span>            :                   continue;
+<span class="lineNum">    1652 </span><span class="lineCov">     192707 :                 tree arg = PHI_ARG_DEF (phi, e-&gt;dest_idx);</span>
+<span class="lineNum">    1653 </span><span class="lineCov">     192707 :                 if (SSA_NAME_IS_DEFAULT_DEF (arg)</span>
+<span class="lineNum">    1654 </span><span class="lineCov">       1554 :                     &amp;&amp; (!SSA_NAME_VAR (arg)</span>
+<span class="lineNum">    1655 </span><span class="lineCov">     194261 :                         || TREE_CODE (SSA_NAME_VAR (arg)) != PARM_DECL))</span>
+<span class="lineNum">    1656 </span>            :                   continue;
+<span class="lineNum">    1657 </span>            : 
+<span class="lineNum">    1658 </span><span class="lineCov">     191985 :                 int p1 = partition_find (tentative, var_to_partition (map, res));</span>
+<span class="lineNum">    1659 </span><span class="lineCov">     191985 :                 int p2 = partition_find (tentative, var_to_partition (map, arg));</span>
+<span class="lineNum">    1660 </span>            : 
+<span class="lineNum">    1661 </span><span class="lineCov">     191985 :                 if (p1 == p2)</span>
+<span class="lineNum">    1662 </span>            :                   continue;
+<span class="lineNum">    1663 </span>            : 
+<span class="lineNum">    1664 </span><span class="lineCov">        997 :                 partition_union (tentative, p1, p2);</span>
+<span class="lineNum">    1665 </span>            :               }
+<span class="lineNum">    1666 </span>            :           }
+<span class="lineNum">    1667 </span>            :     }
+<span class="lineNum">    1668 </span>            : 
+<span class="lineNum">    1669 </span><span class="lineCov">     832898 :   map-&gt;partition_to_base_index = XCNEWVEC (int, parts);</span>
+<span class="lineNum">    1670 </span><span class="lineCov">     832898 :   auto_vec&lt;unsigned int&gt; index_map (parts);</span>
+<span class="lineNum">    1671 </span><span class="lineCov">     832898 :   if (parts)</span>
+<span class="lineNum">    1672 </span><span class="lineCov">     738165 :     index_map.quick_grow (parts);</span>
+<span class="lineNum">    1673 </span>            : 
+<span class="lineNum">    1674 </span>            :   const unsigned no_part = -1;
+<span class="lineNum">    1675 </span>            :   unsigned count = parts;
+<span class="lineNum">    1676 </span><span class="lineCov">    6752197 :   while (count)</span>
+<span class="lineNum">    1677 </span><span class="lineCov">    5919299 :     index_map[--count] = no_part;</span>
+<span class="lineNum">    1678 </span>            : 
+<span class="lineNum">    1679 </span>            :   /* Initialize MAP's mapping from partition to base index, using
+<span class="lineNum">    1680 </span>            :      as base indices an enumeration of the TENTATIVE partitions in
+<span class="lineNum">    1681 </span>            :      which each SSA version ended up, so that we compute conflicts
+<span class="lineNum">    1682 </span>            :      between all SSA versions that ended up in the same potential
+<span class="lineNum">    1683 </span>            :      coalesce partition.  */
+<span class="lineNum">    1684 </span><span class="lineCov">     832898 :   bitmap_iterator bi;</span>
+<span class="lineNum">    1685 </span><span class="lineCov">    6752197 :   EXECUTE_IF_SET_IN_BITMAP (used_in_copies, 0, i, bi)</span>
+<span class="lineNum">    1686 </span>            :     {
+<span class="lineNum">    1687 </span><span class="lineCov">    5919299 :       int pidx = var_to_partition (map, ssa_name (i));</span>
+<span class="lineNum">    1688 </span><span class="lineCov">    5919299 :       int base = partition_find (tentative, pidx);</span>
+<span class="lineNum">    1689 </span><span class="lineCov">    5919299 :       if (index_map[base] != no_part)</span>
+<span class="lineNum">    1690 </span>            :         continue;
+<span class="lineNum">    1691 </span><span class="lineCov">    6120824 :       index_map[base] = count++;</span>
+<span class="lineNum">    1692 </span>            :     }
+<span class="lineNum">    1693 </span>            : 
+<span class="lineNum">    1694 </span><span class="lineCov">     832898 :   map-&gt;num_basevars = count;</span>
+<span class="lineNum">    1695 </span>            : 
+<span class="lineNum">    1696 </span><span class="lineCov">    6752197 :   EXECUTE_IF_SET_IN_BITMAP (used_in_copies, 0, i, bi)</span>
+<span class="lineNum">    1697 </span>            :     {
+<span class="lineNum">    1698 </span><span class="lineCov">    5919299 :       int pidx = var_to_partition (map, ssa_name (i));</span>
+<span class="lineNum">    1699 </span><span class="lineCov">    5919299 :       int base = partition_find (tentative, pidx);</span>
+<span class="lineNum">    1700 </span><span class="lineCov">    5919299 :       gcc_assert (index_map[base] &lt; count);</span>
+<span class="lineNum">    1701 </span><span class="lineCov">   11838598 :       map-&gt;partition_to_base_index[pidx] = index_map[base];</span>
+<span class="lineNum">    1702 </span>            :     }
+<span class="lineNum">    1703 </span>            : 
+<span class="lineNum">    1704 </span><span class="lineCov">     832898 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1705 </span><span class="lineCov">         32 :     dump_part_var_map (dump_file, tentative, map);</span>
+<span class="lineNum">    1706 </span>            : 
+<span class="lineNum">    1707 </span><span class="lineCov">     832898 :   partition_delete (tentative);</span>
+<span class="lineNum">    1708 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">    1709 </span>            : 
+<span class="lineNum">    1710 </span>            : /* Given an initial var_map MAP, coalesce variables and return a partition map
+<span class="lineNum">    1711 </span>            :    with the resulting coalesce.  Note that this function is called in either
+<span class="lineNum">    1712 </span>            :    live range computation context or out-of-ssa context, indicated by MAP.  */
+<a name="1713"><span class="lineNum">    1713 </span>            : </a>
+<span class="lineNum">    1714 </span>            : extern void
+<span class="lineNum">    1715 </span><span class="lineCov">     832898 : coalesce_ssa_name (var_map map)</span>
+<span class="lineNum">    1716 </span>            : {
+<span class="lineNum">    1717 </span><span class="lineCov">     832898 :   tree_live_info_p liveinfo;</span>
+<span class="lineNum">    1718 </span><span class="lineCov">     832898 :   ssa_conflicts *graph;</span>
+<span class="lineNum">    1719 </span><span class="lineCov">     832898 :   coalesce_list *cl;</span>
+<span class="lineNum">    1720 </span><span class="lineCov">    1571063 :   auto_bitmap used_in_copies;</span>
+<span class="lineNum">    1721 </span>            : 
+<span class="lineNum">    1722 </span><span class="lineCov">    1665796 :   cl = create_coalesce_list_for_region (map, used_in_copies);</span>
+<span class="lineNum">    1723 </span><span class="lineCov">     832898 :   if (map-&gt;outofssa_p)</span>
+<span class="lineNum">    1724 </span><span class="lineCov">    1665796 :     populate_coalesce_list_for_outofssa (cl, used_in_copies);</span>
+<span class="lineNum">    1725 </span>            : 
+<span class="lineNum">    1726 </span><span class="lineCov">     832898 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1727 </span><span class="lineCov">         32 :     dump_var_map (dump_file, map);</span>
+<span class="lineNum">    1728 </span>            : 
+<span class="lineNum">    1729 </span><span class="lineCov">    1665796 :   partition_view_bitmap (map, used_in_copies);</span>
+<span class="lineNum">    1730 </span>            : 
+<span class="lineNum">    1731 </span><span class="lineCov">    1665796 :   compute_optimized_partition_bases (map, used_in_copies, cl);</span>
+<span class="lineNum">    1732 </span>            : 
+<span class="lineNum">    1733 </span><span class="lineCov">    1665796 :   if (num_var_partitions (map) &lt; 1)</span>
+<span class="lineNum">    1734 </span>            :     {
+<span class="lineNum">    1735 </span><span class="lineCov">      94733 :       delete_coalesce_list (cl);</span>
+<span class="lineNum">    1736 </span><span class="lineCov">      94733 :       return;</span>
+<span class="lineNum">    1737 </span>            :     }
+<span class="lineNum">    1738 </span>            : 
+<span class="lineNum">    1739 </span><span class="lineCov">     738165 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1740 </span><span class="lineCov">         28 :     dump_var_map (dump_file, map);</span>
+<span class="lineNum">    1741 </span>            : 
+<span class="lineNum">    1742 </span><span class="lineCov">     738165 :   liveinfo = calculate_live_ranges (map, false);</span>
+<span class="lineNum">    1743 </span>            : 
+<span class="lineNum">    1744 </span><span class="lineCov">     738165 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1745 </span><span class="lineCov">         28 :     dump_live_info (dump_file, liveinfo, LIVEDUMP_ENTRY);</span>
+<span class="lineNum">    1746 </span>            : 
+<span class="lineNum">    1747 </span>            :   /* Build a conflict graph.  */
+<span class="lineNum">    1748 </span><span class="lineCov">     738165 :   graph = build_ssa_conflict_graph (liveinfo);</span>
+<span class="lineNum">    1749 </span><span class="lineCov">     738165 :   delete_tree_live_info (liveinfo);</span>
+<span class="lineNum">    1750 </span><span class="lineCov">     738165 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1751 </span><span class="lineCov">         28 :     ssa_conflicts_dump (dump_file, graph);</span>
+<span class="lineNum">    1752 </span>            : 
+<span class="lineNum">    1753 </span><span class="lineCov">     738165 :   sort_coalesce_list (cl, graph, map);</span>
+<span class="lineNum">    1754 </span>            : 
+<span class="lineNum">    1755 </span><span class="lineCov">     738165 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1756 </span>            :     {
+<span class="lineNum">    1757 </span><span class="lineCov">         28 :       fprintf (dump_file, &quot;\nAfter sorting:\n&quot;);</span>
+<span class="lineNum">    1758 </span><span class="lineCov">         28 :       dump_coalesce_list (dump_file, cl);</span>
+<span class="lineNum">    1759 </span>            :     }
+<span class="lineNum">    1760 </span>            : 
+<span class="lineNum">    1761 </span>            :   /* First, coalesce all live on entry variables to their base variable.
+<span class="lineNum">    1762 </span>            :      This will ensure the first use is coming from the correct location.  */
+<span class="lineNum">    1763 </span>            : 
+<span class="lineNum">    1764 </span><span class="lineCov">     738165 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1765 </span><span class="lineCov">         28 :     dump_var_map (dump_file, map);</span>
+<span class="lineNum">    1766 </span>            : 
+<span class="lineNum">    1767 </span>            :   /* Now coalesce everything in the list.  */
+<span class="lineNum">    1768 </span><span class="lineCov">     738165 :   coalesce_partitions (map, graph, cl,</span>
+<span class="lineNum">    1769 </span><span class="lineCov">    1476330 :                        ((dump_flags &amp; TDF_DETAILS) ? dump_file : NULL));</span>
+<span class="lineNum">    1770 </span>            : 
+<span class="lineNum">    1771 </span><span class="lineCov">     738165 :   delete_coalesce_list (cl);</span>
+<span class="lineNum">    1772 </span><span class="lineCov">     738165 :   ssa_conflicts_delete (graph);</span>
+<span class="lineNum">    1773 </span>            : }
+<span class="lineNum">    1774 </span>            : 
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

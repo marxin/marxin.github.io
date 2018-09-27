@@ -1,0 +1,1784 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-chrec.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-chrec.c<span style="font-size: 80%;"> (source / <a href="tree-chrec.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">591</td>
+            <td class="headerCovTableEntry">687</td>
+            <td class="headerCovTableEntryMed">86.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">35</td>
+            <td class="headerCovTableEntry">39</td>
+            <td class="headerCovTableEntryMed">89.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Chains of recurrences.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Sebastian Pop &lt;pop@cri.ensmp.fr&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : /* This file implements operations on chains of recurrences.  Chains
+<span class="lineNum">      22 </span>            :    of recurrences are used for modeling evolution functions of scalar
+<span class="lineNum">      23 </span>            :    variables.
+<span class="lineNum">      24 </span>            : */
+<span class="lineNum">      25 </span>            : 
+<span class="lineNum">      26 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;gimple-expr.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-ssa-loop-ivopts.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-ssa-loop-niter.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;tree-chrec.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-scalar-evolution.h&quot;
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* Extended folder for chrecs.  */
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : /* Determines whether CST is not a constant evolution.  */
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            : static inline bool
+<span class="lineNum">      47 </span>            : is_not_constant_evolution (const_tree cst)
+<span class="lineNum">      48 </span>            : {
+<span class="lineNum">      49 </span>            :   return (TREE_CODE (cst) == POLYNOMIAL_CHREC);
+<span class="lineNum">      50 </span>            : }
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            : /* Fold CODE for a polynomial function and a constant.  */
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            : static inline tree
+<span class="lineNum">      55 </span>            : chrec_fold_poly_cst (enum tree_code code,
+<span class="lineNum">      56 </span>            :                      tree type,
+<span class="lineNum">      57 </span>            :                      tree poly,
+<span class="lineNum">      58 </span>            :                      tree cst)
+<span class="lineNum">      59 </span>            : {
+<span class="lineNum">      60 </span>            :   gcc_assert (poly);
+<span class="lineNum">      61 </span>            :   gcc_assert (cst);
+<span class="lineNum">      62 </span>            :   gcc_assert (TREE_CODE (poly) == POLYNOMIAL_CHREC);
+<span class="lineNum">      63 </span>            :   gcc_checking_assert (!is_not_constant_evolution (cst));
+<span class="lineNum">      64 </span>            :   gcc_checking_assert (useless_type_conversion_p (type, chrec_type (poly)));
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :   switch (code)
+<span class="lineNum">      67 </span>            :     {
+<span class="lineNum">      68 </span>            :     case PLUS_EXPR:
+<span class="lineNum">      69 </span>            :       return build_polynomial_chrec
+<span class="lineNum">      70 </span>            :         (CHREC_VARIABLE (poly),
+<span class="lineNum">      71 </span>            :          chrec_fold_plus (type, CHREC_LEFT (poly), cst),
+<span class="lineNum">      72 </span>            :          CHREC_RIGHT (poly));
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :     case MINUS_EXPR:
+<span class="lineNum">      75 </span>            :       return build_polynomial_chrec
+<span class="lineNum">      76 </span>            :         (CHREC_VARIABLE (poly),
+<span class="lineNum">      77 </span>            :          chrec_fold_minus (type, CHREC_LEFT (poly), cst),
+<span class="lineNum">      78 </span>            :          CHREC_RIGHT (poly));
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            :     case MULT_EXPR:
+<span class="lineNum">      81 </span>            :       return build_polynomial_chrec
+<span class="lineNum">      82 </span>            :         (CHREC_VARIABLE (poly),
+<span class="lineNum">      83 </span>            :          chrec_fold_multiply (type, CHREC_LEFT (poly), cst),
+<span class="lineNum">      84 </span>            :          chrec_fold_multiply (type, CHREC_RIGHT (poly), cst));
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :     default:
+<span class="lineNum">      87 </span>            :       return chrec_dont_know;
+<span class="lineNum">      88 </span>            :     }
+<span class="lineNum">      89 </span>            : }
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            : /* Fold the addition of two polynomial functions.  */
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : static inline tree
+<span class="lineNum">      94 </span><span class="lineCov">      31197 : chrec_fold_plus_poly_poly (enum tree_code code,</span>
+<span class="lineNum">      95 </span>            :                            tree type,
+<span class="lineNum">      96 </span>            :                            tree poly0,
+<span class="lineNum">      97 </span>            :                            tree poly1)
+<span class="lineNum">      98 </span>            : {
+<span class="lineNum">      99 </span><span class="lineCov">      31197 :   tree left, right;</span>
+<span class="lineNum">     100 </span><span class="lineCov">      31197 :   struct loop *loop0 = get_chrec_loop (poly0);</span>
+<span class="lineNum">     101 </span><span class="lineCov">      31197 :   struct loop *loop1 = get_chrec_loop (poly1);</span>
+<span class="lineNum">     102 </span><span class="lineCov">      31197 :   tree rtype = code == POINTER_PLUS_EXPR ? chrec_type (poly1) : type;</span>
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span><span class="lineCov">      31197 :   gcc_assert (poly0);</span>
+<span class="lineNum">     105 </span><span class="lineCov">      31197 :   gcc_assert (poly1);</span>
+<span class="lineNum">     106 </span><span class="lineCov">      31197 :   gcc_assert (TREE_CODE (poly0) == POLYNOMIAL_CHREC);</span>
+<span class="lineNum">     107 </span><span class="lineCov">      31197 :   gcc_assert (TREE_CODE (poly1) == POLYNOMIAL_CHREC);</span>
+<span class="lineNum">     108 </span><span class="lineCov">      31197 :   if (POINTER_TYPE_P (chrec_type (poly0)))</span>
+<span class="lineNum">     109 </span><span class="lineCov">        115 :     gcc_checking_assert (ptrofftype_p (chrec_type (poly1))</span>
+<span class="lineNum">     110 </span>            :                          &amp;&amp; useless_type_conversion_p (type, chrec_type (poly0)));
+<span class="lineNum">     111 </span>            :   else
+<span class="lineNum">     112 </span><span class="lineCov">      31082 :     gcc_checking_assert (useless_type_conversion_p (type, chrec_type (poly0))</span>
+<span class="lineNum">     113 </span>            :                          &amp;&amp; useless_type_conversion_p (type, chrec_type (poly1)));
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span>            :   /*
+<span class="lineNum">     116 </span>            :     {a, +, b}_1 + {c, +, d}_2  -&gt;  {{a, +, b}_1 + c, +, d}_2,
+<span class="lineNum">     117 </span>            :     {a, +, b}_2 + {c, +, d}_1  -&gt;  {{c, +, d}_1 + a, +, b}_2,
+<span class="lineNum">     118 </span>            :     {a, +, b}_x + {c, +, d}_x  -&gt;  {a+c, +, b+d}_x.  */
+<span class="lineNum">     119 </span><span class="lineCov">      31197 :   if (flow_loop_nested_p (loop0, loop1))</span>
+<span class="lineNum">     120 </span>            :     {
+<span class="lineNum">     121 </span><span class="lineCov">         94 :       if (code == PLUS_EXPR || code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     122 </span><span class="lineCov">         41 :         return build_polynomial_chrec</span>
+<span class="lineNum">     123 </span><span class="lineCov">         41 :           (CHREC_VARIABLE (poly1),</span>
+<span class="lineNum">     124 </span><span class="lineCov">         82 :            chrec_fold_plus (type, poly0, CHREC_LEFT (poly1)),</span>
+<span class="lineNum">     125 </span><span class="lineCov">         82 :            CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     126 </span>            :       else
+<span class="lineNum">     127 </span><span class="lineCov">         53 :         return build_polynomial_chrec</span>
+<span class="lineNum">     128 </span><span class="lineCov">        106 :           (CHREC_VARIABLE (poly1),</span>
+<span class="lineNum">     129 </span><span class="lineCov">         53 :            chrec_fold_minus (type, poly0, CHREC_LEFT (poly1)),</span>
+<span class="lineNum">     130 </span><span class="lineCov">         53 :            chrec_fold_multiply (type, CHREC_RIGHT (poly1),</span>
+<span class="lineNum">     131 </span><span class="lineCov">         53 :                                 SCALAR_FLOAT_TYPE_P (type)</span>
+<span class="lineNum">     132 </span><span class="lineNoCov">          0 :                                 ? build_real (type, dconstm1)</span>
+<span class="lineNum">     133 </span><span class="lineCov">        159 :                                 : build_int_cst_type (type, -1)));</span>
+<span class="lineNum">     134 </span>            :     }
+<span class="lineNum">     135 </span>            : 
+<span class="lineNum">     136 </span><span class="lineCov">      31103 :   if (flow_loop_nested_p (loop1, loop0))</span>
+<span class="lineNum">     137 </span>            :     {
+<span class="lineNum">     138 </span><span class="lineCov">        560 :       if (code == PLUS_EXPR || code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     139 </span><span class="lineCov">        550 :         return build_polynomial_chrec</span>
+<span class="lineNum">     140 </span><span class="lineCov">        550 :           (CHREC_VARIABLE (poly0),</span>
+<span class="lineNum">     141 </span><span class="lineCov">       1100 :            chrec_fold_plus (type, CHREC_LEFT (poly0), poly1),</span>
+<span class="lineNum">     142 </span><span class="lineCov">       1100 :            CHREC_RIGHT (poly0));</span>
+<span class="lineNum">     143 </span>            :       else
+<span class="lineNum">     144 </span><span class="lineCov">         10 :         return build_polynomial_chrec</span>
+<span class="lineNum">     145 </span><span class="lineCov">         10 :           (CHREC_VARIABLE (poly0),</span>
+<span class="lineNum">     146 </span><span class="lineCov">         20 :            chrec_fold_minus (type, CHREC_LEFT (poly0), poly1),</span>
+<span class="lineNum">     147 </span><span class="lineCov">         20 :            CHREC_RIGHT (poly0));</span>
+<span class="lineNum">     148 </span>            :     }
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            :   /* This function should never be called for chrecs of loops that
+<span class="lineNum">     151 </span>            :      do not belong to the same loop nest.  */
+<span class="lineNum">     152 </span><span class="lineCov">      30543 :   if (loop0 != loop1)</span>
+<span class="lineNum">     153 </span>            :     {
+<span class="lineNum">     154 </span>            :       /* It still can happen if we are not in loop-closed SSA form.  */
+<span class="lineNum">     155 </span><span class="lineCov">          6 :       gcc_assert (! loops_state_satisfies_p (LOOP_CLOSED_SSA));</span>
+<span class="lineNum">     156 </span><span class="lineCov">          3 :       return chrec_dont_know;</span>
+<span class="lineNum">     157 </span>            :     }
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineCov">      30540 :   if (code == PLUS_EXPR || code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     160 </span>            :     {
+<span class="lineNum">     161 </span><span class="lineCov">      17287 :       left = chrec_fold_plus</span>
+<span class="lineNum">     162 </span><span class="lineCov">      17287 :         (type, CHREC_LEFT (poly0), CHREC_LEFT (poly1));</span>
+<span class="lineNum">     163 </span><span class="lineCov">      17287 :       right = chrec_fold_plus</span>
+<span class="lineNum">     164 </span><span class="lineCov">      17287 :         (rtype, CHREC_RIGHT (poly0), CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     165 </span>            :     }
+<span class="lineNum">     166 </span>            :   else
+<span class="lineNum">     167 </span>            :     {
+<span class="lineNum">     168 </span><span class="lineCov">      13253 :       left = chrec_fold_minus</span>
+<span class="lineNum">     169 </span><span class="lineCov">      13253 :         (type, CHREC_LEFT (poly0), CHREC_LEFT (poly1));</span>
+<span class="lineNum">     170 </span><span class="lineCov">      13253 :       right = chrec_fold_minus</span>
+<span class="lineNum">     171 </span><span class="lineCov">      13253 :         (type, CHREC_RIGHT (poly0), CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     172 </span>            :     }
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span><span class="lineCov">      48310 :   if (chrec_zerop (right))</span>
+<span class="lineNum">     175 </span>            :     return left;
+<span class="lineNum">     176 </span>            :   else
+<span class="lineNum">     177 </span><span class="lineCov">      15959 :     return build_polynomial_chrec</span>
+<span class="lineNum">     178 </span><span class="lineCov">      15959 :       (CHREC_VARIABLE (poly0), left, right);</span>
+<span class="lineNum">     179 </span>            : }
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            : 
+<span class="lineNum">     182 </span>            : 
+<span class="lineNum">     183 </span>            : /* Fold the multiplication of two polynomial functions.  */
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span>            : static inline tree
+<span class="lineNum">     186 </span><span class="lineCov">       8746 : chrec_fold_multiply_poly_poly (tree type,</span>
+<span class="lineNum">     187 </span>            :                                tree poly0,
+<span class="lineNum">     188 </span>            :                                tree poly1)
+<span class="lineNum">     189 </span>            : {
+<span class="lineNum">     190 </span><span class="lineCov">       8746 :   tree t0, t1, t2;</span>
+<span class="lineNum">     191 </span><span class="lineCov">       8746 :   int var;</span>
+<span class="lineNum">     192 </span><span class="lineCov">       8746 :   struct loop *loop0 = get_chrec_loop (poly0);</span>
+<span class="lineNum">     193 </span><span class="lineCov">       8746 :   struct loop *loop1 = get_chrec_loop (poly1);</span>
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span><span class="lineCov">       8746 :   gcc_assert (poly0);</span>
+<span class="lineNum">     196 </span><span class="lineCov">       8746 :   gcc_assert (poly1);</span>
+<span class="lineNum">     197 </span><span class="lineCov">       8746 :   gcc_assert (TREE_CODE (poly0) == POLYNOMIAL_CHREC);</span>
+<span class="lineNum">     198 </span><span class="lineCov">       8746 :   gcc_assert (TREE_CODE (poly1) == POLYNOMIAL_CHREC);</span>
+<span class="lineNum">     199 </span><span class="lineCov">       8746 :   gcc_checking_assert (useless_type_conversion_p (type, chrec_type (poly0))</span>
+<span class="lineNum">     200 </span>            :                        &amp;&amp; useless_type_conversion_p (type, chrec_type (poly1)));
+<span class="lineNum">     201 </span>            : 
+<span class="lineNum">     202 </span>            :   /* {a, +, b}_1 * {c, +, d}_2  -&gt;  {c*{a, +, b}_1, +, d}_2,
+<span class="lineNum">     203 </span>            :      {a, +, b}_2 * {c, +, d}_1  -&gt;  {a*{c, +, d}_1, +, b}_2,
+<span class="lineNum">     204 </span>            :      {a, +, b}_x * {c, +, d}_x  -&gt;  {a*c, +, a*d + b*c + b*d, +, 2*b*d}_x.  */
+<span class="lineNum">     205 </span><span class="lineCov">       8746 :   if (flow_loop_nested_p (loop0, loop1))</span>
+<span class="lineNum">     206 </span>            :     /* poly0 is a constant wrt. poly1.  */
+<span class="lineNum">     207 </span><span class="lineNoCov">          0 :     return build_polynomial_chrec</span>
+<span class="lineNum">     208 </span><span class="lineNoCov">          0 :       (CHREC_VARIABLE (poly1),</span>
+<span class="lineNum">     209 </span><span class="lineNoCov">          0 :        chrec_fold_multiply (type, CHREC_LEFT (poly1), poly0),</span>
+<span class="lineNum">     210 </span><span class="lineNoCov">          0 :        CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span><span class="lineCov">       8746 :   if (flow_loop_nested_p (loop1, loop0))</span>
+<span class="lineNum">     213 </span>            :     /* poly1 is a constant wrt. poly0.  */
+<span class="lineNum">     214 </span><span class="lineNoCov">          0 :     return build_polynomial_chrec</span>
+<span class="lineNum">     215 </span><span class="lineNoCov">          0 :       (CHREC_VARIABLE (poly0),</span>
+<span class="lineNum">     216 </span><span class="lineNoCov">          0 :        chrec_fold_multiply (type, CHREC_LEFT (poly0), poly1),</span>
+<span class="lineNum">     217 </span><span class="lineNoCov">          0 :        CHREC_RIGHT (poly0));</span>
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span><span class="lineCov">       8746 :   if (loop0 != loop1)</span>
+<span class="lineNum">     220 </span>            :     {
+<span class="lineNum">     221 </span>            :       /* It still can happen if we are not in loop-closed SSA form.  */
+<span class="lineNum">     222 </span><span class="lineNoCov">          0 :       gcc_assert (! loops_state_satisfies_p (LOOP_CLOSED_SSA));</span>
+<span class="lineNum">     223 </span><span class="lineNoCov">          0 :       return chrec_dont_know;</span>
+<span class="lineNum">     224 </span>            :     }
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            :   /* poly0 and poly1 are two polynomials in the same variable,
+<span class="lineNum">     227 </span>            :      {a, +, b}_x * {c, +, d}_x  -&gt;  {a*c, +, a*d + b*c + b*d, +, 2*b*d}_x.  */
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span>            :   /* &quot;a*c&quot;.  */
+<span class="lineNum">     230 </span><span class="lineCov">       8746 :   t0 = chrec_fold_multiply (type, CHREC_LEFT (poly0), CHREC_LEFT (poly1));</span>
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span>            :   /* &quot;a*d + b*c&quot;.  */
+<span class="lineNum">     233 </span><span class="lineCov">       8746 :   t1 = chrec_fold_multiply (type, CHREC_LEFT (poly0), CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     234 </span><span class="lineCov">       8746 :   t1 = chrec_fold_plus (type, t1, chrec_fold_multiply (type,</span>
+<span class="lineNum">     235 </span><span class="lineCov">       8746 :                                                        CHREC_RIGHT (poly0),</span>
+<span class="lineNum">     236 </span><span class="lineCov">       8746 :                                                        CHREC_LEFT (poly1)));</span>
+<span class="lineNum">     237 </span>            :   /* &quot;b*d&quot;.  */
+<span class="lineNum">     238 </span><span class="lineCov">       8746 :   t2 = chrec_fold_multiply (type, CHREC_RIGHT (poly0), CHREC_RIGHT (poly1));</span>
+<span class="lineNum">     239 </span>            :   /* &quot;a*d + b*c + b*d&quot;.  */
+<span class="lineNum">     240 </span><span class="lineCov">       8746 :   t1 = chrec_fold_plus (type, t1, t2);</span>
+<span class="lineNum">     241 </span>            :   /* &quot;2*b*d&quot;.  */
+<span class="lineNum">     242 </span><span class="lineCov">      17492 :   t2 = chrec_fold_multiply (type, SCALAR_FLOAT_TYPE_P (type)</span>
+<span class="lineNum">     243 </span><span class="lineCov">          6 :                             ? build_real (type, dconst2)</span>
+<span class="lineNum">     244 </span><span class="lineCov">      17480 :                             : build_int_cst (type, 2), t2);</span>
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span><span class="lineCov">       8746 :   var = CHREC_VARIABLE (poly0);</span>
+<span class="lineNum">     247 </span><span class="lineCov">       8746 :   return build_polynomial_chrec (var, t0,</span>
+<span class="lineNum">     248 </span><span class="lineCov">       8746 :                                  build_polynomial_chrec (var, t1, t2));</span>
+<span class="lineNum">     249 </span>            : }
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            : /* When the operands are automatically_generated_chrec_p, the fold has
+<span class="lineNum">     252 </span>            :    to respect the semantics of the operands.  */
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            : static inline tree
+<span class="lineNum">     255 </span>            : chrec_fold_automatically_generated_operands (tree op0,
+<span class="lineNum">     256 </span>            :                                              tree op1)
+<span class="lineNum">     257 </span>            : {
+<span class="lineNum">     258 </span><span class="lineCov">    3322559 :   if (op0 == chrec_dont_know</span>
+<span class="lineNum">     259 </span><span class="lineCov">     608048 :       || op1 == chrec_dont_know)</span>
+<span class="lineNum">     260 </span>            :     return chrec_dont_know;
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span><span class="lineNoCov">          0 :   if (op0 == chrec_known</span>
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 :       || op1 == chrec_known)</span>
+<span class="lineNum">     264 </span>            :     return chrec_known;
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span><span class="lineNoCov">          0 :   if (op0 == chrec_not_analyzed_yet</span>
+<span class="lineNum">     267 </span><span class="lineNoCov">          0 :       || op1 == chrec_not_analyzed_yet)</span>
+<span class="lineNum">     268 </span><span class="lineNoCov">          0 :     return chrec_not_analyzed_yet;</span>
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            :   /* The default case produces a safe result.  */
+<span class="lineNum">     271 </span>            :   return chrec_dont_know;
+<span class="lineNum">     272 </span>            : }
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span>            : /* Fold the addition of two chrecs.  */
+<span class="lineNum">     275 </span>            : 
+<span class="lineNum">     276 </span>            : static tree
+<span class="lineNum">     277 </span><span class="lineCov">   15267175 : chrec_fold_plus_1 (enum tree_code code, tree type,</span>
+<span class="lineNum">     278 </span>            :                    tree op0, tree op1)
+<span class="lineNum">     279 </span>            : {
+<span class="lineNum">     280 </span><span class="lineCov">   15267175 :   if (automatically_generated_chrec_p (op0)</span>
+<span class="lineNum">     281 </span><span class="lineCov">   15267175 :       || automatically_generated_chrec_p (op1))</span>
+<span class="lineNum">     282 </span><span class="lineNoCov">          0 :     return chrec_fold_automatically_generated_operands (op0, op1);</span>
+<span class="lineNum">     283 </span>            : 
+<span class="lineNum">     284 </span><span class="lineCov">   15267175 :   switch (TREE_CODE (op0))</span>
+<span class="lineNum">     285 </span>            :     {
+<span class="lineNum">     286 </span><span class="lineCov">    4401948 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     287 </span><span class="lineCov">    4401948 :       gcc_checking_assert</span>
+<span class="lineNum">     288 </span>            :         (!chrec_contains_symbols_defined_in_loop (op0, CHREC_VARIABLE (op0)));
+<span class="lineNum">     289 </span><span class="lineCov">    4401948 :       switch (TREE_CODE (op1))</span>
+<span class="lineNum">     290 </span>            :         {
+<span class="lineNum">     291 </span><span class="lineCov">      31197 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     292 </span><span class="lineCov">      31197 :           gcc_checking_assert</span>
+<span class="lineNum">     293 </span>            :             (!chrec_contains_symbols_defined_in_loop (op1,
+<span class="lineNum">     294 </span>            :                                                       CHREC_VARIABLE (op1)));
+<span class="lineNum">     295 </span><span class="lineCov">      31197 :           return chrec_fold_plus_poly_poly (code, type, op0, op1);</span>
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span><span class="lineCov">      89173 :         CASE_CONVERT:</span>
+<span class="lineNum">     298 </span><span class="lineCov">      89173 :           {</span>
+<span class="lineNum">     299 </span>            :             /* We can strip sign-conversions to signed by performing the
+<span class="lineNum">     300 </span>            :                operation in unsigned.  */
+<span class="lineNum">     301 </span><span class="lineCov">      89173 :             tree optype = TREE_TYPE (TREE_OPERAND (op1, 0));</span>
+<span class="lineNum">     302 </span><span class="lineCov">      89173 :             if (INTEGRAL_TYPE_P (type)</span>
+<span class="lineNum">     303 </span><span class="lineCov">      88429 :                 &amp;&amp; INTEGRAL_TYPE_P (optype)</span>
+<span class="lineNum">     304 </span><span class="lineCov">      80651 :                 &amp;&amp; tree_nop_conversion_p (type, optype)</span>
+<span class="lineNum">     305 </span><span class="lineCov">     146948 :                 &amp;&amp; TYPE_UNSIGNED (optype))</span>
+<span class="lineNum">     306 </span><span class="lineCov">      16481 :               return chrec_convert (type,</span>
+<span class="lineNum">     307 </span>            :                                     chrec_fold_plus_1 (code, optype,
+<span class="lineNum">     308 </span>            :                                                        chrec_convert (optype,
+<span class="lineNum">     309 </span>            :                                                                       op0, NULL),
+<span class="lineNum">     310 </span><span class="lineCov">      16481 :                                                        TREE_OPERAND (op1, 0)),</span>
+<span class="lineNum">     311 </span><span class="lineCov">      16481 :                                     NULL);</span>
+<span class="lineNum">     312 </span><span class="lineCov">      72692 :             if (tree_contains_chrecs (op1, NULL))</span>
+<span class="lineNum">     313 </span><span class="lineCov">        408 :               return chrec_dont_know;</span>
+<span class="lineNum">     314 </span>            :           }
+<span class="lineNum">     315 </span>            :           /* FALLTHRU */
+<span class="lineNum">     316 </span>            : 
+<span class="lineNum">     317 </span><span class="lineCov">    4353862 :         default:</span>
+<span class="lineNum">     318 </span><span class="lineCov">    4353862 :           if (code == PLUS_EXPR || code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     319 </span><span class="lineCov">    4044917 :             return build_polynomial_chrec</span>
+<span class="lineNum">     320 </span><span class="lineCov">    4044917 :               (CHREC_VARIABLE (op0),</span>
+<span class="lineNum">     321 </span><span class="lineCov">    8089834 :                chrec_fold_plus (type, CHREC_LEFT (op0), op1),</span>
+<span class="lineNum">     322 </span><span class="lineCov">    8089834 :                CHREC_RIGHT (op0));</span>
+<span class="lineNum">     323 </span>            :           else
+<span class="lineNum">     324 </span><span class="lineCov">     308945 :             return build_polynomial_chrec</span>
+<span class="lineNum">     325 </span><span class="lineCov">     308945 :               (CHREC_VARIABLE (op0),</span>
+<span class="lineNum">     326 </span><span class="lineCov">     617890 :                chrec_fold_minus (type, CHREC_LEFT (op0), op1),</span>
+<span class="lineNum">     327 </span><span class="lineCov">     617890 :                CHREC_RIGHT (op0));</span>
+<span class="lineNum">     328 </span>            :         }
+<span class="lineNum">     329 </span>            : 
+<span class="lineNum">     330 </span><span class="lineCov">    1443077 :     CASE_CONVERT:</span>
+<span class="lineNum">     331 </span><span class="lineCov">    1443077 :       {</span>
+<span class="lineNum">     332 </span>            :         /* We can strip sign-conversions to signed by performing the
+<span class="lineNum">     333 </span>            :            operation in unsigned.  */
+<span class="lineNum">     334 </span><span class="lineCov">    1443077 :         tree optype = TREE_TYPE (TREE_OPERAND (op0, 0));</span>
+<span class="lineNum">     335 </span><span class="lineCov">    1443077 :         if (INTEGRAL_TYPE_P (type)</span>
+<span class="lineNum">     336 </span><span class="lineCov">    1443007 :             &amp;&amp; INTEGRAL_TYPE_P (optype)</span>
+<span class="lineNum">     337 </span><span class="lineCov">    1395775 :             &amp;&amp; tree_nop_conversion_p (type, optype)</span>
+<span class="lineNum">     338 </span><span class="lineCov">    2498839 :             &amp;&amp; TYPE_UNSIGNED (optype))</span>
+<span class="lineNum">     339 </span><span class="lineCov">      26512 :           return chrec_convert (type,</span>
+<span class="lineNum">     340 </span>            :                                 chrec_fold_plus_1 (code, optype,
+<span class="lineNum">     341 </span><span class="lineCov">      13256 :                                                    TREE_OPERAND (op0, 0),</span>
+<span class="lineNum">     342 </span>            :                                                    chrec_convert (optype,
+<span class="lineNum">     343 </span>            :                                                                   op1, NULL)),
+<span class="lineNum">     344 </span><span class="lineCov">      13256 :                                 NULL);</span>
+<span class="lineNum">     345 </span><span class="lineCov">    1429821 :         if (tree_contains_chrecs (op0, NULL))</span>
+<span class="lineNum">     346 </span><span class="lineCov">       6216 :           return chrec_dont_know;</span>
+<span class="lineNum">     347 </span>            :       }
+<span class="lineNum">     348 </span>            :       /* FALLTHRU */
+<span class="lineNum">     349 </span>            : 
+<span class="lineNum">     350 </span><span class="lineCov">   10845755 :     default:</span>
+<span class="lineNum">     351 </span><span class="lineCov">   10845755 :       switch (TREE_CODE (op1))</span>
+<span class="lineNum">     352 </span>            :         {
+<span class="lineNum">     353 </span><span class="lineCov">    1230019 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     354 </span><span class="lineCov">    1230019 :           gcc_checking_assert</span>
+<span class="lineNum">     355 </span>            :             (!chrec_contains_symbols_defined_in_loop (op1,
+<span class="lineNum">     356 </span>            :                                                       CHREC_VARIABLE (op1)));
+<span class="lineNum">     357 </span><span class="lineCov">    1230019 :           if (code == PLUS_EXPR || code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     358 </span><span class="lineCov">    1197205 :             return build_polynomial_chrec</span>
+<span class="lineNum">     359 </span><span class="lineCov">    1197205 :               (CHREC_VARIABLE (op1),</span>
+<span class="lineNum">     360 </span><span class="lineCov">    2394410 :                chrec_fold_plus (type, op0, CHREC_LEFT (op1)),</span>
+<span class="lineNum">     361 </span><span class="lineCov">    2394410 :                CHREC_RIGHT (op1));</span>
+<span class="lineNum">     362 </span>            :           else
+<span class="lineNum">     363 </span><span class="lineCov">      32814 :             return build_polynomial_chrec</span>
+<span class="lineNum">     364 </span><span class="lineCov">      65628 :               (CHREC_VARIABLE (op1),</span>
+<span class="lineNum">     365 </span><span class="lineCov">      32814 :                chrec_fold_minus (type, op0, CHREC_LEFT (op1)),</span>
+<span class="lineNum">     366 </span><span class="lineCov">      32814 :                chrec_fold_multiply (type, CHREC_RIGHT (op1),</span>
+<span class="lineNum">     367 </span><span class="lineCov">      32814 :                                     SCALAR_FLOAT_TYPE_P (type)</span>
+<span class="lineNum">     368 </span><span class="lineCov">          2 :                                     ? build_real (type, dconstm1)</span>
+<span class="lineNum">     369 </span><span class="lineCov">      98438 :                                     : build_int_cst_type (type, -1)));</span>
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span><span class="lineCov">    1003940 :         CASE_CONVERT:</span>
+<span class="lineNum">     372 </span><span class="lineCov">    1003940 :           if (tree_contains_chrecs (op1, NULL))</span>
+<span class="lineNum">     373 </span><span class="lineCov">       6109 :             return chrec_dont_know;</span>
+<span class="lineNum">     374 </span>            :           /* FALLTHRU */
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span><span class="lineCov">    9609627 :         default:</span>
+<span class="lineNum">     377 </span><span class="lineCov">    9609627 :           {</span>
+<span class="lineNum">     378 </span><span class="lineCov">    9609627 :             if (tree_contains_chrecs (op0, NULL)</span>
+<span class="lineNum">     379 </span><span class="lineCov">    9609627 :                 || tree_contains_chrecs (op1, NULL))</span>
+<span class="lineNum">     380 </span><span class="lineNoCov">          0 :               return build2 (code, type, op0, op1);</span>
+<span class="lineNum">     381 </span>            :             else
+<span class="lineNum">     382 </span>            :               {
+<span class="lineNum">     383 </span><span class="lineCov">    9609627 :                 if (code == POINTER_PLUS_EXPR)</span>
+<span class="lineNum">     384 </span><span class="lineCov">    1548640 :                   return fold_build_pointer_plus (fold_convert (type, op0),</span>
+<span class="lineNum">     385 </span>            :                                                   op1);
+<span class="lineNum">     386 </span>            :                 else
+<span class="lineNum">     387 </span><span class="lineCov">    8060987 :                   return fold_build2 (code, type,</span>
+<span class="lineNum">     388 </span>            :                                       fold_convert (type, op0),
+<span class="lineNum">     389 </span>            :                                       fold_convert (type, op1));
+<span class="lineNum">     390 </span>            :               }
+<span class="lineNum">     391 </span>            :           }
+<span class="lineNum">     392 </span>            :         }
+<span class="lineNum">     393 </span>            :     }
+<span class="lineNum">     394 </span>            : }
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            : /* Fold the addition of two chrecs.  */
+<a name="397"><span class="lineNum">     397 </span>            : </a>
+<span class="lineNum">     398 </span>            : tree
+<span class="lineNum">     399 </span><span class="lineCov">   17952357 : chrec_fold_plus (tree type,</span>
+<span class="lineNum">     400 </span>            :                  tree op0,
+<span class="lineNum">     401 </span>            :                  tree op1)
+<span class="lineNum">     402 </span>            : {
+<span class="lineNum">     403 </span><span class="lineCov">   17952357 :   enum tree_code code;</span>
+<span class="lineNum">     404 </span><span class="lineCov">   17952357 :   if (automatically_generated_chrec_p (op0)</span>
+<span class="lineNum">     405 </span><span class="lineCov">   16362497 :       || automatically_generated_chrec_p (op1))</span>
+<span class="lineNum">     406 </span><span class="lineCov">    2090592 :     return chrec_fold_automatically_generated_operands (op0, op1);</span>
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">   15861765 :   if (integer_zerop (op0))</span>
+<span class="lineNum">     409 </span><span class="lineCov">    1611701 :     return chrec_convert (type, op1, NULL);</span>
+<span class="lineNum">     410 </span><span class="lineCov">   14250064 :   if (integer_zerop (op1))</span>
+<span class="lineNum">     411 </span><span class="lineCov">     529230 :     return chrec_convert (type, op0, NULL);</span>
+<span class="lineNum">     412 </span>            : 
+<span class="lineNum">     413 </span><span class="lineCov">   13720834 :   if (POINTER_TYPE_P (type))</span>
+<span class="lineNum">     414 </span>            :     code = POINTER_PLUS_EXPR;
+<span class="lineNum">     415 </span>            :   else
+<span class="lineNum">     416 </span><span class="lineCov">   11094572 :     code = PLUS_EXPR;</span>
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span><span class="lineCov">   13720834 :   return chrec_fold_plus_1 (code, type, op0, op1);</span>
+<span class="lineNum">     419 </span>            : }
+<span class="lineNum">     420 </span>            : 
+<span class="lineNum">     421 </span>            : /* Fold the subtraction of two chrecs.  */
+<a name="422"><span class="lineNum">     422 </span>            : </a>
+<span class="lineNum">     423 </span>            : tree
+<span class="lineNum">     424 </span><span class="lineCov">    1878774 : chrec_fold_minus (tree type,</span>
+<span class="lineNum">     425 </span>            :                   tree op0,
+<span class="lineNum">     426 </span>            :                   tree op1)
+<span class="lineNum">     427 </span>            : {
+<span class="lineNum">     428 </span><span class="lineCov">    1878774 :   if (automatically_generated_chrec_p (op0)</span>
+<span class="lineNum">     429 </span><span class="lineCov">    1601942 :       || automatically_generated_chrec_p (op1))</span>
+<span class="lineNum">     430 </span><span class="lineCov">     323014 :     return chrec_fold_automatically_generated_operands (op0, op1);</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">    1555760 :   if (integer_zerop (op1))</span>
+<span class="lineNum">     433 </span>            :     return op0;
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span><span class="lineCov">    1516604 :   return chrec_fold_plus_1 (MINUS_EXPR, type, op0, op1);</span>
+<span class="lineNum">     436 </span>            : }
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span>            : /* Fold the multiplication of two chrecs.  */
+<span class="lineNum">     439 </span>            : 
+<span class="lineNum">     440 </span>            : tree
+<span class="lineNum">     441 </span><span class="lineCov">    8643375 : chrec_fold_multiply (tree type,</span>
+<span class="lineNum">     442 </span>            :                      tree op0,
+<span class="lineNum">     443 </span>            :                      tree op1)
+<span class="lineNum">     444 </span>            : {
+<span class="lineNum">     445 </span><span class="lineCov">    8643375 :   if (automatically_generated_chrec_p (op0)</span>
+<span class="lineNum">     446 </span><span class="lineCov">    7795556 :       || automatically_generated_chrec_p (op1))</span>
+<span class="lineNum">     447 </span><span class="lineCov">     908953 :     return chrec_fold_automatically_generated_operands (op0, op1);</span>
+<span class="lineNum">     448 </span>            : 
+<span class="lineNum">     449 </span><span class="lineCov">    7734422 :   switch (TREE_CODE (op0))</span>
+<span class="lineNum">     450 </span>            :     {
+<span class="lineNum">     451 </span><span class="lineCov">    1225059 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     452 </span><span class="lineCov">    1225059 :       gcc_checking_assert</span>
+<span class="lineNum">     453 </span>            :         (!chrec_contains_symbols_defined_in_loop (op0, CHREC_VARIABLE (op0)));
+<span class="lineNum">     454 </span><span class="lineCov">    1225059 :       switch (TREE_CODE (op1))</span>
+<span class="lineNum">     455 </span>            :         {
+<span class="lineNum">     456 </span><span class="lineCov">       8746 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     457 </span><span class="lineCov">       8746 :           gcc_checking_assert</span>
+<span class="lineNum">     458 </span>            :             (!chrec_contains_symbols_defined_in_loop (op1,
+<span class="lineNum">     459 </span>            :                                                       CHREC_VARIABLE (op1)));
+<span class="lineNum">     460 </span><span class="lineCov">       8746 :           return chrec_fold_multiply_poly_poly (type, op0, op1);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineCov">      19533 :         CASE_CONVERT:</span>
+<span class="lineNum">     463 </span><span class="lineCov">      19533 :           if (tree_contains_chrecs (op1, NULL))</span>
+<span class="lineNum">     464 </span><span class="lineCov">         68 :             return chrec_dont_know;</span>
+<span class="lineNum">     465 </span>            :           /* FALLTHRU */
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span><span class="lineCov">    1216245 :         default:</span>
+<span class="lineNum">     468 </span><span class="lineCov">    1216245 :           if (integer_onep (op1))</span>
+<span class="lineNum">     469 </span>            :             return op0;
+<span class="lineNum">     470 </span><span class="lineCov">    1216082 :           if (integer_zerop (op1))</span>
+<span class="lineNum">     471 </span><span class="lineCov">        242 :             return build_int_cst (type, 0);</span>
+<span class="lineNum">     472 </span>            : 
+<span class="lineNum">     473 </span><span class="lineCov">    1215961 :           return build_polynomial_chrec</span>
+<span class="lineNum">     474 </span><span class="lineCov">    2431922 :             (CHREC_VARIABLE (op0),</span>
+<span class="lineNum">     475 </span><span class="lineCov">    1215961 :              chrec_fold_multiply (type, CHREC_LEFT (op0), op1),</span>
+<span class="lineNum">     476 </span><span class="lineCov">    2431922 :              chrec_fold_multiply (type, CHREC_RIGHT (op0), op1));</span>
+<span class="lineNum">     477 </span>            :         }
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span><span class="lineCov">    2313940 :     CASE_CONVERT:</span>
+<span class="lineNum">     480 </span><span class="lineCov">    2313940 :       if (tree_contains_chrecs (op0, NULL))</span>
+<span class="lineNum">     481 </span><span class="lineCov">       8543 :         return chrec_dont_know;</span>
+<span class="lineNum">     482 </span>            :       /* FALLTHRU */
+<span class="lineNum">     483 </span>            : 
+<span class="lineNum">     484 </span><span class="lineCov">    6500820 :     default:</span>
+<span class="lineNum">     485 </span><span class="lineCov">    6500820 :       if (integer_onep (op0))</span>
+<span class="lineNum">     486 </span>            :         return op1;
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span><span class="lineCov">    4841461 :       if (integer_zerop (op0))</span>
+<span class="lineNum">     489 </span><span class="lineCov">    1157570 :         return build_int_cst (type, 0);</span>
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span><span class="lineCov">    4262676 :       switch (TREE_CODE (op1))</span>
+<span class="lineNum">     492 </span>            :         {
+<span class="lineNum">     493 </span><span class="lineCov">     103402 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     494 </span><span class="lineCov">     103402 :           gcc_checking_assert</span>
+<span class="lineNum">     495 </span>            :             (!chrec_contains_symbols_defined_in_loop (op1,
+<span class="lineNum">     496 </span>            :                                                       CHREC_VARIABLE (op1)));
+<span class="lineNum">     497 </span><span class="lineCov">     103402 :           return build_polynomial_chrec</span>
+<span class="lineNum">     498 </span><span class="lineCov">     206804 :             (CHREC_VARIABLE (op1),</span>
+<span class="lineNum">     499 </span><span class="lineCov">     103402 :              chrec_fold_multiply (type, CHREC_LEFT (op1), op0),</span>
+<span class="lineNum">     500 </span><span class="lineCov">     206804 :              chrec_fold_multiply (type, CHREC_RIGHT (op1), op0));</span>
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineCov">     484254 :         CASE_CONVERT:</span>
+<span class="lineNum">     503 </span><span class="lineCov">     484254 :           if (tree_contains_chrecs (op1, NULL))</span>
+<span class="lineNum">     504 </span><span class="lineCov">        132 :             return chrec_dont_know;</span>
+<span class="lineNum">     505 </span>            :           /* FALLTHRU */
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span><span class="lineCov">    4159142 :         default:</span>
+<span class="lineNum">     508 </span><span class="lineCov">    4159142 :           if (integer_onep (op1))</span>
+<span class="lineNum">     509 </span>            :             return op0;
+<span class="lineNum">     510 </span><span class="lineCov">    4117999 :           if (integer_zerop (op1))</span>
+<span class="lineNum">     511 </span><span class="lineCov">       2376 :             return build_int_cst (type, 0);</span>
+<span class="lineNum">     512 </span><span class="lineCov">    4116811 :           return fold_build2 (MULT_EXPR, type, op0, op1);</span>
+<span class="lineNum">     513 </span>            :         }
+<span class="lineNum">     514 </span>            :     }
+<span class="lineNum">     515 </span>            : }
+<span class="lineNum">     516 </span>            : 
+<span class="lineNum">     517 </span>            : 
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span>            : /* Operations.  */
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span>            : /* Evaluate the binomial coefficient.  Return NULL_TREE if the intermediate
+<span class="lineNum">     522 </span>            :    calculation overflows, otherwise return C(n,k) with type TYPE.  */
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span>            : static tree
+<span class="lineNum">     525 </span><span class="lineCov">       1086 : tree_fold_binomial (tree type, tree n, unsigned int k)</span>
+<span class="lineNum">     526 </span>            : {
+<span class="lineNum">     527 </span><span class="lineCov">       1086 :   wi::overflow_type overflow;</span>
+<span class="lineNum">     528 </span><span class="lineCov">       1086 :   unsigned int i;</span>
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span>            :   /* Handle the most frequent cases.  */
+<span class="lineNum">     531 </span><span class="lineCov">       1086 :   if (k == 0)</span>
+<span class="lineNum">     532 </span><span class="lineCov">        704 :     return build_int_cst (type, 1);</span>
+<span class="lineNum">     533 </span><span class="lineCov">        734 :   if (k == 1)</span>
+<span class="lineNum">     534 </span><span class="lineCov">        352 :     return fold_convert (type, n);</span>
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span><span class="lineCov">        382 :   widest_int num = wi::to_widest (n);</span>
+<span class="lineNum">     537 </span>            : 
+<span class="lineNum">     538 </span>            :   /* Check that k &lt;= n.  */
+<span class="lineNum">     539 </span><span class="lineCov">        382 :   if (wi::ltu_p (num, k))</span>
+<span class="lineNum">     540 </span>            :     return NULL_TREE;
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span>            :   /* Denominator = 2.  */
+<span class="lineNum">     543 </span><span class="lineCov">        374 :   widest_int denom = 2;</span>
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span>            :   /* Index = Numerator-1.  */
+<span class="lineNum">     546 </span><span class="lineCov">        374 :   widest_int idx = num - 1;</span>
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span>            :   /* Numerator = Numerator*Index = n*(n-1).  */
+<span class="lineNum">     549 </span><span class="lineCov">        374 :   num = wi::smul (num, idx, &amp;overflow);</span>
+<span class="lineNum">     550 </span><span class="lineCov">        374 :   if (overflow)</span>
+<span class="lineNum">     551 </span>            :     return NULL_TREE;
+<span class="lineNum">     552 </span>            : 
+<span class="lineNum">     553 </span><span class="lineCov">        374 :   for (i = 3; i &lt;= k; i++)</span>
+<span class="lineNum">     554 </span>            :     {
+<span class="lineNum">     555 </span>            :       /* Index--.  */
+<span class="lineNum">     556 </span><span class="lineNoCov">          0 :       --idx;</span>
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span>            :       /* Numerator *= Index.  */
+<span class="lineNum">     559 </span><span class="lineNoCov">          0 :       num = wi::smul (num, idx, &amp;overflow);</span>
+<span class="lineNum">     560 </span><span class="lineNoCov">          0 :       if (overflow)</span>
+<span class="lineNum">     561 </span>            :         return NULL_TREE;
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span>            :       /* Denominator *= i.  */
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :       denom *= i;</span>
+<span class="lineNum">     565 </span>            :     }
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span>            :   /* Result = Numerator / Denominator.  */
+<span class="lineNum">     568 </span><span class="lineCov">        374 :   num = wi::udiv_trunc (num, denom);</span>
+<span class="lineNum">     569 </span><span class="lineCov">        374 :   if (! wi::fits_to_tree_p (num, type))</span>
+<span class="lineNum">     570 </span>            :     return NULL_TREE;
+<span class="lineNum">     571 </span><span class="lineCov">        704 :   return wide_int_to_tree (type, num);</span>
+<span class="lineNum">     572 </span>            : }
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span>            : /* Helper function.  Use the Newton's interpolating formula for
+<span class="lineNum">     575 </span>            :    evaluating the value of the evolution function.
+<span class="lineNum">     576 </span>            :    The result may be in an unsigned type of CHREC.  */
+<span class="lineNum">     577 </span>            : 
+<span class="lineNum">     578 </span>            : static tree
+<span class="lineNum">     579 </span><span class="lineCov">       1146 : chrec_evaluate (unsigned var, tree chrec, tree n, unsigned int k)</span>
+<span class="lineNum">     580 </span>            : {
+<span class="lineNum">     581 </span><span class="lineCov">       1146 :   tree arg0, arg1, binomial_n_k;</span>
+<span class="lineNum">     582 </span><span class="lineCov">       1146 :   tree type = TREE_TYPE (chrec);</span>
+<span class="lineNum">     583 </span><span class="lineCov">       1146 :   struct loop *var_loop = get_loop (cfun, var);</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">       1146 :   while (TREE_CODE (chrec) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">     586 </span><span class="lineCov">       1146 :          &amp;&amp; flow_loop_nested_p (var_loop, get_chrec_loop (chrec)))</span>
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :     chrec = CHREC_LEFT (chrec);</span>
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span>            :   /* The formula associates the expression and thus we have to make
+<span class="lineNum">     590 </span>            :      sure to not introduce undefined overflow.  */
+<span class="lineNum">     591 </span><span class="lineCov">       1146 :   tree ctype = type;</span>
+<span class="lineNum">     592 </span><span class="lineCov">       1146 :   if (INTEGRAL_TYPE_P (type)</span>
+<span class="lineNum">     593 </span><span class="lineCov">       1146 :       &amp;&amp; ! TYPE_OVERFLOW_WRAPS (type))</span>
+<span class="lineNum">     594 </span><span class="lineCov">       1017 :     ctype = unsigned_type_for (type);</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span><span class="lineCov">       1146 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">     597 </span><span class="lineCov">       1146 :       &amp;&amp; CHREC_VARIABLE (chrec) == var)</span>
+<span class="lineNum">     598 </span>            :     {
+<span class="lineNum">     599 </span><span class="lineCov">       1528 :       arg1 = chrec_evaluate (var, CHREC_RIGHT (chrec), n, k + 1);</span>
+<span class="lineNum">     600 </span><span class="lineCov">        764 :       if (arg1 == chrec_dont_know)</span>
+<span class="lineNum">     601 </span>            :         return chrec_dont_know;
+<span class="lineNum">     602 </span><span class="lineCov">        704 :       binomial_n_k = tree_fold_binomial (ctype, n, k);</span>
+<span class="lineNum">     603 </span><span class="lineCov">        704 :       if (!binomial_n_k)</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :         return chrec_dont_know;</span>
+<span class="lineNum">     605 </span><span class="lineCov">        704 :       tree l = chrec_convert (ctype, CHREC_LEFT (chrec), NULL);</span>
+<span class="lineNum">     606 </span><span class="lineCov">        704 :       arg0 = fold_build2 (MULT_EXPR, ctype, l, binomial_n_k);</span>
+<span class="lineNum">     607 </span><span class="lineCov">        704 :       return chrec_fold_plus (ctype, arg0, arg1);</span>
+<span class="lineNum">     608 </span>            :     }
+<span class="lineNum">     609 </span>            : 
+<span class="lineNum">     610 </span><span class="lineCov">        382 :   binomial_n_k = tree_fold_binomial (ctype, n, k);</span>
+<span class="lineNum">     611 </span><span class="lineCov">        382 :   if (!binomial_n_k)</span>
+<span class="lineNum">     612 </span><span class="lineCov">         30 :     return chrec_dont_know;</span>
+<span class="lineNum">     613 </span>            : 
+<span class="lineNum">     614 </span><span class="lineCov">        352 :   return fold_build2 (MULT_EXPR, ctype,</span>
+<span class="lineNum">     615 </span>            :                       chrec_convert (ctype, chrec, NULL), binomial_n_k);
+<span class="lineNum">     616 </span>            : }
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span>            : /* Evaluates &quot;CHREC (X)&quot; when the varying variable is VAR.
+<span class="lineNum">     619 </span>            :    Example:  Given the following parameters,
+<span class="lineNum">     620 </span>            : 
+<span class="lineNum">     621 </span>            :    var = 1
+<span class="lineNum">     622 </span>            :    chrec = {3, +, 4}_1
+<span class="lineNum">     623 </span>            :    x = 10
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span>            :    The result is given by the Newton's interpolating formula:
+<span class="lineNum">     626 </span>            :    3 * \binom{10}{0} + 4 * \binom{10}{1}.
+<span class="lineNum">     627 </span>            : */
+<span class="lineNum">     628 </span>            : 
+<span class="lineNum">     629 </span>            : tree
+<span class="lineNum">     630 </span><span class="lineCov">     406430 : chrec_apply (unsigned var,</span>
+<span class="lineNum">     631 </span>            :              tree chrec,
+<span class="lineNum">     632 </span>            :              tree x)
+<span class="lineNum">     633 </span>            : {
+<span class="lineNum">     634 </span><span class="lineCov">     406430 :   tree type = chrec_type (chrec);</span>
+<span class="lineNum">     635 </span><span class="lineCov">     406430 :   tree res = chrec_dont_know;</span>
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span><span class="lineCov">     406430 :   if (automatically_generated_chrec_p (chrec)</span>
+<span class="lineNum">     638 </span><span class="lineCov">     406430 :       || automatically_generated_chrec_p (x)</span>
+<span class="lineNum">     639 </span>            : 
+<span class="lineNum">     640 </span>            :       /* When the symbols are defined in an outer loop, it is possible
+<span class="lineNum">     641 </span>            :          to symbolically compute the apply, since the symbols are
+<span class="lineNum">     642 </span>            :          constants with respect to the varying loop.  */
+<span class="lineNum">     643 </span><span class="lineCov">     406430 :       || chrec_contains_symbols_defined_in_loop (chrec, var))</span>
+<span class="lineNum">     644 </span><span class="lineCov">      22044 :     return chrec_dont_know;</span>
+<span class="lineNum">     645 </span>            : 
+<span class="lineNum">     646 </span><span class="lineCov">     384386 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_SCEV))</span>
+<span class="lineNum">     647 </span><span class="lineNoCov">          0 :     fprintf (dump_file, &quot;(chrec_apply \n&quot;);</span>
+<span class="lineNum">     648 </span>            : 
+<span class="lineNum">     649 </span><span class="lineCov">     384386 :   if (TREE_CODE (x) == INTEGER_CST &amp;&amp; SCALAR_FLOAT_TYPE_P (type))</span>
+<span class="lineNum">     650 </span><span class="lineCov">         14 :     x = build_real_from_int_cst (type, x);</span>
+<span class="lineNum">     651 </span>            : 
+<span class="lineNum">     652 </span><span class="lineCov">     384386 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">     653 </span>            :     {
+<span class="lineNum">     654 </span><span class="lineCov">     383171 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     655 </span><span class="lineCov">     383171 :       if (evolution_function_is_affine_p (chrec))</span>
+<span class="lineNum">     656 </span>            :         {
+<span class="lineNum">     657 </span><span class="lineCov">     381496 :           if (CHREC_VARIABLE (chrec) != var)</span>
+<span class="lineNum">     658 </span><span class="lineCov">        476 :             return build_polynomial_chrec</span>
+<span class="lineNum">     659 </span><span class="lineCov">        952 :               (CHREC_VARIABLE (chrec),</span>
+<span class="lineNum">     660 </span><span class="lineCov">        476 :                chrec_apply (var, CHREC_LEFT (chrec), x),</span>
+<span class="lineNum">     661 </span><span class="lineCov">       1428 :                chrec_apply (var, CHREC_RIGHT (chrec), x));</span>
+<span class="lineNum">     662 </span>            : 
+<span class="lineNum">     663 </span>            :           /* &quot;{a, +, b} (x)&quot;  -&gt;  &quot;a + b*x&quot;.  */
+<span class="lineNum">     664 </span><span class="lineCov">     381020 :           x = chrec_convert_rhs (type, x, NULL);</span>
+<span class="lineNum">     665 </span><span class="lineCov">     381020 :           res = chrec_fold_multiply (TREE_TYPE (x), CHREC_RIGHT (chrec), x);</span>
+<span class="lineNum">     666 </span><span class="lineCov">     381020 :           res = chrec_fold_plus (type, CHREC_LEFT (chrec), res);</span>
+<span class="lineNum">     667 </span>            :         }
+<span class="lineNum">     668 </span><span class="lineCov">       1675 :       else if (TREE_CODE (x) == INTEGER_CST</span>
+<span class="lineNum">     669 </span><span class="lineCov">       1675 :                &amp;&amp; tree_int_cst_sgn (x) == 1)</span>
+<span class="lineNum">     670 </span>            :         /* testsuite/.../ssa-chrec-38.c.  */
+<span class="lineNum">     671 </span><span class="lineCov">        382 :         res = chrec_convert (type, chrec_evaluate (var, chrec, x, 0), NULL);</span>
+<span class="lineNum">     672 </span>            :       else
+<span class="lineNum">     673 </span><span class="lineCov">       1293 :         res = chrec_dont_know;</span>
+<span class="lineNum">     674 </span>            :       break;
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span><span class="lineCov">        164 :     CASE_CONVERT:</span>
+<span class="lineNum">     677 </span><span class="lineCov">        164 :       res = chrec_convert (TREE_TYPE (chrec),</span>
+<span class="lineNum">     678 </span><span class="lineCov">        164 :                            chrec_apply (var, TREE_OPERAND (chrec, 0), x),</span>
+<span class="lineNum">     679 </span>            :                            NULL);
+<span class="lineNum">     680 </span><span class="lineCov">        164 :       break;</span>
+<span class="lineNum">     681 </span>            : 
+<span class="lineNum">     682 </span>            :     default:
+<span class="lineNum">     683 </span>            :       res = chrec;
+<span class="lineNum">     684 </span>            :       break;
+<span class="lineNum">     685 </span>            :     }
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span><span class="lineCov">     383910 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_SCEV))</span>
+<span class="lineNum">     688 </span>            :     {
+<span class="lineNum">     689 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;  (varying_loop = %d\n&quot;, var);</span>
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;)\n  (chrec = &quot;);</span>
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :       print_generic_expr (dump_file, chrec);</span>
+<span class="lineNum">     692 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;)\n  (x = &quot;);</span>
+<span class="lineNum">     693 </span><span class="lineNoCov">          0 :       print_generic_expr (dump_file, x);</span>
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;)\n  (res = &quot;);</span>
+<span class="lineNum">     695 </span><span class="lineNoCov">          0 :       print_generic_expr (dump_file, res);</span>
+<span class="lineNum">     696 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;))\n&quot;);</span>
+<span class="lineNum">     697 </span>            :     }
+<span class="lineNum">     698 </span>            : 
+<span class="lineNum">     699 </span>            :   return res;
+<span class="lineNum">     700 </span>            : }
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span>            : /* For a given CHREC and an induction variable map IV_MAP that maps
+<span class="lineNum">     703 </span>            :    (loop-&gt;num, expr) for every loop number of the current_loops an
+<span class="lineNum">     704 </span>            :    expression, calls chrec_apply when the expression is not NULL.  */
+<a name="705"><span class="lineNum">     705 </span>            : </a>
+<span class="lineNum">     706 </span>            : tree
+<span class="lineNum">     707 </span><span class="lineCov">        901 : chrec_apply_map (tree chrec, vec&lt;tree&gt; iv_map)</span>
+<span class="lineNum">     708 </span>            : {
+<span class="lineNum">     709 </span><span class="lineCov">        901 :   int i;</span>
+<span class="lineNum">     710 </span><span class="lineCov">        901 :   tree expr;</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span><span class="lineCov">       8373 :   FOR_EACH_VEC_ELT (iv_map, i, expr)</span>
+<span class="lineNum">     713 </span><span class="lineCov">       7472 :     if (expr)</span>
+<span class="lineNum">     714 </span><span class="lineCov">       1499 :       chrec = chrec_apply (i, chrec, expr);</span>
+<span class="lineNum">     715 </span>            : 
+<span class="lineNum">     716 </span><span class="lineCov">        901 :   return chrec;</span>
+<span class="lineNum">     717 </span>            : }
+<span class="lineNum">     718 </span>            : 
+<span class="lineNum">     719 </span>            : /* Replaces the initial condition in CHREC with INIT_COND.  */
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span>            : tree
+<span class="lineNum">     722 </span><span class="lineCov">     212729 : chrec_replace_initial_condition (tree chrec,</span>
+<span class="lineNum">     723 </span>            :                                  tree init_cond)
+<span class="lineNum">     724 </span>            : {
+<span class="lineNum">     725 </span><span class="lineCov">     212729 :   if (automatically_generated_chrec_p (chrec))</span>
+<span class="lineNum">     726 </span>            :     return chrec;
+<span class="lineNum">     727 </span>            : 
+<span class="lineNum">     728 </span><span class="lineCov">     212729 :   gcc_assert (chrec_type (chrec) == chrec_type (init_cond));</span>
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span><span class="lineCov">     212729 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">     731 </span>            :     {
+<span class="lineNum">     732 </span><span class="lineCov">     106825 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     733 </span><span class="lineCov">     106825 :       return build_polynomial_chrec</span>
+<span class="lineNum">     734 </span><span class="lineCov">     106825 :         (CHREC_VARIABLE (chrec),</span>
+<span class="lineNum">     735 </span><span class="lineCov">     213650 :          chrec_replace_initial_condition (CHREC_LEFT (chrec), init_cond),</span>
+<span class="lineNum">     736 </span><span class="lineCov">     320475 :          CHREC_RIGHT (chrec));</span>
+<span class="lineNum">     737 </span>            : 
+<span class="lineNum">     738 </span>            :     default:
+<span class="lineNum">     739 </span>            :       return init_cond;
+<span class="lineNum">     740 </span>            :     }
+<span class="lineNum">     741 </span>            : }
+<span class="lineNum">     742 </span>            : 
+<span class="lineNum">     743 </span>            : /* Returns the initial condition of a given CHREC.  */
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span>            : tree
+<span class="lineNum">     746 </span><span class="lineCov">    4877151 : initial_condition (tree chrec)</span>
+<span class="lineNum">     747 </span>            : {
+<span class="lineNum">     748 </span><span class="lineCov">    7930261 :   if (automatically_generated_chrec_p (chrec))</span>
+<span class="lineNum">     749 </span>            :     return chrec;
+<span class="lineNum">     750 </span>            : 
+<span class="lineNum">     751 </span><span class="lineCov">    7417620 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)</span>
+<span class="lineNum">     752 </span><span class="lineCov">    6106220 :     return initial_condition (CHREC_LEFT (chrec));</span>
+<span class="lineNum">     753 </span>            :   else
+<span class="lineNum">     754 </span>            :     return chrec;
+<span class="lineNum">     755 </span>            : }
+<span class="lineNum">     756 </span>            : 
+<span class="lineNum">     757 </span>            : /* Returns a univariate function that represents the evolution in
+<span class="lineNum">     758 </span>            :    LOOP_NUM.  Mask the evolution of any other loop.  */
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span>            : tree
+<span class="lineNum">     761 </span><span class="lineCov">   21633002 : hide_evolution_in_other_loops_than_loop (tree chrec,</span>
+<span class="lineNum">     762 </span>            :                                          unsigned loop_num)
+<span class="lineNum">     763 </span>            : {
+<span class="lineNum">     764 </span><span class="lineCov">   21633888 :   struct loop *loop = get_loop (cfun, loop_num), *chloop;</span>
+<span class="lineNum">     765 </span><span class="lineCov">   21633888 :   if (automatically_generated_chrec_p (chrec))</span>
+<span class="lineNum">     766 </span>            :     return chrec;
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span><span class="lineCov">   21633888 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">     769 </span>            :     {
+<span class="lineNum">     770 </span><span class="lineCov">     935569 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     771 </span><span class="lineCov">     935569 :       chloop = get_chrec_loop (chrec);</span>
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span><span class="lineCov">     935569 :       if (chloop == loop)</span>
+<span class="lineNum">     774 </span><span class="lineCov">     736992 :         return build_polynomial_chrec</span>
+<span class="lineNum">     775 </span><span class="lineCov">     736992 :           (loop_num,</span>
+<span class="lineNum">     776 </span><span class="lineCov">    1473984 :            hide_evolution_in_other_loops_than_loop (CHREC_LEFT (chrec),</span>
+<span class="lineNum">     777 </span>            :                                                     loop_num),
+<span class="lineNum">     778 </span><span class="lineCov">    2210976 :            CHREC_RIGHT (chrec));</span>
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span><span class="lineCov">     198577 :       else if (flow_loop_nested_p (chloop, loop))</span>
+<span class="lineNum">     781 </span>            :         /* There is no evolution in this loop.  */
+<span class="lineNum">     782 </span><span class="lineCov">     197632 :         return initial_condition (chrec);</span>
+<span class="lineNum">     783 </span>            : 
+<span class="lineNum">     784 </span><span class="lineCov">        945 :       else if (flow_loop_nested_p (loop, chloop))</span>
+<span class="lineNum">     785 </span><span class="lineCov">        886 :         return hide_evolution_in_other_loops_than_loop (CHREC_LEFT (chrec),</span>
+<span class="lineNum">     786 </span><span class="lineCov">        886 :                                                         loop_num);</span>
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span>            :       else
+<span class="lineNum">     789 </span><span class="lineCov">         59 :         return chrec_dont_know;</span>
+<span class="lineNum">     790 </span>            : 
+<span class="lineNum">     791 </span>            :     default:
+<span class="lineNum">     792 </span>            :       return chrec;
+<span class="lineNum">     793 </span>            :     }
+<span class="lineNum">     794 </span>            : }
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span>            : /* Returns the evolution part of CHREC in LOOP_NUM when RIGHT is
+<span class="lineNum">     797 </span>            :    true, otherwise returns the initial condition in LOOP_NUM.  */
+<span class="lineNum">     798 </span>            : 
+<span class="lineNum">     799 </span>            : static tree
+<span class="lineNum">     800 </span><span class="lineCov">   17098725 : chrec_component_in_loop_num (tree chrec,</span>
+<span class="lineNum">     801 </span>            :                              unsigned loop_num,
+<span class="lineNum">     802 </span>            :                              bool right)
+<span class="lineNum">     803 </span>            : {
+<span class="lineNum">     804 </span><span class="lineCov">   17098725 :   tree component;</span>
+<span class="lineNum">     805 </span><span class="lineCov">   17098725 :   struct loop *loop = get_loop (cfun, loop_num), *chloop;</span>
+<span class="lineNum">     806 </span>            : 
+<span class="lineNum">     807 </span><span class="lineCov">   17098725 :   if (automatically_generated_chrec_p (chrec))</span>
+<span class="lineNum">     808 </span>            :     return chrec;
+<span class="lineNum">     809 </span>            : 
+<span class="lineNum">     810 </span><span class="lineCov">   16586084 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">     811 </span>            :     {
+<span class="lineNum">     812 </span><span class="lineCov">   13747735 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">     813 </span><span class="lineCov">   13747735 :       chloop = get_chrec_loop (chrec);</span>
+<span class="lineNum">     814 </span>            : 
+<span class="lineNum">     815 </span><span class="lineCov">   13747735 :       if (chloop == loop)</span>
+<span class="lineNum">     816 </span>            :         {
+<span class="lineNum">     817 </span><span class="lineCov">   13103584 :           if (right)</span>
+<span class="lineNum">     818 </span><span class="lineCov">   14092624 :             component = CHREC_RIGHT (chrec);</span>
+<span class="lineNum">     819 </span>            :           else
+<span class="lineNum">     820 </span><span class="lineCov">   12114544 :             component = CHREC_LEFT (chrec);</span>
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span><span class="lineCov">   26207168 :           if (TREE_CODE (CHREC_LEFT (chrec)) != POLYNOMIAL_CHREC</span>
+<span class="lineNum">     823 </span><span class="lineCov">   13103584 :               || CHREC_VARIABLE (CHREC_LEFT (chrec)) != CHREC_VARIABLE (chrec))</span>
+<span class="lineNum">     824 </span>            :             return component;
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span>            :           else
+<span class="lineNum">     827 </span><span class="lineNoCov">          0 :             return build_polynomial_chrec</span>
+<span class="lineNum">     828 </span><span class="lineNoCov">          0 :               (loop_num,</span>
+<span class="lineNum">     829 </span><span class="lineNoCov">          0 :                chrec_component_in_loop_num (CHREC_LEFT (chrec),</span>
+<span class="lineNum">     830 </span>            :                                             loop_num,
+<span class="lineNum">     831 </span>            :                                             right),
+<span class="lineNum">     832 </span><span class="lineNoCov">          0 :                component);</span>
+<span class="lineNum">     833 </span>            :         }
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span><span class="lineCov">     644151 :       else if (flow_loop_nested_p (chloop, loop))</span>
+<span class="lineNum">     836 </span>            :         /* There is no evolution part in this loop.  */
+<span class="lineNum">     837 </span>            :         return NULL_TREE;
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :       else
+<span class="lineNum">     840 </span>            :         {
+<span class="lineNum">     841 </span><span class="lineCov">     644151 :           gcc_assert (flow_loop_nested_p (loop, chloop));</span>
+<span class="lineNum">     842 </span><span class="lineCov">     644151 :           return chrec_component_in_loop_num (CHREC_LEFT (chrec),</span>
+<span class="lineNum">     843 </span>            :                                               loop_num,
+<span class="lineNum">     844 </span><span class="lineCov">     644151 :                                               right);</span>
+<span class="lineNum">     845 </span>            :         }
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span><span class="lineCov">    2838349 :      default:</span>
+<span class="lineNum">     848 </span><span class="lineCov">    2838349 :       if (right)</span>
+<span class="lineNum">     849 </span>            :         return NULL_TREE;
+<span class="lineNum">     850 </span>            :       else
+<span class="lineNum">     851 </span><span class="lineCov">     488714 :         return chrec;</span>
+<span class="lineNum">     852 </span>            :     }
+<span class="lineNum">     853 </span>            : }
+<span class="lineNum">     854 </span>            : 
+<span class="lineNum">     855 </span>            : /* Returns the evolution part in LOOP_NUM.  Example: the call
+<span class="lineNum">     856 </span>            :    evolution_part_in_loop_num ({{0, +, 1}_1, +, 2}_1, 1) returns
+<span class="lineNum">     857 </span>            :    {1, +, 2}_1  */
+<a name="858"><span class="lineNum">     858 </span>            : </a>
+<span class="lineNum">     859 </span>            : tree
+<span class="lineNum">     860 </span><span class="lineCov">    9908588 : evolution_part_in_loop_num (tree chrec,</span>
+<span class="lineNum">     861 </span>            :                             unsigned loop_num)
+<span class="lineNum">     862 </span>            : {
+<span class="lineNum">     863 </span><span class="lineCov">    9908588 :   return chrec_component_in_loop_num (chrec, loop_num, true);</span>
+<span class="lineNum">     864 </span>            : }
+<span class="lineNum">     865 </span>            : 
+<span class="lineNum">     866 </span>            : /* Returns the initial condition in LOOP_NUM.  Example: the call
+<span class="lineNum">     867 </span>            :    initial_condition_in_loop_num ({{0, +, 1}_1, +, 2}_2, 2) returns
+<span class="lineNum">     868 </span>            :    {0, +, 1}_1  */
+<a name="869"><span class="lineNum">     869 </span>            : </a>
+<span class="lineNum">     870 </span>            : tree
+<span class="lineNum">     871 </span><span class="lineCov">    6545986 : initial_condition_in_loop_num (tree chrec,</span>
+<span class="lineNum">     872 </span>            :                                unsigned loop_num)
+<span class="lineNum">     873 </span>            : {
+<span class="lineNum">     874 </span><span class="lineCov">    6545986 :   return chrec_component_in_loop_num (chrec, loop_num, false);</span>
+<span class="lineNum">     875 </span>            : }
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span>            : /* Set or reset the evolution of CHREC to NEW_EVOL in loop LOOP_NUM.
+<span class="lineNum">     878 </span>            :    This function is essentially used for setting the evolution to
+<span class="lineNum">     879 </span>            :    chrec_dont_know, for example after having determined that it is
+<span class="lineNum">     880 </span>            :    impossible to say how many times a loop will execute.  */
+<span class="lineNum">     881 </span>            : 
+<span class="lineNum">     882 </span>            : tree
+<span class="lineNum">     883 </span><span class="lineNoCov">          0 : reset_evolution_in_loop (unsigned loop_num,</span>
+<span class="lineNum">     884 </span>            :                          tree chrec,
+<span class="lineNum">     885 </span>            :                          tree new_evol)
+<span class="lineNum">     886 </span>            : {
+<span class="lineNum">     887 </span><span class="lineNoCov">          0 :   struct loop *loop = get_loop (cfun, loop_num);</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span><span class="lineNoCov">          0 :   if (POINTER_TYPE_P (chrec_type (chrec)))</span>
+<span class="lineNum">     890 </span><span class="lineNoCov">          0 :     gcc_assert (ptrofftype_p (chrec_type (new_evol)));</span>
+<span class="lineNum">     891 </span>            :   else
+<span class="lineNum">     892 </span><span class="lineNoCov">          0 :     gcc_assert (chrec_type (chrec) == chrec_type (new_evol));</span>
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span><span class="lineNoCov">          0 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">     895 </span><span class="lineNoCov">          0 :       &amp;&amp; flow_loop_nested_p (loop, get_chrec_loop (chrec)))</span>
+<span class="lineNum">     896 </span>            :     {
+<span class="lineNum">     897 </span><span class="lineNoCov">          0 :       tree left = reset_evolution_in_loop (loop_num, CHREC_LEFT (chrec),</span>
+<span class="lineNum">     898 </span>            :                                            new_evol);
+<span class="lineNum">     899 </span><span class="lineNoCov">          0 :       tree right = reset_evolution_in_loop (loop_num, CHREC_RIGHT (chrec),</span>
+<span class="lineNum">     900 </span>            :                                             new_evol);
+<span class="lineNum">     901 </span><span class="lineNoCov">          0 :       return build_polynomial_chrec (CHREC_VARIABLE (chrec), left, right);</span>
+<span class="lineNum">     902 </span>            :     }
+<span class="lineNum">     903 </span>            : 
+<span class="lineNum">     904 </span><span class="lineNoCov">          0 :   while (TREE_CODE (chrec) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">     905 </span><span class="lineNoCov">          0 :          &amp;&amp; CHREC_VARIABLE (chrec) == loop_num)</span>
+<span class="lineNum">     906 </span><span class="lineNoCov">          0 :     chrec = CHREC_LEFT (chrec);</span>
+<span class="lineNum">     907 </span>            : 
+<span class="lineNum">     908 </span><span class="lineNoCov">          0 :   return build_polynomial_chrec (loop_num, chrec, new_evol);</span>
+<span class="lineNum">     909 </span>            : }
+<span class="lineNum">     910 </span>            : 
+<span class="lineNum">     911 </span>            : /* Merges two evolution functions that were found by following two
+<span class="lineNum">     912 </span>            :    alternate paths of a conditional expression.  */
+<a name="913"><span class="lineNum">     913 </span>            : </a>
+<span class="lineNum">     914 </span>            : tree
+<span class="lineNum">     915 </span><span class="lineCov">    8451987 : chrec_merge (tree chrec1,</span>
+<span class="lineNum">     916 </span>            :              tree chrec2)
+<span class="lineNum">     917 </span>            : {
+<span class="lineNum">     918 </span><span class="lineCov">    8451987 :   if (chrec1 == chrec_dont_know</span>
+<span class="lineNum">     919 </span><span class="lineCov">    8451987 :       || chrec2 == chrec_dont_know)</span>
+<span class="lineNum">     920 </span>            :     return chrec_dont_know;
+<span class="lineNum">     921 </span>            : 
+<span class="lineNum">     922 </span><span class="lineCov">    6908915 :   if (chrec1 == chrec_known</span>
+<span class="lineNum">     923 </span><span class="lineCov">    6908915 :       || chrec2 == chrec_known)</span>
+<span class="lineNum">     924 </span>            :     return chrec_known;
+<span class="lineNum">     925 </span>            : 
+<span class="lineNum">     926 </span><span class="lineCov">    6908915 :   if (chrec1 == chrec_not_analyzed_yet)</span>
+<span class="lineNum">     927 </span>            :     return chrec2;
+<span class="lineNum">     928 </span><span class="lineCov">    1648285 :   if (chrec2 == chrec_not_analyzed_yet)</span>
+<span class="lineNum">     929 </span>            :     return chrec1;
+<span class="lineNum">     930 </span>            : 
+<span class="lineNum">     931 </span><span class="lineCov">    1648285 :   if (eq_evolutions_p (chrec1, chrec2))</span>
+<span class="lineNum">     932 </span>            :     return chrec1;
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span><span class="lineCov">    1219114 :   return chrec_dont_know;</span>
+<span class="lineNum">     935 </span>            : }
+<span class="lineNum">     936 </span>            : 
+<span class="lineNum">     937 </span>            : 
+<span class="lineNum">     938 </span>            : 
+<span class="lineNum">     939 </span>            : /* Observers.  */
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span>            : /* Helper function for is_multivariate_chrec.  */
+<span class="lineNum">     942 </span>            : 
+<span class="lineNum">     943 </span>            : static bool
+<span class="lineNum">     944 </span><span class="lineNoCov">          0 : is_multivariate_chrec_rec (const_tree chrec, unsigned int rec_var)</span>
+<span class="lineNum">     945 </span>            : {
+<span class="lineNum">     946 </span><span class="lineNoCov">          0 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">     947 </span>            :     return false;
+<span class="lineNum">     948 </span>            : 
+<span class="lineNum">     949 </span><span class="lineNoCov">          0 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)</span>
+<span class="lineNum">     950 </span>            :     {
+<span class="lineNum">     951 </span><span class="lineNoCov">          0 :       if (CHREC_VARIABLE (chrec) != rec_var)</span>
+<span class="lineNum">     952 </span>            :         return true;
+<span class="lineNum">     953 </span>            :       else
+<span class="lineNum">     954 </span><span class="lineNoCov">          0 :         return (is_multivariate_chrec_rec (CHREC_LEFT (chrec), rec_var)</span>
+<span class="lineNum">     955 </span><span class="lineNoCov">          0 :                 || is_multivariate_chrec_rec (CHREC_RIGHT (chrec), rec_var));</span>
+<span class="lineNum">     956 </span>            :     }
+<span class="lineNum">     957 </span>            :   else
+<span class="lineNum">     958 </span>            :     return false;
+<span class="lineNum">     959 </span>            : }
+<span class="lineNum">     960 </span>            : 
+<span class="lineNum">     961 </span>            : /* Determine whether the given chrec is multivariate or not.  */
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span>            : bool
+<span class="lineNum">     964 </span><span class="lineNoCov">          0 : is_multivariate_chrec (const_tree chrec)</span>
+<span class="lineNum">     965 </span>            : {
+<span class="lineNum">     966 </span><span class="lineNoCov">          0 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">     967 </span>            :     return false;
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span><span class="lineNoCov">          0 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)</span>
+<span class="lineNum">     970 </span><span class="lineNoCov">          0 :     return (is_multivariate_chrec_rec (CHREC_LEFT (chrec),</span>
+<span class="lineNum">     971 </span><span class="lineNoCov">          0 :                                        CHREC_VARIABLE (chrec))</span>
+<span class="lineNum">     972 </span><span class="lineNoCov">          0 :             || is_multivariate_chrec_rec (CHREC_RIGHT (chrec),</span>
+<span class="lineNum">     973 </span><span class="lineNoCov">          0 :                                           CHREC_VARIABLE (chrec)));</span>
+<span class="lineNum">     974 </span>            :   else
+<span class="lineNum">     975 </span>            :     return false;
+<span class="lineNum">     976 </span>            : }
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span>            : /* Determines whether the chrec contains symbolic names or not.  */
+<a name="979"><span class="lineNum">     979 </span>            : </a>
+<span class="lineNum">     980 </span>            : bool
+<span class="lineNum">     981 </span><span class="lineCov">   14129884 : chrec_contains_symbols (const_tree chrec)</span>
+<span class="lineNum">     982 </span>            : {
+<span class="lineNum">     983 </span><span class="lineCov">   14129884 :   int i, n;</span>
+<span class="lineNum">     984 </span>            : 
+<span class="lineNum">     985 </span><span class="lineCov">   14129884 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">     986 </span>            :     return false;
+<span class="lineNum">     987 </span>            : 
+<span class="lineNum">     988 </span><span class="lineCov">   14129884 :   if (TREE_CODE (chrec) == SSA_NAME</span>
+<span class="lineNum">     989 </span><span class="lineCov">   11499416 :       || VAR_P (chrec)</span>
+<span class="lineNum">     990 </span><span class="lineCov">   11416912 :       || TREE_CODE (chrec) == POLY_INT_CST</span>
+<span class="lineNum">     991 </span><span class="lineCov">   11416912 :       || TREE_CODE (chrec) == PARM_DECL</span>
+<span class="lineNum">     992 </span><span class="lineCov">   11416900 :       || TREE_CODE (chrec) == FUNCTION_DECL</span>
+<span class="lineNum">     993 </span><span class="lineCov">   11416900 :       || TREE_CODE (chrec) == LABEL_DECL</span>
+<span class="lineNum">     994 </span><span class="lineCov">   11416900 :       || TREE_CODE (chrec) == RESULT_DECL</span>
+<span class="lineNum">     995 </span><span class="lineCov">   11416828 :       || TREE_CODE (chrec) == FIELD_DECL)</span>
+<span class="lineNum">     996 </span>            :     return true;
+<span class="lineNum">     997 </span>            : 
+<span class="lineNum">     998 </span><span class="lineCov">   11416828 :   n = TREE_OPERAND_LENGTH (chrec);</span>
+<span class="lineNum">     999 </span><span class="lineCov">   17474699 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">    1000 </span><span class="lineCov">    8071855 :     if (chrec_contains_symbols (TREE_OPERAND (chrec, i)))</span>
+<span class="lineNum">    1001 </span>            :       return true;
+<span class="lineNum">    1002 </span>            :   return false;
+<span class="lineNum">    1003 </span>            : }
+<span class="lineNum">    1004 </span>            : 
+<span class="lineNum">    1005 </span>            : /* Determines whether the chrec contains undetermined coefficients.  */
+<a name="1006"><span class="lineNum">    1006 </span>            : </a>
+<span class="lineNum">    1007 </span>            : bool
+<span class="lineNum">    1008 </span><span class="lineCov">   97417627 : chrec_contains_undetermined (const_tree chrec)</span>
+<span class="lineNum">    1009 </span>            : {
+<span class="lineNum">    1010 </span><span class="lineCov">   97417627 :   int i, n;</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span><span class="lineCov">   97417627 :   if (chrec == chrec_dont_know)</span>
+<span class="lineNum">    1013 </span>            :     return true;
+<span class="lineNum">    1014 </span>            : 
+<span class="lineNum">    1015 </span><span class="lineCov">   85966359 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">    1016 </span>            :     return false;
+<span class="lineNum">    1017 </span>            : 
+<span class="lineNum">    1018 </span><span class="lineCov">   85857876 :   n = TREE_OPERAND_LENGTH (chrec);</span>
+<span class="lineNum">    1019 </span><span class="lineCov">  140366169 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">    1020 </span><span class="lineCov">   54508813 :     if (chrec_contains_undetermined (TREE_OPERAND (chrec, i)))</span>
+<span class="lineNum">    1021 </span>            :       return true;
+<span class="lineNum">    1022 </span>            :   return false;
+<span class="lineNum">    1023 </span>            : }
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span>            : /* Determines whether the tree EXPR contains chrecs, and increment
+<span class="lineNum">    1026 </span>            :    SIZE if it is not a NULL pointer by an estimation of the depth of
+<span class="lineNum">    1027 </span>            :    the tree.  */
+<a name="1028"><span class="lineNum">    1028 </span>            : </a>
+<span class="lineNum">    1029 </span>            : bool
+<span class="lineNum">    1030 </span><span class="lineCov">  166330892 : tree_contains_chrecs (const_tree expr, int *size)</span>
+<span class="lineNum">    1031 </span>            : {
+<span class="lineNum">    1032 </span><span class="lineCov">  166330892 :   int i, n;</span>
+<span class="lineNum">    1033 </span>            : 
+<span class="lineNum">    1034 </span><span class="lineCov">  166330892 :   if (expr == NULL_TREE)</span>
+<span class="lineNum">    1035 </span>            :     return false;
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span><span class="lineCov">  166157644 :   if (size)</span>
+<span class="lineNum">    1038 </span><span class="lineNoCov">          0 :     (*size)++;</span>
+<span class="lineNum">    1039 </span>            : 
+<span class="lineNum">    1040 </span><span class="lineCov">  166157644 :   if (tree_is_chrec (expr))</span>
+<span class="lineNum">    1041 </span>            :     return true;
+<span class="lineNum">    1042 </span>            : 
+<span class="lineNum">    1043 </span><span class="lineCov">  156906876 :   n = TREE_OPERAND_LENGTH (expr);</span>
+<span class="lineNum">    1044 </span><span class="lineCov">  238348809 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">    1045 </span><span class="lineCov">   81543345 :     if (tree_contains_chrecs (TREE_OPERAND (expr, i), size))</span>
+<span class="lineNum">    1046 </span>            :       return true;
+<span class="lineNum">    1047 </span>            :   return false;
+<span class="lineNum">    1048 </span>            : }
+<span class="lineNum">    1049 </span>            : 
+<span class="lineNum">    1050 </span>            : /* Recursive helper function.  */
+<span class="lineNum">    1051 </span>            : 
+<span class="lineNum">    1052 </span>            : static bool
+<span class="lineNum">    1053 </span><span class="lineCov">   15922999 : evolution_function_is_invariant_rec_p (tree chrec, int loopnum)</span>
+<span class="lineNum">    1054 </span>            : {
+<span class="lineNum">    1055 </span><span class="lineCov">   31845998 :   if (evolution_function_is_constant_p (chrec))</span>
+<span class="lineNum">    1056 </span>            :     return true;
+<span class="lineNum">    1057 </span>            : 
+<span class="lineNum">    1058 </span><span class="lineCov">    4244796 :   if (TREE_CODE (chrec) == SSA_NAME</span>
+<span class="lineNum">    1059 </span><span class="lineCov">    4244796 :       &amp;&amp; (loopnum == 0</span>
+<span class="lineNum">    1060 </span><span class="lineCov">    1425139 :           || expr_invariant_in_loop_p (get_loop (cfun, loopnum), chrec)))</span>
+<span class="lineNum">    1061 </span><span class="lineCov">    1370366 :     return true;</span>
+<span class="lineNum">    1062 </span>            : 
+<span class="lineNum">    1063 </span><span class="lineCov">    2874430 :   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)</span>
+<span class="lineNum">    1064 </span>            :     {
+<span class="lineNum">    1065 </span><span class="lineCov">    1702775 :       if (CHREC_VARIABLE (chrec) == (unsigned) loopnum</span>
+<span class="lineNum">    1066 </span><span class="lineCov">      89392 :           || flow_loop_nested_p (get_loop (cfun, loopnum),</span>
+<span class="lineNum">    1067 </span><span class="lineCov">      89392 :                                  get_chrec_loop (chrec))</span>
+<span class="lineNum">    1068 </span><span class="lineCov">       2933 :           || !evolution_function_is_invariant_rec_p (CHREC_RIGHT (chrec),</span>
+<span class="lineNum">    1069 </span>            :                                                      loopnum)
+<span class="lineNum">    1070 </span><span class="lineCov">    1705708 :           || !evolution_function_is_invariant_rec_p (CHREC_LEFT (chrec),</span>
+<span class="lineNum">    1071 </span>            :                                                      loopnum))
+<span class="lineNum">    1072 </span><span class="lineCov">    1699842 :         return false;</span>
+<span class="lineNum">    1073 </span>            :       return true;
+<span class="lineNum">    1074 </span>            :     }
+<span class="lineNum">    1075 </span>            : 
+<span class="lineNum">    1076 </span><span class="lineCov">    1171655 :   switch (TREE_OPERAND_LENGTH (chrec))</span>
+<span class="lineNum">    1077 </span>            :     {
+<span class="lineNum">    1078 </span><span class="lineCov">     826819 :     case 2:</span>
+<span class="lineNum">    1079 </span><span class="lineCov">     826819 :       if (!evolution_function_is_invariant_rec_p (TREE_OPERAND (chrec, 1),</span>
+<span class="lineNum">    1080 </span>            :                                                   loopnum))
+<span class="lineNum">    1081 </span>            :         return false;
+<span class="lineNum">    1082 </span>            :       /* FALLTHRU */
+<span class="lineNum">    1083 </span>            : 
+<span class="lineNum">    1084 </span><span class="lineCov">    1098956 :     case 1:</span>
+<span class="lineNum">    1085 </span><span class="lineCov">    1098956 :       if (!evolution_function_is_invariant_rec_p (TREE_OPERAND (chrec, 0),</span>
+<span class="lineNum">    1086 </span>            :                                                   loopnum))
+<span class="lineNum">    1087 </span><span class="lineCov">      17738 :         return false;</span>
+<span class="lineNum">    1088 </span>            :       return true;
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span>            :     default:
+<span class="lineNum">    1091 </span>            :       return false;
+<span class="lineNum">    1092 </span>            :     }
+<span class="lineNum">    1093 </span>            : 
+<span class="lineNum">    1094 </span>            :   return false;
+<span class="lineNum">    1095 </span>            : }
+<span class="lineNum">    1096 </span>            : 
+<span class="lineNum">    1097 </span>            : /* Return true if CHREC is invariant in loop LOOPNUM, false otherwise. */
+<a name="1098"><span class="lineNum">    1098 </span>            : </a>
+<span class="lineNum">    1099 </span>            : bool
+<span class="lineNum">    1100 </span><span class="lineCov">    9956086 : evolution_function_is_invariant_p (tree chrec, int loopnum)</span>
+<span class="lineNum">    1101 </span>            : {
+<span class="lineNum">    1102 </span><span class="lineCov">    9956086 :   return evolution_function_is_invariant_rec_p (chrec, loopnum);</span>
+<span class="lineNum">    1103 </span>            : }
+<span class="lineNum">    1104 </span>            : 
+<span class="lineNum">    1105 </span>            : /* Determine whether the given tree is an affine multivariate
+<span class="lineNum">    1106 </span>            :    evolution.  */
+<span class="lineNum">    1107 </span>            : 
+<span class="lineNum">    1108 </span>            : bool
+<span class="lineNum">    1109 </span><span class="lineCov">    2127913 : evolution_function_is_affine_multivariate_p (const_tree chrec, int loopnum)</span>
+<span class="lineNum">    1110 </span>            : {
+<span class="lineNum">    1111 </span><span class="lineCov">    2127913 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">    1112 </span>            :     return false;
+<span class="lineNum">    1113 </span>            : 
+<span class="lineNum">    1114 </span><span class="lineCov">    2127913 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">    1115 </span>            :     {
+<span class="lineNum">    1116 </span><span class="lineCov">    2017636 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1117 </span><span class="lineCov">    4035272 :       if (evolution_function_is_invariant_rec_p (CHREC_LEFT (chrec), loopnum))</span>
+<span class="lineNum">    1118 </span>            :         {
+<span class="lineNum">    1119 </span><span class="lineCov">    1986515 :           if (evolution_function_is_invariant_rec_p (CHREC_RIGHT (chrec), loopnum))</span>
+<span class="lineNum">    1120 </span>            :             return true;
+<span class="lineNum">    1121 </span>            :           else
+<span class="lineNum">    1122 </span>            :             {
+<span class="lineNum">    1123 </span><span class="lineCov">         87 :               if (TREE_CODE (CHREC_RIGHT (chrec)) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">    1124 </span><span class="lineCov">        174 :                   &amp;&amp; CHREC_VARIABLE (CHREC_RIGHT (chrec))</span>
+<span class="lineNum">    1125 </span><span class="lineCov">        174 :                      != CHREC_VARIABLE (chrec)</span>
+<span class="lineNum">    1126 </span><span class="lineCov">         87 :                   &amp;&amp; evolution_function_is_affine_multivariate_p</span>
+<span class="lineNum">    1127 </span><span class="lineNoCov">          0 :                   (CHREC_RIGHT (chrec), loopnum))</span>
+<span class="lineNum">    1128 </span>            :                 return true;
+<span class="lineNum">    1129 </span>            :               else
+<span class="lineNum">    1130 </span><span class="lineCov">         87 :                 return false;</span>
+<span class="lineNum">    1131 </span>            :             }
+<span class="lineNum">    1132 </span>            :         }
+<span class="lineNum">    1133 </span>            :       else
+<span class="lineNum">    1134 </span>            :         {
+<span class="lineNum">    1135 </span><span class="lineCov">      31121 :           if (evolution_function_is_invariant_rec_p (CHREC_RIGHT (chrec), loopnum)</span>
+<span class="lineNum">    1136 </span><span class="lineCov">      31121 :               &amp;&amp; TREE_CODE (CHREC_LEFT (chrec)) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">    1137 </span><span class="lineCov">      62232 :               &amp;&amp; CHREC_VARIABLE (CHREC_LEFT (chrec)) != CHREC_VARIABLE (chrec)</span>
+<span class="lineNum">    1138 </span><span class="lineCov">      62237 :               &amp;&amp; evolution_function_is_affine_multivariate_p</span>
+<span class="lineNum">    1139 </span><span class="lineCov">      62232 :               (CHREC_LEFT (chrec), loopnum))</span>
+<span class="lineNum">    1140 </span>            :             return true;
+<span class="lineNum">    1141 </span>            :           else
+<span class="lineNum">    1142 </span><span class="lineCov">          5 :             return false;</span>
+<span class="lineNum">    1143 </span>            :         }
+<span class="lineNum">    1144 </span>            : 
+<span class="lineNum">    1145 </span>            :     default:
+<span class="lineNum">    1146 </span>            :       return false;
+<span class="lineNum">    1147 </span>            :     }
+<span class="lineNum">    1148 </span>            : }
+<span class="lineNum">    1149 </span>            : 
+<span class="lineNum">    1150 </span>            : /* Determine whether the given tree is a function in zero or one
+<span class="lineNum">    1151 </span>            :    variables.  */
+<span class="lineNum">    1152 </span>            : 
+<span class="lineNum">    1153 </span>            : bool
+<span class="lineNum">    1154 </span><span class="lineCov">    1032170 : evolution_function_is_univariate_p (const_tree chrec)</span>
+<span class="lineNum">    1155 </span>            : {
+<span class="lineNum">    1156 </span><span class="lineCov">    1032170 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">    1157 </span>            :     return true;
+<span class="lineNum">    1158 </span>            : 
+<span class="lineNum">    1159 </span><span class="lineCov">    1032170 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">    1160 </span>            :     {
+<span class="lineNum">    1161 </span><span class="lineCov">    1032170 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1162 </span><span class="lineCov">    2064340 :       switch (TREE_CODE (CHREC_LEFT (chrec)))</span>
+<span class="lineNum">    1163 </span>            :         {
+<span class="lineNum">    1164 </span><span class="lineCov">       8813 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1165 </span><span class="lineCov">      26439 :           if (CHREC_VARIABLE (chrec) != CHREC_VARIABLE (CHREC_LEFT (chrec)))</span>
+<span class="lineNum">    1166 </span>            :             return false;
+<span class="lineNum">    1167 </span><span class="lineNoCov">          0 :           if (!evolution_function_is_univariate_p (CHREC_LEFT (chrec)))</span>
+<span class="lineNum">    1168 </span>            :             return false;
+<span class="lineNum">    1169 </span>            :           break;
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span><span class="lineCov">    1023357 :         default:</span>
+<span class="lineNum">    1172 </span><span class="lineCov">    2046714 :           if (tree_contains_chrecs (CHREC_LEFT (chrec), NULL))</span>
+<span class="lineNum">    1173 </span>            :             return false;
+<span class="lineNum">    1174 </span>            :           break;
+<span class="lineNum">    1175 </span>            :         }
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span><span class="lineCov">    1023357 :       switch (TREE_CODE (CHREC_RIGHT (chrec)))</span>
+<span class="lineNum">    1178 </span>            :         {
+<span class="lineNum">    1179 </span><span class="lineNoCov">          0 :         case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1180 </span><span class="lineNoCov">          0 :           if (CHREC_VARIABLE (chrec) != CHREC_VARIABLE (CHREC_RIGHT (chrec)))</span>
+<span class="lineNum">    1181 </span>            :             return false;
+<span class="lineNum">    1182 </span><span class="lineNoCov">          0 :           if (!evolution_function_is_univariate_p (CHREC_RIGHT (chrec)))</span>
+<span class="lineNum">    1183 </span><span class="lineNoCov">          0 :             return false;</span>
+<span class="lineNum">    1184 </span>            :           break;
+<span class="lineNum">    1185 </span>            : 
+<span class="lineNum">    1186 </span><span class="lineCov">    1023357 :         default:</span>
+<span class="lineNum">    1187 </span><span class="lineCov">    2046714 :           if (tree_contains_chrecs (CHREC_RIGHT (chrec), NULL))</span>
+<span class="lineNum">    1188 </span><span class="lineNoCov">          0 :             return false;</span>
+<span class="lineNum">    1189 </span>            :           break;
+<span class="lineNum">    1190 </span>            :         }
+<span class="lineNum">    1191 </span>            :       return true;
+<span class="lineNum">    1192 </span>            : 
+<span class="lineNum">    1193 </span>            :     default:
+<span class="lineNum">    1194 </span>            :       return true;
+<span class="lineNum">    1195 </span>            :     }
+<span class="lineNum">    1196 </span>            : }
+<span class="lineNum">    1197 </span>            : 
+<span class="lineNum">    1198 </span>            : /* Returns the number of variables of CHREC.  Example: the call
+<span class="lineNum">    1199 </span>            :    nb_vars_in_chrec ({{0, +, 1}_5, +, 2}_6) returns 2.  */
+<span class="lineNum">    1200 </span>            : 
+<span class="lineNum">    1201 </span>            : unsigned
+<span class="lineNum">    1202 </span><span class="lineCov">     956744 : nb_vars_in_chrec (tree chrec)</span>
+<span class="lineNum">    1203 </span>            : {
+<span class="lineNum">    1204 </span><span class="lineCov">    1913811 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">    1205 </span>            :     return 0;
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span><span class="lineCov">    1913811 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">    1208 </span>            :     {
+<span class="lineNum">    1209 </span><span class="lineCov">     957067 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1210 </span><span class="lineCov">     957067 :       return 1 + nb_vars_in_chrec</span>
+<span class="lineNum">    1211 </span><span class="lineCov">    1914134 :         (initial_condition_in_loop_num (chrec, CHREC_VARIABLE (chrec)));</span>
+<span class="lineNum">    1212 </span>            : 
+<span class="lineNum">    1213 </span>            :     default:
+<span class="lineNum">    1214 </span>            :       return 0;
+<span class="lineNum">    1215 </span>            :     }
+<span class="lineNum">    1216 </span>            : }
+<span class="lineNum">    1217 </span>            : 
+<span class="lineNum">    1218 </span>            : /* Converts BASE and STEP of affine scev to TYPE.  LOOP is the loop whose iv
+<span class="lineNum">    1219 </span>            :    the scev corresponds to.  AT_STMT is the statement at that the scev is
+<span class="lineNum">    1220 </span>            :    evaluated.  USE_OVERFLOW_SEMANTICS is true if this function should assume
+<span class="lineNum">    1221 </span>            :    that the rules for overflow of the given language apply (e.g., that signed
+<span class="lineNum">    1222 </span>            :    arithmetics in C does not overflow) -- i.e., to use them to avoid
+<span class="lineNum">    1223 </span>            :    unnecessary tests, but also to enforce that the result follows them.
+<span class="lineNum">    1224 </span>            :    FROM is the source variable converted if it's not NULL.  Returns true if
+<span class="lineNum">    1225 </span>            :    the conversion succeeded, false otherwise.  */
+<span class="lineNum">    1226 </span>            : 
+<span class="lineNum">    1227 </span>            : bool
+<span class="lineNum">    1228 </span><span class="lineCov">    3268735 : convert_affine_scev (struct loop *loop, tree type,</span>
+<span class="lineNum">    1229 </span>            :                      tree *base, tree *step, gimple *at_stmt,
+<span class="lineNum">    1230 </span>            :                      bool use_overflow_semantics, tree from)
+<span class="lineNum">    1231 </span>            : {
+<span class="lineNum">    1232 </span><span class="lineCov">    3268735 :   tree ct = TREE_TYPE (*step);</span>
+<span class="lineNum">    1233 </span><span class="lineCov">    3268735 :   bool enforce_overflow_semantics;</span>
+<span class="lineNum">    1234 </span><span class="lineCov">    3268735 :   bool must_check_src_overflow, must_check_rslt_overflow;</span>
+<span class="lineNum">    1235 </span><span class="lineCov">    3268735 :   tree new_base, new_step;</span>
+<span class="lineNum">    1236 </span><span class="lineCov">    3268735 :   tree step_type = POINTER_TYPE_P (type) ? sizetype : type;</span>
+<span class="lineNum">    1237 </span>            : 
+<span class="lineNum">    1238 </span>            :   /* In general,
+<span class="lineNum">    1239 </span>            :      (TYPE) (BASE + STEP * i) = (TYPE) BASE + (TYPE -- sign extend) STEP * i,
+<span class="lineNum">    1240 </span>            :      but we must check some assumptions.
+<span class="lineNum">    1241 </span>            : 
+<span class="lineNum">    1242 </span>            :      1) If [BASE, +, STEP] wraps, the equation is not valid when precision
+<span class="lineNum">    1243 </span>            :         of CT is smaller than the precision of TYPE.  For example, when we
+<span class="lineNum">    1244 </span>            :         cast unsigned char [254, +, 1] to unsigned, the values on left side
+<span class="lineNum">    1245 </span>            :         are 254, 255, 0, 1, ..., but those on the right side are
+<span class="lineNum">    1246 </span>            :         254, 255, 256, 257, ...
+<span class="lineNum">    1247 </span>            :      2) In case that we must also preserve the fact that signed ivs do not
+<span class="lineNum">    1248 </span>            :         overflow, we must additionally check that the new iv does not wrap.
+<span class="lineNum">    1249 </span>            :         For example, unsigned char [125, +, 1] casted to signed char could
+<span class="lineNum">    1250 </span>            :         become a wrapping variable with values 125, 126, 127, -128, -127, ...,
+<span class="lineNum">    1251 </span>            :         which would confuse optimizers that assume that this does not
+<span class="lineNum">    1252 </span>            :         happen.  */
+<span class="lineNum">    1253 </span><span class="lineCov">    3268735 :   must_check_src_overflow = TYPE_PRECISION (ct) &lt; TYPE_PRECISION (type);</span>
+<span class="lineNum">    1254 </span>            : 
+<span class="lineNum">    1255 </span><span class="lineCov">    4759446 :   enforce_overflow_semantics = (use_overflow_semantics</span>
+<span class="lineNum">    1256 </span><span class="lineCov">    3268735 :                                 &amp;&amp; nowrap_type_p (type));</span>
+<span class="lineNum">    1257 </span><span class="lineCov">    1490711 :   if (enforce_overflow_semantics)</span>
+<span class="lineNum">    1258 </span>            :     {
+<span class="lineNum">    1259 </span>            :       /* We can avoid checking whether the result overflows in the following
+<span class="lineNum">    1260 </span>            :          cases:
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span>            :          -- must_check_src_overflow is true, and the range of TYPE is superset
+<span class="lineNum">    1263 </span>            :             of the range of CT -- i.e., in all cases except if CT signed and
+<span class="lineNum">    1264 </span>            :             TYPE unsigned.
+<span class="lineNum">    1265 </span>            :          -- both CT and TYPE have the same precision and signedness, and we
+<span class="lineNum">    1266 </span>            :             verify instead that the source does not overflow (this may be
+<span class="lineNum">    1267 </span>            :             easier than verifying it for the result, as we may use the
+<span class="lineNum">    1268 </span>            :             information about the semantics of overflow in CT).  */
+<span class="lineNum">    1269 </span><span class="lineCov">    1490711 :       if (must_check_src_overflow)</span>
+<span class="lineNum">    1270 </span>            :         {
+<span class="lineNum">    1271 </span><span class="lineCov">     302579 :           if (TYPE_UNSIGNED (type) &amp;&amp; !TYPE_UNSIGNED (ct))</span>
+<span class="lineNum">    1272 </span>            :             must_check_rslt_overflow = true;
+<span class="lineNum">    1273 </span>            :           else
+<span class="lineNum">    1274 </span>            :             must_check_rslt_overflow = false;
+<span class="lineNum">    1275 </span>            :         }
+<span class="lineNum">    1276 </span><span class="lineCov">    1188132 :       else if (TYPE_UNSIGNED (ct) == TYPE_UNSIGNED (type)</span>
+<span class="lineNum">    1277 </span><span class="lineCov">    1188132 :                &amp;&amp; TYPE_PRECISION (ct) == TYPE_PRECISION (type))</span>
+<span class="lineNum">    1278 </span>            :         {
+<span class="lineNum">    1279 </span>            :           must_check_rslt_overflow = false;
+<span class="lineNum">    1280 </span>            :           must_check_src_overflow = true;
+<span class="lineNum">    1281 </span>            :         }
+<span class="lineNum">    1282 </span>            :       else
+<span class="lineNum">    1283 </span>            :         must_check_rslt_overflow = true;
+<span class="lineNum">    1284 </span>            :     }
+<span class="lineNum">    1285 </span>            :   else
+<span class="lineNum">    1286 </span>            :     must_check_rslt_overflow = false;
+<span class="lineNum">    1287 </span>            : 
+<span class="lineNum">    1288 </span><span class="lineCov">    2801797 :   if (must_check_src_overflow</span>
+<span class="lineNum">    1289 </span><span class="lineCov">    3268735 :       &amp;&amp; scev_probably_wraps_p (from, *base, *step, at_stmt, loop,</span>
+<span class="lineNum">    1290 </span>            :                                 use_overflow_semantics))
+<span class="lineNum">    1291 </span>            :     return false;
+<span class="lineNum">    1292 </span>            : 
+<span class="lineNum">    1293 </span><span class="lineCov">    2652127 :   new_base = chrec_convert (type, *base, at_stmt, use_overflow_semantics);</span>
+<span class="lineNum">    1294 </span>            :   /* The step must be sign extended, regardless of the signedness
+<span class="lineNum">    1295 </span>            :      of CT and TYPE.  This only needs to be handled specially when
+<span class="lineNum">    1296 </span>            :      CT is unsigned -- to avoid e.g. unsigned char [100, +, 255]
+<span class="lineNum">    1297 </span>            :      (with values 100, 99, 98, ...) from becoming signed or unsigned
+<span class="lineNum">    1298 </span>            :      [100, +, 255] with values 100, 355, ...; the sign-extension is
+<span class="lineNum">    1299 </span>            :      performed by default when CT is signed.  */
+<span class="lineNum">    1300 </span><span class="lineCov">    2652127 :   new_step = *step;</span>
+<span class="lineNum">    1301 </span><span class="lineCov">    2652127 :   if (TYPE_PRECISION (step_type) &gt; TYPE_PRECISION (ct) &amp;&amp; TYPE_UNSIGNED (ct))</span>
+<span class="lineNum">    1302 </span>            :     {
+<span class="lineNum">    1303 </span><span class="lineCov">      50054 :       tree signed_ct = build_nonstandard_integer_type (TYPE_PRECISION (ct), 0);</span>
+<span class="lineNum">    1304 </span><span class="lineCov">      25027 :       new_step = chrec_convert (signed_ct, new_step, at_stmt,</span>
+<span class="lineNum">    1305 </span>            :                                 use_overflow_semantics);
+<span class="lineNum">    1306 </span>            :     }
+<span class="lineNum">    1307 </span><span class="lineCov">    2652127 :   new_step = chrec_convert (step_type, new_step, at_stmt,</span>
+<span class="lineNum">    1308 </span>            :                             use_overflow_semantics);
+<span class="lineNum">    1309 </span>            : 
+<span class="lineNum">    1310 </span><span class="lineCov">    2652127 :   if (automatically_generated_chrec_p (new_base)</span>
+<span class="lineNum">    1311 </span><span class="lineCov">    2652127 :       || automatically_generated_chrec_p (new_step))</span>
+<span class="lineNum">    1312 </span>            :     return false;
+<span class="lineNum">    1313 </span>            : 
+<span class="lineNum">    1314 </span><span class="lineCov">    2652127 :   if (must_check_rslt_overflow</span>
+<span class="lineNum">    1315 </span>            :       /* Note that in this case we cannot use the fact that signed variables
+<span class="lineNum">    1316 </span>            :          do not overflow, as this is what we are verifying for the new iv.  */
+<span class="lineNum">    1317 </span><span class="lineCov">    2652127 :       &amp;&amp; scev_probably_wraps_p (NULL_TREE, new_base, new_step,</span>
+<span class="lineNum">    1318 </span>            :                                 at_stmt, loop, false))
+<span class="lineNum">    1319 </span>            :     return false;
+<span class="lineNum">    1320 </span>            : 
+<span class="lineNum">    1321 </span><span class="lineCov">    2095008 :   *base = new_base;</span>
+<span class="lineNum">    1322 </span><span class="lineCov">    2095008 :   *step = new_step;</span>
+<span class="lineNum">    1323 </span><span class="lineCov">    2095008 :   return true;</span>
+<span class="lineNum">    1324 </span>            : }
+<span class="lineNum">    1325 </span>            : 
+<span class="lineNum">    1326 </span>            : 
+<span class="lineNum">    1327 </span>            : /* Convert CHREC for the right hand side of a CHREC.
+<span class="lineNum">    1328 </span>            :    The increment for a pointer type is always sizetype.  */
+<a name="1329"><span class="lineNum">    1329 </span>            : </a>
+<span class="lineNum">    1330 </span>            : tree
+<span class="lineNum">    1331 </span><span class="lineCov">   15907403 : chrec_convert_rhs (tree type, tree chrec, gimple *at_stmt)</span>
+<span class="lineNum">    1332 </span>            : {
+<span class="lineNum">    1333 </span><span class="lineCov">   15907403 :   if (POINTER_TYPE_P (type))</span>
+<span class="lineNum">    1334 </span><span class="lineCov">    2400599 :     type = sizetype;</span>
+<span class="lineNum">    1335 </span>            : 
+<span class="lineNum">    1336 </span><span class="lineCov">   15907403 :   return chrec_convert (type, chrec, at_stmt);</span>
+<span class="lineNum">    1337 </span>            : }
+<span class="lineNum">    1338 </span>            : 
+<span class="lineNum">    1339 </span>            : /* Convert CHREC to TYPE.  When the analyzer knows the context in
+<span class="lineNum">    1340 </span>            :    which the CHREC is built, it sets AT_STMT to the statement that
+<span class="lineNum">    1341 </span>            :    contains the definition of the analyzed variable, otherwise the
+<span class="lineNum">    1342 </span>            :    conversion is less accurate: the information is used for
+<span class="lineNum">    1343 </span>            :    determining a more accurate estimation of the number of iterations.
+<span class="lineNum">    1344 </span>            :    By default AT_STMT could be safely set to NULL_TREE.
+<span class="lineNum">    1345 </span>            : 
+<span class="lineNum">    1346 </span>            :    USE_OVERFLOW_SEMANTICS is true if this function should assume that
+<span class="lineNum">    1347 </span>            :    the rules for overflow of the given language apply (e.g., that signed
+<span class="lineNum">    1348 </span>            :    arithmetics in C does not overflow) -- i.e., to use them to avoid
+<span class="lineNum">    1349 </span>            :    unnecessary tests, but also to enforce that the result follows them.
+<span class="lineNum">    1350 </span>            : 
+<span class="lineNum">    1351 </span>            :    FROM is the source variable converted if it's not NULL.  */
+<span class="lineNum">    1352 </span>            : 
+<span class="lineNum">    1353 </span>            : static tree
+<span class="lineNum">    1354 </span><span class="lineCov">   74696836 : chrec_convert_1 (tree type, tree chrec, gimple *at_stmt,</span>
+<span class="lineNum">    1355 </span>            :                  bool use_overflow_semantics, tree from)
+<span class="lineNum">    1356 </span>            : {
+<span class="lineNum">    1357 </span><span class="lineCov">   74696836 :   tree ct, res;</span>
+<span class="lineNum">    1358 </span><span class="lineCov">   74696836 :   tree base, step;</span>
+<span class="lineNum">    1359 </span><span class="lineCov">   74696836 :   struct loop *loop;</span>
+<span class="lineNum">    1360 </span>            : 
+<span class="lineNum">    1361 </span><span class="lineCov">   74696836 :   if (automatically_generated_chrec_p (chrec))</span>
+<span class="lineNum">    1362 </span>            :     return chrec;
+<span class="lineNum">    1363 </span>            : 
+<span class="lineNum">    1364 </span><span class="lineCov">   74021244 :   ct = chrec_type (chrec);</span>
+<span class="lineNum">    1365 </span><span class="lineCov">   74021244 :   if (useless_type_conversion_p (type, ct))</span>
+<span class="lineNum">    1366 </span>            :     return chrec;
+<span class="lineNum">    1367 </span>            : 
+<span class="lineNum">    1368 </span><span class="lineCov">   18983739 :   if (!evolution_function_is_affine_p (chrec))</span>
+<span class="lineNum">    1369 </span>            :     goto keep_cast;
+<span class="lineNum">    1370 </span>            : 
+<span class="lineNum">    1371 </span><span class="lineCov">    2445569 :   loop = get_chrec_loop (chrec);</span>
+<span class="lineNum">    1372 </span><span class="lineCov">    2445569 :   base = CHREC_LEFT (chrec);</span>
+<span class="lineNum">    1373 </span><span class="lineCov">    4891138 :   step = CHREC_RIGHT (chrec);</span>
+<span class="lineNum">    1374 </span>            : 
+<span class="lineNum">    1375 </span><span class="lineCov">    2445569 :   if (convert_affine_scev (loop, type, &amp;base, &amp;step, at_stmt,</span>
+<span class="lineNum">    1376 </span>            :                            use_overflow_semantics, from))
+<span class="lineNum">    1377 </span><span class="lineCov">    1633456 :     return build_polynomial_chrec (loop-&gt;num, base, step);</span>
+<span class="lineNum">    1378 </span>            : 
+<span class="lineNum">    1379 </span>            :   /* If we cannot propagate the cast inside the chrec, just keep the cast.  */
+<span class="lineNum">    1380 </span><span class="lineCov">     812113 : keep_cast:</span>
+<span class="lineNum">    1381 </span>            :   /* Fold will not canonicalize (long)(i - 1) to (long)i - 1 because that
+<span class="lineNum">    1382 </span>            :      may be more expensive.  We do want to perform this optimization here
+<span class="lineNum">    1383 </span>            :      though for canonicalization reasons.  */
+<span class="lineNum">    1384 </span><span class="lineCov">   17350283 :   if (use_overflow_semantics</span>
+<span class="lineNum">    1385 </span><span class="lineCov">   34114578 :       &amp;&amp; (TREE_CODE (chrec) == PLUS_EXPR</span>
+<span class="lineNum">    1386 </span><span class="lineCov">   17057289 :           || TREE_CODE (chrec) == MINUS_EXPR)</span>
+<span class="lineNum">    1387 </span><span class="lineCov">    1746908 :       &amp;&amp; TREE_CODE (type) == INTEGER_TYPE</span>
+<span class="lineNum">    1388 </span><span class="lineCov">    1713765 :       &amp;&amp; TREE_CODE (ct) == INTEGER_TYPE</span>
+<span class="lineNum">    1389 </span><span class="lineCov">    1713765 :       &amp;&amp; TYPE_PRECISION (type) &gt; TYPE_PRECISION (ct)</span>
+<span class="lineNum">    1390 </span><span class="lineCov">   17462953 :       &amp;&amp; TYPE_OVERFLOW_UNDEFINED (ct))</span>
+<span class="lineNum">    1391 </span><span class="lineCov">      51303 :     res = fold_build2 (TREE_CODE (chrec), type,</span>
+<span class="lineNum">    1392 </span>            :                        fold_convert (type, TREE_OPERAND (chrec, 0)),
+<span class="lineNum">    1393 </span>            :                        fold_convert (type, TREE_OPERAND (chrec, 1)));
+<span class="lineNum">    1394 </span>            :   /* Similar perform the trick that (signed char)((int)x + 2) can be
+<span class="lineNum">    1395 </span>            :      narrowed to (signed char)((unsigned char)x + 2).  */
+<span class="lineNum">    1396 </span><span class="lineCov">   17298980 :   else if (use_overflow_semantics</span>
+<span class="lineNum">    1397 </span><span class="lineCov">   17005986 :            &amp;&amp; TREE_CODE (chrec) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">    1398 </span><span class="lineCov">     870327 :            &amp;&amp; TREE_CODE (ct) == INTEGER_TYPE</span>
+<span class="lineNum">    1399 </span><span class="lineCov">     854492 :            &amp;&amp; TREE_CODE (type) == INTEGER_TYPE</span>
+<span class="lineNum">    1400 </span><span class="lineCov">     620147 :            &amp;&amp; TYPE_OVERFLOW_UNDEFINED (type)</span>
+<span class="lineNum">    1401 </span><span class="lineCov">   17882943 :            &amp;&amp; TYPE_PRECISION (type) &lt; TYPE_PRECISION (ct))</span>
+<span class="lineNum">    1402 </span>            :     {
+<span class="lineNum">    1403 </span><span class="lineCov">      18861 :       tree utype = unsigned_type_for (type);</span>
+<span class="lineNum">    1404 </span><span class="lineCov">      37722 :       res = build_polynomial_chrec (CHREC_VARIABLE (chrec),</span>
+<span class="lineNum">    1405 </span><span class="lineCov">      18861 :                                     fold_convert (utype,</span>
+<span class="lineNum">    1406 </span>            :                                                   CHREC_LEFT (chrec)),
+<span class="lineNum">    1407 </span><span class="lineCov">      18861 :                                     fold_convert (utype,</span>
+<span class="lineNum">    1408 </span>            :                                                   CHREC_RIGHT (chrec)));
+<span class="lineNum">    1409 </span><span class="lineCov">      18861 :       res = chrec_convert_1 (type, res, at_stmt, use_overflow_semantics, from);</span>
+<span class="lineNum">    1410 </span>            :     }
+<span class="lineNum">    1411 </span>            :   else
+<span class="lineNum">    1412 </span><span class="lineCov">   17280119 :     res = fold_convert (type, chrec);</span>
+<span class="lineNum">    1413 </span>            : 
+<span class="lineNum">    1414 </span>            :   /* Don't propagate overflows.  */
+<span class="lineNum">    1415 </span><span class="lineCov">   17350283 :   if (CONSTANT_CLASS_P (res))</span>
+<span class="lineNum">    1416 </span><span class="lineCov">    8800402 :     TREE_OVERFLOW (res) = 0;</span>
+<span class="lineNum">    1417 </span>            : 
+<span class="lineNum">    1418 </span>            :   /* But reject constants that don't fit in their type after conversion.
+<span class="lineNum">    1419 </span>            :      This can happen if TYPE_MIN_VALUE or TYPE_MAX_VALUE are not the
+<span class="lineNum">    1420 </span>            :      natural values associated with TYPE_PRECISION and TYPE_UNSIGNED,
+<span class="lineNum">    1421 </span>            :      and can cause problems later when computing niters of loops.  Note
+<span class="lineNum">    1422 </span>            :      that we don't do the check before converting because we don't want
+<span class="lineNum">    1423 </span>            :      to reject conversions of negative chrecs to unsigned types.  */
+<span class="lineNum">    1424 </span><span class="lineCov">   17350283 :   if (TREE_CODE (res) == INTEGER_CST</span>
+<span class="lineNum">    1425 </span><span class="lineCov">    4400201 :       &amp;&amp; TREE_CODE (type) == INTEGER_TYPE</span>
+<span class="lineNum">    1426 </span><span class="lineCov">   21726299 :       &amp;&amp; !int_fits_type_p (res, type))</span>
+<span class="lineNum">    1427 </span><span class="lineNoCov">          0 :     res = chrec_dont_know;</span>
+<span class="lineNum">    1428 </span>            : 
+<span class="lineNum">    1429 </span>            :   return res;
+<span class="lineNum">    1430 </span>            : }
+<span class="lineNum">    1431 </span>            : 
+<span class="lineNum">    1432 </span>            : /* Convert CHREC to TYPE.  When the analyzer knows the context in
+<span class="lineNum">    1433 </span>            :    which the CHREC is built, it sets AT_STMT to the statement that
+<span class="lineNum">    1434 </span>            :    contains the definition of the analyzed variable, otherwise the
+<span class="lineNum">    1435 </span>            :    conversion is less accurate: the information is used for
+<span class="lineNum">    1436 </span>            :    determining a more accurate estimation of the number of iterations.
+<span class="lineNum">    1437 </span>            :    By default AT_STMT could be safely set to NULL_TREE.
+<span class="lineNum">    1438 </span>            : 
+<span class="lineNum">    1439 </span>            :    The following rule is always true: TREE_TYPE (chrec) ==
+<span class="lineNum">    1440 </span>            :    TREE_TYPE (CHREC_LEFT (chrec)) == TREE_TYPE (CHREC_RIGHT (chrec)).
+<span class="lineNum">    1441 </span>            :    An example of what could happen when adding two chrecs and the type
+<span class="lineNum">    1442 </span>            :    of the CHREC_RIGHT is different than CHREC_LEFT is:
+<span class="lineNum">    1443 </span>            : 
+<span class="lineNum">    1444 </span>            :    {(uint) 0, +, (uchar) 10} +
+<span class="lineNum">    1445 </span>            :    {(uint) 0, +, (uchar) 250}
+<span class="lineNum">    1446 </span>            : 
+<span class="lineNum">    1447 </span>            :    that would produce a wrong result if CHREC_RIGHT is not (uint):
+<span class="lineNum">    1448 </span>            : 
+<span class="lineNum">    1449 </span>            :    {(uint) 0, +, (uchar) 4}
+<span class="lineNum">    1450 </span>            : 
+<span class="lineNum">    1451 </span>            :    instead of
+<span class="lineNum">    1452 </span>            : 
+<span class="lineNum">    1453 </span>            :    {(uint) 0, +, (uint) 260}
+<span class="lineNum">    1454 </span>            : 
+<span class="lineNum">    1455 </span>            :    USE_OVERFLOW_SEMANTICS is true if this function should assume that
+<span class="lineNum">    1456 </span>            :    the rules for overflow of the given language apply (e.g., that signed
+<span class="lineNum">    1457 </span>            :    arithmetics in C does not overflow) -- i.e., to use them to avoid
+<span class="lineNum">    1458 </span>            :    unnecessary tests, but also to enforce that the result follows them.
+<span class="lineNum">    1459 </span>            : 
+<span class="lineNum">    1460 </span>            :    FROM is the source variable converted if it's not NULL.  */
+<a name="1461"><span class="lineNum">    1461 </span>            : </a>
+<span class="lineNum">    1462 </span>            : tree
+<span class="lineNum">    1463 </span><span class="lineCov">   74677975 : chrec_convert (tree type, tree chrec, gimple *at_stmt,</span>
+<span class="lineNum">    1464 </span>            :                bool use_overflow_semantics, tree from)
+<span class="lineNum">    1465 </span>            : {
+<span class="lineNum">    1466 </span><span class="lineCov">   74677975 :   return chrec_convert_1 (type, chrec, at_stmt, use_overflow_semantics, from);</span>
+<span class="lineNum">    1467 </span>            : }
+<span class="lineNum">    1468 </span>            : 
+<span class="lineNum">    1469 </span>            : /* Convert CHREC to TYPE, without regard to signed overflows.  Returns the new
+<span class="lineNum">    1470 </span>            :    chrec if something else than what chrec_convert would do happens, NULL_TREE
+<span class="lineNum">    1471 </span>            :    otherwise.  This function set TRUE to variable pointed by FOLD_CONVERSIONS
+<span class="lineNum">    1472 </span>            :    if the result chrec may overflow.  */
+<span class="lineNum">    1473 </span>            : 
+<span class="lineNum">    1474 </span>            : tree
+<span class="lineNum">    1475 </span><span class="lineCov">    4264172 : chrec_convert_aggressive (tree type, tree chrec, bool *fold_conversions)</span>
+<span class="lineNum">    1476 </span>            : {
+<span class="lineNum">    1477 </span><span class="lineCov">    4264172 :   tree inner_type, left, right, lc, rc, rtype;</span>
+<span class="lineNum">    1478 </span>            : 
+<span class="lineNum">    1479 </span><span class="lineCov">    4264172 :   gcc_assert (fold_conversions != NULL);</span>
+<span class="lineNum">    1480 </span>            : 
+<span class="lineNum">    1481 </span><span class="lineCov">    4264172 :   if (automatically_generated_chrec_p (chrec)</span>
+<span class="lineNum">    1482 </span><span class="lineCov">    4264172 :       || TREE_CODE (chrec) != POLYNOMIAL_CHREC)</span>
+<span class="lineNum">    1483 </span>            :     return NULL_TREE;
+<span class="lineNum">    1484 </span>            : 
+<span class="lineNum">    1485 </span><span class="lineCov">     409258 :   inner_type = TREE_TYPE (chrec);</span>
+<span class="lineNum">    1486 </span><span class="lineCov">     409258 :   if (TYPE_PRECISION (type) &gt; TYPE_PRECISION (inner_type))</span>
+<span class="lineNum">    1487 </span>            :     return NULL_TREE;
+<span class="lineNum">    1488 </span>            : 
+<span class="lineNum">    1489 </span><span class="lineCov">     382644 :   if (useless_type_conversion_p (type, inner_type))</span>
+<span class="lineNum">    1490 </span>            :     return NULL_TREE;
+<span class="lineNum">    1491 </span>            : 
+<span class="lineNum">    1492 </span><span class="lineCov">     362661 :   if (!*fold_conversions &amp;&amp; evolution_function_is_affine_p (chrec))</span>
+<span class="lineNum">    1493 </span>            :     {
+<span class="lineNum">    1494 </span><span class="lineCov">     362228 :       tree base, step;</span>
+<span class="lineNum">    1495 </span><span class="lineCov">     362228 :       struct loop *loop;</span>
+<span class="lineNum">    1496 </span>            : 
+<span class="lineNum">    1497 </span><span class="lineCov">     362228 :       loop = get_chrec_loop (chrec);</span>
+<span class="lineNum">    1498 </span><span class="lineCov">     362228 :       base = CHREC_LEFT (chrec);</span>
+<span class="lineNum">    1499 </span><span class="lineCov">     724456 :       step = CHREC_RIGHT (chrec);</span>
+<span class="lineNum">    1500 </span><span class="lineCov">     362228 :       if (convert_affine_scev (loop, type, &amp;base, &amp;step, NULL, true))</span>
+<span class="lineNum">    1501 </span><span class="lineCov">       1205 :         return build_polynomial_chrec (loop-&gt;num, base, step);</span>
+<span class="lineNum">    1502 </span>            :     }
+<span class="lineNum">    1503 </span><span class="lineCov">     361456 :   rtype = POINTER_TYPE_P (type) ? sizetype : type;</span>
+<span class="lineNum">    1504 </span>            : 
+<span class="lineNum">    1505 </span><span class="lineCov">     361456 :   left = CHREC_LEFT (chrec);</span>
+<span class="lineNum">    1506 </span><span class="lineCov">     722912 :   right = CHREC_RIGHT (chrec);</span>
+<span class="lineNum">    1507 </span><span class="lineCov">     361456 :   lc = chrec_convert_aggressive (type, left, fold_conversions);</span>
+<span class="lineNum">    1508 </span><span class="lineCov">     361456 :   if (!lc)</span>
+<span class="lineNum">    1509 </span><span class="lineCov">     361456 :     lc = chrec_convert (type, left, NULL);</span>
+<span class="lineNum">    1510 </span><span class="lineCov">     361456 :   rc = chrec_convert_aggressive (rtype, right, fold_conversions);</span>
+<span class="lineNum">    1511 </span><span class="lineCov">     361456 :   if (!rc)</span>
+<span class="lineNum">    1512 </span><span class="lineCov">     361085 :     rc = chrec_convert (rtype, right, NULL);</span>
+<span class="lineNum">    1513 </span>            : 
+<span class="lineNum">    1514 </span><span class="lineCov">     361456 :   *fold_conversions = true;</span>
+<span class="lineNum">    1515 </span>            : 
+<span class="lineNum">    1516 </span><span class="lineCov">     361456 :   return build_polynomial_chrec (CHREC_VARIABLE (chrec), lc, rc);</span>
+<span class="lineNum">    1517 </span>            : }
+<span class="lineNum">    1518 </span>            : 
+<span class="lineNum">    1519 </span>            : /* Returns true when CHREC0 == CHREC1.  */
+<span class="lineNum">    1520 </span>            : 
+<span class="lineNum">    1521 </span>            : bool
+<span class="lineNum">    1522 </span><span class="lineCov">    5009992 : eq_evolutions_p (const_tree chrec0, const_tree chrec1)</span>
+<span class="lineNum">    1523 </span>            : {
+<span class="lineNum">    1524 </span><span class="lineCov">    5064567 :   if (chrec0 == NULL_TREE</span>
+<span class="lineNum">    1525 </span><span class="lineCov">    5064567 :       || chrec1 == NULL_TREE</span>
+<span class="lineNum">    1526 </span><span class="lineCov">    5064567 :       || TREE_CODE (chrec0) != TREE_CODE (chrec1))</span>
+<span class="lineNum">    1527 </span>            :     return false;
+<span class="lineNum">    1528 </span>            : 
+<span class="lineNum">    1529 </span><span class="lineCov">    4601170 :   if (chrec0 == chrec1)</span>
+<span class="lineNum">    1530 </span>            :     return true;
+<span class="lineNum">    1531 </span>            : 
+<span class="lineNum">    1532 </span><span class="lineCov">    3336934 :   if (! types_compatible_p (TREE_TYPE (chrec0), TREE_TYPE (chrec1)))</span>
+<span class="lineNum">    1533 </span>            :     return false;
+<span class="lineNum">    1534 </span>            : 
+<span class="lineNum">    1535 </span><span class="lineCov">    3336394 :   switch (TREE_CODE (chrec0))</span>
+<span class="lineNum">    1536 </span>            :     {
+<span class="lineNum">    1537 </span><span class="lineCov">    1263747 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1538 </span><span class="lineCov">    1263747 :       return (CHREC_VARIABLE (chrec0) == CHREC_VARIABLE (chrec1)</span>
+<span class="lineNum">    1539 </span><span class="lineCov">    2527034 :               &amp;&amp; eq_evolutions_p (CHREC_LEFT (chrec0), CHREC_LEFT (chrec1))</span>
+<span class="lineNum">    1540 </span><span class="lineCov">    1504999 :               &amp;&amp; eq_evolutions_p (CHREC_RIGHT (chrec0), CHREC_RIGHT (chrec1)));</span>
+<span class="lineNum">    1541 </span>            : 
+<span class="lineNum">    1542 </span><span class="lineCov">      93736 :     case PLUS_EXPR:</span>
+<span class="lineNum">    1543 </span><span class="lineCov">      93736 :     case MULT_EXPR:</span>
+<span class="lineNum">    1544 </span><span class="lineCov">      93736 :     case MINUS_EXPR:</span>
+<span class="lineNum">    1545 </span><span class="lineCov">      93736 :     case POINTER_PLUS_EXPR:</span>
+<span class="lineNum">    1546 </span><span class="lineCov">      93736 :       return eq_evolutions_p (TREE_OPERAND (chrec0, 0),</span>
+<span class="lineNum">    1547 </span><span class="lineCov">      93736 :                               TREE_OPERAND (chrec1, 0))</span>
+<span class="lineNum">    1548 </span><span class="lineCov">     161193 :           &amp;&amp; eq_evolutions_p (TREE_OPERAND (chrec0, 1),</span>
+<span class="lineNum">    1549 </span><span class="lineCov">      67457 :                               TREE_OPERAND (chrec1, 1));</span>
+<span class="lineNum">    1550 </span>            : 
+<span class="lineNum">    1551 </span><span class="lineCov">      54575 :     CASE_CONVERT:</span>
+<span class="lineNum">    1552 </span><span class="lineCov">      54575 :       return eq_evolutions_p (TREE_OPERAND (chrec0, 0),</span>
+<span class="lineNum">    1553 </span><span class="lineCov">     109150 :                               TREE_OPERAND (chrec1, 0));</span>
+<span class="lineNum">    1554 </span>            : 
+<span class="lineNum">    1555 </span><span class="lineCov">    1924336 :     default:</span>
+<span class="lineNum">    1556 </span><span class="lineCov">    1924336 :       return operand_equal_p (chrec0, chrec1, 0);</span>
+<span class="lineNum">    1557 </span>            :     }
+<span class="lineNum">    1558 </span>            : }
+<span class="lineNum">    1559 </span>            : 
+<span class="lineNum">    1560 </span>            : /* Returns EV_GROWS if CHREC grows (assuming that it does not overflow),
+<span class="lineNum">    1561 </span>            :    EV_DECREASES if it decreases, and EV_UNKNOWN if we cannot determine
+<span class="lineNum">    1562 </span>            :    which of these cases happens.  */
+<span class="lineNum">    1563 </span>            : 
+<span class="lineNum">    1564 </span>            : enum ev_direction
+<span class="lineNum">    1565 </span><span class="lineCov">     876622 : scev_direction (const_tree chrec)</span>
+<span class="lineNum">    1566 </span>            : {
+<span class="lineNum">    1567 </span><span class="lineCov">     876622 :   const_tree step;</span>
+<span class="lineNum">    1568 </span>            : 
+<span class="lineNum">    1569 </span><span class="lineCov">     876622 :   if (!evolution_function_is_affine_p (chrec))</span>
+<span class="lineNum">    1570 </span>            :     return EV_DIR_UNKNOWN;
+<span class="lineNum">    1571 </span>            : 
+<span class="lineNum">    1572 </span><span class="lineCov">     876622 :   step = CHREC_RIGHT (chrec);</span>
+<span class="lineNum">    1573 </span><span class="lineCov">     876622 :   if (TREE_CODE (step) != INTEGER_CST)</span>
+<span class="lineNum">    1574 </span>            :     return EV_DIR_UNKNOWN;
+<span class="lineNum">    1575 </span>            : 
+<span class="lineNum">    1576 </span><span class="lineCov">     876387 :   if (tree_int_cst_sign_bit (step))</span>
+<span class="lineNum">    1577 </span>            :     return EV_DIR_DECREASES;
+<span class="lineNum">    1578 </span>            :   else
+<span class="lineNum">    1579 </span><span class="lineCov">     807782 :     return EV_DIR_GROWS;</span>
+<span class="lineNum">    1580 </span>            : }
+<span class="lineNum">    1581 </span>            : 
+<span class="lineNum">    1582 </span>            : /* Iterates over all the components of SCEV, and calls CBCK.  */
+<a name="1583"><span class="lineNum">    1583 </span>            : </a>
+<span class="lineNum">    1584 </span>            : void
+<span class="lineNum">    1585 </span><span class="lineNoCov">          0 : for_each_scev_op (tree *scev, bool (*cbck) (tree *, void *), void *data)</span>
+<span class="lineNum">    1586 </span>            : {
+<span class="lineNum">    1587 </span><span class="lineNoCov">          0 :   switch (TREE_CODE_LENGTH (TREE_CODE (*scev)))</span>
+<span class="lineNum">    1588 </span>            :     {
+<span class="lineNum">    1589 </span><span class="lineNoCov">          0 :     case 3:</span>
+<span class="lineNum">    1590 </span><span class="lineNoCov">          0 :       for_each_scev_op (&amp;TREE_OPERAND (*scev, 2), cbck, data);</span>
+<span class="lineNum">    1591 </span>            :       /* FALLTHRU */
+<span class="lineNum">    1592 </span>            : 
+<span class="lineNum">    1593 </span><span class="lineNoCov">          0 :     case 2:</span>
+<span class="lineNum">    1594 </span><span class="lineNoCov">          0 :       for_each_scev_op (&amp;TREE_OPERAND (*scev, 1), cbck, data);</span>
+<span class="lineNum">    1595 </span>            :       /* FALLTHRU */
+<span class="lineNum">    1596 </span>            : 
+<span class="lineNum">    1597 </span><span class="lineNoCov">          0 :     case 1:</span>
+<span class="lineNum">    1598 </span><span class="lineNoCov">          0 :       for_each_scev_op (&amp;TREE_OPERAND (*scev, 0), cbck, data);</span>
+<span class="lineNum">    1599 </span>            :       /* FALLTHRU */
+<span class="lineNum">    1600 </span>            : 
+<span class="lineNum">    1601 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1602 </span><span class="lineNoCov">          0 :       cbck (scev, data);</span>
+<span class="lineNum">    1603 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1604 </span>            :     }
+<span class="lineNum">    1605 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1606 </span>            : 
+<span class="lineNum">    1607 </span>            : /* Returns true when the operation can be part of a linear
+<span class="lineNum">    1608 </span>            :    expression.  */
+<a name="1609"><span class="lineNum">    1609 </span>            : </a>
+<span class="lineNum">    1610 </span>            : static inline bool
+<span class="lineNum">    1611 </span><span class="lineCov">      32233 : operator_is_linear (tree scev)</span>
+<span class="lineNum">    1612 </span>            : {
+<span class="lineNum">    1613 </span><span class="lineCov">      32233 :   switch (TREE_CODE (scev))</span>
+<span class="lineNum">    1614 </span>            :     {
+<span class="lineNum">    1615 </span>            :     case INTEGER_CST:
+<span class="lineNum">    1616 </span>            :     case POLYNOMIAL_CHREC:
+<span class="lineNum">    1617 </span>            :     case PLUS_EXPR:
+<span class="lineNum">    1618 </span>            :     case POINTER_PLUS_EXPR:
+<span class="lineNum">    1619 </span>            :     case MULT_EXPR:
+<span class="lineNum">    1620 </span>            :     case MINUS_EXPR:
+<span class="lineNum">    1621 </span>            :     case NEGATE_EXPR:
+<span class="lineNum">    1622 </span>            :     case SSA_NAME:
+<span class="lineNum">    1623 </span>            :     case NON_LVALUE_EXPR:
+<span class="lineNum">    1624 </span>            :     case BIT_NOT_EXPR:
+<span class="lineNum">    1625 </span>            :     CASE_CONVERT:
+<span class="lineNum">    1626 </span>            :       return true;
+<span class="lineNum">    1627 </span>            : 
+<span class="lineNum">    1628 </span><span class="lineCov">         50 :     default:</span>
+<span class="lineNum">    1629 </span><span class="lineCov">         50 :       return false;</span>
+<span class="lineNum">    1630 </span>            :     }
+<span class="lineNum">    1631 </span>            : }
+<span class="lineNum">    1632 </span>            : 
+<span class="lineNum">    1633 </span>            : /* Return true when SCEV is a linear expression.  Linear expressions
+<span class="lineNum">    1634 </span>            :    can contain additions, substractions and multiplications.
+<span class="lineNum">    1635 </span>            :    Multiplications are restricted to constant scaling: &quot;cst * x&quot;.  */
+<span class="lineNum">    1636 </span>            : 
+<span class="lineNum">    1637 </span>            : bool
+<span class="lineNum">    1638 </span><span class="lineCov">      75939 : scev_is_linear_expression (tree scev)</span>
+<span class="lineNum">    1639 </span>            : {
+<span class="lineNum">    1640 </span><span class="lineCov">     154782 :   if (evolution_function_is_constant_p (scev))</span>
+<span class="lineNum">    1641 </span>            :     return true;
+<span class="lineNum">    1642 </span>            : 
+<span class="lineNum">    1643 </span><span class="lineCov">      32233 :   if (scev == NULL</span>
+<span class="lineNum">    1644 </span><span class="lineCov">      32233 :       || !operator_is_linear (scev))</span>
+<span class="lineNum">    1645 </span>            :     return false;
+<span class="lineNum">    1646 </span>            : 
+<span class="lineNum">    1647 </span><span class="lineCov">      32183 :   if (TREE_CODE (scev) == MULT_EXPR)</span>
+<span class="lineNum">    1648 </span><span class="lineCov">        319 :     return !(tree_contains_chrecs (TREE_OPERAND (scev, 0), NULL)</span>
+<span class="lineNum">    1649 </span><span class="lineNoCov">          0 :              &amp;&amp; tree_contains_chrecs (TREE_OPERAND (scev, 1), NULL));</span>
+<span class="lineNum">    1650 </span>            : 
+<span class="lineNum">    1651 </span><span class="lineCov">      31864 :   if (TREE_CODE (scev) == POLYNOMIAL_CHREC</span>
+<span class="lineNum">    1652 </span><span class="lineCov">      31864 :       &amp;&amp; !evolution_function_is_affine_multivariate_p (scev, CHREC_VARIABLE (scev)))</span>
+<span class="lineNum">    1653 </span>            :     return false;
+<span class="lineNum">    1654 </span>            : 
+<span class="lineNum">    1655 </span><span class="lineCov">      31777 :   switch (TREE_CODE_LENGTH (TREE_CODE (scev)))</span>
+<span class="lineNum">    1656 </span>            :     {
+<span class="lineNum">    1657 </span><span class="lineNoCov">          0 :     case 3:</span>
+<span class="lineNum">    1658 </span><span class="lineNoCov">          0 :       return scev_is_linear_expression (TREE_OPERAND (scev, 0))</span>
+<span class="lineNum">    1659 </span><span class="lineNoCov">          0 :         &amp;&amp; scev_is_linear_expression (TREE_OPERAND (scev, 1))</span>
+<span class="lineNum">    1660 </span><span class="lineNoCov">          0 :         &amp;&amp; scev_is_linear_expression (TREE_OPERAND (scev, 2));</span>
+<span class="lineNum">    1661 </span>            : 
+<span class="lineNum">    1662 </span><span class="lineCov">      23721 :     case 2:</span>
+<span class="lineNum">    1663 </span><span class="lineCov">      23721 :       return scev_is_linear_expression (TREE_OPERAND (scev, 0))</span>
+<span class="lineNum">    1664 </span><span class="lineCov">      23721 :         &amp;&amp; scev_is_linear_expression (TREE_OPERAND (scev, 1));</span>
+<span class="lineNum">    1665 </span>            : 
+<span class="lineNum">    1666 </span><span class="lineCov">       1452 :     case 1:</span>
+<span class="lineNum">    1667 </span><span class="lineCov">       1452 :       return scev_is_linear_expression (TREE_OPERAND (scev, 0));</span>
+<span class="lineNum">    1668 </span>            : 
+<span class="lineNum">    1669 </span>            :     case 0:
+<span class="lineNum">    1670 </span>            :       return true;
+<span class="lineNum">    1671 </span>            : 
+<span class="lineNum">    1672 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1673 </span><span class="lineNoCov">          0 :       return false;</span>
+<span class="lineNum">    1674 </span>            :     }
+<span class="lineNum">    1675 </span>            : }
+<span class="lineNum">    1676 </span>            : 
+<span class="lineNum">    1677 </span>            : /* Determines whether the expression CHREC contains only interger consts
+<span class="lineNum">    1678 </span>            :    in the right parts.  */
+<span class="lineNum">    1679 </span>            : 
+<span class="lineNum">    1680 </span>            : bool
+<span class="lineNum">    1681 </span><span class="lineCov">       4391 : evolution_function_right_is_integer_cst (const_tree chrec)</span>
+<span class="lineNum">    1682 </span>            : {
+<span class="lineNum">    1683 </span><span class="lineCov">       4391 :   if (chrec == NULL_TREE)</span>
+<span class="lineNum">    1684 </span>            :     return false;
+<span class="lineNum">    1685 </span>            : 
+<span class="lineNum">    1686 </span><span class="lineCov">       4391 :   switch (TREE_CODE (chrec))</span>
+<span class="lineNum">    1687 </span>            :     {
+<span class="lineNum">    1688 </span>            :     case INTEGER_CST:
+<span class="lineNum">    1689 </span>            :       return true;
+<span class="lineNum">    1690 </span>            : 
+<span class="lineNum">    1691 </span><span class="lineCov">       4391 :     case POLYNOMIAL_CHREC:</span>
+<span class="lineNum">    1692 </span><span class="lineCov">       4391 :       return TREE_CODE (CHREC_RIGHT (chrec)) == INTEGER_CST</span>
+<span class="lineNum">    1693 </span><span class="lineCov">       4391 :         &amp;&amp; (TREE_CODE (CHREC_LEFT (chrec)) != POLYNOMIAL_CHREC</span>
+<span class="lineNum">    1694 </span><span class="lineCov">        958 :             || evolution_function_right_is_integer_cst (CHREC_LEFT (chrec)));</span>
+<span class="lineNum">    1695 </span>            : 
+<span class="lineNum">    1696 </span><span class="lineNoCov">          0 :     CASE_CONVERT:</span>
+<span class="lineNum">    1697 </span><span class="lineNoCov">          0 :       return evolution_function_right_is_integer_cst (TREE_OPERAND (chrec, 0));</span>
+<span class="lineNum">    1698 </span>            : 
+<span class="lineNum">    1699 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1700 </span><span class="lineNoCov">          0 :       return false;</span>
+<span class="lineNum">    1701 </span>            :     }
+<span class="lineNum">    1702 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

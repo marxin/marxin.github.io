@@ -1,0 +1,915 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-ifcombine.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-ifcombine.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-ifcombine.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">305</td>
+            <td class="headerCovTableEntry">311</td>
+            <td class="headerCovTableEntryHi">98.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Combining of if-expressions on trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2007-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Richard Guenther &lt;rguenther@suse.de&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tm_p.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;tree-pretty-print.h&quot;
+<span class="lineNum">      34 </span>            : /* rtl is needed only because arm back-end requires it for
+<span class="lineNum">      35 </span>            :    BRANCH_COST.  */
+<span class="lineNum">      36 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;gimple-fold.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : #ifndef LOGICAL_OP_NON_SHORT_CIRCUIT
+<span class="lineNum">      45 </span>            : #define LOGICAL_OP_NON_SHORT_CIRCUIT \
+<span class="lineNum">      46 </span>            :   (BRANCH_COST (optimize_function_for_speed_p (cfun), \
+<span class="lineNum">      47 </span>            :                 false) &gt;= 2)
+<span class="lineNum">      48 </span>            : #endif
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            : /* This pass combines COND_EXPRs to simplify control flow.  It
+<span class="lineNum">      51 </span>            :    currently recognizes bit tests and comparisons in chains that
+<span class="lineNum">      52 </span>            :    represent logical and or logical or of two COND_EXPRs.
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :    It does so by walking basic blocks in a approximate reverse
+<span class="lineNum">      55 </span>            :    post-dominator order and trying to match CFG patterns that
+<span class="lineNum">      56 </span>            :    represent logical and or logical or of two COND_EXPRs.
+<span class="lineNum">      57 </span>            :    Transformations are done if the COND_EXPR conditions match
+<span class="lineNum">      58 </span>            :    either
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :      1. two single bit tests X &amp; (1 &lt;&lt; Yn) (for logical and)
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            :      2. two bit tests X &amp; Yn (for logical or)
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            :      3. two comparisons X OPn Y (for logical or)
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :    To simplify this pass, removing basic blocks and dead code
+<span class="lineNum">      67 </span>            :    is left to CFG cleanup and DCE.  */
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            : /* Recognize a if-then-else CFG pattern starting to match with the
+<span class="lineNum">      71 </span>            :    COND_BB basic-block containing the COND_EXPR.  The recognized
+<span class="lineNum">      72 </span>            :    then end else blocks are stored to *THEN_BB and *ELSE_BB.  If
+<span class="lineNum">      73 </span>            :    *THEN_BB and/or *ELSE_BB are already set, they are required to
+<span class="lineNum">      74 </span>            :    match the then and else basic-blocks to make the pattern match.
+<span class="lineNum">      75 </span>            :    Returns true if the pattern matched, false otherwise.  */
+<a name="76"><span class="lineNum">      76 </span>            : </a>
+<span class="lineNum">      77 </span>            : static bool
+<span class="lineNum">      78 </span><span class="lineCov">    4136316 : recognize_if_then_else (basic_block cond_bb,</span>
+<span class="lineNum">      79 </span>            :                         basic_block *then_bb, basic_block *else_bb)
+<span class="lineNum">      80 </span>            : {
+<span class="lineNum">      81 </span><span class="lineCov">    4136316 :   edge t, e;</span>
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span><span class="lineCov">    4136316 :   if (EDGE_COUNT (cond_bb-&gt;succs) != 2)</span>
+<span class="lineNum">      84 </span>            :     return false;
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :   /* Find the then/else edges.  */
+<span class="lineNum">      87 </span><span class="lineCov">    3936630 :   t = EDGE_SUCC (cond_bb, 0);</span>
+<span class="lineNum">      88 </span><span class="lineCov">    3936630 :   e = EDGE_SUCC (cond_bb, 1);</span>
+<span class="lineNum">      89 </span><span class="lineCov">    3936630 :   if (!(t-&gt;flags &amp; EDGE_TRUE_VALUE))</span>
+<span class="lineNum">      90 </span><span class="lineCov">     359757 :     std::swap (t, e);</span>
+<span class="lineNum">      91 </span><span class="lineCov">    3936630 :   if (!(t-&gt;flags &amp; EDGE_TRUE_VALUE)</span>
+<span class="lineNum">      92 </span><span class="lineCov">    3740022 :       || !(e-&gt;flags &amp; EDGE_FALSE_VALUE))</span>
+<span class="lineNum">      93 </span>            :     return false;
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :   /* Check if the edge destinations point to the required block.  */
+<span class="lineNum">      96 </span><span class="lineCov">    3740022 :   if (*then_bb</span>
+<span class="lineNum">      97 </span><span class="lineCov">    1434331 :       &amp;&amp; t-&gt;dest != *then_bb)</span>
+<span class="lineNum">      98 </span>            :     return false;
+<span class="lineNum">      99 </span><span class="lineCov">    2671808 :   if (*else_bb</span>
+<span class="lineNum">     100 </span><span class="lineCov">     366117 :       &amp;&amp; e-&gt;dest != *else_bb)</span>
+<span class="lineNum">     101 </span>            :     return false;
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span><span class="lineCov">    2482767 :   if (!*then_bb)</span>
+<span class="lineNum">     104 </span><span class="lineCov">    2305691 :     *then_bb = t-&gt;dest;</span>
+<span class="lineNum">     105 </span><span class="lineCov">    2482767 :   if (!*else_bb)</span>
+<span class="lineNum">     106 </span><span class="lineCov">    2305691 :     *else_bb = e-&gt;dest;</span>
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            :   return true;
+<span class="lineNum">     109 </span>            : }
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* Verify if the basic block BB does not have side-effects.  Return
+<span class="lineNum">     112 </span>            :    true in this case, else false.  */
+<span class="lineNum">     113 </span>            : 
+<span class="lineNum">     114 </span>            : static bool
+<span class="lineNum">     115 </span><span class="lineCov">    1608542 : bb_no_side_effects_p (basic_block bb)</span>
+<span class="lineNum">     116 </span>            : {
+<span class="lineNum">     117 </span><span class="lineCov">    1608542 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span><span class="lineCov">    7513572 :   for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     120 </span>            :     {
+<span class="lineNum">     121 </span><span class="lineCov">    5406204 :       gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span><span class="lineCov">   10812408 :       if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     124 </span>            :         continue;
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span><span class="lineCov">    2241393 :       if (gimple_has_side_effects (stmt)</span>
+<span class="lineNum">     127 </span><span class="lineCov">    1862011 :           || gimple_uses_undefined_value_p (stmt)</span>
+<span class="lineNum">     128 </span><span class="lineCov">    1860258 :           || gimple_could_trap_p (stmt)</span>
+<span class="lineNum">     129 </span><span class="lineCov">    2462931 :           || gimple_vuse (stmt)</span>
+<span class="lineNum">     130 </span>            :           /* const calls don't match any of the above, yet they could
+<span class="lineNum">     131 </span>            :              still have some side-effects - they could contain
+<span class="lineNum">     132 </span>            :              gimple_could_trap_p statements, like floating point
+<span class="lineNum">     133 </span>            :              exceptions or integer division by zero.  See PR70586.
+<span class="lineNum">     134 </span>            :              FIXME: perhaps gimple_has_side_effects or gimple_could_trap_p
+<span class="lineNum">     135 </span>            :              should handle this.  */
+<span class="lineNum">     136 </span><span class="lineCov">    4545541 :           || is_gimple_call (stmt))</span>
+<span class="lineNum">     137 </span><span class="lineCov">    1109716 :         return false;</span>
+<span class="lineNum">     138 </span>            :     }
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            :   return true;
+<span class="lineNum">     141 </span>            : }
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span>            : /* Return true if BB is an empty forwarder block to TO_BB.  */
+<a name="144"><span class="lineNum">     144 </span>            : </a>
+<span class="lineNum">     145 </span>            : static bool
+<span class="lineNum">     146 </span><span class="lineCov">     849418 : forwarder_block_to (basic_block bb, basic_block to_bb)</span>
+<span class="lineNum">     147 </span>            : {
+<span class="lineNum">     148 </span><span class="lineCov">     849418 :   return empty_block_p (bb)</span>
+<span class="lineNum">     149 </span><span class="lineCov">      29431 :          &amp;&amp; single_succ_p (bb)</span>
+<span class="lineNum">     150 </span><span class="lineCov">     878849 :          &amp;&amp; single_succ (bb) == to_bb;</span>
+<span class="lineNum">     151 </span>            : }
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            : /* Verify if all PHI node arguments in DEST for edges from BB1 or
+<span class="lineNum">     154 </span>            :    BB2 to DEST are the same.  This makes the CFG merge point
+<span class="lineNum">     155 </span>            :    free from side-effects.  Return true in this case, else false.  */
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span>            : static bool
+<span class="lineNum">     158 </span><span class="lineCov">     177076 : same_phi_args_p (basic_block bb1, basic_block bb2, basic_block dest)</span>
+<span class="lineNum">     159 </span>            : {
+<span class="lineNum">     160 </span><span class="lineCov">     177076 :   edge e1 = find_edge (bb1, dest);</span>
+<span class="lineNum">     161 </span><span class="lineCov">     177076 :   edge e2 = find_edge (bb2, dest);</span>
+<span class="lineNum">     162 </span><span class="lineCov">     177076 :   gphi_iterator gsi;</span>
+<span class="lineNum">     163 </span><span class="lineCov">     177076 :   gphi *phi;</span>
+<span class="lineNum">     164 </span>            : 
+<span class="lineNum">     165 </span><span class="lineCov">     226216 :   for (gsi = gsi_start_phis (dest); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     166 </span>            :     {
+<span class="lineNum">     167 </span><span class="lineCov">     107495 :       phi = gsi.phi ();</span>
+<span class="lineNum">     168 </span><span class="lineCov">     107495 :       if (!operand_equal_p (PHI_ARG_DEF_FROM_EDGE (phi, e1),</span>
+<span class="lineNum">     169 </span><span class="lineCov">     107495 :                             PHI_ARG_DEF_FROM_EDGE (phi, e2), 0))</span>
+<span class="lineNum">     170 </span>            :         return false;
+<span class="lineNum">     171 </span>            :     }
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span>            :   return true;
+<span class="lineNum">     174 </span>            : }
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            : /* Return the best representative SSA name for CANDIDATE which is used
+<span class="lineNum">     177 </span>            :    in a bit test.  */
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            : static tree
+<span class="lineNum">     180 </span><span class="lineCov">       2296 : get_name_for_bit_test (tree candidate)</span>
+<span class="lineNum">     181 </span>            : {
+<span class="lineNum">     182 </span>            :   /* Skip single-use names in favor of using the name from a
+<span class="lineNum">     183 </span>            :      non-widening conversion definition.  */
+<span class="lineNum">     184 </span><span class="lineCov">       2296 :   if (TREE_CODE (candidate) == SSA_NAME</span>
+<span class="lineNum">     185 </span><span class="lineCov">       2296 :       &amp;&amp; has_single_use (candidate))</span>
+<span class="lineNum">     186 </span>            :     {
+<span class="lineNum">     187 </span><span class="lineCov">       1255 :       gimple *def_stmt = SSA_NAME_DEF_STMT (candidate);</span>
+<span class="lineNum">     188 </span><span class="lineCov">       1255 :       if (is_gimple_assign (def_stmt)</span>
+<span class="lineNum">     189 </span><span class="lineCov">       1255 :           &amp;&amp; CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def_stmt)))</span>
+<span class="lineNum">     190 </span>            :         {
+<span class="lineNum">     191 </span><span class="lineCov">        111 :           if (TYPE_PRECISION (TREE_TYPE (candidate))</span>
+<span class="lineNum">     192 </span><span class="lineCov">        222 :               &lt;= TYPE_PRECISION (TREE_TYPE (gimple_assign_rhs1 (def_stmt))))</span>
+<span class="lineNum">     193 </span>            :             return gimple_assign_rhs1 (def_stmt);
+<span class="lineNum">     194 </span>            :         }
+<span class="lineNum">     195 </span>            :     }
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span>            :   return candidate;
+<span class="lineNum">     198 </span>            : }
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            : /* Recognize a single bit test pattern in GIMPLE_COND and its defining
+<span class="lineNum">     201 </span>            :    statements.  Store the name being tested in *NAME and the bit
+<span class="lineNum">     202 </span>            :    in *BIT.  The GIMPLE_COND computes *NAME &amp; (1 &lt;&lt; *BIT).
+<span class="lineNum">     203 </span>            :    Returns true if the pattern matched, false otherwise.  */
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span>            : static bool
+<span class="lineNum">     206 </span><span class="lineCov">     124533 : recognize_single_bit_test (gcond *cond, tree *name, tree *bit, bool inv)</span>
+<span class="lineNum">     207 </span>            : {
+<span class="lineNum">     208 </span><span class="lineCov">     124533 :   gimple *stmt;</span>
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span>            :   /* Get at the definition of the result of the bit test.  */
+<span class="lineNum">     211 </span><span class="lineCov">     249066 :   if (gimple_cond_code (cond) != (inv ? EQ_EXPR : NE_EXPR)</span>
+<span class="lineNum">     212 </span><span class="lineCov">      61682 :       || TREE_CODE (gimple_cond_lhs (cond)) != SSA_NAME</span>
+<span class="lineNum">     213 </span><span class="lineCov">     185785 :       || !integer_zerop (gimple_cond_rhs (cond)))</span>
+<span class="lineNum">     214 </span><span class="lineCov">      99387 :     return false;</span>
+<span class="lineNum">     215 </span><span class="lineCov">      50292 :   stmt = SSA_NAME_DEF_STMT (gimple_cond_lhs (cond));</span>
+<span class="lineNum">     216 </span><span class="lineCov">      50292 :   if (!is_gimple_assign (stmt))</span>
+<span class="lineNum">     217 </span>            :     return false;
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   /* Look at which bit is tested.  One form to recognize is
+<span class="lineNum">     220 </span>            :      D.1985_5 = state_3(D) &gt;&gt; control1_4(D);
+<span class="lineNum">     221 </span>            :      D.1986_6 = (int) D.1985_5;
+<span class="lineNum">     222 </span>            :      D.1987_7 = op0 &amp; 1;
+<span class="lineNum">     223 </span>            :      if (D.1987_7 != 0)  */
+<span class="lineNum">     224 </span><span class="lineCov">      20018 :   if (gimple_assign_rhs_code (stmt) == BIT_AND_EXPR</span>
+<span class="lineNum">     225 </span><span class="lineCov">       8072 :       &amp;&amp; integer_onep (gimple_assign_rhs2 (stmt))</span>
+<span class="lineNum">     226 </span><span class="lineCov">      20235 :       &amp;&amp; TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME)</span>
+<span class="lineNum">     227 </span>            :     {
+<span class="lineNum">     228 </span><span class="lineCov">        217 :       tree orig_name = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span>            :       /* Look through copies and conversions to eventually
+<span class="lineNum">     231 </span>            :          find the stmt that computes the shift.  */
+<span class="lineNum">     232 </span><span class="lineCov">        434 :       stmt = SSA_NAME_DEF_STMT (orig_name);</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span><span class="lineCov">        219 :       while (is_gimple_assign (stmt)</span>
+<span class="lineNum">     235 </span><span class="lineCov">        219 :              &amp;&amp; ((CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (stmt))</span>
+<span class="lineNum">     236 </span><span class="lineCov">          4 :                   &amp;&amp; (TYPE_PRECISION (TREE_TYPE (gimple_assign_lhs (stmt)))</span>
+<span class="lineNum">     237 </span><span class="lineCov">          4 :                       &lt;= TYPE_PRECISION (TREE_TYPE (gimple_assign_rhs1 (stmt))))</span>
+<span class="lineNum">     238 </span><span class="lineCov">          4 :                   &amp;&amp; TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME)</span>
+<span class="lineNum">     239 </span><span class="lineCov">        126 :                  || gimple_assign_ssa_name_copy_p (stmt)))</span>
+<span class="lineNum">     240 </span><span class="lineCov">          2 :         stmt = SSA_NAME_DEF_STMT (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span>            :       /* If we found such, decompose it.  */
+<span class="lineNum">     243 </span><span class="lineCov">        217 :       if (is_gimple_assign (stmt)</span>
+<span class="lineNum">     244 </span><span class="lineCov">        217 :           &amp;&amp; gimple_assign_rhs_code (stmt) == RSHIFT_EXPR)</span>
+<span class="lineNum">     245 </span>            :         {
+<span class="lineNum">     246 </span>            :           /* op0 &amp; (1 &lt;&lt; op1) */
+<span class="lineNum">     247 </span><span class="lineCov">        116 :           *bit = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     248 </span><span class="lineCov">        232 :           *name = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     249 </span>            :         }
+<span class="lineNum">     250 </span>            :       else
+<span class="lineNum">     251 </span>            :         {
+<span class="lineNum">     252 </span>            :           /* t &amp; 1 */
+<span class="lineNum">     253 </span><span class="lineCov">        101 :           *bit = integer_zero_node;</span>
+<span class="lineNum">     254 </span><span class="lineCov">        101 :           *name = get_name_for_bit_test (orig_name);</span>
+<span class="lineNum">     255 </span>            :         }
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span><span class="lineCov">        217 :       return true;</span>
+<span class="lineNum">     258 </span>            :     }
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            :   /* Another form is
+<span class="lineNum">     261 </span>            :      D.1987_7 = op0 &amp; (1 &lt;&lt; CST)
+<span class="lineNum">     262 </span>            :      if (D.1987_7 != 0)  */
+<span class="lineNum">     263 </span><span class="lineCov">      19801 :   if (gimple_assign_rhs_code (stmt) == BIT_AND_EXPR</span>
+<span class="lineNum">     264 </span><span class="lineCov">       7855 :       &amp;&amp; TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME</span>
+<span class="lineNum">     265 </span><span class="lineCov">      27656 :       &amp;&amp; integer_pow2p (gimple_assign_rhs2 (stmt)))</span>
+<span class="lineNum">     266 </span>            :     {
+<span class="lineNum">     267 </span><span class="lineCov">       6734 :       *name = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     268 </span><span class="lineCov">       6734 :       *bit = build_int_cst (integer_type_node,</span>
+<span class="lineNum">     269 </span><span class="lineCov">       6734 :                             tree_log2 (gimple_assign_rhs2 (stmt)));</span>
+<span class="lineNum">     270 </span><span class="lineCov">       6734 :       return true;</span>
+<span class="lineNum">     271 </span>            :     }
+<span class="lineNum">     272 </span>            : 
+<span class="lineNum">     273 </span>            :   /* Another form is
+<span class="lineNum">     274 </span>            :      D.1986_6 = 1 &lt;&lt; control1_4(D)
+<span class="lineNum">     275 </span>            :      D.1987_7 = op0 &amp; D.1986_6
+<span class="lineNum">     276 </span>            :      if (D.1987_7 != 0)  */
+<span class="lineNum">     277 </span><span class="lineCov">      13067 :   if (gimple_assign_rhs_code (stmt) == BIT_AND_EXPR</span>
+<span class="lineNum">     278 </span><span class="lineCov">       1121 :       &amp;&amp; TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME</span>
+<span class="lineNum">     279 </span><span class="lineCov">      14188 :       &amp;&amp; TREE_CODE (gimple_assign_rhs2 (stmt)) == SSA_NAME)</span>
+<span class="lineNum">     280 </span>            :     {
+<span class="lineNum">     281 </span><span class="lineCov">       1076 :       gimple *tmp;</span>
+<span class="lineNum">     282 </span>            : 
+<span class="lineNum">     283 </span>            :       /* Both arguments of the BIT_AND_EXPR can be the single-bit
+<span class="lineNum">     284 </span>            :          specifying expression.  */
+<span class="lineNum">     285 </span><span class="lineCov">       2152 :       tmp = SSA_NAME_DEF_STMT (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     286 </span><span class="lineCov">       1076 :       if (is_gimple_assign (tmp)</span>
+<span class="lineNum">     287 </span><span class="lineCov">       1046 :           &amp;&amp; gimple_assign_rhs_code (tmp) == LSHIFT_EXPR</span>
+<span class="lineNum">     288 </span><span class="lineCov">       1078 :           &amp;&amp; integer_onep (gimple_assign_rhs1 (tmp)))</span>
+<span class="lineNum">     289 </span>            :         {
+<span class="lineNum">     290 </span><span class="lineCov">          1 :           *name = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     291 </span><span class="lineCov">          1 :           *bit = gimple_assign_rhs2 (tmp);</span>
+<span class="lineNum">     292 </span><span class="lineCov">          1 :           return true;</span>
+<span class="lineNum">     293 </span>            :         }
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">       1075 :       tmp = SSA_NAME_DEF_STMT (gimple_assign_rhs2 (stmt));</span>
+<span class="lineNum">     296 </span><span class="lineCov">       1075 :       if (is_gimple_assign (tmp)</span>
+<span class="lineNum">     297 </span><span class="lineCov">       1045 :           &amp;&amp; gimple_assign_rhs_code (tmp) == LSHIFT_EXPR</span>
+<span class="lineNum">     298 </span><span class="lineCov">       1159 :           &amp;&amp; integer_onep (gimple_assign_rhs1 (tmp)))</span>
+<span class="lineNum">     299 </span>            :         {
+<span class="lineNum">     300 </span><span class="lineCov">         36 :           *name = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     301 </span><span class="lineCov">         36 :           *bit = gimple_assign_rhs2 (tmp);</span>
+<span class="lineNum">     302 </span><span class="lineCov">         36 :           return true;</span>
+<span class="lineNum">     303 </span>            :         }
+<span class="lineNum">     304 </span>            :     }
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span>            :   return false;
+<span class="lineNum">     307 </span>            : }
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span>            : /* Recognize a bit test pattern in a GIMPLE_COND and its defining
+<span class="lineNum">     310 </span>            :    statements.  Store the name being tested in *NAME and the bits
+<span class="lineNum">     311 </span>            :    in *BITS.  The COND_EXPR computes *NAME &amp; *BITS.
+<span class="lineNum">     312 </span>            :    Returns true if the pattern matched, false otherwise.  */
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span>            : static bool
+<span class="lineNum">     315 </span><span class="lineCov">     120275 : recognize_bits_test (gcond *cond, tree *name, tree *bits, bool inv)</span>
+<span class="lineNum">     316 </span>            : {
+<span class="lineNum">     317 </span><span class="lineCov">     120275 :   gimple *stmt;</span>
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span>            :   /* Get at the definition of the result of the bit test.  */
+<span class="lineNum">     320 </span><span class="lineCov">     240550 :   if (gimple_cond_code (cond) != (inv ? EQ_EXPR : NE_EXPR)</span>
+<span class="lineNum">     321 </span><span class="lineCov">      65220 :       || TREE_CODE (gimple_cond_lhs (cond)) != SSA_NAME</span>
+<span class="lineNum">     322 </span><span class="lineCov">     185363 :       || !integer_zerop (gimple_cond_rhs (cond)))</span>
+<span class="lineNum">     323 </span><span class="lineCov">     107109 :     return false;</span>
+<span class="lineNum">     324 </span><span class="lineCov">      26332 :   stmt = SSA_NAME_DEF_STMT (gimple_cond_lhs (cond));</span>
+<span class="lineNum">     325 </span><span class="lineCov">      13166 :   if (!is_gimple_assign (stmt)</span>
+<span class="lineNum">     326 </span><span class="lineCov">      13166 :       || gimple_assign_rhs_code (stmt) != BIT_AND_EXPR)</span>
+<span class="lineNum">     327 </span>            :     return false;
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span><span class="lineCov">       4390 :   *name = get_name_for_bit_test (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     330 </span><span class="lineCov">       2195 :   *bits = gimple_assign_rhs2 (stmt);</span>
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span><span class="lineCov">       2195 :   return true;</span>
+<span class="lineNum">     333 </span>            : }
+<span class="lineNum">     334 </span>            : 
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span>            : /* Update profile after code in outer_cond_bb was adjusted so
+<span class="lineNum">     337 </span>            :    outer_cond_bb has no condition.  */
+<a name="338"><span class="lineNum">     338 </span>            : </a>
+<span class="lineNum">     339 </span>            : static void
+<span class="lineNum">     340 </span><span class="lineCov">      69469 : update_profile_after_ifcombine (basic_block inner_cond_bb,</span>
+<span class="lineNum">     341 </span>            :                                 basic_block outer_cond_bb)
+<span class="lineNum">     342 </span>            : {
+<span class="lineNum">     343 </span><span class="lineCov">      69469 :   edge outer_to_inner = find_edge (outer_cond_bb, inner_cond_bb);</span>
+<span class="lineNum">     344 </span><span class="lineCov">      69469 :   edge outer2 = (EDGE_SUCC (outer_cond_bb, 0) == outer_to_inner</span>
+<span class="lineNum">     345 </span><span class="lineCov">      69469 :                  ? EDGE_SUCC (outer_cond_bb, 1)</span>
+<span class="lineNum">     346 </span><span class="lineCov">      69469 :                  : EDGE_SUCC (outer_cond_bb, 0));</span>
+<span class="lineNum">     347 </span><span class="lineCov">      69469 :   edge inner_taken = EDGE_SUCC (inner_cond_bb, 0);</span>
+<span class="lineNum">     348 </span><span class="lineCov">      69469 :   edge inner_not_taken = EDGE_SUCC (inner_cond_bb, 1);</span>
+<span class="lineNum">     349 </span>            :   
+<span class="lineNum">     350 </span><span class="lineCov">      69469 :   if (inner_taken-&gt;dest != outer2-&gt;dest)</span>
+<span class="lineNum">     351 </span><span class="lineCov">      17658 :     std::swap (inner_taken, inner_not_taken);</span>
+<span class="lineNum">     352 </span><span class="lineCov">      69469 :   gcc_assert (inner_taken-&gt;dest == outer2-&gt;dest);</span>
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            :   /* In the following we assume that inner_cond_bb has single predecessor.  */
+<span class="lineNum">     355 </span><span class="lineCov">      69469 :   gcc_assert (single_pred_p (inner_cond_bb));</span>
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            :   /* Path outer_cond_bb-&gt;(outer2) needs to be merged into path
+<span class="lineNum">     358 </span>            :      outer_cond_bb-&gt;(outer_to_inner)-&gt;inner_cond_bb-&gt;(inner_taken)
+<span class="lineNum">     359 </span>            :      and probability of inner_not_taken updated.  */
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineCov">      69469 :   inner_cond_bb-&gt;count = outer_cond_bb-&gt;count;</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span><span class="lineCov">      69469 :   inner_taken-&gt;probability = outer2-&gt;probability + outer_to_inner-&gt;probability</span>
+<span class="lineNum">     364 </span><span class="lineCov">      69469 :                              * inner_taken-&gt;probability;</span>
+<span class="lineNum">     365 </span><span class="lineCov">     208407 :   inner_not_taken-&gt;probability = profile_probability::always ()</span>
+<span class="lineNum">     366 </span><span class="lineCov">      69469 :                                  - inner_taken-&gt;probability;</span>
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineCov">     138938 :   outer_to_inner-&gt;probability = profile_probability::always ();</span>
+<span class="lineNum">     369 </span><span class="lineCov">     138938 :   outer2-&gt;probability = profile_probability::never ();</span>
+<span class="lineNum">     370 </span><span class="lineCov">      69469 : }</span>
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            : /* If-convert on a and pattern with a common else block.  The inner
+<span class="lineNum">     373 </span>            :    if is specified by its INNER_COND_BB, the outer by OUTER_COND_BB.
+<span class="lineNum">     374 </span>            :    inner_inv, outer_inv and result_inv indicate whether the conditions
+<span class="lineNum">     375 </span>            :    are inverted.
+<span class="lineNum">     376 </span>            :    Returns true if the edges to the common else basic-block were merged.  */
+<span class="lineNum">     377 </span>            : 
+<span class="lineNum">     378 </span>            : static bool
+<span class="lineNum">     379 </span><span class="lineCov">     118721 : ifcombine_ifandif (basic_block inner_cond_bb, bool inner_inv,</span>
+<span class="lineNum">     380 </span>            :                    basic_block outer_cond_bb, bool outer_inv, bool result_inv)
+<span class="lineNum">     381 </span>            : {
+<span class="lineNum">     382 </span><span class="lineCov">     118721 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     383 </span><span class="lineCov">     118721 :   gimple *inner_stmt, *outer_stmt;</span>
+<span class="lineNum">     384 </span><span class="lineCov">     118721 :   gcond *inner_cond, *outer_cond;</span>
+<span class="lineNum">     385 </span><span class="lineCov">     118721 :   tree name1, name2, bit1, bit2, bits1, bits2;</span>
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span><span class="lineCov">     118721 :   inner_stmt = last_stmt (inner_cond_bb);</span>
+<span class="lineNum">     388 </span><span class="lineCov">     118721 :   if (!inner_stmt</span>
+<span class="lineNum">     389 </span><span class="lineCov">     118721 :       || gimple_code (inner_stmt) != GIMPLE_COND)</span>
+<span class="lineNum">     390 </span>            :     return false;
+<span class="lineNum">     391 </span><span class="lineCov">     118721 :   inner_cond = as_a &lt;gcond *&gt; (inner_stmt);</span>
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span><span class="lineCov">     118721 :   outer_stmt = last_stmt (outer_cond_bb);</span>
+<span class="lineNum">     394 </span><span class="lineCov">     118721 :   if (!outer_stmt</span>
+<span class="lineNum">     395 </span><span class="lineCov">     118721 :       || gimple_code (outer_stmt) != GIMPLE_COND)</span>
+<span class="lineNum">     396 </span>            :     return false;
+<span class="lineNum">     397 </span><span class="lineCov">     118721 :   outer_cond = as_a &lt;gcond *&gt; (outer_stmt);</span>
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span>            :   /* See if we test a single bit of the same name in both tests.  In
+<span class="lineNum">     400 </span>            :      that case remove the outer test, merging both else edges,
+<span class="lineNum">     401 </span>            :      and change the inner one to test for
+<span class="lineNum">     402 </span>            :      name &amp; (bit1 | bit2) == (bit1 | bit2).  */
+<span class="lineNum">     403 </span><span class="lineCov">     118721 :   if (recognize_single_bit_test (inner_cond, &amp;name1, &amp;bit1, inner_inv)</span>
+<span class="lineNum">     404 </span><span class="lineCov">       5812 :       &amp;&amp; recognize_single_bit_test (outer_cond, &amp;name2, &amp;bit2, outer_inv)</span>
+<span class="lineNum">     405 </span><span class="lineCov">     119897 :       &amp;&amp; name1 == name2)</span>
+<span class="lineNum">     406 </span>            :     {
+<span class="lineNum">     407 </span><span class="lineCov">          9 :       tree t, t2;</span>
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span>            :       /* Do it.  */
+<span class="lineNum">     410 </span><span class="lineCov">          9 :       gsi = gsi_for_stmt (inner_cond);</span>
+<span class="lineNum">     411 </span><span class="lineCov">         18 :       t = fold_build2 (LSHIFT_EXPR, TREE_TYPE (name1),</span>
+<span class="lineNum">     412 </span>            :                        build_int_cst (TREE_TYPE (name1), 1), bit1);
+<span class="lineNum">     413 </span><span class="lineCov">         18 :       t2 = fold_build2 (LSHIFT_EXPR, TREE_TYPE (name1),</span>
+<span class="lineNum">     414 </span>            :                         build_int_cst (TREE_TYPE (name1), 1), bit2);
+<span class="lineNum">     415 </span><span class="lineCov">          9 :       t = fold_build2 (BIT_IOR_EXPR, TREE_TYPE (name1), t, t2);</span>
+<span class="lineNum">     416 </span><span class="lineCov">          9 :       t = force_gimple_operand_gsi (&amp;gsi, t, true, NULL_TREE,</span>
+<span class="lineNum">     417 </span>            :                                     true, GSI_SAME_STMT);
+<span class="lineNum">     418 </span><span class="lineCov">          9 :       t2 = fold_build2 (BIT_AND_EXPR, TREE_TYPE (name1), name1, t);</span>
+<span class="lineNum">     419 </span><span class="lineCov">          9 :       t2 = force_gimple_operand_gsi (&amp;gsi, t2, true, NULL_TREE,</span>
+<span class="lineNum">     420 </span>            :                                      true, GSI_SAME_STMT);
+<span class="lineNum">     421 </span><span class="lineCov">         16 :       t = fold_build2 (result_inv ? NE_EXPR : EQ_EXPR,</span>
+<span class="lineNum">     422 </span>            :                        boolean_type_node, t2, t);
+<span class="lineNum">     423 </span><span class="lineCov">          9 :       t = canonicalize_cond_expr_cond (t);</span>
+<span class="lineNum">     424 </span><span class="lineCov">          9 :       if (!t)</span>
+<span class="lineNum">     425 </span>            :         return false;
+<span class="lineNum">     426 </span><span class="lineCov">          9 :       gimple_cond_set_condition_from_tree (inner_cond, t);</span>
+<span class="lineNum">     427 </span><span class="lineCov">          9 :       update_stmt (inner_cond);</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            :       /* Leave CFG optimization to cfg_cleanup.  */
+<span class="lineNum">     430 </span><span class="lineCov">          9 :       gimple_cond_set_condition_from_tree (outer_cond,</span>
+<span class="lineNum">     431 </span>            :         outer_inv ? boolean_false_node : boolean_true_node);
+<span class="lineNum">     432 </span><span class="lineCov">          9 :       update_stmt (outer_cond);</span>
+<span class="lineNum">     433 </span>            : 
+<span class="lineNum">     434 </span><span class="lineCov">          9 :       update_profile_after_ifcombine (inner_cond_bb, outer_cond_bb);</span>
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span><span class="lineCov">          9 :       if (dump_file)</span>
+<span class="lineNum">     437 </span>            :         {
+<span class="lineNum">     438 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot;optimizing double bit test to &quot;);</span>
+<span class="lineNum">     439 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, name1);</span>
+<span class="lineNum">     440 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot; &amp; T == T\nwith temporary T = (1 &lt;&lt; &quot;);</span>
+<span class="lineNum">     441 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, bit1);</span>
+<span class="lineNum">     442 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot;) | (1 &lt;&lt; &quot;);</span>
+<span class="lineNum">     443 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, bit2);</span>
+<span class="lineNum">     444 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot;)\n&quot;);</span>
+<span class="lineNum">     445 </span>            :         }
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span><span class="lineCov">          9 :       return true;</span>
+<span class="lineNum">     448 </span>            :     }
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span>            :   /* See if we have two bit tests of the same name in both tests.
+<span class="lineNum">     451 </span>            :      In that case remove the outer test and change the inner one to
+<span class="lineNum">     452 </span>            :      test for name &amp; (bits1 | bits2) != 0.  */
+<span class="lineNum">     453 </span><span class="lineCov">     118712 :   else if (recognize_bits_test (inner_cond, &amp;name1, &amp;bits1, !inner_inv)</span>
+<span class="lineNum">     454 </span><span class="lineCov">     118712 :       &amp;&amp; recognize_bits_test (outer_cond, &amp;name2, &amp;bits2, !outer_inv))</span>
+<span class="lineNum">     455 </span>            :     {
+<span class="lineNum">     456 </span><span class="lineCov">        632 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     457 </span><span class="lineCov">        632 :       tree t;</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span>            :       /* Find the common name which is bit-tested.  */
+<span class="lineNum">     460 </span><span class="lineCov">        632 :       if (name1 == name2)</span>
+<span class="lineNum">     461 </span>            :         ;
+<span class="lineNum">     462 </span><span class="lineCov">        353 :       else if (bits1 == bits2)</span>
+<span class="lineNum">     463 </span>            :         {
+<span class="lineNum">     464 </span><span class="lineCov">         47 :           std::swap (name2, bits2);</span>
+<span class="lineNum">     465 </span><span class="lineCov">         47 :           std::swap (name1, bits1);</span>
+<span class="lineNum">     466 </span>            :         }
+<span class="lineNum">     467 </span><span class="lineCov">        306 :       else if (name1 == bits2)</span>
+<span class="lineNum">     468 </span><span class="lineNoCov">          0 :         std::swap (name2, bits2);</span>
+<span class="lineNum">     469 </span><span class="lineCov">        306 :       else if (bits1 == name2)</span>
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :         std::swap (name1, bits1);</span>
+<span class="lineNum">     471 </span>            :       else
+<span class="lineNum">     472 </span>            :         return false;
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span>            :       /* As we strip non-widening conversions in finding a common
+<span class="lineNum">     475 </span>            :          name that is tested make sure to end up with an integral
+<span class="lineNum">     476 </span>            :          type for building the bit operations.  */
+<span class="lineNum">     477 </span><span class="lineCov">        326 :       if (TYPE_PRECISION (TREE_TYPE (bits1))</span>
+<span class="lineNum">     478 </span><span class="lineCov">        326 :           &gt;= TYPE_PRECISION (TREE_TYPE (bits2)))</span>
+<span class="lineNum">     479 </span>            :         {
+<span class="lineNum">     480 </span><span class="lineCov">        652 :           bits1 = fold_convert (unsigned_type_for (TREE_TYPE (bits1)), bits1);</span>
+<span class="lineNum">     481 </span><span class="lineCov">        326 :           name1 = fold_convert (TREE_TYPE (bits1), name1);</span>
+<span class="lineNum">     482 </span><span class="lineCov">        326 :           bits2 = fold_convert (unsigned_type_for (TREE_TYPE (bits2)), bits2);</span>
+<span class="lineNum">     483 </span><span class="lineCov">        326 :           bits2 = fold_convert (TREE_TYPE (bits1), bits2);</span>
+<span class="lineNum">     484 </span>            :         }
+<span class="lineNum">     485 </span>            :       else
+<span class="lineNum">     486 </span>            :         {
+<span class="lineNum">     487 </span><span class="lineNoCov">          0 :           bits2 = fold_convert (unsigned_type_for (TREE_TYPE (bits2)), bits2);</span>
+<span class="lineNum">     488 </span><span class="lineNoCov">          0 :           name1 = fold_convert (TREE_TYPE (bits2), name1);</span>
+<span class="lineNum">     489 </span><span class="lineNoCov">          0 :           bits1 = fold_convert (unsigned_type_for (TREE_TYPE (bits1)), bits1);</span>
+<span class="lineNum">     490 </span><span class="lineNoCov">          0 :           bits1 = fold_convert (TREE_TYPE (bits2), bits1);</span>
+<span class="lineNum">     491 </span>            :         }
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            :       /* Do it.  */
+<span class="lineNum">     494 </span><span class="lineCov">        326 :       gsi = gsi_for_stmt (inner_cond);</span>
+<span class="lineNum">     495 </span><span class="lineCov">        326 :       t = fold_build2 (BIT_IOR_EXPR, TREE_TYPE (name1), bits1, bits2);</span>
+<span class="lineNum">     496 </span><span class="lineCov">        326 :       t = force_gimple_operand_gsi (&amp;gsi, t, true, NULL_TREE,</span>
+<span class="lineNum">     497 </span>            :                                     true, GSI_SAME_STMT);
+<span class="lineNum">     498 </span><span class="lineCov">        326 :       t = fold_build2 (BIT_AND_EXPR, TREE_TYPE (name1), name1, t);</span>
+<span class="lineNum">     499 </span><span class="lineCov">        326 :       t = force_gimple_operand_gsi (&amp;gsi, t, true, NULL_TREE,</span>
+<span class="lineNum">     500 </span>            :                                     true, GSI_SAME_STMT);
+<span class="lineNum">     501 </span><span class="lineCov">        670 :       t = fold_build2 (result_inv ? NE_EXPR : EQ_EXPR, boolean_type_node, t,</span>
+<span class="lineNum">     502 </span>            :                        build_int_cst (TREE_TYPE (t), 0));
+<span class="lineNum">     503 </span><span class="lineCov">        326 :       t = canonicalize_cond_expr_cond (t);</span>
+<span class="lineNum">     504 </span><span class="lineCov">        326 :       if (!t)</span>
+<span class="lineNum">     505 </span>            :         return false;
+<span class="lineNum">     506 </span><span class="lineCov">        326 :       gimple_cond_set_condition_from_tree (inner_cond, t);</span>
+<span class="lineNum">     507 </span><span class="lineCov">        326 :       update_stmt (inner_cond);</span>
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span>            :       /* Leave CFG optimization to cfg_cleanup.  */
+<span class="lineNum">     510 </span><span class="lineCov">        326 :       gimple_cond_set_condition_from_tree (outer_cond,</span>
+<span class="lineNum">     511 </span>            :         outer_inv ? boolean_false_node : boolean_true_node);
+<span class="lineNum">     512 </span><span class="lineCov">        326 :       update_stmt (outer_cond);</span>
+<span class="lineNum">     513 </span><span class="lineCov">        326 :       update_profile_after_ifcombine (inner_cond_bb, outer_cond_bb);</span>
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span><span class="lineCov">        326 :       if (dump_file)</span>
+<span class="lineNum">     516 </span>            :         {
+<span class="lineNum">     517 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot;optimizing bits or bits test to &quot;);</span>
+<span class="lineNum">     518 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, name1);</span>
+<span class="lineNum">     519 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot; &amp; T != 0\nwith temporary T = &quot;);</span>
+<span class="lineNum">     520 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, bits1);</span>
+<span class="lineNum">     521 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot; | &quot;);</span>
+<span class="lineNum">     522 </span><span class="lineCov">          1 :           print_generic_expr (dump_file, bits2);</span>
+<span class="lineNum">     523 </span><span class="lineCov">          1 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     524 </span>            :         }
+<span class="lineNum">     525 </span>            : 
+<span class="lineNum">     526 </span><span class="lineCov">        326 :       return true;</span>
+<span class="lineNum">     527 </span>            :     }
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span>            :   /* See if we have two comparisons that we can merge into one.  */
+<span class="lineNum">     530 </span><span class="lineCov">     118080 :   else if (TREE_CODE_CLASS (gimple_cond_code (inner_cond)) == tcc_comparison</span>
+<span class="lineNum">     531 </span><span class="lineCov">     118080 :            &amp;&amp; TREE_CODE_CLASS (gimple_cond_code (outer_cond)) == tcc_comparison)</span>
+<span class="lineNum">     532 </span>            :     {
+<span class="lineNum">     533 </span><span class="lineCov">     118080 :       tree t;</span>
+<span class="lineNum">     534 </span><span class="lineCov">     118080 :       enum tree_code inner_cond_code = gimple_cond_code (inner_cond);</span>
+<span class="lineNum">     535 </span><span class="lineCov">     118080 :       enum tree_code outer_cond_code = gimple_cond_code (outer_cond);</span>
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span>            :       /* Invert comparisons if necessary (and possible).  */
+<span class="lineNum">     538 </span><span class="lineCov">     118080 :       if (inner_inv)</span>
+<span class="lineNum">     539 </span><span class="lineCov">      71882 :         inner_cond_code = invert_tree_comparison (inner_cond_code,</span>
+<span class="lineNum">     540 </span><span class="lineCov">     143764 :           HONOR_NANS (gimple_cond_lhs (inner_cond)));</span>
+<span class="lineNum">     541 </span><span class="lineCov">     118080 :       if (inner_cond_code == ERROR_MARK)</span>
+<span class="lineNum">     542 </span>            :         return false;
+<span class="lineNum">     543 </span><span class="lineCov">     118004 :       if (outer_inv)</span>
+<span class="lineNum">     544 </span><span class="lineCov">      71345 :         outer_cond_code = invert_tree_comparison (outer_cond_code,</span>
+<span class="lineNum">     545 </span><span class="lineCov">     142690 :           HONOR_NANS (gimple_cond_lhs (outer_cond)));</span>
+<span class="lineNum">     546 </span><span class="lineCov">     118004 :       if (outer_cond_code == ERROR_MARK)</span>
+<span class="lineNum">     547 </span>            :         return false;
+<span class="lineNum">     548 </span>            :       /* Don't return false so fast, try maybe_fold_or_comparisons?  */
+<span class="lineNum">     549 </span>            : 
+<span class="lineNum">     550 </span><span class="lineCov">     588485 :       if (!(t = maybe_fold_and_comparisons (inner_cond_code,</span>
+<span class="lineNum">     551 </span>            :                                             gimple_cond_lhs (inner_cond),
+<span class="lineNum">     552 </span>            :                                             gimple_cond_rhs (inner_cond),
+<span class="lineNum">     553 </span>            :                                             outer_cond_code,
+<span class="lineNum">     554 </span>            :                                             gimple_cond_lhs (outer_cond),
+<span class="lineNum">     555 </span>            :                                             gimple_cond_rhs (outer_cond))))
+<span class="lineNum">     556 </span>            :         {
+<span class="lineNum">     557 </span><span class="lineCov">     116885 :           tree t1, t2;</span>
+<span class="lineNum">     558 </span><span class="lineCov">     116885 :           gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     559 </span><span class="lineCov">     116885 :           if (!LOGICAL_OP_NON_SHORT_CIRCUIT || flag_sanitize_coverage)</span>
+<span class="lineNum">     560 </span><span class="lineCov">      48563 :             return false;</span>
+<span class="lineNum">     561 </span>            :           /* Only do this optimization if the inner bb contains only the conditional. */
+<span class="lineNum">     562 </span><span class="lineCov">     116868 :           if (!gsi_one_before_end_p (gsi_start_nondebug_after_labels_bb (inner_cond_bb)))</span>
+<span class="lineNum">     563 </span>            :             return false;
+<span class="lineNum">     564 </span><span class="lineCov">     273288 :           t1 = fold_build2_loc (gimple_location (inner_cond),</span>
+<span class="lineNum">     565 </span>            :                                 inner_cond_code,
+<span class="lineNum">     566 </span>            :                                 boolean_type_node,
+<span class="lineNum">     567 </span>            :                                 gimple_cond_lhs (inner_cond),
+<span class="lineNum">     568 </span>            :                                 gimple_cond_rhs (inner_cond));
+<span class="lineNum">     569 </span><span class="lineCov">     273288 :           t2 = fold_build2_loc (gimple_location (outer_cond),</span>
+<span class="lineNum">     570 </span>            :                                 outer_cond_code,
+<span class="lineNum">     571 </span>            :                                 boolean_type_node,
+<span class="lineNum">     572 </span>            :                                 gimple_cond_lhs (outer_cond),
+<span class="lineNum">     573 </span>            :                                 gimple_cond_rhs (outer_cond));
+<span class="lineNum">     574 </span><span class="lineCov">     136644 :           t = fold_build2_loc (gimple_location (inner_cond), </span>
+<span class="lineNum">     575 </span>            :                                TRUTH_AND_EXPR, boolean_type_node, t1, t2);
+<span class="lineNum">     576 </span><span class="lineCov">      68322 :           if (result_inv)</span>
+<span class="lineNum">     577 </span>            :             {
+<span class="lineNum">     578 </span><span class="lineCov">      51022 :               t = fold_build1 (TRUTH_NOT_EXPR, TREE_TYPE (t), t);</span>
+<span class="lineNum">     579 </span><span class="lineCov">      51022 :               result_inv = false;</span>
+<span class="lineNum">     580 </span>            :             }
+<span class="lineNum">     581 </span><span class="lineCov">      68322 :           gsi = gsi_for_stmt (inner_cond);</span>
+<span class="lineNum">     582 </span><span class="lineCov">      68322 :           t = force_gimple_operand_gsi_1 (&amp;gsi, t, is_gimple_condexpr, NULL, true,</span>
+<span class="lineNum">     583 </span>            :                                           GSI_SAME_STMT);
+<span class="lineNum">     584 </span>            :         }
+<span class="lineNum">     585 </span><span class="lineCov">      69134 :       if (result_inv)</span>
+<span class="lineNum">     586 </span><span class="lineCov">        618 :         t = fold_build1 (TRUTH_NOT_EXPR, TREE_TYPE (t), t);</span>
+<span class="lineNum">     587 </span><span class="lineCov">      69134 :       t = canonicalize_cond_expr_cond (t);</span>
+<span class="lineNum">     588 </span><span class="lineCov">      69134 :       if (!t)</span>
+<span class="lineNum">     589 </span>            :         return false;
+<span class="lineNum">     590 </span><span class="lineCov">      69134 :       gimple_cond_set_condition_from_tree (inner_cond, t);</span>
+<span class="lineNum">     591 </span><span class="lineCov">      69134 :       update_stmt (inner_cond);</span>
+<span class="lineNum">     592 </span>            : 
+<span class="lineNum">     593 </span>            :       /* Leave CFG optimization to cfg_cleanup.  */
+<span class="lineNum">     594 </span><span class="lineCov">      69134 :       gimple_cond_set_condition_from_tree (outer_cond,</span>
+<span class="lineNum">     595 </span>            :         outer_inv ? boolean_false_node : boolean_true_node);
+<span class="lineNum">     596 </span><span class="lineCov">      69134 :       update_stmt (outer_cond);</span>
+<span class="lineNum">     597 </span><span class="lineCov">      69134 :       update_profile_after_ifcombine (inner_cond_bb, outer_cond_bb);</span>
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span><span class="lineCov">      69134 :       if (dump_file)</span>
+<span class="lineNum">     600 </span>            :         {
+<span class="lineNum">     601 </span><span class="lineCov">          3 :           fprintf (dump_file, &quot;optimizing two comparisons to &quot;);</span>
+<span class="lineNum">     602 </span><span class="lineCov">          3 :           print_generic_expr (dump_file, t);</span>
+<span class="lineNum">     603 </span><span class="lineCov">          3 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     604 </span>            :         }
+<span class="lineNum">     605 </span>            : 
+<span class="lineNum">     606 </span><span class="lineCov">      69134 :       return true;</span>
+<span class="lineNum">     607 </span>            :     }
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span>            :   return false;
+<span class="lineNum">     610 </span>            : }
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span>            : /* Helper function for tree_ssa_ifcombine_bb.  Recognize a CFG pattern and
+<span class="lineNum">     613 </span>            :    dispatch to the appropriate if-conversion helper for a particular
+<span class="lineNum">     614 </span>            :    set of INNER_COND_BB, OUTER_COND_BB, THEN_BB and ELSE_BB.
+<span class="lineNum">     615 </span>            :    PHI_PRED_BB should be one of INNER_COND_BB, THEN_BB or ELSE_BB.  */
+<a name="616"><span class="lineNum">     616 </span>            : </a>
+<span class="lineNum">     617 </span>            : static bool
+<span class="lineNum">     618 </span><span class="lineCov">     517482 : tree_ssa_ifcombine_bb_1 (basic_block inner_cond_bb, basic_block outer_cond_bb,</span>
+<span class="lineNum">     619 </span>            :                          basic_block then_bb, basic_block else_bb,
+<span class="lineNum">     620 </span>            :                          basic_block phi_pred_bb)
+<span class="lineNum">     621 </span>            : {
+<span class="lineNum">     622 </span>            :   /* The &amp;&amp; form is characterized by a common else_bb with
+<span class="lineNum">     623 </span>            :      the two edges leading to it mergable.  The latter is
+<span class="lineNum">     624 </span>            :      guaranteed by matching PHI arguments in the else_bb and
+<span class="lineNum">     625 </span>            :      the inner cond_bb having no side-effects.  */
+<span class="lineNum">     626 </span><span class="lineCov">     517482 :   if (phi_pred_bb != else_bb</span>
+<span class="lineNum">     627 </span><span class="lineCov">     509366 :       &amp;&amp; recognize_if_then_else (outer_cond_bb, &amp;inner_cond_bb, &amp;else_bb)</span>
+<span class="lineNum">     628 </span><span class="lineCov">     563566 :       &amp;&amp; same_phi_args_p (outer_cond_bb, phi_pred_bb, else_bb))</span>
+<span class="lineNum">     629 </span>            :     {
+<span class="lineNum">     630 </span>            :       /* We have
+<span class="lineNum">     631 </span>            :            &lt;outer_cond_bb&gt;
+<span class="lineNum">     632 </span>            :              if (q) goto inner_cond_bb; else goto else_bb;
+<span class="lineNum">     633 </span>            :            &lt;inner_cond_bb&gt;
+<span class="lineNum">     634 </span>            :              if (p) goto ...; else goto else_bb;
+<span class="lineNum">     635 </span>            :              ...
+<span class="lineNum">     636 </span>            :            &lt;else_bb&gt;
+<span class="lineNum">     637 </span>            :              ...
+<span class="lineNum">     638 </span>            :        */
+<span class="lineNum">     639 </span><span class="lineCov">      42379 :       return ifcombine_ifandif (inner_cond_bb, false, outer_cond_bb, false,</span>
+<span class="lineNum">     640 </span><span class="lineCov">      42379 :                                 false);</span>
+<span class="lineNum">     641 </span>            :     }
+<span class="lineNum">     642 </span>            : 
+<span class="lineNum">     643 </span>            :   /* And a version where the outer condition is negated.  */
+<span class="lineNum">     644 </span><span class="lineCov">     475103 :   if (phi_pred_bb != else_bb</span>
+<span class="lineNum">     645 </span><span class="lineCov">     466987 :       &amp;&amp; recognize_if_then_else (outer_cond_bb, &amp;else_bb, &amp;inner_cond_bb)</span>
+<span class="lineNum">     646 </span><span class="lineCov">     483830 :       &amp;&amp; same_phi_args_p (outer_cond_bb, phi_pred_bb, else_bb))</span>
+<span class="lineNum">     647 </span>            :     {
+<span class="lineNum">     648 </span>            :       /* We have
+<span class="lineNum">     649 </span>            :            &lt;outer_cond_bb&gt;
+<span class="lineNum">     650 </span>            :              if (q) goto else_bb; else goto inner_cond_bb;
+<span class="lineNum">     651 </span>            :            &lt;inner_cond_bb&gt;
+<span class="lineNum">     652 </span>            :              if (p) goto ...; else goto else_bb;
+<span class="lineNum">     653 </span>            :              ...
+<span class="lineNum">     654 </span>            :            &lt;else_bb&gt;
+<span class="lineNum">     655 </span>            :              ...
+<span class="lineNum">     656 </span>            :        */
+<span class="lineNum">     657 </span><span class="lineCov">       3848 :       return ifcombine_ifandif (inner_cond_bb, false, outer_cond_bb, true,</span>
+<span class="lineNum">     658 </span><span class="lineCov">       3848 :                                 false);</span>
+<span class="lineNum">     659 </span>            :     }
+<span class="lineNum">     660 </span>            : 
+<span class="lineNum">     661 </span>            :   /* The || form is characterized by a common then_bb with the
+<span class="lineNum">     662 </span>            :      two edges leading to it mergable.  The latter is guaranteed
+<span class="lineNum">     663 </span>            :      by matching PHI arguments in the then_bb and the inner cond_bb
+<span class="lineNum">     664 </span>            :      having no side-effects.  */
+<span class="lineNum">     665 </span><span class="lineCov">     471255 :   if (phi_pred_bb != then_bb</span>
+<span class="lineNum">     666 </span><span class="lineCov">     461194 :       &amp;&amp; recognize_if_then_else (outer_cond_bb, &amp;then_bb, &amp;inner_cond_bb)</span>
+<span class="lineNum">     667 </span><span class="lineCov">     586845 :       &amp;&amp; same_phi_args_p (outer_cond_bb, phi_pred_bb, then_bb))</span>
+<span class="lineNum">     668 </span>            :     {
+<span class="lineNum">     669 </span>            :       /* We have
+<span class="lineNum">     670 </span>            :            &lt;outer_cond_bb&gt;
+<span class="lineNum">     671 </span>            :              if (q) goto then_bb; else goto inner_cond_bb;
+<span class="lineNum">     672 </span>            :            &lt;inner_cond_bb&gt;
+<span class="lineNum">     673 </span>            :              if (q) goto then_bb; else goto ...;
+<span class="lineNum">     674 </span>            :            &lt;then_bb&gt;
+<span class="lineNum">     675 </span>            :              ...
+<span class="lineNum">     676 </span>            :        */
+<span class="lineNum">     677 </span><span class="lineCov">      68116 :       return ifcombine_ifandif (inner_cond_bb, true, outer_cond_bb, true,</span>
+<span class="lineNum">     678 </span><span class="lineCov">      68116 :                                 true);</span>
+<span class="lineNum">     679 </span>            :     }
+<span class="lineNum">     680 </span>            : 
+<span class="lineNum">     681 </span>            :   /* And a version where the outer condition is negated.  */
+<span class="lineNum">     682 </span><span class="lineCov">     403139 :   if (phi_pred_bb != then_bb</span>
+<span class="lineNum">     683 </span><span class="lineCov">     393078 :       &amp;&amp; recognize_if_then_else (outer_cond_bb, &amp;inner_cond_bb, &amp;then_bb)</span>
+<span class="lineNum">     684 </span><span class="lineCov">     409814 :       &amp;&amp; same_phi_args_p (outer_cond_bb, phi_pred_bb, then_bb))</span>
+<span class="lineNum">     685 </span>            :     {
+<span class="lineNum">     686 </span>            :       /* We have
+<span class="lineNum">     687 </span>            :            &lt;outer_cond_bb&gt;
+<span class="lineNum">     688 </span>            :              if (q) goto inner_cond_bb; else goto then_bb;
+<span class="lineNum">     689 </span>            :            &lt;inner_cond_bb&gt;
+<span class="lineNum">     690 </span>            :              if (q) goto then_bb; else goto ...;
+<span class="lineNum">     691 </span>            :            &lt;then_bb&gt;
+<span class="lineNum">     692 </span>            :              ...
+<span class="lineNum">     693 </span>            :        */
+<span class="lineNum">     694 </span><span class="lineCov">       4378 :       return ifcombine_ifandif (inner_cond_bb, true, outer_cond_bb, false,</span>
+<span class="lineNum">     695 </span><span class="lineCov">       4378 :                                 true);</span>
+<span class="lineNum">     696 </span>            :     }
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span>            :   return false;
+<span class="lineNum">     699 </span>            : }
+<span class="lineNum">     700 </span>            : 
+<span class="lineNum">     701 </span>            : /* Recognize a CFG pattern and dispatch to the appropriate
+<span class="lineNum">     702 </span>            :    if-conversion helper.  We start with BB as the innermost
+<span class="lineNum">     703 </span>            :    worker basic-block.  Returns true if a transformation was done.  */
+<a name="704"><span class="lineNum">     704 </span>            : </a>
+<span class="lineNum">     705 </span>            : static bool
+<span class="lineNum">     706 </span><span class="lineCov">    2305691 : tree_ssa_ifcombine_bb (basic_block inner_cond_bb)</span>
+<span class="lineNum">     707 </span>            : {
+<span class="lineNum">     708 </span><span class="lineCov">    2305691 :   basic_block then_bb = NULL, else_bb = NULL;</span>
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span><span class="lineCov">    2305691 :   if (!recognize_if_then_else (inner_cond_bb, &amp;then_bb, &amp;else_bb))</span>
+<span class="lineNum">     711 </span>            :     return false;
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span>            :   /* Recognize &amp;&amp; and || of two conditions with a common
+<span class="lineNum">     714 </span>            :      then/else block which entry edges we can merge.  That is:
+<span class="lineNum">     715 </span>            :        if (a || b)
+<span class="lineNum">     716 </span>            :          ;
+<span class="lineNum">     717 </span>            :      and
+<span class="lineNum">     718 </span>            :        if (a &amp;&amp; b)
+<span class="lineNum">     719 </span>            :          ;
+<span class="lineNum">     720 </span>            :      This requires a single predecessor of the inner cond_bb.  */
+<span class="lineNum">     721 </span><span class="lineCov">    2305691 :   if (single_pred_p (inner_cond_bb)</span>
+<span class="lineNum">     722 </span><span class="lineCov">    2305691 :       &amp;&amp; bb_no_side_effects_p (inner_cond_bb))</span>
+<span class="lineNum">     723 </span>            :     {
+<span class="lineNum">     724 </span><span class="lineCov">     498826 :       basic_block outer_cond_bb = single_pred (inner_cond_bb);</span>
+<span class="lineNum">     725 </span>            : 
+<span class="lineNum">     726 </span><span class="lineCov">     498826 :       if (tree_ssa_ifcombine_bb_1 (inner_cond_bb, outer_cond_bb,</span>
+<span class="lineNum">     727 </span>            :                                    then_bb, else_bb, inner_cond_bb))
+<span class="lineNum">     728 </span>            :         return true;
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span><span class="lineCov">     429979 :       if (forwarder_block_to (else_bb, then_bb))</span>
+<span class="lineNum">     731 </span>            :         {
+<span class="lineNum">     732 </span>            :           /* Other possibilities for the &amp;&amp; form, if else_bb is
+<span class="lineNum">     733 </span>            :              empty forwarder block to then_bb.  Compared to the above simpler
+<span class="lineNum">     734 </span>            :              forms this can be treated as if then_bb and else_bb were swapped,
+<span class="lineNum">     735 </span>            :              and the corresponding inner_cond_bb not inverted because of that.
+<span class="lineNum">     736 </span>            :              For same_phi_args_p we look at equality of arguments between
+<span class="lineNum">     737 </span>            :              edge from outer_cond_bb and the forwarder block.  */
+<span class="lineNum">     738 </span><span class="lineCov">      10540 :           if (tree_ssa_ifcombine_bb_1 (inner_cond_bb, outer_cond_bb, else_bb,</span>
+<span class="lineNum">     739 </span>            :                                        then_bb, else_bb))
+<span class="lineNum">     740 </span><span class="lineCov">        247 :             return true;</span>
+<span class="lineNum">     741 </span>            :         }
+<span class="lineNum">     742 </span><span class="lineCov">     419439 :       else if (forwarder_block_to (then_bb, else_bb))</span>
+<span class="lineNum">     743 </span>            :         {
+<span class="lineNum">     744 </span>            :           /* Other possibilities for the || form, if then_bb is
+<span class="lineNum">     745 </span>            :              empty forwarder block to else_bb.  Compared to the above simpler
+<span class="lineNum">     746 </span>            :              forms this can be treated as if then_bb and else_bb were swapped,
+<span class="lineNum">     747 </span>            :              and the corresponding inner_cond_bb not inverted because of that.
+<span class="lineNum">     748 </span>            :              For same_phi_args_p we look at equality of arguments between
+<span class="lineNum">     749 </span>            :              edge from outer_cond_bb and the forwarder block.  */
+<span class="lineNum">     750 </span><span class="lineCov">       8116 :           if (tree_ssa_ifcombine_bb_1 (inner_cond_bb, outer_cond_bb, else_bb,</span>
+<span class="lineNum">     751 </span>            :                                        then_bb, then_bb))
+<span class="lineNum">     752 </span><span class="lineCov">        375 :             return true;</span>
+<span class="lineNum">     753 </span>            :         }
+<span class="lineNum">     754 </span>            :     }
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span>            :   return false;
+<span class="lineNum">     757 </span>            : }
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            : /* Main entry for the tree if-conversion pass.  */
+<span class="lineNum">     760 </span>            : 
+<span class="lineNum">     761 </span>            : namespace {
+<span class="lineNum">     762 </span>            : 
+<span class="lineNum">     763 </span>            : const pass_data pass_data_tree_ifcombine =
+<span class="lineNum">     764 </span>            : {
+<span class="lineNum">     765 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     766 </span>            :   &quot;ifcombine&quot;, /* name */
+<span class="lineNum">     767 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     768 </span>            :   TV_TREE_IFCOMBINE, /* tv_id */
+<span class="lineNum">     769 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">     770 </span>            :   0, /* properties_provided */
+<span class="lineNum">     771 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     772 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     773 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     774 </span>            : };
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span>            : class pass_tree_ifcombine : public gimple_opt_pass
+<span class="lineNum">     777 </span>            : {
+<span class="lineNum">     778 </span>            : public:
+<span class="lineNum">     779 </span>            :   pass_tree_ifcombine (gcc::context *ctxt)
+<span class="lineNum">     780 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_tree_ifcombine, ctxt)</span>
+<span class="lineNum">     781 </span>            :   {}
+<span class="lineNum">     782 </span>            : 
+<span class="lineNum">     783 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     784 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     785 </span>            : 
+<span class="lineNum">     786 </span>            : }; // class pass_tree_ifcombine
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span>            : unsigned int
+<span class="lineNum">     789 </span><span class="lineCov">     620933 : pass_tree_ifcombine::execute (function *fun)</span>
+<span class="lineNum">     790 </span>            : {
+<span class="lineNum">     791 </span><span class="lineCov">     620933 :   basic_block *bbs;</span>
+<span class="lineNum">     792 </span><span class="lineCov">     620933 :   bool cfg_changed = false;</span>
+<span class="lineNum">     793 </span><span class="lineCov">     620933 :   int i;</span>
+<span class="lineNum">     794 </span>            : 
+<span class="lineNum">     795 </span><span class="lineCov">     620933 :   bbs = single_pred_before_succ_order ();</span>
+<span class="lineNum">     796 </span><span class="lineCov">     620933 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     797 </span>            : 
+<span class="lineNum">     798 </span>            :   /* Search every basic block for COND_EXPR we may be able to optimize.
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span>            :      We walk the blocks in order that guarantees that a block with
+<span class="lineNum">     801 </span>            :      a single predecessor is processed after the predecessor.
+<span class="lineNum">     802 </span>            :      This ensures that we collapse outter ifs before visiting the
+<span class="lineNum">     803 </span>            :      inner ones, and also that we do not try to visit a removed
+<span class="lineNum">     804 </span>            :      block.  This is opposite of PHI-OPT, because we cascade the
+<span class="lineNum">     805 </span>            :      combining rather than cascading PHIs. */
+<span class="lineNum">     806 </span><span class="lineCov">    6254783 :   for (i = n_basic_blocks_for_fn (fun) - NUM_FIXED_BLOCKS - 1; i &gt;= 0; i--)</span>
+<span class="lineNum">     807 </span>            :     {
+<span class="lineNum">     808 </span><span class="lineCov">    5633850 :       basic_block bb = bbs[i];</span>
+<span class="lineNum">     809 </span><span class="lineCov">    5633850 :       gimple *stmt = last_stmt (bb);</span>
+<span class="lineNum">     810 </span>            : 
+<span class="lineNum">     811 </span><span class="lineCov">    5633850 :       if (stmt</span>
+<span class="lineNum">     812 </span><span class="lineCov">    5633850 :           &amp;&amp; gimple_code (stmt) == GIMPLE_COND)</span>
+<span class="lineNum">     813 </span><span class="lineCov">    2305691 :         if (tree_ssa_ifcombine_bb (bb))</span>
+<span class="lineNum">     814 </span>            :           {
+<span class="lineNum">     815 </span>            :             /* Clear range info from all stmts in BB which is now executed
+<span class="lineNum">     816 </span>            :                conditional on a always true/false condition.  */
+<span class="lineNum">     817 </span><span class="lineCov">      69469 :             reset_flow_sensitive_info_in_bb (bb);</span>
+<span class="lineNum">     818 </span><span class="lineCov">      69469 :             cfg_changed |= true;</span>
+<span class="lineNum">     819 </span>            :           }
+<span class="lineNum">     820 </span>            :     }
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span><span class="lineCov">     620933 :   free (bbs);</span>
+<span class="lineNum">     823 </span>            : 
+<span class="lineNum">     824 </span><span class="lineCov">     620933 :   return cfg_changed ? TODO_cleanup_cfg : 0;</span>
+<span class="lineNum">     825 </span>            : }
+<span class="lineNum">     826 </span>            : 
+<span class="lineNum">     827 </span>            : } // anon namespace
+<a name="828"><span class="lineNum">     828 </span>            : </a>
+<span class="lineNum">     829 </span>            : gimple_opt_pass *
+<span class="lineNum">     830 </span><span class="lineCov">     170312 : make_pass_tree_ifcombine (gcc::context *ctxt)</span>
+<span class="lineNum">     831 </span>            : {
+<span class="lineNum">     832 </span><span class="lineCov">     170312 :   return new pass_tree_ifcombine (ctxt);</span>
+<span class="lineNum">     833 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

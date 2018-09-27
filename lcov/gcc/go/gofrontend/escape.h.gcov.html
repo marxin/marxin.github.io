@@ -1,0 +1,588 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/go/gofrontend/escape.h</title>
+  <link rel="stylesheet" type="text/css" href="../../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../../index.html">top level</a> - <a href="index.html">gcc/go/gofrontend</a> - escape.h<span style="font-size: 80%;"> (source / <a href="escape.h.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">50</td>
+            <td class="headerCovTableEntry">82</td>
+            <td class="headerCovTableEntryLo">61.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">25</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : // escape.h -- Go escape analysis (based on Go compiler algorithm).</a>
+<span class="lineNum">       2 </span>            : 
+<span class="lineNum">       3 </span>            : // Copyright 2016 The Go Authors. All rights reserved.
+<span class="lineNum">       4 </span>            : // Use of this source code is governed by a BSD-style
+<span class="lineNum">       5 </span>            : // license that can be found in the LICENSE file.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : #ifndef GO_ESCAPE_H
+<span class="lineNum">       8 </span>            : #define GO_ESCAPE_H
+<span class="lineNum">       9 </span>            : 
+<span class="lineNum">      10 </span>            : #include &quot;gogo.h&quot;
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : class Named_object;
+<span class="lineNum">      13 </span>            : class Expression;
+<span class="lineNum">      14 </span>            : class Statement;
+<span class="lineNum">      15 </span>            : class Escape_context;
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : // There can be loops in the escape graph that lead to arbitrary recursions.
+<span class="lineNum">      18 </span>            : // See comment in gc/esc.go.
+<span class="lineNum">      19 </span>            : static const int MIN_LEVEL = -2;
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : // Level models the escapement of a Node using two integers that are computed
+<span class="lineNum">      22 </span>            : // by backwards-analyzing the flow of a function from its sink and increasing or
+<span class="lineNum">      23 </span>            : // decreasing based on dereferences and addressing, respectively.
+<span class="lineNum">      24 </span>            : // One integer, known as the level's VALUE (think absolute value), is just the
+<span class="lineNum">      25 </span>            : // sum of indirections (via referencing or dereferencing) applied to the Node.
+<span class="lineNum">      26 </span>            : // The second, known as the level's SUFFIX_VALUE, is the amount of indirections
+<span class="lineNum">      27 </span>            : // applied after some data has been copied from the node.  When accessing a
+<span class="lineNum">      28 </span>            : // field F of an object O and then applying indirections, for example, the field
+<span class="lineNum">      29 </span>            : // access O.F is assumed to copy that data from O before applying indirections.
+<span class="lineNum">      30 </span>            : // With this, even if O.F escapes, it might mean that the content of O escape,
+<span class="lineNum">      31 </span>            : // but not the object O itself.
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            : class Level
+<span class="lineNum">      34 </span>            : {
+<span class="lineNum">      35 </span>            : public:
+<span class="lineNum">      36 </span>            :   Level()
+<span class="lineNum">      37 </span><span class="lineCov">    3319791 :     : value_(0), suffix_value_(0)</span>
+<span class="lineNum">      38 </span>            :   { }
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            :   Level(int value, int suffix)
+<span class="lineNum">      41 </span>            :     : value_(value), suffix_value_(suffix)
+<span class="lineNum">      42 </span>            :   { }
+<span class="lineNum">      43 </span>            : 
+<a name="44"><span class="lineNum">      44 </span>            :   // Return this level's value.</a>
+<span class="lineNum">      45 </span>            :   int
+<span class="lineNum">      46 </span><span class="lineNoCov">          0 :   value() const</span>
+<span class="lineNum">      47 </span><span class="lineCov">    9816081 :   { return this-&gt;value_; }</span>
+<span class="lineNum">      48 </span>            : 
+<a name="49"><span class="lineNum">      49 </span>            :   // Return this level's suffix value.</a>
+<span class="lineNum">      50 </span>            :   int
+<span class="lineNum">      51 </span><span class="lineNoCov">          0 :   suffix_value() const</span>
+<span class="lineNum">      52 </span><span class="lineCov">    3111623 :   { return this-&gt;suffix_value_; }</span>
+<span class="lineNum">      53 </span>            : 
+<a name="54"><span class="lineNum">      54 </span>            :   // Increase the level because a node is dereferenced.</a>
+<span class="lineNum">      55 </span>            :   Level
+<span class="lineNum">      56 </span><span class="lineNoCov">          0 :   increase() const</span>
+<span class="lineNum">      57 </span>            :   {
+<span class="lineNum">      58 </span><span class="lineCov">    2525925 :     if (this-&gt;value_ &lt;= MIN_LEVEL)</span>
+<span class="lineNum">      59 </span><span class="lineNoCov">          0 :       return Level(MIN_LEVEL, 0);</span>
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span><span class="lineCov">    2504472 :     return Level(this-&gt;value_ + 1, this-&gt;suffix_value_ + 1);</span>
+<span class="lineNum">      62 </span>            :   }
+<span class="lineNum">      63 </span>            : 
+<a name="64"><span class="lineNum">      64 </span>            :   // Decrease the level because a node is referenced.</a>
+<span class="lineNum">      65 </span>            :   Level
+<span class="lineNum">      66 </span><span class="lineNoCov">          0 :   decrease() const</span>
+<span class="lineNum">      67 </span>            :   {
+<span class="lineNum">      68 </span><span class="lineCov">     644497 :     if (this-&gt;value_ &lt;= MIN_LEVEL)</span>
+<span class="lineNum">      69 </span><span class="lineNoCov">          0 :       return Level(MIN_LEVEL, 0);</span>
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span><span class="lineCov">     596533 :     return Level(this-&gt;value_ - 1, this-&gt;suffix_value_ - 1);</span>
+<span class="lineNum">      72 </span>            :   }
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :   // Model a node being copied.
+<span class="lineNum">      75 </span>            :   Level
+<span class="lineNum">      76 </span>            :   copy() const
+<span class="lineNum">      77 </span>            :   {
+<span class="lineNum">      78 </span><span class="lineCov">    8733673 :     return Level(this-&gt;value_, std::max(this-&gt;suffix_value_, 0));</span>
+<span class="lineNum">      79 </span>            :   }
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            :   // Return a level with the minimum values of this level and l.
+<span class="lineNum">      82 </span>            :   Level
+<span class="lineNum">      83 </span>            :   min(const Level&amp; l) const
+<span class="lineNum">      84 </span>            :   {
+<span class="lineNum">      85 </span><span class="lineCov">   21097296 :     return Level(std::min(this-&gt;value_, l.value()),</span>
+<span class="lineNum">      86 </span><span class="lineCov">    7612115 :                  std::min(this-&gt;suffix_value_, l.suffix_value()));</span>
+<span class="lineNum">      87 </span>            :   }
+<span class="lineNum">      88 </span>            : 
+<a name="89"><span class="lineNum">      89 </span>            :   // Compare two levels for equality.</a>
+<span class="lineNum">      90 </span>            :   bool
+<span class="lineNum">      91 </span><span class="lineNoCov">          0 :   operator==(const Level&amp; l) const</span>
+<span class="lineNum">      92 </span>            :   {
+<span class="lineNum">      93 </span><span class="lineCov">    5274324 :     return (this-&gt;value_ == l.value()</span>
+<span class="lineNum">      94 </span><span class="lineCov">    5274324 :             &amp;&amp; this-&gt;suffix_value_ == l.suffix_value());</span>
+<span class="lineNum">      95 </span>            :   }
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            :   // Create a level from an integer value.
+<span class="lineNum">      98 </span>            :   static Level
+<span class="lineNum">      99 </span>            :   From(int i)
+<span class="lineNum">     100 </span>            :   {
+<span class="lineNum">     101 </span><span class="lineCov">     721540 :     if (i &lt;= MIN_LEVEL)</span>
+<span class="lineNum">     102 </span>            :       return Level(MIN_LEVEL, 0);
+<span class="lineNum">     103 </span><span class="lineCov">     721540 :     return Level(i, 0);</span>
+<span class="lineNum">     104 </span>            :   }
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span>            : private:
+<span class="lineNum">     107 </span>            :   // The sum of all references (-1) and indirects (+1) applied to a Node.
+<span class="lineNum">     108 </span>            :   int value_;
+<span class="lineNum">     109 </span>            :   // The sum of all references (-1) abd indirects (+1) applied to a copied Node.
+<span class="lineNum">     110 </span>            :   int suffix_value_;
+<span class="lineNum">     111 </span>            : };
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span>            : // A node in the escape graph.  This node is an alias to a particular node
+<span class="lineNum">     114 </span>            : // in the Go parse tree.  Specifically, it can represent an expression node,
+<span class="lineNum">     115 </span>            : // a statement node, or a named object node (a variable or function).
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : class Node
+<span class="lineNum">     118 </span>            : {
+<span class="lineNum">     119 </span>            :  public:
+<span class="lineNum">     120 </span>            :   // This classification represents type of nodes in the Go parse tree that are
+<span class="lineNum">     121 </span>            :   // interesting during the analysis.
+<span class="lineNum">     122 </span>            :   enum Node_classification
+<span class="lineNum">     123 </span>            :     {
+<span class="lineNum">     124 </span>            :       NODE_OBJECT,
+<span class="lineNum">     125 </span>            :       NODE_EXPRESSION,
+<span class="lineNum">     126 </span>            :       NODE_STATEMENT,
+<span class="lineNum">     127 </span>            :       // A &quot;fake&quot; node that models the indirection of its child node.
+<span class="lineNum">     128 </span>            :       // This node does not correspond to an AST node.
+<span class="lineNum">     129 </span>            :       NODE_INDIRECT
+<span class="lineNum">     130 </span>            :     };
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            :   // The state necessary to keep track of how a node escapes.
+<span class="lineNum">     133 </span>            :   struct Escape_state
+<span class="lineNum">     134 </span>            :   {
+<span class="lineNum">     135 </span>            :     // The current function.
+<span class="lineNum">     136 </span>            :     Named_object* fn;
+<span class="lineNum">     137 </span>            :     // A list of source nodes that flow into this node.
+<span class="lineNum">     138 </span>            :     std::set&lt;Node*&gt; flows;
+<span class="lineNum">     139 </span>            :     // If the node is a function call, the list of nodes returned.
+<span class="lineNum">     140 </span>            :     std::vector&lt;Node*&gt; retvals;
+<span class="lineNum">     141 </span>            :     // The node's loop depth.
+<span class="lineNum">     142 </span>            :     int loop_depth;
+<span class="lineNum">     143 </span>            :     // There is an extra loop depth in the flood phase used to account for
+<span class="lineNum">     144 </span>            :     // variables referenced across closures.  This is the maximum value of the
+<span class="lineNum">     145 </span>            :     // extra loop depth seen during the flood that touches this node.
+<span class="lineNum">     146 </span>            :     int max_extra_loop_depth;
+<span class="lineNum">     147 </span>            :     // The node's level.
+<span class="lineNum">     148 </span>            :     Level level;
+<span class="lineNum">     149 </span>            :     // An ID given to a node when it is encountered as a flow from the current
+<span class="lineNum">     150 </span>            :     // dst node.  This is used to avoid infinite recursion of cyclic nodes.
+<span class="lineNum">     151 </span>            :     int flood_id;
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            :     Escape_state()
+<span class="lineNum">     154 </span><span class="lineCov">    9959373 :       : fn(NULL), loop_depth(0), max_extra_loop_depth(0), flood_id(0)</span>
+<span class="lineNum">     155 </span>            :     { }
+<span class="lineNum">     156 </span>            :   };
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            :   // Note: values in this enum appear in export data, and therefore MUST NOT
+<span class="lineNum">     159 </span>            :   // change.
+<span class="lineNum">     160 </span>            :   enum Escapement_encoding
+<span class="lineNum">     161 </span>            :   {
+<span class="lineNum">     162 </span>            :     ESCAPE_UNKNOWN,
+<span class="lineNum">     163 </span>            :     // Does not escape to heap, result, or parameters.
+<span class="lineNum">     164 </span>            :     ESCAPE_NONE,
+<span class="lineNum">     165 </span>            :     // Is returned or reachable from a return statement.
+<span class="lineNum">     166 </span>            :     ESCAPE_RETURN,
+<span class="lineNum">     167 </span>            :     // Reachable from the heap.
+<span class="lineNum">     168 </span>            :     ESCAPE_HEAP,
+<span class="lineNum">     169 </span>            :     // By construction will not escape.
+<span class="lineNum">     170 </span>            :     ESCAPE_NEVER
+<span class="lineNum">     171 </span>            :   };
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span>            :   // Multiple constructors for each classification.
+<span class="lineNum">     174 </span>            :   Node(Named_object* no)
+<span class="lineNum">     175 </span><span class="lineCov">    1302442 :     : classification_(NODE_OBJECT), state_(NULL), encoding_(ESCAPE_UNKNOWN),</span>
+<span class="lineNum">     176 </span><span class="lineCov">    1302442 :       child_(NULL)</span>
+<span class="lineNum">     177 </span><span class="lineCov">    1302442 :   { this-&gt;u_.object_val = no; }</span>
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            :   Node(Expression* e)
+<span class="lineNum">     180 </span><span class="lineCov">    6188002 :     : classification_(NODE_EXPRESSION), state_(NULL), encoding_(ESCAPE_UNKNOWN),</span>
+<span class="lineNum">     181 </span><span class="lineCov">    6188002 :       child_(NULL)</span>
+<span class="lineNum">     182 </span><span class="lineCov">    6188002 :   { this-&gt;u_.expression_val = e; }</span>
+<span class="lineNum">     183 </span>            : 
+<span class="lineNum">     184 </span>            :   Node(Statement* s)
+<span class="lineNum">     185 </span><span class="lineCov">     260454 :     : classification_(NODE_STATEMENT), state_(NULL), encoding_(ESCAPE_UNKNOWN),</span>
+<span class="lineNum">     186 </span><span class="lineCov">     260454 :       child_(NULL)</span>
+<span class="lineNum">     187 </span><span class="lineCov">     260454 :   { this-&gt;u_.statement_val = s; }</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            :   Node(Node *n)
+<span class="lineNum">     190 </span><span class="lineCov">      83699 :     : classification_(NODE_INDIRECT), state_(NULL), encoding_(ESCAPE_UNKNOWN),</span>
+<span class="lineNum">     191 </span><span class="lineCov">      83699 :       child_(n)</span>
+<span class="lineNum">     192 </span>            :   {}
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span>            :   ~Node();
+<span class="lineNum">     195 </span>            : 
+<span class="lineNum">     196 </span>            :   // Return this node's type.
+<span class="lineNum">     197 </span>            :   Type*
+<span class="lineNum">     198 </span>            :   type() const;
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            :   // Return this node's location.
+<span class="lineNum">     201 </span>            :   Location
+<span class="lineNum">     202 </span>            :   location() const;
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span>            :   // Return the location where the node's underlying object is defined.
+<span class="lineNum">     205 </span>            :   Location
+<span class="lineNum">     206 </span>            :   definition_location() const;
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            :   // Return this node's AST formatted string.
+<span class="lineNum">     209 </span>            :   std::string
+<span class="lineNum">     210 </span>            :   ast_format(Gogo*) const;
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span>            :   // Return this node's detailed format string.
+<span class="lineNum">     213 </span>            :   std::string
+<span class="lineNum">     214 </span>            :   details();
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :   std::string
+<span class="lineNum">     217 </span>            :   op_format() const;
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   // Return this node's escape state.
+<span class="lineNum">     220 </span>            :   Escape_state*
+<span class="lineNum">     221 </span>            :   state(Escape_context* context, Named_object* fn);
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            :   // Return this node's escape encoding.
+<span class="lineNum">     224 </span>            :   int
+<span class="lineNum">     225 </span>            :   encoding();
+<span class="lineNum">     226 </span>            : 
+<span class="lineNum">     227 </span>            :   // Set the node's escape encoding.
+<span class="lineNum">     228 </span>            :   void
+<span class="lineNum">     229 </span>            :   set_encoding(int enc);
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            :   bool
+<span class="lineNum">     232 </span>            :   is_big(Escape_context*) const;
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            :   bool
+<span class="lineNum">     235 </span>            :   is_sink() const;
+<span class="lineNum">     236 </span>            : 
+<a name="237"><span class="lineNum">     237 </span>            :   // Methods to return the underlying value in the Node union.</a>
+<span class="lineNum">     238 </span>            :   Named_object*
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 :   object() const</span>
+<span class="lineNum">     240 </span>            :   {
+<span class="lineNum">     241 </span><span class="lineCov">     996200 :     return (this-&gt;classification_ == NODE_OBJECT</span>
+<span class="lineNum">     242 </span><span class="lineCov">   27668876 :             ? this-&gt;u_.object_val</span>
+<span class="lineNum">     243 </span><span class="lineNoCov">          0 :             : NULL);</span>
+<span class="lineNum">     244 </span>            :   }
+<a name="245"><span class="lineNum">     245 </span>            : </a>
+<span class="lineNum">     246 </span>            :   Expression*
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 :   expr() const</span>
+<span class="lineNum">     248 </span>            :   {
+<span class="lineNum">     249 </span><span class="lineCov">   63968997 :     return (this-&gt;classification_ == NODE_EXPRESSION</span>
+<span class="lineNum">     250 </span><span class="lineCov">   96689749 :             ? this-&gt;u_.expression_val</span>
+<span class="lineNum">     251 </span><span class="lineNoCov">          0 :             : NULL);</span>
+<span class="lineNum">     252 </span>            :   }
+<a name="253"><span class="lineNum">     253 </span>            : </a>
+<span class="lineNum">     254 </span>            :   Statement*
+<span class="lineNum">     255 </span><span class="lineNoCov">          0 :   statement() const</span>
+<span class="lineNum">     256 </span>            :   {
+<span class="lineNum">     257 </span><span class="lineCov">     566586 :     return (this-&gt;classification_ == NODE_STATEMENT</span>
+<span class="lineNum">     258 </span><span class="lineCov">     573540 :             ? this-&gt;u_.statement_val</span>
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 :             : NULL);</span>
+<span class="lineNum">     260 </span>            :   }
+<a name="261"><span class="lineNum">     261 </span>            : </a>
+<span class="lineNum">     262 </span>            :   bool
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 :   is_indirect() const</span>
+<span class="lineNum">     264 </span><span class="lineCov">    7703155 :   { return this-&gt;classification_ == NODE_INDIRECT; }</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span>            :   // Return its child node.
+<span class="lineNum">     267 </span>            :   // Child node is used only in indirect node, and in expression node
+<a name="268"><span class="lineNum">     268 </span>            :   // representing slicing an array.</a>
+<span class="lineNum">     269 </span>            :   Node*
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 :   child() const</span>
+<span class="lineNum">     271 </span><span class="lineCov">     768572 :   { return this-&gt;child_; }</span>
+<span class="lineNum">     272 </span>            : 
+<a name="273"><span class="lineNum">     273 </span>            :   // Set the child node.</a>
+<span class="lineNum">     274 </span>            :   void
+<span class="lineNum">     275 </span><span class="lineNoCov">          0 :   set_child(Node* n)</span>
+<span class="lineNum">     276 </span><span class="lineCov">       7844 :   { this-&gt;child_ = n; }</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            :   // Static creation methods for each value supported in the union.
+<span class="lineNum">     279 </span>            :   static Node*
+<span class="lineNum">     280 </span>            :   make_node(Named_object*);
+<span class="lineNum">     281 </span>            : 
+<span class="lineNum">     282 </span>            :   static Node*
+<span class="lineNum">     283 </span>            :   make_node(Expression*);
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            :   static Node*
+<span class="lineNum">     286 </span>            :   make_node(Statement*);
+<span class="lineNum">     287 </span>            : 
+<span class="lineNum">     288 </span>            :   static Node*
+<span class="lineNum">     289 </span>            :   make_indirect_node(Node*);
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            :   // Return the maximum of an existing escape encoding E and a new
+<span class="lineNum">     292 </span>            :   // escape type.
+<span class="lineNum">     293 </span>            :   static int
+<span class="lineNum">     294 </span>            :   max_encoding(int e, int etype);
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span>            :   // Return a modified encoding for an input parameter that flows into an
+<span class="lineNum">     297 </span>            :   // output parameter.
+<span class="lineNum">     298 </span>            :   static int
+<span class="lineNum">     299 </span>            :   note_inout_flows(int e, int index, Level level);
+<span class="lineNum">     300 </span>            : 
+<span class="lineNum">     301 </span>            :   // Reclaim nodes.
+<span class="lineNum">     302 </span>            :   static void
+<span class="lineNum">     303 </span>            :   reclaim_nodes();
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span>            :  private:
+<span class="lineNum">     306 </span>            :   // The classification of this Node.
+<span class="lineNum">     307 </span>            :   Node_classification classification_;
+<span class="lineNum">     308 </span>            :   // The value union.
+<span class="lineNum">     309 </span>            :   union
+<span class="lineNum">     310 </span>            :   {
+<span class="lineNum">     311 </span>            :     // If NODE_OBJECT.
+<span class="lineNum">     312 </span>            :     Named_object* object_val;
+<span class="lineNum">     313 </span>            :     // If NODE_EXPRESSION.
+<span class="lineNum">     314 </span>            :     Expression* expression_val;
+<span class="lineNum">     315 </span>            :     // If NODE_STATEMENT.
+<span class="lineNum">     316 </span>            :     Statement* statement_val;
+<span class="lineNum">     317 </span>            :   } u_;
+<span class="lineNum">     318 </span>            :   // The node's escape state.
+<span class="lineNum">     319 </span>            :   Escape_state* state_;
+<span class="lineNum">     320 </span>            :   // The node's escape encoding.
+<span class="lineNum">     321 </span>            :   // The encoding:
+<span class="lineNum">     322 </span>            :   // | Return Encoding: (width - ESCAPE_RETURN_BITS) |
+<span class="lineNum">     323 </span>            :   // | Content Escapes bit: 1 |
+<span class="lineNum">     324 </span>            :   // | Escapement_encoding: ESCAPE_BITS |
+<span class="lineNum">     325 </span>            :   int encoding_;
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            :   // Child node, used only in indirect node, and expression node representing
+<span class="lineNum">     328 </span>            :   // slicing an array.
+<span class="lineNum">     329 </span>            :   Node* child_;
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span>            :   // Cache all the Nodes created via Node::make_node to make the API simpler.
+<span class="lineNum">     332 </span>            :   static std::map&lt;Named_object*, Node*&gt; objects;
+<span class="lineNum">     333 </span>            :   static std::map&lt;Expression*, Node*&gt; expressions;
+<span class="lineNum">     334 </span>            :   static std::map&lt;Statement*, Node*&gt; statements;
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span>            :   // Collection of all NODE_INDIRECT Nodes, used for reclaiming memory. This
+<span class="lineNum">     337 </span>            :   // is not a cache -- each make_indirect_node will make a fresh Node.
+<span class="lineNum">     338 </span>            :   static std::vector&lt;Node*&gt; indirects;
+<span class="lineNum">     339 </span>            : };
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span>            : // The amount of bits used for the escapement encoding.
+<span class="lineNum">     342 </span>            : static const int ESCAPE_BITS = 3;
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            : // Mask used to extract encoding.
+<span class="lineNum">     345 </span>            : static const int ESCAPE_MASK = (1 &lt;&lt; ESCAPE_BITS) - 1;
+<span class="lineNum">     346 </span>            : 
+<span class="lineNum">     347 </span>            : // Value obtained by indirect of parameter escapes to heap.
+<span class="lineNum">     348 </span>            : static const int ESCAPE_CONTENT_ESCAPES = 1 &lt;&lt; ESCAPE_BITS;
+<span class="lineNum">     349 </span>            : 
+<span class="lineNum">     350 </span>            : // The amount of bits used in encoding of return values.
+<span class="lineNum">     351 </span>            : static const int ESCAPE_RETURN_BITS = ESCAPE_BITS + 1;
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span>            : // For each output, the number of bits for a tag.
+<span class="lineNum">     354 </span>            : static const int ESCAPE_BITS_PER_OUTPUT_IN_TAG = 3;
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span>            : // The bit max to extract a single tag.
+<span class="lineNum">     357 </span>            : static const int ESCAPE_BITS_MASK_FOR_TAG = (1 &lt;&lt; ESCAPE_BITS_PER_OUTPUT_IN_TAG) - 1;
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            : // The largest level that can be stored in a tag.
+<span class="lineNum">     360 </span>            : static const int ESCAPE_MAX_ENCODED_LEVEL = ESCAPE_BITS_MASK_FOR_TAG - 1;
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span>            : // A helper for converting escape notes from encoded integers to a
+<span class="lineNum">     363 </span>            : // textual format and vice-versa.
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span>            : class Escape_note
+<span class="lineNum">     366 </span>            : {
+<span class="lineNum">     367 </span>            :  public:
+<span class="lineNum">     368 </span>            :   // Return the string representation of an escapement encoding.
+<span class="lineNum">     369 </span>            :   static std::string
+<span class="lineNum">     370 </span>            :   make_tag(int encoding);
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            :   // Return the escapement encoding for a string tag.
+<span class="lineNum">     373 </span>            :   static int
+<span class="lineNum">     374 </span>            :   parse_tag(std::string* tag);
+<span class="lineNum">     375 </span>            : };
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span>            : // The escape context for a set of functions being analyzed.
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            : class Escape_context
+<span class="lineNum">     380 </span>            : {
+<span class="lineNum">     381 </span>            :  public:
+<span class="lineNum">     382 </span>            :   Escape_context(Gogo* gogo, bool recursive);
+<span class="lineNum">     383 </span>            : 
+<a name="384"><span class="lineNum">     384 </span>            :   // Return the Go IR.</a>
+<span class="lineNum">     385 </span>            :   Gogo*
+<span class="lineNum">     386 </span><span class="lineNoCov">          0 :   gogo() const</span>
+<span class="lineNum">     387 </span><span class="lineCov">   27955129 :   { return this-&gt;gogo_; }</span>
+<span class="lineNum">     388 </span>            : 
+<a name="389"><span class="lineNum">     389 </span>            :   // Return the current function being analyzed.</a>
+<span class="lineNum">     390 </span>            :   Named_object*
+<span class="lineNum">     391 </span><span class="lineNoCov">          0 :   current_function() const</span>
+<span class="lineNum">     392 </span><span class="lineCov">    3069229 :   { return this-&gt;current_function_; }</span>
+<span class="lineNum">     393 </span>            : 
+<a name="394"><span class="lineNum">     394 </span>            :   // Change the function being analyzed.</a>
+<span class="lineNum">     395 </span>            :   void
+<span class="lineNum">     396 </span><span class="lineNoCov">          0 :   set_current_function(Named_object* fn)</span>
+<span class="lineNum">     397 </span><span class="lineCov">     475585 :   { this-&gt;current_function_ = fn; }</span>
+<span class="lineNum">     398 </span>            : 
+<span class="lineNum">     399 </span>            :   // Return the name of the current function.
+<span class="lineNum">     400 </span>            :   std::string
+<span class="lineNum">     401 </span>            :   current_function_name() const;
+<span class="lineNum">     402 </span>            : 
+<a name="403"><span class="lineNum">     403 </span>            :   // Return true if this is the context for a mutually recursive set of functions.</a>
+<span class="lineNum">     404 </span>            :   bool
+<span class="lineNum">     405 </span><span class="lineNoCov">          0 :   recursive() const</span>
+<span class="lineNum">     406 </span><span class="lineCov">      86166 :   { return this-&gt;recursive_; }</span>
+<span class="lineNum">     407 </span>            : 
+<a name="408"><span class="lineNum">     408 </span>            :   // Return the special sink node for this context.</a>
+<span class="lineNum">     409 </span>            :   Node*
+<span class="lineNum">     410 </span><span class="lineNoCov">          0 :   sink()</span>
+<span class="lineNum">     411 </span><span class="lineCov">     814914 :   { return this-&gt;sink_; }</span>
+<span class="lineNum">     412 </span>            : 
+<a name="413"><span class="lineNum">     413 </span>            :   // Return the current loop depth.</a>
+<span class="lineNum">     414 </span>            :   int
+<span class="lineNum">     415 </span><span class="lineNoCov">          0 :   loop_depth() const</span>
+<span class="lineNum">     416 </span><span class="lineCov">     371661 :   { return this-&gt;loop_depth_; }</span>
+<span class="lineNum">     417 </span>            : 
+<a name="418"><span class="lineNum">     418 </span>            :   // Increase the loop depth.</a>
+<span class="lineNum">     419 </span>            :   void
+<span class="lineNum">     420 </span><span class="lineNoCov">          0 :   increase_loop_depth()</span>
+<span class="lineNum">     421 </span><span class="lineCov">      39571 :   { this-&gt;loop_depth_++; }</span>
+<span class="lineNum">     422 </span>            : 
+<a name="423"><span class="lineNum">     423 </span>            :   // Decrease the loop depth.</a>
+<span class="lineNum">     424 </span>            :   void
+<span class="lineNum">     425 </span><span class="lineNoCov">          0 :   decrease_loop_depth()</span>
+<span class="lineNum">     426 </span><span class="lineCov">      39324 :   { this-&gt;loop_depth_--; }</span>
+<a name="427"><span class="lineNum">     427 </span>            : </a>
+<span class="lineNum">     428 </span>            :   void
+<span class="lineNum">     429 </span><span class="lineNoCov">          0 :   set_loop_depth(int depth)</span>
+<span class="lineNum">     430 </span><span class="lineCov">     220396 :   { this-&gt;loop_depth_ = depth; }</span>
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            :   // Return the destination nodes encountered in this context.
+<span class="lineNum">     433 </span>            :   const std::set&lt;Node*&gt;&amp;
+<span class="lineNum">     434 </span>            :   dsts() const
+<span class="lineNum">     435 </span><span class="lineCov">     466737 :   { return this-&gt;dsts_; }</span>
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            :   // Add a destination node.
+<span class="lineNum">     438 </span>            :   void
+<span class="lineNum">     439 </span>            :   add_dst(Node* dst)
+<span class="lineNum">     440 </span><span class="lineCov">     565374 :   { this-&gt;dsts_.insert(dst); }</span>
+<span class="lineNum">     441 </span>            : 
+<span class="lineNum">     442 </span>            :   // Return the nodes initially marked as non-escaping before flooding.
+<span class="lineNum">     443 </span>            :   const std::vector&lt;Node*&gt;&amp;
+<span class="lineNum">     444 </span>            :   non_escaping_nodes() const
+<span class="lineNum">     445 </span><span class="lineNoCov">          0 :   { return this-&gt;noesc_; }</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :   // Initialize the dummy return values for this Node N using the results
+<span class="lineNum">     448 </span>            :   // in FNTYPE.
+<span class="lineNum">     449 </span>            :   void
+<span class="lineNum">     450 </span>            :   init_retvals(Node* n, Function_type* fntype);
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span>            :   // Return the indirection of Node N.
+<span class="lineNum">     453 </span>            :   Node*
+<span class="lineNum">     454 </span>            :   add_dereference(Node* n);
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span>            :   // Keep track of possibly non-escaping node N.
+<span class="lineNum">     457 </span>            :   void
+<span class="lineNum">     458 </span>            :   track(Node* n);
+<a name="459"><span class="lineNum">     459 </span>            : </a>
+<span class="lineNum">     460 </span>            :   int
+<span class="lineNum">     461 </span><span class="lineNoCov">          0 :   flood_id() const</span>
+<span class="lineNum">     462 </span><span class="lineCov">   19996772 :   { return this-&gt;flood_id_; }</span>
+<a name="463"><span class="lineNum">     463 </span>            : </a>
+<span class="lineNum">     464 </span>            :   void
+<span class="lineNum">     465 </span><span class="lineNoCov">          0 :   increase_flood_id()</span>
+<span class="lineNum">     466 </span><span class="lineCov">     721531 :   { this-&gt;flood_id_++; }</span>
+<a name="467"><span class="lineNum">     467 </span>            : </a>
+<span class="lineNum">     468 </span>            :   int
+<span class="lineNum">     469 </span><span class="lineNoCov">          0 :   pdepth() const</span>
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :   { return this-&gt;pdepth_; }</span>
+<a name="471"><span class="lineNum">     471 </span>            : </a>
+<span class="lineNum">     472 </span>            :   void
+<span class="lineNum">     473 </span><span class="lineNoCov">          0 :   increase_pdepth()</span>
+<span class="lineNum">     474 </span><span class="lineCov">    8508982 :   { this-&gt;pdepth_++; }</span>
+<a name="475"><span class="lineNum">     475 </span>            : </a>
+<span class="lineNum">     476 </span>            :   void
+<span class="lineNum">     477 </span><span class="lineNoCov">          0 :   decrease_pdepth()</span>
+<span class="lineNum">     478 </span><span class="lineCov">    8491047 :   { this-&gt;pdepth_--; }</span>
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            :  private:
+<span class="lineNum">     481 </span>            :   // The Go IR.
+<span class="lineNum">     482 </span>            :   Gogo* gogo_;
+<span class="lineNum">     483 </span>            :   // The current function being analyzed.
+<span class="lineNum">     484 </span>            :   Named_object* current_function_;
+<span class="lineNum">     485 </span>            :   // Return whether this is the context for a recursive function or a group of mutually
+<span class="lineNum">     486 </span>            :   // recursive functions.
+<span class="lineNum">     487 </span>            :   bool recursive_;
+<span class="lineNum">     488 </span>            :   // The sink for this escape context.  Nodes whose reference objects created
+<span class="lineNum">     489 </span>            :   // outside the current function are assigned to the sink as well as nodes that
+<span class="lineNum">     490 </span>            :   // the analysis loses track of.
+<span class="lineNum">     491 </span>            :   Node* sink_;
+<span class="lineNum">     492 </span>            :   // Used to detect nested loop scopes.
+<span class="lineNum">     493 </span>            :   int loop_depth_;
+<span class="lineNum">     494 </span>            :   // All the destination nodes considered in this set of analyzed functions.
+<span class="lineNum">     495 </span>            :   std::set&lt;Node*&gt; dsts_;
+<span class="lineNum">     496 </span>            :   // All the nodes that were noted as possibly not escaping in this context.
+<span class="lineNum">     497 </span>            :   std::vector&lt;Node*&gt; noesc_;
+<span class="lineNum">     498 </span>            :   // An ID given to each dst and the flows discovered through DFS of that dst.
+<span class="lineNum">     499 </span>            :   // This is used to avoid infinite recursion from nodes that point to each
+<span class="lineNum">     500 </span>            :   // other within the flooding phase.
+<span class="lineNum">     501 </span>            :   int flood_id_;
+<span class="lineNum">     502 </span>            :   // The current level of recursion within a flooded section; used to debug.
+<span class="lineNum">     503 </span>            :   int pdepth_;
+<span class="lineNum">     504 </span>            : };
+<span class="lineNum">     505 </span>            : 
+<span class="lineNum">     506 </span>            : #endif // !defined(GO_ESCAPE_H)
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,598 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-uncprop.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-uncprop.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-uncprop.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">161</td>
+            <td class="headerCovTableEntry">165</td>
+            <td class="headerCovTableEntryHi">97.6 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Routines for discovering and unpropagating edge equivalences.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2005-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;domwalk.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;tree-hash-traits.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-ssa-live.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-ssa-coalesce.h&quot;
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            : /* The basic structure describing an equivalency created by traversing
+<span class="lineNum">      38 </span>            :    an edge.  Traversing the edge effectively means that we can assume
+<span class="lineNum">      39 </span>            :    that we've seen an assignment LHS = RHS.  */
+<span class="lineNum">      40 </span>            : struct edge_equivalency
+<span class="lineNum">      41 </span>            : {
+<span class="lineNum">      42 </span>            :   tree rhs;
+<span class="lineNum">      43 </span>            :   tree lhs;
+<span class="lineNum">      44 </span>            : };
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            : /* This routine finds and records edge equivalences for every edge
+<span class="lineNum">      47 </span>            :    in the CFG.
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :    When complete, each edge that creates an equivalency will have an
+<span class="lineNum">      50 </span>            :    EDGE_EQUIVALENCY structure hanging off the edge's AUX field.
+<span class="lineNum">      51 </span>            :    The caller is responsible for freeing the AUX fields.  */
+<a name="52"><span class="lineNum">      52 </span>            : </a>
+<span class="lineNum">      53 </span>            : static void
+<span class="lineNum">      54 </span><span class="lineCov">     622459 : associate_equivalences_with_edges (void)</span>
+<span class="lineNum">      55 </span>            : {
+<span class="lineNum">      56 </span><span class="lineCov">     622459 :   basic_block bb;</span>
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            :   /* Walk over each block.  If the block ends with a control statement,
+<span class="lineNum">      59 </span>            :      then it might create a useful equivalence.  */
+<span class="lineNum">      60 </span><span class="lineCov">    8711259 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">      61 </span>            :     {
+<span class="lineNum">      62 </span><span class="lineCov">    8088800 :       gimple_stmt_iterator gsi = gsi_last_bb (bb);</span>
+<span class="lineNum">      63 </span><span class="lineCov">    8088800 :       gimple *stmt;</span>
+<span class="lineNum">      64 </span>            : 
+<span class="lineNum">      65 </span>            :       /* If the block does not end with a COND_EXPR or SWITCH_EXPR
+<span class="lineNum">      66 </span>            :          then there is nothing to do.  */
+<span class="lineNum">      67 </span><span class="lineCov">   16177600 :       if (gsi_end_p (gsi))</span>
+<span class="lineNum">      68 </span>            :         continue;
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span><span class="lineCov">    5795955 :       stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">      71 </span>            : 
+<span class="lineNum">      72 </span><span class="lineCov">    5795955 :       if (!stmt)</span>
+<span class="lineNum">      73 </span>            :         continue;
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            :       /* A COND_EXPR may create an equivalency in a variety of different
+<span class="lineNum">      76 </span>            :          ways.  */
+<span class="lineNum">      77 </span><span class="lineCov">   11591910 :       if (gimple_code (stmt) == GIMPLE_COND)</span>
+<span class="lineNum">      78 </span>            :         {
+<span class="lineNum">      79 </span><span class="lineCov">    2388085 :           edge true_edge;</span>
+<span class="lineNum">      80 </span><span class="lineCov">    2388085 :           edge false_edge;</span>
+<span class="lineNum">      81 </span><span class="lineCov">    2388085 :           struct edge_equivalency *equivalency;</span>
+<span class="lineNum">      82 </span><span class="lineCov">    2388085 :           enum tree_code code = gimple_cond_code (stmt);</span>
+<span class="lineNum">      83 </span>            : 
+<span class="lineNum">      84 </span><span class="lineCov">    2388085 :           extract_true_false_edges_from_block (bb, &amp;true_edge, &amp;false_edge);</span>
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :           /* Equality tests may create one or two equivalences.  */
+<span class="lineNum">      87 </span><span class="lineCov">    2388085 :           if (code == EQ_EXPR || code == NE_EXPR)</span>
+<span class="lineNum">      88 </span>            :             {
+<span class="lineNum">      89 </span><span class="lineCov">    1890213 :               tree op0 = gimple_cond_lhs (stmt);</span>
+<span class="lineNum">      90 </span><span class="lineCov">    1890213 :               tree op1 = gimple_cond_rhs (stmt);</span>
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            :               /* Special case comparing booleans against a constant as we
+<span class="lineNum">      93 </span>            :                  know the value of OP0 on both arms of the branch.  i.e., we
+<span class="lineNum">      94 </span>            :                  can record an equivalence for OP0 rather than COND.  */
+<span class="lineNum">      95 </span><span class="lineCov">    1890213 :               if (TREE_CODE (op0) == SSA_NAME</span>
+<span class="lineNum">      96 </span><span class="lineCov">    3630694 :                   &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (op0)</span>
+<span class="lineNum">      97 </span><span class="lineCov">    1815294 :                   &amp;&amp; ssa_name_has_boolean_range (op0)</span>
+<span class="lineNum">      98 </span><span class="lineCov">     357270 :                   &amp;&amp; is_gimple_min_invariant (op1)</span>
+<span class="lineNum">      99 </span><span class="lineCov">    2237751 :                   &amp;&amp; (integer_zerop (op1) || integer_onep (op1)))</span>
+<span class="lineNum">     100 </span>            :                 {
+<span class="lineNum">     101 </span><span class="lineCov">     347538 :                   tree true_val = constant_boolean_node (true, TREE_TYPE (op0));</span>
+<span class="lineNum">     102 </span><span class="lineCov">    1042614 :                   tree false_val = constant_boolean_node (false,</span>
+<span class="lineNum">     103 </span><span class="lineCov">     347538 :                                                           TREE_TYPE (op0));</span>
+<span class="lineNum">     104 </span><span class="lineCov">     347538 :                   if (code == EQ_EXPR)</span>
+<span class="lineNum">     105 </span>            :                     {
+<span class="lineNum">     106 </span><span class="lineCov">       3540 :                       equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     107 </span><span class="lineCov">       3540 :                       equivalency-&gt;lhs = op0;</span>
+<span class="lineNum">     108 </span><span class="lineCov">       3540 :                       equivalency-&gt;rhs = (integer_zerop (op1)</span>
+<span class="lineNum">     109 </span><span class="lineCov">       3540 :                                           ? false_val</span>
+<span class="lineNum">     110 </span>            :                                           : true_val);
+<span class="lineNum">     111 </span><span class="lineCov">       3540 :                       true_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span><span class="lineCov">       3540 :                       equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     114 </span><span class="lineCov">       3540 :                       equivalency-&gt;lhs = op0;</span>
+<span class="lineNum">     115 </span><span class="lineCov">       3540 :                       equivalency-&gt;rhs = (integer_zerop (op1)</span>
+<span class="lineNum">     116 </span><span class="lineCov">       3540 :                                           ? true_val</span>
+<span class="lineNum">     117 </span>            :                                           : false_val);
+<span class="lineNum">     118 </span><span class="lineCov">       3540 :                       false_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     119 </span>            :                     }
+<span class="lineNum">     120 </span>            :                   else
+<span class="lineNum">     121 </span>            :                     {
+<span class="lineNum">     122 </span><span class="lineCov">     343998 :                       equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     123 </span><span class="lineCov">     343998 :                       equivalency-&gt;lhs = op0;</span>
+<span class="lineNum">     124 </span><span class="lineCov">     343998 :                       equivalency-&gt;rhs = (integer_zerop (op1)</span>
+<span class="lineNum">     125 </span><span class="lineCov">     343998 :                                           ? true_val</span>
+<span class="lineNum">     126 </span>            :                                           : false_val);
+<span class="lineNum">     127 </span><span class="lineCov">     343998 :                       true_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span><span class="lineCov">     343998 :                       equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     130 </span><span class="lineCov">     343998 :                       equivalency-&gt;lhs = op0;</span>
+<span class="lineNum">     131 </span><span class="lineCov">     343998 :                       equivalency-&gt;rhs = (integer_zerop (op1)</span>
+<span class="lineNum">     132 </span><span class="lineCov">     343998 :                                           ? false_val</span>
+<span class="lineNum">     133 </span>            :                                           : true_val);
+<span class="lineNum">     134 </span><span class="lineCov">     343998 :                       false_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     135 </span>            :                     }
+<span class="lineNum">     136 </span>            :                 }
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span><span class="lineCov">    1542675 :               else if (TREE_CODE (op0) == SSA_NAME</span>
+<span class="lineNum">     139 </span><span class="lineCov">    2935618 :                        &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (op0)</span>
+<span class="lineNum">     140 </span><span class="lineCov">    3010431 :                        &amp;&amp; (is_gimple_min_invariant (op1)</span>
+<span class="lineNum">     141 </span><span class="lineCov">     365172 :                            || (TREE_CODE (op1) == SSA_NAME</span>
+<span class="lineNum">     142 </span><span class="lineCov">     730344 :                                &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (op1))))</span>
+<span class="lineNum">     143 </span>            :                 {
+<span class="lineNum">     144 </span>            :                   /* For IEEE, -0.0 == 0.0, so we don't necessarily know
+<span class="lineNum">     145 </span>            :                      the sign of a variable compared against zero.  If
+<span class="lineNum">     146 </span>            :                      we're honoring signed zeros, then we cannot record
+<span class="lineNum">     147 </span>            :                      this value unless we know that the value is nonzero.  */
+<span class="lineNum">     148 </span><span class="lineCov">    1467755 :                   if (HONOR_SIGNED_ZEROS (op0)</span>
+<span class="lineNum">     149 </span><span class="lineCov">    1467755 :                       &amp;&amp; (TREE_CODE (op1) != REAL_CST</span>
+<span class="lineNum">     150 </span><span class="lineCov">     153926 :                           || real_equal (&amp;dconst0, &amp;TREE_REAL_CST (op1))))</span>
+<span class="lineNum">     151 </span><span class="lineCov">      36677 :                     continue;</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">    1431078 :                   equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     154 </span><span class="lineCov">    1431078 :                   equivalency-&gt;lhs = op0;</span>
+<span class="lineNum">     155 </span><span class="lineCov">    1431078 :                   equivalency-&gt;rhs = op1;</span>
+<span class="lineNum">     156 </span><span class="lineCov">    1431078 :                   if (code == EQ_EXPR)</span>
+<span class="lineNum">     157 </span><span class="lineCov">     566050 :                     true_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     158 </span>            :                   else
+<span class="lineNum">     159 </span><span class="lineCov">     865028 :                     false_edge-&gt;aux = equivalency;</span>
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            :                 }
+<span class="lineNum">     162 </span>            :             }
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            :           /* ??? TRUTH_NOT_EXPR can create an equivalence too.  */
+<span class="lineNum">     165 </span>            :         }
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span>            :       /* For a SWITCH_EXPR, a case label which represents a single
+<span class="lineNum">     168 </span>            :          value and which is the only case label which reaches the
+<span class="lineNum">     169 </span>            :          target block creates an equivalence.  */
+<span class="lineNum">     170 </span><span class="lineCov">    6815740 :       else if (gimple_code (stmt) == GIMPLE_SWITCH)</span>
+<span class="lineNum">     171 </span>            :         {
+<span class="lineNum">     172 </span><span class="lineCov">       2779 :           gswitch *switch_stmt = as_a &lt;gswitch *&gt; (stmt);</span>
+<span class="lineNum">     173 </span><span class="lineCov">       2779 :           tree cond = gimple_switch_index (switch_stmt);</span>
+<span class="lineNum">     174 </span>            : 
+<span class="lineNum">     175 </span><span class="lineCov">       2779 :           if (TREE_CODE (cond) == SSA_NAME</span>
+<span class="lineNum">     176 </span><span class="lineCov">       2779 :               &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (cond))</span>
+<span class="lineNum">     177 </span>            :             {
+<span class="lineNum">     178 </span><span class="lineCov">       2779 :               int i, n_labels = gimple_switch_num_labels (switch_stmt);</span>
+<span class="lineNum">     179 </span><span class="lineCov">       2779 :               tree *info = XCNEWVEC (tree, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            :               /* Walk over the case label vector.  Record blocks
+<span class="lineNum">     182 </span>            :                  which are reached by a single case label which represents
+<span class="lineNum">     183 </span>            :                  a single value.  */
+<span class="lineNum">     184 </span><span class="lineCov">      33729 :               for (i = 0; i &lt; n_labels; i++)</span>
+<span class="lineNum">     185 </span>            :                 {
+<span class="lineNum">     186 </span><span class="lineCov">      30950 :                   tree label = gimple_switch_label (switch_stmt, i);</span>
+<span class="lineNum">     187 </span><span class="lineCov">      30950 :                   basic_block bb = label_to_block (cfun, CASE_LABEL (label));</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span><span class="lineCov">      30950 :                   if (CASE_HIGH (label)</span>
+<span class="lineNum">     190 </span><span class="lineCov">      57342 :                       || !CASE_LOW (label)</span>
+<span class="lineNum">     191 </span><span class="lineCov">      56842 :                       || info[bb-&gt;index])</span>
+<span class="lineNum">     192 </span><span class="lineCov">       8130 :                     info[bb-&gt;index] = error_mark_node;</span>
+<span class="lineNum">     193 </span>            :                   else
+<span class="lineNum">     194 </span><span class="lineCov">      22820 :                     info[bb-&gt;index] = label;</span>
+<span class="lineNum">     195 </span>            :                 }
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span>            :               /* Now walk over the blocks to determine which ones were
+<span class="lineNum">     198 </span>            :                  marked as being reached by a useful case label.  */
+<span class="lineNum">     199 </span><span class="lineCov">     381623 :               for (i = 0; i &lt; n_basic_blocks_for_fn (cfun); i++)</span>
+<span class="lineNum">     200 </span>            :                 {
+<span class="lineNum">     201 </span><span class="lineCov">     378844 :                   tree node = info[i];</span>
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span><span class="lineCov">     378844 :                   if (node != NULL</span>
+<span class="lineNum">     204 </span><span class="lineCov">      27016 :                       &amp;&amp; node != error_mark_node)</span>
+<span class="lineNum">     205 </span>            :                     {
+<span class="lineNum">     206 </span><span class="lineCov">      21396 :                       tree x = fold_convert (TREE_TYPE (cond), CASE_LOW (node));</span>
+<span class="lineNum">     207 </span><span class="lineCov">      21396 :                       struct edge_equivalency *equivalency;</span>
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span>            :                       /* Record an equivalency on the edge from BB to basic
+<span class="lineNum">     210 </span>            :                          block I.  */
+<span class="lineNum">     211 </span><span class="lineCov">      21396 :                       equivalency = XNEW (struct edge_equivalency);</span>
+<span class="lineNum">     212 </span><span class="lineCov">      21396 :                       equivalency-&gt;rhs = x;</span>
+<span class="lineNum">     213 </span><span class="lineCov">      21396 :                       equivalency-&gt;lhs = cond;</span>
+<span class="lineNum">     214 </span><span class="lineCov">      21396 :                       find_edge (bb, BASIC_BLOCK_FOR_FN (cfun, i))-&gt;aux =</span>
+<span class="lineNum">     215 </span>            :                         equivalency;
+<span class="lineNum">     216 </span>            :                     }
+<span class="lineNum">     217 </span>            :                 }
+<span class="lineNum">     218 </span><span class="lineCov">       2779 :               free (info);</span>
+<span class="lineNum">     219 </span>            :             }
+<span class="lineNum">     220 </span>            :         }
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span>            :     }
+<span class="lineNum">     223 </span><span class="lineCov">     622459 : }</span>
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            : /* Translating out of SSA sometimes requires inserting copies and
+<span class="lineNum">     227 </span>            :    constant initializations on edges to eliminate PHI nodes.
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span>            :    In some cases those copies and constant initializations are
+<span class="lineNum">     230 </span>            :    redundant because the target already has the value on the
+<span class="lineNum">     231 </span>            :    RHS of the assignment.
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span>            :    We previously tried to catch these cases after translating
+<span class="lineNum">     234 </span>            :    out of SSA form.  However, that code often missed cases.  Worse
+<span class="lineNum">     235 </span>            :    yet, the cases it missed were also often missed by the RTL
+<span class="lineNum">     236 </span>            :    optimizers.  Thus the resulting code had redundant instructions.
+<span class="lineNum">     237 </span>            : 
+<span class="lineNum">     238 </span>            :    This pass attempts to detect these situations before translating
+<span class="lineNum">     239 </span>            :    out of SSA form.
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            :    The key concept that this pass is built upon is that these
+<span class="lineNum">     242 </span>            :    redundant copies and constant initializations often occur
+<span class="lineNum">     243 </span>            :    due to constant/copy propagating equivalences resulting from
+<span class="lineNum">     244 </span>            :    COND_EXPRs and SWITCH_EXPRs.
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span>            :    We want to do those propagations as they can sometimes allow
+<span class="lineNum">     247 </span>            :    the SSA optimizers to do a better job.  However, in the cases
+<span class="lineNum">     248 </span>            :    where such propagations do not result in further optimization,
+<span class="lineNum">     249 </span>            :    we would like to &quot;undo&quot; the propagation to avoid the redundant
+<span class="lineNum">     250 </span>            :    copies and constant initializations.
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span>            :    This pass works by first associating equivalences with edges in
+<span class="lineNum">     253 </span>            :    the CFG.  For example, the edge leading from a SWITCH_EXPR to
+<span class="lineNum">     254 </span>            :    its associated CASE_LABEL will have an equivalency between
+<span class="lineNum">     255 </span>            :    SWITCH_COND and the value in the case label.
+<span class="lineNum">     256 </span>            : 
+<span class="lineNum">     257 </span>            :    Once we have found the edge equivalences, we proceed to walk
+<span class="lineNum">     258 </span>            :    the CFG in dominator order.  As we traverse edges we record
+<span class="lineNum">     259 </span>            :    equivalences associated with those edges we traverse.
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span>            :    When we encounter a PHI node, we walk its arguments to see if we
+<span class="lineNum">     262 </span>            :    have an equivalence for the PHI argument.  If so, then we replace
+<span class="lineNum">     263 </span>            :    the argument.
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span>            :    Equivalences are looked up based on their value (think of it as
+<span class="lineNum">     266 </span>            :    the RHS of an assignment).   A value may be an SSA_NAME or an
+<span class="lineNum">     267 </span>            :    invariant.  We may have several SSA_NAMEs with the same value,
+<span class="lineNum">     268 </span>            :    so with each value we have a list of SSA_NAMEs that have the
+<span class="lineNum">     269 </span>            :    same value.  */
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            : /* Main structure for recording equivalences into our hash table.  */
+<span class="lineNum">     273 </span>            : struct equiv_hash_elt
+<span class="lineNum">     274 </span>            : {
+<span class="lineNum">     275 </span>            :   /* The value/key of this entry.  */
+<span class="lineNum">     276 </span>            :   tree value;
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            :   /* List of SSA_NAMEs which have the same value/key.  */
+<span class="lineNum">     279 </span>            :   vec&lt;tree&gt; equivalences;
+<span class="lineNum">     280 </span>            : };
+<span class="lineNum">     281 </span>            : 
+<span class="lineNum">     282 </span>            : /* Global hash table implementing a mapping from invariant values
+<span class="lineNum">     283 </span>            :    to a list of SSA_NAMEs which have the same value.  We might be
+<span class="lineNum">     284 </span>            :    able to reuse tree-vn for this code.  */
+<span class="lineNum">     285 </span>            : static hash_map&lt;tree, auto_vec&lt;tree&gt; &gt; *val_ssa_equiv;
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            : static void uncprop_into_successor_phis (basic_block);
+<span class="lineNum">     288 </span>            : 
+<span class="lineNum">     289 </span>            : /* Remove the most recently recorded equivalency for VALUE.  */
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            : static void
+<span class="lineNum">     292 </span><span class="lineCov">    2147550 : remove_equivalence (tree value)</span>
+<span class="lineNum">     293 </span>            : {
+<span class="lineNum">     294 </span><span class="lineCov">    4295100 :     val_ssa_equiv-&gt;get (value)-&gt;pop ();</span>
+<span class="lineNum">     295 </span><span class="lineCov">    2147550 : }</span>
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            : /* Record EQUIVALENCE = VALUE into our hash table.  */
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span>            : static void
+<span class="lineNum">     300 </span><span class="lineCov">    2147550 : record_equiv (tree value, tree equivalence)</span>
+<span class="lineNum">     301 </span>            : {
+<span class="lineNum">     302 </span><span class="lineCov">    4295100 :   val_ssa_equiv-&gt;get_or_insert (value).safe_push (equivalence);</span>
+<span class="lineNum">     303 </span><span class="lineCov">    2147550 : }</span>
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span>            : class uncprop_dom_walker : public dom_walker
+<span class="lineNum">     306 </span>            : {
+<span class="lineNum">     307 </span>            : public:
+<span class="lineNum">     308 </span><span class="lineCov">     622459 :   uncprop_dom_walker (cdi_direction direction) : dom_walker (direction) {}</span>
+<span class="lineNum">     309 </span>            : 
+<span class="lineNum">     310 </span>            :   virtual edge before_dom_children (basic_block);
+<span class="lineNum">     311 </span>            :   virtual void after_dom_children (basic_block);
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span>            : private:
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            :   /* As we enter each block we record the value for any edge equivalency
+<span class="lineNum">     316 </span>            :      leading to this block.  If no such edge equivalency exists, then we
+<span class="lineNum">     317 </span>            :      record NULL.  These equivalences are live until we leave the dominator
+<span class="lineNum">     318 </span>            :      subtree rooted at the block where we record the equivalency.  */
+<span class="lineNum">     319 </span>            :   auto_vec&lt;tree, 2&gt; m_equiv_stack;
+<span class="lineNum">     320 </span>            : };
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span>            : /* We have finished processing the dominator children of BB, perform
+<span class="lineNum">     323 </span>            :    any finalization actions in preparation for leaving this node in
+<span class="lineNum">     324 </span>            :    the dominator tree.  */
+<a name="325"><span class="lineNum">     325 </span>            : </a>
+<span class="lineNum">     326 </span>            : void
+<span class="lineNum">     327 </span><span class="lineCov">    8711259 : uncprop_dom_walker::after_dom_children (basic_block bb ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     328 </span>            : {
+<span class="lineNum">     329 </span>            :   /* Pop the topmost value off the equiv stack.  */
+<span class="lineNum">     330 </span><span class="lineCov">    8711259 :   tree value = m_equiv_stack.pop ();</span>
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span>            :   /* If that value was non-null, then pop the topmost equivalency off
+<span class="lineNum">     333 </span>            :      its equivalency stack.  */
+<span class="lineNum">     334 </span><span class="lineCov">    8711259 :   if (value != NULL)</span>
+<span class="lineNum">     335 </span><span class="lineCov">    2147550 :     remove_equivalence (value);</span>
+<span class="lineNum">     336 </span><span class="lineCov">    8711259 : }</span>
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span>            : /* Unpropagate values from PHI nodes in successor blocks of BB.  */
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span>            : static void
+<span class="lineNum">     341 </span><span class="lineCov">    8711259 : uncprop_into_successor_phis (basic_block bb)</span>
+<span class="lineNum">     342 </span>            : {
+<span class="lineNum">     343 </span><span class="lineCov">    8711259 :   edge e;</span>
+<span class="lineNum">     344 </span><span class="lineCov">    8711259 :   edge_iterator ei;</span>
+<span class="lineNum">     345 </span>            : 
+<span class="lineNum">     346 </span>            :   /* For each successor edge, first temporarily record any equivalence
+<span class="lineNum">     347 </span>            :      on that edge.  Then unpropagate values in any PHI nodes at the
+<span class="lineNum">     348 </span>            :      destination of the edge.  Then remove the temporary equivalence.  */
+<span class="lineNum">     349 </span><span class="lineCov">   28777337 :   FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     350 </span>            :     {
+<span class="lineNum">     351 </span><span class="lineCov">   11354819 :       gimple_seq phis = phi_nodes (e-&gt;dest);</span>
+<span class="lineNum">     352 </span><span class="lineCov">   11354819 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            :       /* If there are no PHI nodes in this destination, then there is
+<span class="lineNum">     355 </span>            :          no sense in recording any equivalences.  */
+<span class="lineNum">     356 </span><span class="lineCov">   22709638 :       if (gimple_seq_empty_p (phis))</span>
+<span class="lineNum">     357 </span><span class="lineCov">    7757749 :         continue;</span>
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :       /* Record any equivalency associated with E.  */
+<span class="lineNum">     360 </span><span class="lineCov">    3597070 :       if (e-&gt;aux)</span>
+<span class="lineNum">     361 </span>            :         {
+<span class="lineNum">     362 </span><span class="lineNoCov">          0 :           struct edge_equivalency *equiv = (struct edge_equivalency *) e-&gt;aux;</span>
+<span class="lineNum">     363 </span><span class="lineNoCov">          0 :           record_equiv (equiv-&gt;rhs, equiv-&gt;lhs);</span>
+<span class="lineNum">     364 </span>            :         }
+<span class="lineNum">     365 </span>            : 
+<span class="lineNum">     366 </span>            :       /* Walk over the PHI nodes, unpropagating values.  */
+<span class="lineNum">     367 </span><span class="lineCov">   13037022 :       for (gsi = gsi_start (phis) ; !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     368 </span>            :         {
+<span class="lineNum">     369 </span><span class="lineCov">    5842882 :           gimple *phi = gsi_stmt (gsi);</span>
+<span class="lineNum">     370 </span><span class="lineCov">    5842882 :           tree arg = PHI_ARG_DEF (phi, e-&gt;dest_idx);</span>
+<span class="lineNum">     371 </span><span class="lineCov">    5842882 :           tree res = PHI_RESULT (phi);</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            :           /* If the argument is not an invariant and can be potentially
+<span class="lineNum">     374 </span>            :              coalesced with the result, then there's no point in
+<span class="lineNum">     375 </span>            :              un-propagating the argument.  */
+<span class="lineNum">     376 </span><span class="lineCov">    5842882 :           if (!is_gimple_min_invariant (arg)</span>
+<span class="lineNum">     377 </span><span class="lineCov">    5842882 :               &amp;&amp; gimple_can_coalesce_p (arg, res))</span>
+<span class="lineNum">     378 </span><span class="lineCov">    5201314 :             continue;</span>
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            :           /* Lookup this argument's value in the hash table.  */
+<span class="lineNum">     381 </span><span class="lineCov">     641568 :           vec&lt;tree&gt; *equivalences = val_ssa_equiv-&gt;get (arg);</span>
+<span class="lineNum">     382 </span><span class="lineCov">     140537 :           if (equivalences)</span>
+<span class="lineNum">     383 </span>            :             {
+<span class="lineNum">     384 </span>            :               /* Walk every equivalence with the same value.  If we find
+<span class="lineNum">     385 </span>            :                  one that can potentially coalesce with the PHI rsult,
+<span class="lineNum">     386 </span>            :                  then replace the value in the argument with its equivalent
+<span class="lineNum">     387 </span>            :                  SSA_NAME.  Use the most recent equivalence as hopefully
+<span class="lineNum">     388 </span>            :                  that results in shortest lifetimes.  */
+<span class="lineNum">     389 </span><span class="lineCov">     281074 :               for (int j = equivalences-&gt;length () - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">     390 </span>            :                 {
+<span class="lineNum">     391 </span><span class="lineCov">      73375 :                   tree equiv = (*equivalences)[j];</span>
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span><span class="lineCov">      73375 :                   if (gimple_can_coalesce_p (equiv, res))</span>
+<span class="lineNum">     394 </span>            :                     {
+<span class="lineNum">     395 </span><span class="lineCov">      73375 :                       SET_PHI_ARG_DEF (phi, e-&gt;dest_idx, equiv);</span>
+<span class="lineNum">     396 </span><span class="lineCov">      73375 :                       break;</span>
+<span class="lineNum">     397 </span>            :                     }
+<span class="lineNum">     398 </span>            :                 }
+<span class="lineNum">     399 </span>            :             }
+<span class="lineNum">     400 </span>            :         }
+<span class="lineNum">     401 </span>            : 
+<span class="lineNum">     402 </span>            :       /* If we had an equivalence associated with this edge, remove it.  */
+<span class="lineNum">     403 </span><span class="lineCov">    3597070 :       if (e-&gt;aux)</span>
+<span class="lineNum">     404 </span>            :         {
+<span class="lineNum">     405 </span><span class="lineNoCov">          0 :           struct edge_equivalency *equiv = (struct edge_equivalency *) e-&gt;aux;</span>
+<span class="lineNum">     406 </span><span class="lineNoCov">          0 :           remove_equivalence (equiv-&gt;rhs);</span>
+<span class="lineNum">     407 </span>            :         }
+<span class="lineNum">     408 </span>            :     }
+<span class="lineNum">     409 </span><span class="lineCov">    8711259 : }</span>
+<a name="410"><span class="lineNum">     410 </span>            : </a>
+<span class="lineNum">     411 </span>            : edge
+<span class="lineNum">     412 </span><span class="lineCov">    8711259 : uncprop_dom_walker::before_dom_children (basic_block bb)</span>
+<span class="lineNum">     413 </span>            : {
+<span class="lineNum">     414 </span><span class="lineCov">    8711259 :   basic_block parent;</span>
+<span class="lineNum">     415 </span><span class="lineCov">    8711259 :   bool recorded = false;</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            :   /* If this block is dominated by a single incoming edge and that edge
+<span class="lineNum">     418 </span>            :      has an equivalency, then record the equivalency and push the
+<span class="lineNum">     419 </span>            :      VALUE onto EQUIV_STACK.  Else push a NULL entry on EQUIV_STACK.  */
+<span class="lineNum">     420 </span><span class="lineCov">    8711259 :   parent = get_immediate_dominator (CDI_DOMINATORS, bb);</span>
+<span class="lineNum">     421 </span><span class="lineCov">    8711259 :   if (parent)</span>
+<span class="lineNum">     422 </span>            :     {
+<span class="lineNum">     423 </span><span class="lineCov">    8088800 :       edge e = single_pred_edge_ignoring_loop_edges (bb, false);</span>
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">    8088800 :       if (e &amp;&amp; e-&gt;src == parent &amp;&amp; e-&gt;aux)</span>
+<span class="lineNum">     426 </span>            :         {
+<span class="lineNum">     427 </span><span class="lineCov">    2147550 :           struct edge_equivalency *equiv = (struct edge_equivalency *) e-&gt;aux;</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span><span class="lineCov">    2147550 :           record_equiv (equiv-&gt;rhs, equiv-&gt;lhs);</span>
+<span class="lineNum">     430 </span><span class="lineCov">    2147550 :           m_equiv_stack.safe_push (equiv-&gt;rhs);</span>
+<span class="lineNum">     431 </span><span class="lineCov">    2147550 :           recorded = true;</span>
+<span class="lineNum">     432 </span>            :         }
+<span class="lineNum">     433 </span>            :     }
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span><span class="lineCov">    2147550 :   if (!recorded)</span>
+<span class="lineNum">     436 </span><span class="lineCov">    6563709 :     m_equiv_stack.safe_push (NULL_TREE);</span>
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span><span class="lineCov">    8711259 :   uncprop_into_successor_phis (bb);</span>
+<span class="lineNum">     439 </span><span class="lineCov">    8711259 :   return NULL;</span>
+<span class="lineNum">     440 </span>            : }
+<span class="lineNum">     441 </span>            : 
+<span class="lineNum">     442 </span>            : namespace {
+<span class="lineNum">     443 </span>            : 
+<span class="lineNum">     444 </span>            : const pass_data pass_data_uncprop =
+<span class="lineNum">     445 </span>            : {
+<span class="lineNum">     446 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     447 </span>            :   &quot;uncprop&quot;, /* name */
+<span class="lineNum">     448 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     449 </span>            :   TV_TREE_SSA_UNCPROP, /* tv_id */
+<span class="lineNum">     450 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">     451 </span>            :   0, /* properties_provided */
+<span class="lineNum">     452 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     453 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     454 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     455 </span>            : };
+<span class="lineNum">     456 </span>            : 
+<span class="lineNum">     457 </span>            : class pass_uncprop : public gimple_opt_pass
+<span class="lineNum">     458 </span>            : {
+<span class="lineNum">     459 </span>            : public:
+<span class="lineNum">     460 </span>            :   pass_uncprop (gcc::context *ctxt)
+<span class="lineNum">     461 </span><span class="lineCov">     681248 :     : gimple_opt_pass (pass_data_uncprop, ctxt)</span>
+<span class="lineNum">     462 </span>            :   {}
+<a name="463"><span class="lineNum">     463 </span>            : </a>
+<a name="464"><span class="lineNum">     464 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     465 </span><span class="lineCov">     170312 :   opt_pass * clone () { return new pass_uncprop (m_ctxt); }</span>
+<span class="lineNum">     466 </span><span class="lineCov">     622600 :   virtual bool gate (function *) { return flag_tree_dom != 0; }</span>
+<span class="lineNum">     467 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     468 </span>            : 
+<span class="lineNum">     469 </span>            : }; // class pass_uncprop
+<a name="470"><span class="lineNum">     470 </span>            : </a>
+<span class="lineNum">     471 </span>            : unsigned int
+<span class="lineNum">     472 </span><span class="lineCov">     622459 : pass_uncprop::execute (function *fun)</span>
+<span class="lineNum">     473 </span>            : {
+<span class="lineNum">     474 </span><span class="lineCov">     622459 :   basic_block bb;</span>
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span><span class="lineCov">     622459 :   associate_equivalences_with_edges ();</span>
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span>            :   /* Create our global data structures.  */
+<span class="lineNum">     479 </span><span class="lineCov">     622459 :   val_ssa_equiv = new hash_map&lt;tree, auto_vec&lt;tree&gt; &gt; (1024);</span>
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            :   /* We're going to do a dominator walk, so ensure that we have
+<span class="lineNum">     482 </span>            :      dominance information.  */
+<span class="lineNum">     483 </span><span class="lineCov">     622459 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span>            :   /* Recursively walk the dominator tree undoing unprofitable
+<span class="lineNum">     486 </span>            :      constant/copy propagations.  */
+<span class="lineNum">     487 </span><span class="lineCov">     622459 :   uncprop_dom_walker (CDI_DOMINATORS).walk (fun-&gt;cfg-&gt;x_entry_block_ptr);</span>
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span>            :   /* we just need to empty elements out of the hash table, and cleanup the
+<span class="lineNum">     490 </span>            :     AUX field on the edges.  */
+<span class="lineNum">     491 </span><span class="lineCov">     622459 :   delete val_ssa_equiv;</span>
+<span class="lineNum">     492 </span><span class="lineCov">     622459 :   val_ssa_equiv = NULL;</span>
+<span class="lineNum">     493 </span><span class="lineCov">    8711259 :   FOR_EACH_BB_FN (bb, fun)</span>
+<span class="lineNum">     494 </span>            :     {
+<span class="lineNum">     495 </span><span class="lineCov">    8088800 :       edge e;</span>
+<span class="lineNum">     496 </span><span class="lineCov">    8088800 :       edge_iterator ei;</span>
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span><span class="lineCov">   26909960 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     499 </span>            :         {
+<span class="lineNum">     500 </span><span class="lineCov">   10732360 :           if (e-&gt;aux)</span>
+<span class="lineNum">     501 </span>            :             {
+<span class="lineNum">     502 </span><span class="lineCov">    2147550 :               free (e-&gt;aux);</span>
+<span class="lineNum">     503 </span><span class="lineCov">    2147550 :               e-&gt;aux = NULL;</span>
+<span class="lineNum">     504 </span>            :             }
+<span class="lineNum">     505 </span>            :         }
+<span class="lineNum">     506 </span>            :     }
+<span class="lineNum">     507 </span><span class="lineCov">     622459 :   return 0;</span>
+<span class="lineNum">     508 </span>            : }
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span>            : } // anon namespace
+<a name="511"><span class="lineNum">     511 </span>            : </a>
+<span class="lineNum">     512 </span>            : gimple_opt_pass *
+<span class="lineNum">     513 </span><span class="lineCov">     170312 : make_pass_uncprop (gcc::context *ctxt)</span>
+<span class="lineNum">     514 </span>            : {
+<span class="lineNum">     515 </span><span class="lineCov">     170312 :   return new pass_uncprop (ctxt);</span>
+<span class="lineNum">     516 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,1356 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/store-motion.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - store-motion.c<span style="font-size: 80%;"> (source / <a href="store-motion.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">470</td>
+            <td class="headerCovTableEntry">511</td>
+            <td class="headerCovTableEntryHi">92.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">25</td>
+            <td class="headerCovTableEntry">30</td>
+            <td class="headerCovTableEntryMed">83.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Store motion via Lazy Code Motion on the reverse CFG.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1997-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;toplev.h&quot;
+<span class="lineNum">      29 </span>            : 
+<span class="lineNum">      30 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;lcm.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;cfgcleanup.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;expr.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;dbgcnt.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;rtl-iter.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;print-rtl.h&quot;
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : /* This pass implements downward store motion.
+<span class="lineNum">      41 </span>            :    As of May 1, 2009, the pass is not enabled by default on any target,
+<span class="lineNum">      42 </span>            :    but bootstrap completes on ia64 and x86_64 with the pass enabled.  */
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : /* TODO:
+<span class="lineNum">      45 </span>            :    - remove_reachable_equiv_notes is an incomprehensible pile of goo and
+<span class="lineNum">      46 </span>            :      a compile time hog that needs a rewrite (maybe cache st_exprs to
+<span class="lineNum">      47 </span>            :      invalidate REG_EQUAL/REG_EQUIV notes for?).
+<span class="lineNum">      48 </span>            :    - pattern_regs in st_expr should be a regset (on its own obstack).
+<span class="lineNum">      49 </span>            :    - store_motion_mems should be a vec instead of a list.
+<span class="lineNum">      50 </span>            :    - there should be an alloc pool for struct st_expr objects.
+<span class="lineNum">      51 </span>            :    - investigate whether it is helpful to make the address of an st_expr
+<span class="lineNum">      52 </span>            :      a cselib VALUE.
+<span class="lineNum">      53 </span>            :    - when GIMPLE alias information is exported, the effectiveness of this
+<span class="lineNum">      54 </span>            :      pass should be re-evaluated.
+<span class="lineNum">      55 </span>            : */
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            : /* This is a list of store expressions (MEMs).  The structure is used
+<span class="lineNum">      58 </span>            :    as an expression table to track stores which look interesting, and
+<span class="lineNum">      59 </span>            :    might be moveable towards the exit block.  */
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : struct st_expr
+<span class="lineNum">      62 </span>            : {
+<span class="lineNum">      63 </span>            :   /* Pattern of this mem.  */
+<span class="lineNum">      64 </span>            :   rtx pattern;
+<span class="lineNum">      65 </span>            :   /* List of registers mentioned by the mem.  */
+<span class="lineNum">      66 </span>            :   vec&lt;rtx&gt; pattern_regs;
+<span class="lineNum">      67 </span>            :   /* INSN list of stores that are locally anticipatable.  */
+<span class="lineNum">      68 </span>            :   vec&lt;rtx_insn *&gt; antic_stores;
+<span class="lineNum">      69 </span>            :   /* INSN list of stores that are locally available.  */
+<span class="lineNum">      70 </span>            :   vec&lt;rtx_insn *&gt; avail_stores;
+<span class="lineNum">      71 </span>            :   /* Next in the list.  */
+<span class="lineNum">      72 </span>            :   struct st_expr * next;
+<span class="lineNum">      73 </span>            :   /* Store ID in the dataflow bitmaps.  */
+<span class="lineNum">      74 </span>            :   int index;
+<span class="lineNum">      75 </span>            :   /* Hash value for the hash table.  */
+<span class="lineNum">      76 </span>            :   unsigned int hash_index;
+<span class="lineNum">      77 </span>            :   /* Register holding the stored expression when a store is moved.
+<span class="lineNum">      78 </span>            :      This field is also used as a cache in find_moveable_store, see
+<span class="lineNum">      79 </span>            :      LAST_AVAIL_CHECK_FAILURE below.  */
+<span class="lineNum">      80 </span>            :   rtx reaching_reg;
+<span class="lineNum">      81 </span>            : };
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            : /* Head of the list of load/store memory refs.  */
+<span class="lineNum">      84 </span>            : static struct st_expr * store_motion_mems = NULL;
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            : /* These bitmaps will hold the local dataflow properties per basic block.  */
+<span class="lineNum">      87 </span>            : static sbitmap *st_kill, *st_avloc, *st_antloc, *st_transp;
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : /* Nonzero for expressions which should be inserted on a specific edge.  */
+<span class="lineNum">      90 </span>            : static sbitmap *st_insert_map;
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            : /* Nonzero for expressions which should be deleted in a specific block.  */
+<span class="lineNum">      93 </span>            : static sbitmap *st_delete_map;
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            : /* Global holding the number of store expressions we are dealing with.  */
+<span class="lineNum">      96 </span>            : static int num_stores;
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : /* Contains the edge_list returned by pre_edge_lcm.  */
+<span class="lineNum">      99 </span>            : static struct edge_list *edge_list;
+<span class="lineNum">     100 </span>            : 
+<span class="lineNum">     101 </span>            : /* Hashtable helpers.  */
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span>            : struct st_expr_hasher : nofree_ptr_hash &lt;st_expr&gt;
+<span class="lineNum">     104 </span>            : {
+<span class="lineNum">     105 </span>            :   static inline hashval_t hash (const st_expr *);
+<span class="lineNum">     106 </span>            :   static inline bool equal (const st_expr *, const st_expr *);
+<span class="lineNum">     107 </span>            : };
+<a name="108"><span class="lineNum">     108 </span>            : </a>
+<span class="lineNum">     109 </span>            : inline hashval_t
+<span class="lineNum">     110 </span><span class="lineNoCov">          0 : st_expr_hasher::hash (const st_expr *x)</span>
+<span class="lineNum">     111 </span>            : {
+<span class="lineNum">     112 </span><span class="lineNoCov">          0 :   int do_not_record_p = 0;</span>
+<span class="lineNum">     113 </span><span class="lineNoCov">          0 :   return hash_rtx (x-&gt;pattern, GET_MODE (x-&gt;pattern), &amp;do_not_record_p, NULL, false);</span>
+<span class="lineNum">     114 </span>            : }
+<a name="115"><span class="lineNum">     115 </span>            : </a>
+<span class="lineNum">     116 </span>            : inline bool
+<span class="lineNum">     117 </span><span class="lineNoCov">          0 : st_expr_hasher::equal (const st_expr *ptr1, const st_expr *ptr2)</span>
+<span class="lineNum">     118 </span>            : {
+<span class="lineNum">     119 </span><span class="lineCov">         15 :   return exp_equiv_p (ptr1-&gt;pattern, ptr2-&gt;pattern, 0, true);</span>
+<span class="lineNum">     120 </span>            : }
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            : /* Hashtable for the load/store memory refs.  */
+<span class="lineNum">     123 </span>            : static hash_table&lt;st_expr_hasher&gt; *store_motion_mems_table;
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            : /* This will search the st_expr list for a matching expression. If it
+<span class="lineNum">     126 </span>            :    doesn't find one, we create one and initialize it.  */
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span>            : static struct st_expr *
+<span class="lineNum">     129 </span><span class="lineCov">         31 : st_expr_entry (rtx x)</span>
+<span class="lineNum">     130 </span>            : {
+<span class="lineNum">     131 </span><span class="lineCov">         31 :   int do_not_record_p = 0;</span>
+<span class="lineNum">     132 </span><span class="lineCov">         31 :   struct st_expr * ptr;</span>
+<span class="lineNum">     133 </span><span class="lineCov">         31 :   unsigned int hash;</span>
+<span class="lineNum">     134 </span><span class="lineCov">         31 :   st_expr **slot;</span>
+<span class="lineNum">     135 </span><span class="lineCov">         31 :   struct st_expr e;</span>
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span><span class="lineCov">         31 :   hash = hash_rtx (x, GET_MODE (x), &amp;do_not_record_p,</span>
+<span class="lineNum">     138 </span>            :                    NULL,  /*have_reg_qty=*/false);
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span><span class="lineCov">         31 :   e.pattern = x;</span>
+<span class="lineNum">     141 </span><span class="lineCov">         31 :   slot = store_motion_mems_table-&gt;find_slot_with_hash (&amp;e, hash, INSERT);</span>
+<span class="lineNum">     142 </span><span class="lineCov">         31 :   if (*slot)</span>
+<span class="lineNum">     143 </span>            :     return *slot;
+<span class="lineNum">     144 </span>            : 
+<span class="lineNum">     145 </span><span class="lineCov">         30 :   ptr = XNEW (struct st_expr);</span>
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span><span class="lineCov">         30 :   ptr-&gt;next         = store_motion_mems;</span>
+<span class="lineNum">     148 </span><span class="lineCov">         30 :   ptr-&gt;pattern      = x;</span>
+<span class="lineNum">     149 </span><span class="lineCov">         30 :   ptr-&gt;pattern_regs.create (0);</span>
+<span class="lineNum">     150 </span><span class="lineCov">         30 :   ptr-&gt;antic_stores.create (0);</span>
+<span class="lineNum">     151 </span><span class="lineCov">         30 :   ptr-&gt;avail_stores.create (0);</span>
+<span class="lineNum">     152 </span><span class="lineCov">         30 :   ptr-&gt;reaching_reg = NULL_RTX;</span>
+<span class="lineNum">     153 </span><span class="lineCov">         30 :   ptr-&gt;index        = 0;</span>
+<span class="lineNum">     154 </span><span class="lineCov">         30 :   ptr-&gt;hash_index   = hash;</span>
+<span class="lineNum">     155 </span><span class="lineCov">         30 :   store_motion_mems = ptr;</span>
+<span class="lineNum">     156 </span><span class="lineCov">         30 :   *slot = ptr;</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span><span class="lineCov">         30 :   return ptr;</span>
+<span class="lineNum">     159 </span>            : }
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            : /* Free up an individual st_expr entry.  */
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span>            : static void
+<span class="lineNum">     164 </span><span class="lineCov">         30 : free_st_expr_entry (struct st_expr * ptr)</span>
+<span class="lineNum">     165 </span>            : {
+<span class="lineNum">     166 </span><span class="lineCov">         30 :   ptr-&gt;antic_stores.release ();</span>
+<span class="lineNum">     167 </span><span class="lineCov">         30 :   ptr-&gt;avail_stores.release ();</span>
+<span class="lineNum">     168 </span><span class="lineCov">         30 :   ptr-&gt;pattern_regs.release ();</span>
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span><span class="lineCov">         30 :   free (ptr);</span>
+<span class="lineNum">     171 </span><span class="lineCov">         30 : }</span>
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span>            : /* Free up all memory associated with the st_expr list.  */
+<a name="174"><span class="lineNum">     174 </span>            : </a>
+<span class="lineNum">     175 </span>            : static void
+<span class="lineNum">     176 </span><span class="lineCov">         11 : free_store_motion_mems (void)</span>
+<span class="lineNum">     177 </span>            : {
+<span class="lineNum">     178 </span><span class="lineCov">         11 :   delete store_motion_mems_table;</span>
+<span class="lineNum">     179 </span><span class="lineCov">         11 :   store_motion_mems_table = NULL;</span>
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span><span class="lineCov">         37 :   while (store_motion_mems)</span>
+<span class="lineNum">     182 </span>            :     {
+<span class="lineNum">     183 </span><span class="lineCov">         26 :       struct st_expr * tmp = store_motion_mems;</span>
+<span class="lineNum">     184 </span><span class="lineCov">         26 :       store_motion_mems = store_motion_mems-&gt;next;</span>
+<span class="lineNum">     185 </span><span class="lineCov">         26 :       free_st_expr_entry (tmp);</span>
+<span class="lineNum">     186 </span>            :     }
+<span class="lineNum">     187 </span><span class="lineCov">         11 :   store_motion_mems = NULL;</span>
+<span class="lineNum">     188 </span><span class="lineCov">         11 : }</span>
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span>            : /* Assign each element of the list of mems a monotonically increasing value.  */
+<a name="191"><span class="lineNum">     191 </span>            : </a>
+<span class="lineNum">     192 </span>            : static int
+<span class="lineNum">     193 </span><span class="lineNoCov">          0 : enumerate_store_motion_mems (void)</span>
+<span class="lineNum">     194 </span>            : {
+<span class="lineNum">     195 </span><span class="lineCov">         30 :   struct st_expr * ptr;</span>
+<span class="lineNum">     196 </span><span class="lineCov">         30 :   int n = 0;</span>
+<span class="lineNum">     197 </span>            : 
+<span class="lineNum">     198 </span><span class="lineCov">         56 :   for (ptr = store_motion_mems; ptr != NULL; ptr = ptr-&gt;next)</span>
+<span class="lineNum">     199 </span><span class="lineCov">         26 :     ptr-&gt;index = n++;</span>
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span><span class="lineCov">         30 :   return n;</span>
+<span class="lineNum">     202 </span>            : }
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span>            : /* Return first item in the list.  */
+<span class="lineNum">     205 </span>            : 
+<span class="lineNum">     206 </span>            : static inline struct st_expr *
+<span class="lineNum">     207 </span>            : first_st_expr (void)
+<span class="lineNum">     208 </span>            : {
+<span class="lineNum">     209 </span><span class="lineCov">        137 :   return store_motion_mems;</span>
+<span class="lineNum">     210 </span>            : }
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span>            : /* Return the next item in the list after the specified one.  */
+<a name="213"><span class="lineNum">     213 </span>            : </a>
+<span class="lineNum">     214 </span>            : static inline struct st_expr *
+<span class="lineNum">     215 </span><span class="lineNoCov">          0 : next_st_expr (struct st_expr * ptr)</span>
+<span class="lineNum">     216 </span>            : {
+<span class="lineNum">     217 </span><span class="lineCov">        292 :   return ptr-&gt;next;</span>
+<span class="lineNum">     218 </span>            : }
+<span class="lineNum">     219 </span>            : 
+<span class="lineNum">     220 </span>            : /* Dump debugging info about the store_motion_mems list.  */
+<a name="221"><span class="lineNum">     221 </span>            : </a>
+<span class="lineNum">     222 </span>            : static void
+<span class="lineNum">     223 </span><span class="lineCov">          2 : print_store_motion_mems (FILE * file)</span>
+<span class="lineNum">     224 </span>            : {
+<span class="lineNum">     225 </span><span class="lineCov">          2 :   struct st_expr * ptr;</span>
+<span class="lineNum">     226 </span>            : 
+<span class="lineNum">     227 </span><span class="lineCov">          2 :   fprintf (dump_file, &quot;STORE_MOTION list of MEM exprs considered:\n&quot;);</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">          3 :   for (ptr = first_st_expr (); ptr != NULL; ptr = next_st_expr (ptr))</span>
+<span class="lineNum">     230 </span>            :     {
+<span class="lineNum">     231 </span><span class="lineCov">          1 :       fprintf (file, &quot;  Pattern (%3d): &quot;, ptr-&gt;index);</span>
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span><span class="lineCov">          1 :       print_rtl (file, ptr-&gt;pattern);</span>
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span><span class="lineCov">          1 :       fprintf (file, &quot;\n    ANTIC stores : &quot;);</span>
+<span class="lineNum">     236 </span><span class="lineCov">          1 :       print_rtx_insn_vec (file, ptr-&gt;antic_stores);</span>
+<span class="lineNum">     237 </span>            : 
+<span class="lineNum">     238 </span><span class="lineCov">          1 :       fprintf (file, &quot;\n    AVAIL stores : &quot;);</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span><span class="lineCov">          1 :         print_rtx_insn_vec (file, ptr-&gt;avail_stores);</span>
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span><span class="lineCov">          1 :       fprintf (file, &quot;\n\n&quot;);</span>
+<span class="lineNum">     243 </span>            :     }
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">          2 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     246 </span><span class="lineCov">          2 : }</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            : /* Return zero if some of the registers in list X are killed
+<span class="lineNum">     249 </span>            :    due to set of registers in bitmap REGS_SET.  */
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            : static bool
+<span class="lineNum">     252 </span><span class="lineNoCov">          0 : store_ops_ok (const vec&lt;rtx&gt; &amp;x, int *regs_set)</span>
+<span class="lineNum">     253 </span>            : {
+<span class="lineNum">     254 </span><span class="lineCov">        207 :   unsigned int i;</span>
+<span class="lineNum">     255 </span><span class="lineCov">        207 :   rtx temp;</span>
+<span class="lineNum">     256 </span><span class="lineCov">        289 :   FOR_EACH_VEC_ELT (x, i, temp)</span>
+<span class="lineNum">     257 </span><span class="lineCov">        218 :     if (regs_set[REGNO (temp)])</span>
+<span class="lineNum">     258 </span>            :       return false;
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            :   return true;
+<span class="lineNum">     261 </span>            : }
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span>            : /* Returns a list of registers mentioned in X.
+<span class="lineNum">     264 </span>            :    FIXME: A regset would be prettier and less expensive.  */
+<a name="265"><span class="lineNum">     265 </span>            : </a>
+<span class="lineNum">     266 </span>            : static void
+<span class="lineNum">     267 </span><span class="lineCov">         30 : extract_mentioned_regs (rtx x, vec&lt;rtx&gt; *mentioned_regs)</span>
+<span class="lineNum">     268 </span>            : {
+<span class="lineNum">     269 </span><span class="lineCov">         60 :   subrtx_var_iterator::array_type array;</span>
+<span class="lineNum">     270 </span><span class="lineCov">        116 :   FOR_EACH_SUBRTX_VAR (iter, array, x, NONCONST)</span>
+<span class="lineNum">     271 </span>            :     {
+<span class="lineNum">     272 </span><span class="lineCov">         86 :       rtx x = *iter;</span>
+<span class="lineNum">     273 </span><span class="lineCov">         86 :       if (REG_P (x))</span>
+<span class="lineNum">     274 </span><span class="lineCov">         23 :         mentioned_regs-&gt;safe_push (x);</span>
+<span class="lineNum">     275 </span>            :     }
+<span class="lineNum">     276 </span><span class="lineCov">         30 : }</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            : /* Check to see if the load X is aliased with STORE_PATTERN.
+<span class="lineNum">     279 </span>            :    AFTER is true if we are checking the case when STORE_PATTERN occurs
+<span class="lineNum">     280 </span>            :    after the X.  */
+<a name="281"><span class="lineNum">     281 </span>            : </a>
+<span class="lineNum">     282 </span>            : static bool
+<span class="lineNum">     283 </span><span class="lineCov">         87 : load_kills_store (const_rtx x, const_rtx store_pattern, int after)</span>
+<span class="lineNum">     284 </span>            : {
+<span class="lineNum">     285 </span><span class="lineCov">         87 :   if (after)</span>
+<span class="lineNum">     286 </span><span class="lineCov">          8 :     return anti_dependence (x, store_pattern);</span>
+<span class="lineNum">     287 </span>            :   else
+<span class="lineNum">     288 </span><span class="lineCov">         79 :     return true_dependence (store_pattern, GET_MODE (store_pattern), x);</span>
+<span class="lineNum">     289 </span>            : }
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            : /* Go through the entire rtx X, looking for any loads which might alias
+<span class="lineNum">     292 </span>            :    STORE_PATTERN.  Return true if found.
+<span class="lineNum">     293 </span>            :    AFTER is true if we are checking the case when STORE_PATTERN occurs
+<span class="lineNum">     294 </span>            :    after the insn X.  */
+<a name="295"><span class="lineNum">     295 </span>            : </a>
+<span class="lineNum">     296 </span>            : static bool
+<span class="lineNum">     297 </span><span class="lineCov">       2061 : find_loads (const_rtx x, const_rtx store_pattern, int after)</span>
+<span class="lineNum">     298 </span>            : {
+<span class="lineNum">     299 </span><span class="lineCov">       2061 :   const char * fmt;</span>
+<span class="lineNum">     300 </span><span class="lineCov">       2061 :   int i, j;</span>
+<span class="lineNum">     301 </span><span class="lineCov">       2061 :   int ret = false;</span>
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span><span class="lineCov">       2061 :   if (!x)</span>
+<span class="lineNum">     304 </span>            :     return false;
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span><span class="lineCov">       2061 :   if (GET_CODE (x) == SET)</span>
+<span class="lineNum">     307 </span><span class="lineCov">        578 :     x = SET_SRC (x);</span>
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span><span class="lineCov">       2061 :   if (MEM_P (x))</span>
+<span class="lineNum">     310 </span>            :     {
+<span class="lineNum">     311 </span><span class="lineCov">         87 :       if (load_kills_store (x, store_pattern, after))</span>
+<span class="lineNum">     312 </span>            :         return true;
+<span class="lineNum">     313 </span>            :     }
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            :   /* Recursively process the insn.  */
+<span class="lineNum">     316 </span><span class="lineCov">       2047 :   fmt = GET_RTX_FORMAT (GET_CODE (x));</span>
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span><span class="lineCov">       4820 :   for (i = GET_RTX_LENGTH (GET_CODE (x)) - 1; i &gt;= 0 &amp;&amp; !ret; i--)</span>
+<span class="lineNum">     319 </span>            :     {
+<span class="lineNum">     320 </span><span class="lineCov">       2773 :       if (fmt[i] == 'e')</span>
+<span class="lineNum">     321 </span><span class="lineCov">       1227 :         ret |= find_loads (XEXP (x, i), store_pattern, after);</span>
+<span class="lineNum">     322 </span><span class="lineCov">       1546 :       else if (fmt[i] == 'E')</span>
+<span class="lineNum">     323 </span><span class="lineCov">         72 :         for (j = XVECLEN (x, i) - 1; j &gt;= 0; j--)</span>
+<span class="lineNum">     324 </span><span class="lineCov">         36 :           ret |= find_loads (XVECEXP (x, i, j), store_pattern, after);</span>
+<span class="lineNum">     325 </span>            :     }
+<span class="lineNum">     326 </span>            :   return ret;
+<span class="lineNum">     327 </span>            : }
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span>            : /* Go through pattern PAT looking for any loads which might kill the
+<span class="lineNum">     330 </span>            :    store in X.  Return true if found.
+<span class="lineNum">     331 </span>            :    AFTER is true if we are checking the case when loads kill X occurs
+<span class="lineNum">     332 </span>            :    after the insn for PAT.  */
+<a name="333"><span class="lineNum">     333 </span>            : </a>
+<span class="lineNum">     334 </span>            : static inline bool
+<span class="lineNum">     335 </span><span class="lineCov">        751 : store_killed_in_pat (const_rtx x, const_rtx pat, int after)</span>
+<span class="lineNum">     336 </span>            : {
+<span class="lineNum">     337 </span><span class="lineCov">        751 :   if (GET_CODE (pat) == SET)</span>
+<span class="lineNum">     338 </span>            :     {
+<span class="lineNum">     339 </span><span class="lineCov">        585 :       rtx dest = SET_DEST (pat);</span>
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineCov">        585 :       if (GET_CODE (dest) == ZERO_EXTRACT)</span>
+<span class="lineNum">     342 </span><span class="lineNoCov">          0 :         dest = XEXP (dest, 0);</span>
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            :       /* Check for memory stores to aliased objects.  */
+<span class="lineNum">     345 </span><span class="lineCov">        585 :       if (MEM_P (dest)</span>
+<span class="lineNum">     346 </span><span class="lineCov">        585 :           &amp;&amp; !exp_equiv_p (dest, x, 0, true))</span>
+<span class="lineNum">     347 </span>            :         {
+<span class="lineNum">     348 </span><span class="lineCov">         70 :           if (after)</span>
+<span class="lineNum">     349 </span>            :             {
+<span class="lineNum">     350 </span><span class="lineCov">          6 :               if (output_dependence (dest, x))</span>
+<span class="lineNum">     351 </span>            :                 return true;
+<span class="lineNum">     352 </span>            :             }
+<span class="lineNum">     353 </span>            :           else
+<span class="lineNum">     354 </span>            :             {
+<span class="lineNum">     355 </span><span class="lineCov">         64 :               if (output_dependence (x, dest))</span>
+<span class="lineNum">     356 </span>            :                 return true;
+<span class="lineNum">     357 </span>            :             }
+<span class="lineNum">     358 </span>            :         }
+<span class="lineNum">     359 </span>            :     }
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineCov">        744 :   if (find_loads (pat, x, after))</span>
+<span class="lineNum">     362 </span><span class="lineCov">         12 :     return true;</span>
+<span class="lineNum">     363 </span>            : 
+<span class="lineNum">     364 </span>            :   return false;
+<span class="lineNum">     365 </span>            : }
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            : /* Check if INSN kills the store pattern X (is aliased with it).
+<span class="lineNum">     368 </span>            :    AFTER is true if we are checking the case when store X occurs
+<span class="lineNum">     369 </span>            :    after the insn.  Return true if it does.  */
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span>            : static bool
+<span class="lineNum">     372 </span><span class="lineCov">        800 : store_killed_in_insn (const_rtx x, const vec&lt;rtx&gt; &amp;x_regs,</span>
+<span class="lineNum">     373 </span>            :                       const rtx_insn *insn, int after)
+<span class="lineNum">     374 </span>            : {
+<span class="lineNum">     375 </span><span class="lineCov">        800 :   const_rtx note, pat;</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">        800 :   if (! NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     378 </span>            :     return false;
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span><span class="lineCov">        596 :   if (CALL_P (insn))</span>
+<span class="lineNum">     381 </span>            :     {
+<span class="lineNum">     382 </span>            :       /* A normal or pure call might read from pattern,
+<span class="lineNum">     383 </span>            :          but a const call will not.  */
+<span class="lineNum">     384 </span><span class="lineCov">         15 :       if (!RTL_CONST_CALL_P (insn))</span>
+<span class="lineNum">     385 </span>            :         return true;
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            :       /* But even a const call reads its parameters.  Check whether the
+<span class="lineNum">     388 </span>            :          base of some of registers used in mem is stack pointer.  */
+<span class="lineNum">     389 </span>            :       rtx temp;
+<span class="lineNum">     390 </span>            :       unsigned int i;
+<span class="lineNum">     391 </span><span class="lineNoCov">          0 :       FOR_EACH_VEC_ELT (x_regs, i, temp)</span>
+<span class="lineNum">     392 </span><span class="lineNoCov">          0 :         if (may_be_sp_based_p (temp))</span>
+<span class="lineNum">     393 </span>            :           return true;
+<span class="lineNum">     394 </span>            : 
+<span class="lineNum">     395 </span>            :       return false;
+<span class="lineNum">     396 </span>            :     }
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span><span class="lineCov">        581 :   pat = PATTERN (insn);</span>
+<span class="lineNum">     399 </span><span class="lineCov">        581 :   if (GET_CODE (pat) == SET)</span>
+<span class="lineNum">     400 </span>            :     {
+<span class="lineNum">     401 </span><span class="lineCov">        411 :       if (store_killed_in_pat (x, pat, after))</span>
+<span class="lineNum">     402 </span>            :         return true;
+<span class="lineNum">     403 </span>            :     }
+<span class="lineNum">     404 </span><span class="lineCov">        170 :   else if (GET_CODE (pat) == PARALLEL)</span>
+<span class="lineNum">     405 </span>            :     {
+<span class="lineNum">     406 </span>            :       int i;
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">        506 :       for (i = 0; i &lt; XVECLEN (pat, 0); i++)</span>
+<span class="lineNum">     409 </span><span class="lineCov">        340 :         if (store_killed_in_pat (x, XVECEXP (pat, 0, i), after))</span>
+<span class="lineNum">     410 </span>            :           return true;
+<span class="lineNum">     411 </span>            :     }
+<span class="lineNum">     412 </span><span class="lineCov">          4 :   else if (find_loads (PATTERN (insn), x, after))</span>
+<span class="lineNum">     413 </span>            :     return true;
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span>            :   /* If this insn has a REG_EQUAL or REG_EQUIV note referencing a memory
+<span class="lineNum">     416 </span>            :      location aliased with X, then this insn kills X.  */
+<span class="lineNum">     417 </span><span class="lineCov">        562 :   note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">     418 </span><span class="lineCov">        562 :   if (! note)</span>
+<span class="lineNum">     419 </span>            :     return false;
+<span class="lineNum">     420 </span><span class="lineCov">         52 :   note = XEXP (note, 0);</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span>            :   /* However, if the note represents a must alias rather than a may
+<span class="lineNum">     423 </span>            :      alias relationship, then it does not kill X.  */
+<span class="lineNum">     424 </span><span class="lineCov">         52 :   if (exp_equiv_p (note, x, 0, true))</span>
+<span class="lineNum">     425 </span>            :     return false;
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span>            :   /* See if there are any aliased loads in the note.  */
+<span class="lineNum">     428 </span><span class="lineCov">         52 :   return find_loads (note, x, after);</span>
+<span class="lineNum">     429 </span>            : }
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span>            : /* Returns true if the expression X is loaded or clobbered on or after INSN
+<span class="lineNum">     432 </span>            :    within basic block BB.  REGS_SET_AFTER is bitmap of registers set in
+<span class="lineNum">     433 </span>            :    or after the insn.  X_REGS is list of registers mentioned in X. If the store
+<span class="lineNum">     434 </span>            :    is killed, return the last insn in that it occurs in FAIL_INSN.  */
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            : static bool
+<span class="lineNum">     437 </span><span class="lineCov">        176 : store_killed_after (const_rtx x, const vec&lt;rtx&gt; &amp;x_regs,</span>
+<span class="lineNum">     438 </span>            :                     const rtx_insn *insn, const_basic_block bb,
+<span class="lineNum">     439 </span>            :                     int *regs_set_after, rtx *fail_insn)
+<span class="lineNum">     440 </span>            : {
+<span class="lineNum">     441 </span><span class="lineCov">        176 :   rtx_insn *last = BB_END (bb), *act;</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">        352 :   if (!store_ops_ok (x_regs, regs_set_after))</span>
+<span class="lineNum">     444 </span>            :     {
+<span class="lineNum">     445 </span>            :       /* We do not know where it will happen.  */
+<span class="lineNum">     446 </span><span class="lineCov">         19 :       if (fail_insn)</span>
+<span class="lineNum">     447 </span><span class="lineNoCov">          0 :         *fail_insn = NULL_RTX;</span>
+<span class="lineNum">     448 </span><span class="lineCov">         19 :       return true;</span>
+<span class="lineNum">     449 </span>            :     }
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            :   /* Scan from the end, so that fail_insn is determined correctly.  */
+<span class="lineNum">     452 </span><span class="lineCov">       1459 :   for (act = last; act != PREV_INSN (insn); act = PREV_INSN (act))</span>
+<span class="lineNum">     453 </span><span class="lineCov">        683 :     if (store_killed_in_insn (x, x_regs, act, false))</span>
+<span class="lineNum">     454 </span>            :       {
+<span class="lineNum">     455 </span><span class="lineCov">         32 :         if (fail_insn)</span>
+<span class="lineNum">     456 </span><span class="lineCov">          4 :           *fail_insn = act;</span>
+<span class="lineNum">     457 </span><span class="lineCov">         32 :         return true;</span>
+<span class="lineNum">     458 </span>            :       }
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span>            :   return false;
+<span class="lineNum">     461 </span>            : }
+<span class="lineNum">     462 </span>            : 
+<span class="lineNum">     463 </span>            : /* Returns true if the expression X is loaded or clobbered on or before INSN
+<span class="lineNum">     464 </span>            :    within basic block BB. X_REGS is list of registers mentioned in X.
+<span class="lineNum">     465 </span>            :    REGS_SET_BEFORE is bitmap of registers set before or in this insn.  */
+<span class="lineNum">     466 </span>            : static bool
+<span class="lineNum">     467 </span><span class="lineCov">         31 : store_killed_before (const_rtx x, const vec&lt;rtx&gt; &amp;x_regs,</span>
+<span class="lineNum">     468 </span>            :                      const rtx_insn *insn, const_basic_block bb,
+<span class="lineNum">     469 </span>            :                      int *regs_set_before)
+<span class="lineNum">     470 </span>            : {
+<span class="lineNum">     471 </span><span class="lineCov">         31 :   rtx_insn *first = BB_HEAD (bb);</span>
+<span class="lineNum">     472 </span>            : 
+<span class="lineNum">     473 </span><span class="lineCov">         62 :   if (!store_ops_ok (x_regs, regs_set_before))</span>
+<span class="lineNum">     474 </span>            :     return true;
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span><span class="lineCov">        249 :   for ( ; insn != PREV_INSN (first); insn = PREV_INSN (insn))</span>
+<span class="lineNum">     477 </span><span class="lineCov">        117 :     if (store_killed_in_insn (x, x_regs, insn, true))</span>
+<span class="lineNum">     478 </span>            :       return true;
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            :   return false;
+<span class="lineNum">     481 </span>            : }
+<span class="lineNum">     482 </span>            : 
+<span class="lineNum">     483 </span>            : /* The last insn in the basic block that compute_store_table is processing,
+<span class="lineNum">     484 </span>            :    where store_killed_after is true for X.
+<span class="lineNum">     485 </span>            :    Since we go through the basic block from BB_END to BB_HEAD, this is
+<span class="lineNum">     486 </span>            :    also the available store at the end of the basic block.  Therefore
+<span class="lineNum">     487 </span>            :    this is in effect a cache, to avoid calling store_killed_after for
+<span class="lineNum">     488 </span>            :    equivalent aliasing store expressions.
+<span class="lineNum">     489 </span>            :    This value is only meaningful during the computation of the store
+<span class="lineNum">     490 </span>            :    table.  We hi-jack the REACHING_REG field of struct st_expr to save
+<span class="lineNum">     491 </span>            :    a bit of memory.  */
+<span class="lineNum">     492 </span>            : #define LAST_AVAIL_CHECK_FAILURE(x)     ((x)-&gt;reaching_reg)
+<span class="lineNum">     493 </span>            : 
+<span class="lineNum">     494 </span>            : /* Determine whether INSN is MEM store pattern that we will consider moving.
+<span class="lineNum">     495 </span>            :    REGS_SET_BEFORE is bitmap of registers set before (and including) the
+<span class="lineNum">     496 </span>            :    current insn, REGS_SET_AFTER is bitmap of registers set after (and
+<span class="lineNum">     497 </span>            :    including) the insn in this basic block.  We must be passing through BB from
+<span class="lineNum">     498 </span>            :    head to end, as we are using this fact to speed things up.
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span>            :    The results are stored this way:
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span>            :    -- the first anticipatable expression is added into ANTIC_STORES
+<span class="lineNum">     503 </span>            :    -- if the processed expression is not anticipatable, NULL_RTX is added
+<span class="lineNum">     504 </span>            :       there instead, so that we can use it as indicator that no further
+<span class="lineNum">     505 </span>            :       expression of this type may be anticipatable
+<span class="lineNum">     506 </span>            :    -- if the expression is available, it is added as head of AVAIL_STORES;
+<span class="lineNum">     507 </span>            :       consequently, all of them but this head are dead and may be deleted.
+<span class="lineNum">     508 </span>            :    -- if the expression is not available, the insn due to that it fails to be
+<span class="lineNum">     509 </span>            :       available is stored in REACHING_REG (via LAST_AVAIL_CHECK_FAILURE).
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span>            :    The things are complicated a bit by fact that there already may be stores
+<span class="lineNum">     512 </span>            :    to the same MEM from other blocks; also caller must take care of the
+<span class="lineNum">     513 </span>            :    necessary cleanup of the temporary markers after end of the basic block.
+<span class="lineNum">     514 </span>            :    */
+<span class="lineNum">     515 </span>            : 
+<span class="lineNum">     516 </span>            : static void
+<span class="lineNum">     517 </span><span class="lineCov">        234 : find_moveable_store (rtx_insn *insn, int *regs_set_before, int *regs_set_after)</span>
+<span class="lineNum">     518 </span>            : {
+<span class="lineNum">     519 </span><span class="lineCov">        234 :   struct st_expr * ptr;</span>
+<span class="lineNum">     520 </span><span class="lineCov">        234 :   rtx dest, set;</span>
+<span class="lineNum">     521 </span><span class="lineCov">        234 :   int check_anticipatable, check_available;</span>
+<span class="lineNum">     522 </span><span class="lineCov">        234 :   basic_block bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span><span class="lineCov">        234 :   set = single_set (insn);</span>
+<span class="lineNum">     525 </span><span class="lineCov">        234 :   if (!set)</span>
+<span class="lineNum">     526 </span>            :     return;
+<span class="lineNum">     527 </span>            : 
+<span class="lineNum">     528 </span><span class="lineCov">        215 :   dest = SET_DEST (set);</span>
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span><span class="lineCov">         34 :   if (! MEM_P (dest) || MEM_VOLATILE_P (dest)</span>
+<span class="lineNum">     531 </span><span class="lineCov">        247 :       || GET_MODE (dest) == BLKmode)</span>
+<span class="lineNum">     532 </span>            :     return;
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span><span class="lineCov">         31 :   if (side_effects_p (dest))</span>
+<span class="lineNum">     535 </span>            :     return;
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span>            :   /* If we are handling exceptions, we must be careful with memory references
+<span class="lineNum">     538 </span>            :      that may trap.  If we are not, the behavior is undefined, so we may just
+<span class="lineNum">     539 </span>            :      continue.  */
+<span class="lineNum">     540 </span><span class="lineCov">         31 :   if (cfun-&gt;can_throw_non_call_exceptions &amp;&amp; may_trap_p (dest))</span>
+<span class="lineNum">     541 </span>            :     return;
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            :   /* Even if the destination cannot trap, the source may.  In this case we'd
+<span class="lineNum">     544 </span>            :      need to handle updating the REG_EH_REGION note.  */
+<span class="lineNum">     545 </span><span class="lineCov">         31 :   if (find_reg_note (insn, REG_EH_REGION, NULL_RTX))</span>
+<span class="lineNum">     546 </span>            :     return;
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span>            :   /* Make sure that the SET_SRC of this store insns can be assigned to
+<span class="lineNum">     549 </span>            :      a register, or we will fail later on in replace_store_insn, which
+<span class="lineNum">     550 </span>            :      assumes that we can do this.  But sometimes the target machine has
+<span class="lineNum">     551 </span>            :      oddities like MEM read-modify-write instruction.  See for example
+<span class="lineNum">     552 </span>            :      PR24257.  */
+<span class="lineNum">     553 </span><span class="lineCov">         31 :   if (!can_assign_to_reg_without_clobbers_p (SET_SRC (set),</span>
+<span class="lineNum">     554 </span><span class="lineCov">         31 :                                               GET_MODE (SET_SRC (set))))</span>
+<span class="lineNum">     555 </span>            :     return;
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span><span class="lineCov">         31 :   ptr = st_expr_entry (dest);</span>
+<span class="lineNum">     558 </span><span class="lineCov">         31 :   if (ptr-&gt;pattern_regs.is_empty ())</span>
+<span class="lineNum">     559 </span><span class="lineCov">         30 :     extract_mentioned_regs (dest, &amp;ptr-&gt;pattern_regs);</span>
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span>            :   /* Do not check for anticipatability if we either found one anticipatable
+<span class="lineNum">     562 </span>            :      store already, or tested for one and found out that it was killed.  */
+<span class="lineNum">     563 </span><span class="lineCov">         31 :   check_anticipatable = 0;</span>
+<span class="lineNum">     564 </span><span class="lineCov">         31 :   if (ptr-&gt;antic_stores.is_empty ())</span>
+<span class="lineNum">     565 </span>            :     check_anticipatable = 1;
+<span class="lineNum">     566 </span>            :   else
+<span class="lineNum">     567 </span>            :     {
+<span class="lineNum">     568 </span><span class="lineNoCov">          0 :       rtx_insn *tmp = ptr-&gt;antic_stores.last ();</span>
+<span class="lineNum">     569 </span><span class="lineNoCov">          0 :       if (tmp != NULL_RTX</span>
+<span class="lineNum">     570 </span><span class="lineNoCov">          0 :           &amp;&amp; BLOCK_FOR_INSN (tmp) != bb)</span>
+<span class="lineNum">     571 </span>            :         check_anticipatable = 1;
+<span class="lineNum">     572 </span>            :     }
+<span class="lineNum">     573 </span>            :   if (check_anticipatable)
+<span class="lineNum">     574 </span>            :     {
+<span class="lineNum">     575 </span><span class="lineCov">         31 :       rtx_insn *tmp;</span>
+<span class="lineNum">     576 </span><span class="lineCov">         31 :       if (store_killed_before (dest, ptr-&gt;pattern_regs, insn, bb, regs_set_before))</span>
+<span class="lineNum">     577 </span><span class="lineCov">         12 :         tmp = NULL;</span>
+<span class="lineNum">     578 </span>            :       else
+<span class="lineNum">     579 </span><span class="lineCov">         19 :         tmp = insn;</span>
+<span class="lineNum">     580 </span><span class="lineCov">         31 :       ptr-&gt;antic_stores.safe_push (tmp);</span>
+<span class="lineNum">     581 </span>            :     }
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span>            :   /* It is not necessary to check whether store is available if we did
+<span class="lineNum">     584 </span>            :      it successfully before; if we failed before, do not bother to check
+<span class="lineNum">     585 </span>            :      until we reach the insn that caused us to fail.  */
+<span class="lineNum">     586 </span><span class="lineCov">         31 :   check_available = 0;</span>
+<span class="lineNum">     587 </span><span class="lineCov">         31 :   if (ptr-&gt;avail_stores.is_empty ())</span>
+<span class="lineNum">     588 </span>            :     check_available = 1;
+<span class="lineNum">     589 </span>            :   else
+<span class="lineNum">     590 </span>            :     {
+<span class="lineNum">     591 </span><span class="lineCov">          1 :       rtx_insn *tmp = ptr-&gt;avail_stores.last ();</span>
+<span class="lineNum">     592 </span><span class="lineCov">          2 :       if (BLOCK_FOR_INSN (tmp) != bb)</span>
+<span class="lineNum">     593 </span>            :         check_available = 1;
+<span class="lineNum">     594 </span>            :     }
+<span class="lineNum">     595 </span>            :   if (check_available)
+<span class="lineNum">     596 </span>            :     {
+<span class="lineNum">     597 </span>            :       /* Check that we have already reached the insn at that the check
+<span class="lineNum">     598 </span>            :          failed last time.  */
+<span class="lineNum">     599 </span><span class="lineCov">         31 :       if (LAST_AVAIL_CHECK_FAILURE (ptr))</span>
+<span class="lineNum">     600 </span>            :         {
+<span class="lineNum">     601 </span><span class="lineNoCov">          0 :           rtx_insn *tmp;</span>
+<span class="lineNum">     602 </span><span class="lineNoCov">          0 :           for (tmp = BB_END (bb);</span>
+<span class="lineNum">     603 </span><span class="lineNoCov">          0 :                tmp != insn &amp;&amp; tmp != LAST_AVAIL_CHECK_FAILURE (ptr);</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :                tmp = PREV_INSN (tmp))</span>
+<span class="lineNum">     605 </span><span class="lineNoCov">          0 :             continue;</span>
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :           if (tmp == insn)</span>
+<span class="lineNum">     607 </span>            :             check_available = 0;
+<span class="lineNum">     608 </span>            :         }
+<span class="lineNum">     609 </span>            :       else
+<span class="lineNum">     610 </span><span class="lineCov">         31 :         check_available = store_killed_after (dest, ptr-&gt;pattern_regs, insn,</span>
+<span class="lineNum">     611 </span>            :                                               bb, regs_set_after,
+<span class="lineNum">     612 </span>            :                                               &amp;LAST_AVAIL_CHECK_FAILURE (ptr));
+<span class="lineNum">     613 </span>            :     }
+<span class="lineNum">     614 </span><span class="lineCov">         31 :   if (!check_available)</span>
+<span class="lineNum">     615 </span><span class="lineCov">         27 :     ptr-&gt;avail_stores.safe_push (insn);</span>
+<span class="lineNum">     616 </span>            : }
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span>            : /* Find available and anticipatable stores.  */
+<span class="lineNum">     619 </span>            : 
+<span class="lineNum">     620 </span>            : static int
+<span class="lineNum">     621 </span><span class="lineCov">         30 : compute_store_table (void)</span>
+<span class="lineNum">     622 </span>            : {
+<span class="lineNum">     623 </span><span class="lineCov">         30 :   int ret;</span>
+<span class="lineNum">     624 </span><span class="lineCov">         30 :   basic_block bb;</span>
+<span class="lineNum">     625 </span><span class="lineCov">         30 :   rtx_insn *insn;</span>
+<span class="lineNum">     626 </span><span class="lineCov">         30 :   rtx_insn *tmp;</span>
+<span class="lineNum">     627 </span><span class="lineCov">         30 :   df_ref def;</span>
+<span class="lineNum">     628 </span><span class="lineCov">         30 :   int *last_set_in, *already_set;</span>
+<span class="lineNum">     629 </span><span class="lineCov">         30 :   struct st_expr * ptr, **prev_next_ptr_ptr;</span>
+<span class="lineNum">     630 </span><span class="lineCov">         30 :   unsigned int max_gcse_regno = max_reg_num ();</span>
+<span class="lineNum">     631 </span>            : 
+<span class="lineNum">     632 </span><span class="lineCov">         30 :   store_motion_mems = NULL;</span>
+<span class="lineNum">     633 </span><span class="lineCov">         30 :   store_motion_mems_table = new hash_table&lt;st_expr_hasher&gt; (13);</span>
+<span class="lineNum">     634 </span><span class="lineCov">         30 :   last_set_in = XCNEWVEC (int, max_gcse_regno);</span>
+<span class="lineNum">     635 </span><span class="lineCov">         30 :   already_set = XNEWVEC (int, max_gcse_regno);</span>
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span>            :   /* Find all the stores we care about.  */
+<span class="lineNum">     638 </span><span class="lineCov">        101 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     639 </span>            :     {
+<span class="lineNum">     640 </span>            :       /* First compute the registers set in this block.  */
+<span class="lineNum">     641 </span><span class="lineCov">        813 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     642 </span>            :         {
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span><span class="lineCov">        371 :           if (! NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     645 </span>            :             continue;
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span><span class="lineCov">       1665 :           FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     648 </span><span class="lineCov">       1197 :             last_set_in[DF_REF_REGNO (def)] = INSN_UID (insn);</span>
+<span class="lineNum">     649 </span>            :         }
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span>            :       /* Now find the stores.  */
+<span class="lineNum">     652 </span><span class="lineCov">         71 :       memset (already_set, 0, sizeof (int) * max_gcse_regno);</span>
+<span class="lineNum">     653 </span><span class="lineCov">        813 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">     654 </span>            :         {
+<span class="lineNum">     655 </span><span class="lineCov">        371 :           if (! NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     656 </span>            :             continue;
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span><span class="lineCov">       1665 :           FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     659 </span><span class="lineCov">       1197 :             already_set[DF_REF_REGNO (def)] = INSN_UID (insn);</span>
+<span class="lineNum">     660 </span>            : 
+<span class="lineNum">     661 </span>            :           /* Now that we've marked regs, look for stores.  */
+<span class="lineNum">     662 </span><span class="lineCov">        234 :           find_moveable_store (insn, already_set, last_set_in);</span>
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span>            :           /* Unmark regs that are no longer set.  */
+<span class="lineNum">     665 </span><span class="lineCov">       1431 :           FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">     666 </span><span class="lineCov">       1197 :             if (last_set_in[DF_REF_REGNO (def)] == INSN_UID (insn))</span>
+<span class="lineNum">     667 </span><span class="lineCov">       1139 :               last_set_in[DF_REF_REGNO (def)] = 0;</span>
+<span class="lineNum">     668 </span>            :         }
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span><span class="lineCov">         71 :       if (flag_checking)</span>
+<span class="lineNum">     671 </span>            :         {
+<span class="lineNum">     672 </span>            :           /* last_set_in should now be all-zero.  */
+<span class="lineNum">     673 </span><span class="lineCov">       7234 :           for (unsigned regno = 0; regno &lt; max_gcse_regno; regno++)</span>
+<span class="lineNum">     674 </span><span class="lineCov">       7163 :             gcc_assert (!last_set_in[regno]);</span>
+<span class="lineNum">     675 </span>            :         }
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span>            :       /* Clear temporary marks.  */
+<span class="lineNum">     678 </span><span class="lineCov">        165 :       for (ptr = first_st_expr (); ptr != NULL; ptr = next_st_expr (ptr))</span>
+<span class="lineNum">     679 </span>            :         {
+<span class="lineNum">     680 </span><span class="lineCov">         94 :           LAST_AVAIL_CHECK_FAILURE (ptr) = NULL_RTX;</span>
+<span class="lineNum">     681 </span><span class="lineCov">         94 :           if (!ptr-&gt;antic_stores.is_empty ()</span>
+<span class="lineNum">     682 </span><span class="lineCov">        142 :               &amp;&amp; (tmp = ptr-&gt;antic_stores.last ()) == NULL)</span>
+<span class="lineNum">     683 </span><span class="lineCov">         12 :             ptr-&gt;antic_stores.pop ();</span>
+<span class="lineNum">     684 </span>            :         }
+<span class="lineNum">     685 </span>            :     }
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span>            :   /* Remove the stores that are not available anywhere, as there will
+<span class="lineNum">     688 </span>            :      be no opportunity to optimize them.  */
+<span class="lineNum">     689 </span><span class="lineCov">         30 :   for (ptr = store_motion_mems, prev_next_ptr_ptr = &amp;store_motion_mems;</span>
+<span class="lineNum">     690 </span><span class="lineCov">         60 :        ptr != NULL;</span>
+<span class="lineNum">     691 </span><span class="lineCov">         30 :        ptr = *prev_next_ptr_ptr)</span>
+<span class="lineNum">     692 </span>            :     {
+<span class="lineNum">     693 </span><span class="lineCov">         30 :       if (ptr-&gt;avail_stores.is_empty ())</span>
+<span class="lineNum">     694 </span>            :         {
+<span class="lineNum">     695 </span><span class="lineCov">          4 :           *prev_next_ptr_ptr = ptr-&gt;next;</span>
+<span class="lineNum">     696 </span><span class="lineCov">          4 :           store_motion_mems_table-&gt;remove_elt_with_hash (ptr, ptr-&gt;hash_index);</span>
+<span class="lineNum">     697 </span><span class="lineCov">          4 :           free_st_expr_entry (ptr);</span>
+<span class="lineNum">     698 </span>            :         }
+<span class="lineNum">     699 </span>            :       else
+<span class="lineNum">     700 </span><span class="lineCov">         26 :         prev_next_ptr_ptr = &amp;ptr-&gt;next;</span>
+<span class="lineNum">     701 </span>            :     }
+<span class="lineNum">     702 </span>            : 
+<span class="lineNum">     703 </span><span class="lineCov">         30 :   ret = enumerate_store_motion_mems ();</span>
+<span class="lineNum">     704 </span>            : 
+<span class="lineNum">     705 </span><span class="lineCov">         30 :   if (dump_file)</span>
+<span class="lineNum">     706 </span><span class="lineCov">          2 :     print_store_motion_mems (dump_file);</span>
+<span class="lineNum">     707 </span>            : 
+<span class="lineNum">     708 </span><span class="lineCov">         30 :   free (last_set_in);</span>
+<span class="lineNum">     709 </span><span class="lineCov">         30 :   free (already_set);</span>
+<span class="lineNum">     710 </span><span class="lineCov">         30 :   return ret;</span>
+<span class="lineNum">     711 </span>            : }
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span>            : /* In all code following after this, REACHING_REG has its original
+<span class="lineNum">     714 </span>            :    meaning again.  Avoid confusion, and undef the accessor macro for
+<span class="lineNum">     715 </span>            :    the temporary marks usage in compute_store_table.  */
+<span class="lineNum">     716 </span>            : #undef LAST_AVAIL_CHECK_FAILURE
+<span class="lineNum">     717 </span>            : 
+<span class="lineNum">     718 </span>            : /* Insert an instruction at the beginning of a basic block, and update
+<span class="lineNum">     719 </span>            :    the BB_HEAD if needed.  */
+<a name="720"><span class="lineNum">     720 </span>            : </a>
+<span class="lineNum">     721 </span>            : static void
+<span class="lineNum">     722 </span><span class="lineCov">          2 : insert_insn_start_basic_block (rtx_insn *insn, basic_block bb)</span>
+<span class="lineNum">     723 </span>            : {
+<span class="lineNum">     724 </span>            :   /* Insert at start of successor block.  */
+<span class="lineNum">     725 </span><span class="lineCov">          2 :   rtx_insn *prev = PREV_INSN (BB_HEAD (bb));</span>
+<span class="lineNum">     726 </span><span class="lineCov">          2 :   rtx_insn *before = BB_HEAD (bb);</span>
+<span class="lineNum">     727 </span><span class="lineCov">          4 :   while (before != 0)</span>
+<span class="lineNum">     728 </span>            :     {
+<span class="lineNum">     729 </span><span class="lineCov">          4 :       if (! LABEL_P (before)</span>
+<span class="lineNum">     730 </span><span class="lineCov">          4 :           &amp;&amp; !NOTE_INSN_BASIC_BLOCK_P (before))</span>
+<span class="lineNum">     731 </span>            :         break;
+<span class="lineNum">     732 </span><span class="lineCov">          2 :       prev = before;</span>
+<span class="lineNum">     733 </span><span class="lineCov">          2 :       if (prev == BB_END (bb))</span>
+<span class="lineNum">     734 </span>            :         break;
+<span class="lineNum">     735 </span><span class="lineCov">          4 :       before = NEXT_INSN (before);</span>
+<span class="lineNum">     736 </span>            :     }
+<span class="lineNum">     737 </span>            : 
+<span class="lineNum">     738 </span><span class="lineCov">          2 :   insn = emit_insn_after_noloc (insn, prev, bb);</span>
+<span class="lineNum">     739 </span>            : 
+<span class="lineNum">     740 </span><span class="lineCov">          2 :   if (dump_file)</span>
+<span class="lineNum">     741 </span>            :     {
+<span class="lineNum">     742 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;STORE_MOTION  insert store at start of BB %d:\n&quot;,</span>
+<span class="lineNum">     743 </span>            :                bb-&gt;index);
+<span class="lineNum">     744 </span><span class="lineNoCov">          0 :       print_inline_rtx (dump_file, insn, 6);</span>
+<span class="lineNum">     745 </span><span class="lineNoCov">          0 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     746 </span>            :     }
+<span class="lineNum">     747 </span><span class="lineCov">          2 : }</span>
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span>            : /* This routine will insert a store on an edge. EXPR is the st_expr entry for
+<span class="lineNum">     750 </span>            :    the memory reference, and E is the edge to insert it on.  Returns nonzero
+<span class="lineNum">     751 </span>            :    if an edge insertion was performed.  */
+<a name="752"><span class="lineNum">     752 </span>            : </a>
+<span class="lineNum">     753 </span>            : static int
+<span class="lineNum">     754 </span><span class="lineCov">          4 : insert_store (struct st_expr * expr, edge e)</span>
+<span class="lineNum">     755 </span>            : {
+<span class="lineNum">     756 </span><span class="lineCov">          4 :   rtx reg;</span>
+<span class="lineNum">     757 </span><span class="lineCov">          4 :   rtx_insn *insn;</span>
+<span class="lineNum">     758 </span><span class="lineCov">          4 :   basic_block bb;</span>
+<span class="lineNum">     759 </span><span class="lineCov">          4 :   edge tmp;</span>
+<span class="lineNum">     760 </span><span class="lineCov">          4 :   edge_iterator ei;</span>
+<span class="lineNum">     761 </span>            : 
+<span class="lineNum">     762 </span>            :   /* We did all the deleted before this insert, so if we didn't delete a
+<span class="lineNum">     763 </span>            :      store, then we haven't set the reaching reg yet either.  */
+<span class="lineNum">     764 </span><span class="lineCov">          4 :   if (expr-&gt;reaching_reg == NULL_RTX)</span>
+<span class="lineNum">     765 </span>            :     return 0;
+<span class="lineNum">     766 </span>            : 
+<span class="lineNum">     767 </span><span class="lineCov">          4 :   if (e-&gt;flags &amp; EDGE_FAKE)</span>
+<span class="lineNum">     768 </span>            :     return 0;
+<span class="lineNum">     769 </span>            : 
+<span class="lineNum">     770 </span><span class="lineCov">          4 :   reg = expr-&gt;reaching_reg;</span>
+<span class="lineNum">     771 </span><span class="lineCov">          4 :   insn = gen_move_insn (copy_rtx (expr-&gt;pattern), reg);</span>
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span>            :   /* If we are inserting this expression on ALL predecessor edges of a BB,
+<span class="lineNum">     774 </span>            :      insert it at the start of the BB, and reset the insert bits on the other
+<span class="lineNum">     775 </span>            :      edges so we don't try to insert it on the other edges.  */
+<span class="lineNum">     776 </span><span class="lineCov">          4 :   bb = e-&gt;dest;</span>
+<span class="lineNum">     777 </span><span class="lineCov">         10 :   FOR_EACH_EDGE (tmp, ei, e-&gt;dest-&gt;preds)</span>
+<span class="lineNum">     778 </span><span class="lineCov">          4 :     if (!(tmp-&gt;flags &amp; EDGE_FAKE))</span>
+<span class="lineNum">     779 </span>            :       {
+<span class="lineNum">     780 </span><span class="lineCov">          4 :         int index = EDGE_INDEX (edge_list, tmp-&gt;src, tmp-&gt;dest);</span>
+<span class="lineNum">     781 </span>            : 
+<span class="lineNum">     782 </span><span class="lineCov">          4 :         gcc_assert (index != EDGE_INDEX_NO_EDGE);</span>
+<span class="lineNum">     783 </span><span class="lineCov">          4 :         if (! bitmap_bit_p (st_insert_map[index], expr-&gt;index))</span>
+<span class="lineNum">     784 </span>            :           break;
+<span class="lineNum">     785 </span>            :       }
+<span class="lineNum">     786 </span>            : 
+<span class="lineNum">     787 </span>            :   /* If tmp is NULL, we found an insertion on every edge, blank the
+<span class="lineNum">     788 </span>            :      insertion vector for these edges, and insert at the start of the BB.  */
+<span class="lineNum">     789 </span><span class="lineCov">          4 :   if (!tmp &amp;&amp; bb != EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     790 </span>            :     {
+<span class="lineNum">     791 </span><span class="lineCov">          6 :       FOR_EACH_EDGE (tmp, ei, e-&gt;dest-&gt;preds)</span>
+<span class="lineNum">     792 </span>            :         {
+<span class="lineNum">     793 </span><span class="lineCov">          2 :           int index = EDGE_INDEX (edge_list, tmp-&gt;src, tmp-&gt;dest);</span>
+<span class="lineNum">     794 </span><span class="lineCov">          2 :           bitmap_clear_bit (st_insert_map[index], expr-&gt;index);</span>
+<span class="lineNum">     795 </span>            :         }
+<span class="lineNum">     796 </span><span class="lineCov">          2 :       insert_insn_start_basic_block (insn, bb);</span>
+<span class="lineNum">     797 </span><span class="lineCov">          2 :       return 0;</span>
+<span class="lineNum">     798 </span>            :     }
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span>            :   /* We can't put stores in the front of blocks pointed to by abnormal
+<span class="lineNum">     801 </span>            :      edges since that may put a store where one didn't used to be.  */
+<span class="lineNum">     802 </span><span class="lineCov">          2 :   gcc_assert (!(e-&gt;flags &amp; EDGE_ABNORMAL));</span>
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span><span class="lineCov">          2 :   insert_insn_on_edge (insn, e);</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span><span class="lineCov">          2 :   if (dump_file)</span>
+<span class="lineNum">     807 </span>            :     {
+<span class="lineNum">     808 </span><span class="lineCov">          3 :       fprintf (dump_file, &quot;STORE_MOTION  insert insn on edge (%d, %d):\n&quot;,</span>
+<span class="lineNum">     809 </span><span class="lineCov">          1 :                e-&gt;src-&gt;index, e-&gt;dest-&gt;index);</span>
+<span class="lineNum">     810 </span><span class="lineCov">          1 :       print_inline_rtx (dump_file, insn, 6);</span>
+<span class="lineNum">     811 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     812 </span>            :     }
+<span class="lineNum">     813 </span>            : 
+<span class="lineNum">     814 </span>            :   return 1;
+<span class="lineNum">     815 </span>            : }
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span>            : /* Remove any REG_EQUAL or REG_EQUIV notes containing a reference to the
+<span class="lineNum">     818 </span>            :    memory location in SMEXPR set in basic block BB.
+<span class="lineNum">     819 </span>            : 
+<span class="lineNum">     820 </span>            :    This could be rather expensive.  */
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span>            : static void
+<span class="lineNum">     823 </span><span class="lineCov">          4 : remove_reachable_equiv_notes (basic_block bb, struct st_expr *smexpr)</span>
+<span class="lineNum">     824 </span>            : {
+<span class="lineNum">     825 </span><span class="lineCov">          4 :   edge_iterator *stack, ei;</span>
+<span class="lineNum">     826 </span><span class="lineCov">          4 :   int sp;</span>
+<span class="lineNum">     827 </span><span class="lineCov">          4 :   edge act;</span>
+<span class="lineNum">     828 </span><span class="lineCov">          4 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     829 </span><span class="lineCov">          4 :   rtx note;</span>
+<span class="lineNum">     830 </span><span class="lineCov">          4 :   rtx_insn *insn;</span>
+<span class="lineNum">     831 </span><span class="lineCov">          4 :   rtx mem = smexpr-&gt;pattern;</span>
+<span class="lineNum">     832 </span>            : 
+<span class="lineNum">     833 </span><span class="lineCov">          4 :   stack = XNEWVEC (edge_iterator, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     834 </span><span class="lineCov">          4 :   sp = 0;</span>
+<span class="lineNum">     835 </span><span class="lineCov">          4 :   ei = ei_start (bb-&gt;succs);</span>
+<span class="lineNum">     836 </span>            : 
+<span class="lineNum">     837 </span><span class="lineCov">          8 :   bitmap_clear (visited);</span>
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span><span class="lineCov">          4 :   act = (EDGE_COUNT (ei_container (ei))</span>
+<span class="lineNum">     840 </span><span class="lineCov">          4 :          ? EDGE_I (ei_container (ei), 0)</span>
+<span class="lineNum">     841 </span>            :          : NULL);
+<span class="lineNum">     842 </span><span class="lineCov">         45 :   for (;;)</span>
+<span class="lineNum">     843 </span>            :     {
+<span class="lineNum">     844 </span><span class="lineCov">         45 :       if (!act)</span>
+<span class="lineNum">     845 </span>            :         {
+<span class="lineNum">     846 </span><span class="lineCov">         10 :           if (!sp)</span>
+<span class="lineNum">     847 </span>            :             {
+<span class="lineNum">     848 </span><span class="lineCov">          4 :               free (stack);</span>
+<span class="lineNum">     849 </span><span class="lineCov">          8 :               return;</span>
+<span class="lineNum">     850 </span>            :             }
+<span class="lineNum">     851 </span><span class="lineCov">          6 :           act = ei_edge (stack[--sp]);</span>
+<span class="lineNum">     852 </span>            :         }
+<span class="lineNum">     853 </span><span class="lineCov">         41 :       bb = act-&gt;dest;</span>
+<span class="lineNum">     854 </span>            : 
+<span class="lineNum">     855 </span><span class="lineCov">         41 :       if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     856 </span><span class="lineCov">         41 :           || bitmap_bit_p (visited, bb-&gt;index))</span>
+<span class="lineNum">     857 </span>            :         {
+<span class="lineNum">     858 </span><span class="lineCov">         38 :           if (!ei_end_p (ei))</span>
+<span class="lineNum">     859 </span><span class="lineCov">         15 :               ei_next (&amp;ei);</span>
+<span class="lineNum">     860 </span><span class="lineCov">         38 :           act = (! ei_end_p (ei)) ? ei_edge (ei) : NULL;</span>
+<span class="lineNum">     861 </span><span class="lineCov">         19 :           continue;</span>
+<span class="lineNum">     862 </span>            :         }
+<span class="lineNum">     863 </span><span class="lineCov">         44 :       bitmap_set_bit (visited, bb-&gt;index);</span>
+<span class="lineNum">     864 </span>            : 
+<span class="lineNum">     865 </span><span class="lineCov">         22 :       rtx_insn *last;</span>
+<span class="lineNum">     866 </span><span class="lineCov">         22 :       if (bitmap_bit_p (st_antloc[bb-&gt;index], smexpr-&gt;index))</span>
+<span class="lineNum">     867 </span>            :         {
+<span class="lineNum">     868 </span><span class="lineCov">          4 :           unsigned int i;</span>
+<span class="lineNum">     869 </span><span class="lineCov">          8 :           FOR_EACH_VEC_ELT_REVERSE (smexpr-&gt;antic_stores, i, last)</span>
+<span class="lineNum">     870 </span><span class="lineCov">          8 :             if (BLOCK_FOR_INSN (last) == bb)</span>
+<span class="lineNum">     871 </span>            :               break;
+<span class="lineNum">     872 </span>            :         }
+<span class="lineNum">     873 </span>            :       else
+<span class="lineNum">     874 </span><span class="lineCov">         36 :         last = NEXT_INSN (BB_END (bb));</span>
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span><span class="lineCov">        252 :       for (insn = BB_HEAD (bb); insn != last; insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     877 </span><span class="lineCov">        115 :         if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     878 </span>            :           {
+<span class="lineNum">     879 </span><span class="lineCov">         82 :             note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">     880 </span><span class="lineCov">         82 :             if (!note || !exp_equiv_p (XEXP (note, 0), mem, 0, true))</span>
+<span class="lineNum">     881 </span><span class="lineCov">         82 :               continue;</span>
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span><span class="lineNoCov">          0 :             if (dump_file)</span>
+<span class="lineNum">     884 </span><span class="lineNoCov">          0 :               fprintf (dump_file,</span>
+<span class="lineNum">     885 </span>            :                        &quot;STORE_MOTION  drop REG_EQUAL note at insn %d:\n&quot;,
+<span class="lineNum">     886 </span><span class="lineNoCov">          0 :                        INSN_UID (insn));</span>
+<span class="lineNum">     887 </span><span class="lineNoCov">          0 :             remove_note (insn, note);</span>
+<span class="lineNum">     888 </span>            :           }
+<span class="lineNum">     889 </span>            : 
+<span class="lineNum">     890 </span><span class="lineCov">         44 :       if (!ei_end_p (ei))</span>
+<span class="lineNum">     891 </span><span class="lineCov">         20 :         ei_next (&amp;ei);</span>
+<span class="lineNum">     892 </span><span class="lineCov">         44 :       act = (! ei_end_p (ei)) ? ei_edge (ei) : NULL;</span>
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span><span class="lineCov">         22 :       if (EDGE_COUNT (bb-&gt;succs) &gt; 0)</span>
+<span class="lineNum">     895 </span>            :         {
+<span class="lineNum">     896 </span><span class="lineCov">         22 :           if (act)</span>
+<span class="lineNum">     897 </span><span class="lineCov">          6 :             stack[sp++] = ei;</span>
+<span class="lineNum">     898 </span><span class="lineCov">         22 :           ei = ei_start (bb-&gt;succs);</span>
+<span class="lineNum">     899 </span><span class="lineCov">         44 :           act = (EDGE_COUNT (ei_container (ei))</span>
+<span class="lineNum">     900 </span><span class="lineCov">         22 :                  ? EDGE_I (ei_container (ei), 0)</span>
+<span class="lineNum">     901 </span>            :                  : NULL);
+<span class="lineNum">     902 </span>            :         }
+<span class="lineNum">     903 </span>            :     }
+<span class="lineNum">     904 </span>            : }
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span>            : /* This routine will replace a store with a SET to a specified register.  */
+<span class="lineNum">     907 </span>            : 
+<span class="lineNum">     908 </span>            : static void
+<span class="lineNum">     909 </span><span class="lineCov">          4 : replace_store_insn (rtx reg, rtx_insn *del, basic_block bb,</span>
+<span class="lineNum">     910 </span>            :                     struct st_expr *smexpr)
+<span class="lineNum">     911 </span>            : {
+<span class="lineNum">     912 </span><span class="lineCov">          4 :   rtx_insn *insn;</span>
+<span class="lineNum">     913 </span><span class="lineCov">          4 :   rtx mem, note, set;</span>
+<span class="lineNum">     914 </span>            : 
+<span class="lineNum">     915 </span><span class="lineCov">          4 :   mem = smexpr-&gt;pattern;</span>
+<span class="lineNum">     916 </span><span class="lineCov">          4 :   insn = gen_move_insn (reg, SET_SRC (single_set (del)));</span>
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span><span class="lineCov">          4 :   unsigned int i;</span>
+<span class="lineNum">     919 </span><span class="lineCov">          4 :   rtx_insn *temp;</span>
+<span class="lineNum">     920 </span><span class="lineCov">          9 :   FOR_EACH_VEC_ELT_REVERSE (smexpr-&gt;antic_stores, i, temp)</span>
+<span class="lineNum">     921 </span><span class="lineCov">          4 :     if (temp == del)</span>
+<span class="lineNum">     922 </span>            :       {
+<span class="lineNum">     923 </span><span class="lineCov">          3 :         smexpr-&gt;antic_stores[i] = insn;</span>
+<span class="lineNum">     924 </span><span class="lineCov">          3 :         break;</span>
+<span class="lineNum">     925 </span>            :       }
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span>            :   /* Move the notes from the deleted insn to its replacement.  */
+<span class="lineNum">     928 </span><span class="lineCov">          4 :   REG_NOTES (insn) = REG_NOTES (del);</span>
+<span class="lineNum">     929 </span>            : 
+<span class="lineNum">     930 </span>            :   /* Emit the insn AFTER all the notes are transferred.
+<span class="lineNum">     931 </span>            :      This is cheaper since we avoid df rescanning for the note change.  */
+<span class="lineNum">     932 </span><span class="lineCov">          4 :   insn = emit_insn_after (insn, del);</span>
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span><span class="lineCov">          4 :   if (dump_file)</span>
+<span class="lineNum">     935 </span>            :     {
+<span class="lineNum">     936 </span><span class="lineCov">          1 :       fprintf (dump_file,</span>
+<span class="lineNum">     937 </span>            :                &quot;STORE_MOTION  delete insn in BB %d:\n      &quot;, bb-&gt;index);
+<span class="lineNum">     938 </span><span class="lineCov">          1 :       print_inline_rtx (dump_file, del, 6);</span>
+<span class="lineNum">     939 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;\nSTORE_MOTION  replaced with insn:\n      &quot;);</span>
+<span class="lineNum">     940 </span><span class="lineCov">          1 :       print_inline_rtx (dump_file, insn, 6);</span>
+<span class="lineNum">     941 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     942 </span>            :     }
+<span class="lineNum">     943 </span>            : 
+<span class="lineNum">     944 </span><span class="lineCov">          4 :   delete_insn (del);</span>
+<span class="lineNum">     945 </span>            : 
+<span class="lineNum">     946 </span>            :   /* Now we must handle REG_EQUAL notes whose contents is equal to the mem;
+<span class="lineNum">     947 </span>            :      they are no longer accurate provided that they are reached by this
+<span class="lineNum">     948 </span>            :      definition, so drop them.  */
+<span class="lineNum">     949 </span><span class="lineCov">         34 :   for (; insn != NEXT_INSN (BB_END (bb)); insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     950 </span><span class="lineCov">         15 :     if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     951 </span>            :       {
+<span class="lineNum">     952 </span><span class="lineCov">         15 :         set = single_set (insn);</span>
+<span class="lineNum">     953 </span><span class="lineCov">         15 :         if (!set)</span>
+<span class="lineNum">     954 </span>            :           continue;
+<span class="lineNum">     955 </span><span class="lineCov">         15 :         if (exp_equiv_p (SET_DEST (set), mem, 0, true))</span>
+<span class="lineNum">     956 </span>            :           return;
+<span class="lineNum">     957 </span><span class="lineCov">         15 :         note = find_reg_equal_equiv_note (insn);</span>
+<span class="lineNum">     958 </span><span class="lineCov">         15 :         if (!note || !exp_equiv_p (XEXP (note, 0), mem, 0, true))</span>
+<span class="lineNum">     959 </span><span class="lineCov">         15 :           continue;</span>
+<span class="lineNum">     960 </span>            : 
+<span class="lineNum">     961 </span><span class="lineNoCov">          0 :         if (dump_file)</span>
+<span class="lineNum">     962 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;STORE_MOTION  drop REG_EQUAL note at insn %d:\n&quot;,</span>
+<span class="lineNum">     963 </span><span class="lineNoCov">          0 :                    INSN_UID (insn));</span>
+<span class="lineNum">     964 </span><span class="lineNoCov">          0 :         remove_note (insn, note);</span>
+<span class="lineNum">     965 </span>            :       }
+<span class="lineNum">     966 </span><span class="lineCov">          4 :   remove_reachable_equiv_notes (bb, smexpr);</span>
+<span class="lineNum">     967 </span>            : }
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span>            : 
+<span class="lineNum">     970 </span>            : /* Delete a store, but copy the value that would have been stored into
+<span class="lineNum">     971 </span>            :    the reaching_reg for later storing.  */
+<span class="lineNum">     972 </span>            : 
+<span class="lineNum">     973 </span>            : static void
+<span class="lineNum">     974 </span><span class="lineCov">          4 : delete_store (struct st_expr * expr, basic_block bb)</span>
+<span class="lineNum">     975 </span>            : {
+<span class="lineNum">     976 </span><span class="lineCov">          4 :   rtx reg;</span>
+<span class="lineNum">     977 </span>            : 
+<span class="lineNum">     978 </span><span class="lineCov">          4 :   if (expr-&gt;reaching_reg == NULL_RTX)</span>
+<span class="lineNum">     979 </span><span class="lineCov">          4 :     expr-&gt;reaching_reg = gen_reg_rtx_and_attrs (expr-&gt;pattern);</span>
+<span class="lineNum">     980 </span>            : 
+<span class="lineNum">     981 </span><span class="lineCov">          4 :   reg = expr-&gt;reaching_reg;</span>
+<span class="lineNum">     982 </span>            : 
+<span class="lineNum">     983 </span><span class="lineCov">          4 :   unsigned int len = expr-&gt;avail_stores.length ();</span>
+<span class="lineNum">     984 </span><span class="lineCov">          5 :   for (unsigned int i = len - 1; i &lt; len; i--)</span>
+<span class="lineNum">     985 </span>            :     {
+<span class="lineNum">     986 </span><span class="lineCov">          5 :       rtx_insn *del = expr-&gt;avail_stores[i];</span>
+<span class="lineNum">     987 </span><span class="lineCov">         10 :       if (BLOCK_FOR_INSN (del) == bb)</span>
+<span class="lineNum">     988 </span>            :         {
+<span class="lineNum">     989 </span>            :           /* We know there is only one since we deleted redundant
+<span class="lineNum">     990 </span>            :              ones during the available computation.  */
+<span class="lineNum">     991 </span><span class="lineCov">          4 :           replace_store_insn (reg, del, bb, expr);</span>
+<span class="lineNum">     992 </span><span class="lineCov">          4 :           break;</span>
+<span class="lineNum">     993 </span>            :         }
+<span class="lineNum">     994 </span>            :     }
+<span class="lineNum">     995 </span><span class="lineCov">          4 : }</span>
+<span class="lineNum">     996 </span>            : 
+<span class="lineNum">     997 </span>            : /* Fill in available, anticipatable, transparent and kill vectors in
+<span class="lineNum">     998 </span>            :    STORE_DATA, based on lists of available and anticipatable stores.  */
+<span class="lineNum">     999 </span>            : static void
+<span class="lineNum">    1000 </span><span class="lineCov">         11 : build_store_vectors (void)</span>
+<span class="lineNum">    1001 </span>            : {
+<span class="lineNum">    1002 </span><span class="lineCov">         11 :   basic_block bb;</span>
+<span class="lineNum">    1003 </span><span class="lineCov">         11 :   int *regs_set_in_block;</span>
+<span class="lineNum">    1004 </span><span class="lineCov">         11 :   rtx_insn *insn;</span>
+<span class="lineNum">    1005 </span><span class="lineCov">         11 :   struct st_expr * ptr;</span>
+<span class="lineNum">    1006 </span><span class="lineCov">         11 :   unsigned int max_gcse_regno = max_reg_num ();</span>
+<span class="lineNum">    1007 </span>            : 
+<span class="lineNum">    1008 </span>            :   /* Build the gen_vector. This is any store in the table which is not killed
+<span class="lineNum">    1009 </span>            :      by aliasing later in its block.  */
+<span class="lineNum">    1010 </span><span class="lineCov">         11 :   st_avloc = sbitmap_vector_alloc (last_basic_block_for_fn (cfun),</span>
+<span class="lineNum">    1011 </span>            :                                    num_stores);
+<span class="lineNum">    1012 </span><span class="lineCov">         11 :   bitmap_vector_clear (st_avloc, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1013 </span>            : 
+<span class="lineNum">    1014 </span><span class="lineCov">         11 :   st_antloc = sbitmap_vector_alloc (last_basic_block_for_fn (cfun),</span>
+<span class="lineNum">    1015 </span>            :                                     num_stores);
+<span class="lineNum">    1016 </span><span class="lineCov">         11 :   bitmap_vector_clear (st_antloc, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1017 </span>            : 
+<span class="lineNum">    1018 </span><span class="lineCov">         37 :   for (ptr = first_st_expr (); ptr != NULL; ptr = next_st_expr (ptr))</span>
+<span class="lineNum">    1019 </span>            :     {
+<span class="lineNum">    1020 </span><span class="lineCov">         26 :       unsigned int len = ptr-&gt;avail_stores.length ();</span>
+<span class="lineNum">    1021 </span><span class="lineCov">         53 :       for (unsigned int i = len - 1; i &lt; len; i--)</span>
+<span class="lineNum">    1022 </span>            :         {
+<span class="lineNum">    1023 </span><span class="lineCov">         27 :           insn = ptr-&gt;avail_stores[i];</span>
+<span class="lineNum">    1024 </span><span class="lineCov">         27 :           bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">    1025 </span>            : 
+<span class="lineNum">    1026 </span>            :           /* If we've already seen an available expression in this block,
+<span class="lineNum">    1027 </span>            :              we can delete this one (It occurs earlier in the block). We'll
+<span class="lineNum">    1028 </span>            :              copy the SRC expression to an unused register in case there
+<span class="lineNum">    1029 </span>            :              are any side effects.  */
+<span class="lineNum">    1030 </span><span class="lineCov">         27 :           if (bitmap_bit_p (st_avloc[bb-&gt;index], ptr-&gt;index))</span>
+<span class="lineNum">    1031 </span>            :             {
+<span class="lineNum">    1032 </span><span class="lineNoCov">          0 :               rtx r = gen_reg_rtx_and_attrs (ptr-&gt;pattern);</span>
+<span class="lineNum">    1033 </span><span class="lineNoCov">          0 :               if (dump_file)</span>
+<span class="lineNum">    1034 </span><span class="lineNoCov">          0 :                 fprintf (dump_file, &quot;Removing redundant store:\n&quot;);</span>
+<span class="lineNum">    1035 </span><span class="lineNoCov">          0 :               replace_store_insn (r, insn, bb, ptr);</span>
+<span class="lineNum">    1036 </span><span class="lineNoCov">          0 :               continue;</span>
+<span class="lineNum">    1037 </span>            :             }
+<span class="lineNum">    1038 </span><span class="lineCov">         27 :           bitmap_set_bit (st_avloc[bb-&gt;index], ptr-&gt;index);</span>
+<span class="lineNum">    1039 </span>            :         }
+<span class="lineNum">    1040 </span>            : 
+<span class="lineNum">    1041 </span><span class="lineCov">         26 :       unsigned int i;</span>
+<span class="lineNum">    1042 </span><span class="lineCov">         68 :       FOR_EACH_VEC_ELT_REVERSE (ptr-&gt;antic_stores, i, insn)</span>
+<span class="lineNum">    1043 </span>            :         {
+<span class="lineNum">    1044 </span><span class="lineCov">         16 :           bb = BLOCK_FOR_INSN (insn);</span>
+<span class="lineNum">    1045 </span><span class="lineCov">         16 :           bitmap_set_bit (st_antloc[bb-&gt;index], ptr-&gt;index);</span>
+<span class="lineNum">    1046 </span>            :         }
+<span class="lineNum">    1047 </span>            :     }
+<span class="lineNum">    1048 </span>            : 
+<span class="lineNum">    1049 </span><span class="lineCov">         11 :   st_kill = sbitmap_vector_alloc (last_basic_block_for_fn (cfun), num_stores);</span>
+<span class="lineNum">    1050 </span><span class="lineCov">         11 :   bitmap_vector_clear (st_kill, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1051 </span>            : 
+<span class="lineNum">    1052 </span><span class="lineCov">         11 :   st_transp = sbitmap_vector_alloc (last_basic_block_for_fn (cfun), num_stores);</span>
+<span class="lineNum">    1053 </span><span class="lineCov">         11 :   bitmap_vector_clear (st_transp, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1054 </span><span class="lineCov">         11 :   regs_set_in_block = XNEWVEC (int, max_gcse_regno);</span>
+<span class="lineNum">    1055 </span>            : 
+<span class="lineNum">    1056 </span><span class="lineCov">         53 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1057 </span>            :     {
+<span class="lineNum">    1058 </span><span class="lineCov">         42 :       memset (regs_set_in_block, 0, sizeof (int) * max_gcse_regno);</span>
+<span class="lineNum">    1059 </span>            : 
+<span class="lineNum">    1060 </span><span class="lineCov">        552 :       FOR_BB_INSNS (bb, insn)</span>
+<span class="lineNum">    1061 </span><span class="lineCov">        255 :         if (NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">    1062 </span>            :           {
+<span class="lineNum">    1063 </span><span class="lineCov">        171 :             df_ref def;</span>
+<span class="lineNum">    1064 </span><span class="lineCov">        713 :             FOR_EACH_INSN_DEF (def, insn)</span>
+<span class="lineNum">    1065 </span>            :               {
+<span class="lineNum">    1066 </span><span class="lineCov">        371 :                 unsigned int ref_regno = DF_REF_REGNO (def);</span>
+<span class="lineNum">    1067 </span><span class="lineCov">        371 :                 if (ref_regno &lt; max_gcse_regno)</span>
+<span class="lineNum">    1068 </span><span class="lineCov">        371 :                   regs_set_in_block[DF_REF_REGNO (def)] = 1;</span>
+<span class="lineNum">    1069 </span>            :               }
+<span class="lineNum">    1070 </span>            :           }
+<span class="lineNum">    1071 </span>            : 
+<span class="lineNum">    1072 </span><span class="lineCov">        187 :       for (ptr = first_st_expr (); ptr != NULL; ptr = next_st_expr (ptr))</span>
+<span class="lineNum">    1073 </span>            :         {
+<span class="lineNum">    1074 </span><span class="lineCov">        145 :           if (store_killed_after (ptr-&gt;pattern, ptr-&gt;pattern_regs, BB_HEAD (bb),</span>
+<span class="lineNum">    1075 </span>            :                                   bb, regs_set_in_block, NULL))
+<span class="lineNum">    1076 </span>            :             {
+<span class="lineNum">    1077 </span>            :               /* It should not be necessary to consider the expression
+<span class="lineNum">    1078 </span>            :                  killed if it is both anticipatable and available.  */
+<span class="lineNum">    1079 </span><span class="lineCov">         47 :               if (!bitmap_bit_p (st_antloc[bb-&gt;index], ptr-&gt;index)</span>
+<span class="lineNum">    1080 </span><span class="lineCov">         47 :                   || !bitmap_bit_p (st_avloc[bb-&gt;index], ptr-&gt;index))</span>
+<span class="lineNum">    1081 </span><span class="lineCov">         47 :                 bitmap_set_bit (st_kill[bb-&gt;index], ptr-&gt;index);</span>
+<span class="lineNum">    1082 </span>            :             }
+<span class="lineNum">    1083 </span>            :           else
+<span class="lineNum">    1084 </span><span class="lineCov">         98 :             bitmap_set_bit (st_transp[bb-&gt;index], ptr-&gt;index);</span>
+<span class="lineNum">    1085 </span>            :         }
+<span class="lineNum">    1086 </span>            :     }
+<span class="lineNum">    1087 </span>            : 
+<span class="lineNum">    1088 </span><span class="lineCov">         11 :   free (regs_set_in_block);</span>
+<span class="lineNum">    1089 </span>            : 
+<span class="lineNum">    1090 </span><span class="lineCov">         11 :   if (dump_file)</span>
+<span class="lineNum">    1091 </span>            :     {
+<span class="lineNum">    1092 </span><span class="lineCov">          2 :       dump_bitmap_vector (dump_file, &quot;st_antloc&quot;, &quot;&quot;, st_antloc,</span>
+<span class="lineNum">    1093 </span><span class="lineCov">          1 :                           last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1094 </span><span class="lineCov">          2 :       dump_bitmap_vector (dump_file, &quot;st_kill&quot;, &quot;&quot;, st_kill,</span>
+<span class="lineNum">    1095 </span><span class="lineCov">          1 :                           last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1096 </span><span class="lineCov">          2 :       dump_bitmap_vector (dump_file, &quot;st_transp&quot;, &quot;&quot;, st_transp,</span>
+<span class="lineNum">    1097 </span><span class="lineCov">          1 :                           last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1098 </span><span class="lineCov">          2 :       dump_bitmap_vector (dump_file, &quot;st_avloc&quot;, &quot;&quot;, st_avloc,</span>
+<span class="lineNum">    1099 </span><span class="lineCov">          1 :                           last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1100 </span>            :     }
+<span class="lineNum">    1101 </span><span class="lineCov">         11 : }</span>
+<span class="lineNum">    1102 </span>            : 
+<span class="lineNum">    1103 </span>            : /* Free memory used by store motion.  */
+<a name="1104"><span class="lineNum">    1104 </span>            : </a>
+<span class="lineNum">    1105 </span>            : static void
+<span class="lineNum">    1106 </span><span class="lineCov">         11 : free_store_memory (void)</span>
+<span class="lineNum">    1107 </span>            : {
+<span class="lineNum">    1108 </span><span class="lineCov">         11 :   free_store_motion_mems ();</span>
+<span class="lineNum">    1109 </span>            : 
+<span class="lineNum">    1110 </span><span class="lineCov">         11 :   if (st_avloc)</span>
+<span class="lineNum">    1111 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_avloc);</span>
+<span class="lineNum">    1112 </span><span class="lineCov">         11 :   if (st_kill)</span>
+<span class="lineNum">    1113 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_kill);</span>
+<span class="lineNum">    1114 </span><span class="lineCov">         11 :   if (st_transp)</span>
+<span class="lineNum">    1115 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_transp);</span>
+<span class="lineNum">    1116 </span><span class="lineCov">         11 :   if (st_antloc)</span>
+<span class="lineNum">    1117 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_antloc);</span>
+<span class="lineNum">    1118 </span><span class="lineCov">         11 :   if (st_insert_map)</span>
+<span class="lineNum">    1119 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_insert_map);</span>
+<span class="lineNum">    1120 </span><span class="lineCov">         11 :   if (st_delete_map)</span>
+<span class="lineNum">    1121 </span><span class="lineCov">         11 :     sbitmap_vector_free (st_delete_map);</span>
+<span class="lineNum">    1122 </span>            : 
+<span class="lineNum">    1123 </span><span class="lineCov">         11 :   st_avloc = st_kill = st_transp = st_antloc = NULL;</span>
+<span class="lineNum">    1124 </span><span class="lineCov">         11 :   st_insert_map = st_delete_map = NULL;</span>
+<span class="lineNum">    1125 </span><span class="lineCov">         11 : }</span>
+<span class="lineNum">    1126 </span>            : 
+<span class="lineNum">    1127 </span>            : /* Perform store motion. Much like gcse, except we move expressions the
+<span class="lineNum">    1128 </span>            :    other way by looking at the flowgraph in reverse.
+<span class="lineNum">    1129 </span>            :    Return non-zero if transformations are performed by the pass.  */
+<a name="1130"><span class="lineNum">    1130 </span>            : </a>
+<span class="lineNum">    1131 </span>            : static int
+<span class="lineNum">    1132 </span><span class="lineCov">         30 : one_store_motion_pass (void)</span>
+<span class="lineNum">    1133 </span>            : {
+<span class="lineNum">    1134 </span><span class="lineCov">         30 :   basic_block bb;</span>
+<span class="lineNum">    1135 </span><span class="lineCov">         30 :   int x;</span>
+<span class="lineNum">    1136 </span><span class="lineCov">         30 :   struct st_expr * ptr;</span>
+<span class="lineNum">    1137 </span><span class="lineCov">         30 :   int did_edge_inserts = 0;</span>
+<span class="lineNum">    1138 </span><span class="lineCov">         30 :   int n_stores_deleted = 0;</span>
+<span class="lineNum">    1139 </span><span class="lineCov">         30 :   int n_stores_created = 0;</span>
+<span class="lineNum">    1140 </span>            : 
+<span class="lineNum">    1141 </span><span class="lineCov">         30 :   init_alias_analysis ();</span>
+<span class="lineNum">    1142 </span>            : 
+<span class="lineNum">    1143 </span>            :   /* Find all the available and anticipatable stores.  */
+<span class="lineNum">    1144 </span><span class="lineCov">         30 :   num_stores = compute_store_table ();</span>
+<span class="lineNum">    1145 </span><span class="lineCov">         30 :   if (num_stores == 0)</span>
+<span class="lineNum">    1146 </span>            :     {
+<span class="lineNum">    1147 </span><span class="lineCov">         19 :       delete store_motion_mems_table;</span>
+<span class="lineNum">    1148 </span><span class="lineCov">         19 :       store_motion_mems_table = NULL;</span>
+<span class="lineNum">    1149 </span><span class="lineCov">         19 :       end_alias_analysis ();</span>
+<span class="lineNum">    1150 </span><span class="lineCov">         19 :       return 0;</span>
+<span class="lineNum">    1151 </span>            :     }
+<span class="lineNum">    1152 </span>            : 
+<span class="lineNum">    1153 </span>            :   /* Now compute kill &amp; transp vectors.  */
+<span class="lineNum">    1154 </span><span class="lineCov">         11 :   build_store_vectors ();</span>
+<span class="lineNum">    1155 </span><span class="lineCov">         11 :   add_noreturn_fake_exit_edges ();</span>
+<span class="lineNum">    1156 </span><span class="lineCov">         11 :   connect_infinite_loops_to_exit ();</span>
+<span class="lineNum">    1157 </span>            : 
+<span class="lineNum">    1158 </span><span class="lineCov">         11 :   edge_list = pre_edge_rev_lcm (num_stores, st_transp, st_avloc,</span>
+<span class="lineNum">    1159 </span>            :                                 st_antloc, st_kill, &amp;st_insert_map,
+<span class="lineNum">    1160 </span>            :                                 &amp;st_delete_map);
+<span class="lineNum">    1161 </span>            : 
+<span class="lineNum">    1162 </span>            :   /* Now we want to insert the new stores which are going to be needed.  */
+<span class="lineNum">    1163 </span><span class="lineCov">         37 :   for (ptr = first_st_expr (); ptr != NULL; ptr = next_st_expr (ptr))</span>
+<span class="lineNum">    1164 </span>            :     {
+<span class="lineNum">    1165 </span>            :       /* If any of the edges we have above are abnormal, we can't move this
+<span class="lineNum">    1166 </span>            :          store.  */
+<span class="lineNum">    1167 </span><span class="lineCov">        261 :       for (x = NUM_EDGES (edge_list) - 1; x &gt;= 0; x--)</span>
+<span class="lineNum">    1168 </span><span class="lineCov">        235 :         if (bitmap_bit_p (st_insert_map[x], ptr-&gt;index)</span>
+<span class="lineNum">    1169 </span><span class="lineCov">        235 :             &amp;&amp; (INDEX_EDGE (edge_list, x)-&gt;flags &amp; EDGE_ABNORMAL))</span>
+<span class="lineNum">    1170 </span>            :           break;
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span><span class="lineCov">         26 :       if (x &gt;= 0)</span>
+<span class="lineNum">    1173 </span>            :         {
+<span class="lineNum">    1174 </span><span class="lineNoCov">          0 :           if (dump_file != NULL)</span>
+<span class="lineNum">    1175 </span><span class="lineNoCov">          0 :             fprintf (dump_file,</span>
+<span class="lineNum">    1176 </span>            :                      &quot;Can't replace store %d: abnormal edge from %d to %d\n&quot;,
+<span class="lineNum">    1177 </span><span class="lineNoCov">          0 :                      ptr-&gt;index, INDEX_EDGE (edge_list, x)-&gt;src-&gt;index,</span>
+<span class="lineNum">    1178 </span><span class="lineNoCov">          0 :                      INDEX_EDGE (edge_list, x)-&gt;dest-&gt;index);</span>
+<span class="lineNum">    1179 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">    1180 </span>            :         }
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span>            :       /* Now we want to insert the new stores which are going to be needed.  */
+<span class="lineNum">    1183 </span>            : 
+<span class="lineNum">    1184 </span><span class="lineCov">        171 :       FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1185 </span><span class="lineCov">        145 :         if (bitmap_bit_p (st_delete_map[bb-&gt;index], ptr-&gt;index))</span>
+<span class="lineNum">    1186 </span>            :           {
+<span class="lineNum">    1187 </span><span class="lineCov">          4 :             delete_store (ptr, bb);</span>
+<span class="lineNum">    1188 </span><span class="lineCov">          4 :             n_stores_deleted++;</span>
+<span class="lineNum">    1189 </span>            :           }
+<span class="lineNum">    1190 </span>            : 
+<span class="lineNum">    1191 </span><span class="lineCov">        261 :       for (x = 0; x &lt; NUM_EDGES (edge_list); x++)</span>
+<span class="lineNum">    1192 </span><span class="lineCov">        235 :         if (bitmap_bit_p (st_insert_map[x], ptr-&gt;index))</span>
+<span class="lineNum">    1193 </span>            :           {
+<span class="lineNum">    1194 </span><span class="lineCov">          4 :             did_edge_inserts |= insert_store (ptr, INDEX_EDGE (edge_list, x));</span>
+<span class="lineNum">    1195 </span><span class="lineCov">          4 :             n_stores_created++;</span>
+<span class="lineNum">    1196 </span>            :           }
+<span class="lineNum">    1197 </span>            :     }
+<span class="lineNum">    1198 </span>            : 
+<span class="lineNum">    1199 </span><span class="lineCov">         11 :   if (did_edge_inserts)</span>
+<span class="lineNum">    1200 </span><span class="lineCov">          2 :     commit_edge_insertions ();</span>
+<span class="lineNum">    1201 </span>            : 
+<span class="lineNum">    1202 </span><span class="lineCov">         11 :   free_store_memory ();</span>
+<span class="lineNum">    1203 </span><span class="lineCov">         11 :   free_edge_list (edge_list);</span>
+<span class="lineNum">    1204 </span><span class="lineCov">         11 :   remove_fake_exit_edges ();</span>
+<span class="lineNum">    1205 </span><span class="lineCov">         11 :   end_alias_analysis ();</span>
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span><span class="lineCov">         11 :   if (dump_file)</span>
+<span class="lineNum">    1208 </span>            :     {
+<span class="lineNum">    1209 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;STORE_MOTION of %s, %d basic blocks, &quot;,</span>
+<span class="lineNum">    1210 </span><span class="lineCov">          1 :                current_function_name (), n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">    1211 </span><span class="lineCov">          1 :       fprintf (dump_file, &quot;%d insns deleted, %d insns created\n&quot;,</span>
+<span class="lineNum">    1212 </span>            :                n_stores_deleted, n_stores_created);
+<span class="lineNum">    1213 </span>            :     }
+<span class="lineNum">    1214 </span>            : 
+<span class="lineNum">    1215 </span><span class="lineCov">         11 :   return (n_stores_deleted &gt; 0 || n_stores_created &gt; 0);</span>
+<span class="lineNum">    1216 </span>            : }
+<span class="lineNum">    1217 </span>            : 
+<a name="1218"><span class="lineNum">    1218 </span>            : </a>
+<span class="lineNum">    1219 </span>            : static unsigned int
+<span class="lineNum">    1220 </span><span class="lineCov">         30 : execute_rtl_store_motion (void)</span>
+<span class="lineNum">    1221 </span>            : {
+<span class="lineNum">    1222 </span><span class="lineCov">         30 :   delete_unreachable_blocks ();</span>
+<span class="lineNum">    1223 </span><span class="lineCov">         30 :   df_analyze ();</span>
+<span class="lineNum">    1224 </span><span class="lineCov">         30 :   flag_rerun_cse_after_global_opts |= one_store_motion_pass ();</span>
+<span class="lineNum">    1225 </span><span class="lineCov">         30 :   return 0;</span>
+<span class="lineNum">    1226 </span>            : }
+<span class="lineNum">    1227 </span>            : 
+<span class="lineNum">    1228 </span>            : namespace {
+<span class="lineNum">    1229 </span>            : 
+<span class="lineNum">    1230 </span>            : const pass_data pass_data_rtl_store_motion =
+<span class="lineNum">    1231 </span>            : {
+<span class="lineNum">    1232 </span>            :   RTL_PASS, /* type */
+<span class="lineNum">    1233 </span>            :   &quot;store_motion&quot;, /* name */
+<span class="lineNum">    1234 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">    1235 </span>            :   TV_LSM, /* tv_id */
+<span class="lineNum">    1236 </span>            :   PROP_cfglayout, /* properties_required */
+<span class="lineNum">    1237 </span>            :   0, /* properties_provided */
+<span class="lineNum">    1238 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">    1239 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">    1240 </span>            :   TODO_df_finish, /* todo_flags_finish */
+<span class="lineNum">    1241 </span>            : };
+<span class="lineNum">    1242 </span>            : 
+<span class="lineNum">    1243 </span>            : class pass_rtl_store_motion : public rtl_opt_pass
+<span class="lineNum">    1244 </span>            : {
+<span class="lineNum">    1245 </span>            : public:
+<span class="lineNum">    1246 </span>            :   pass_rtl_store_motion (gcc::context *ctxt)
+<span class="lineNum">    1247 </span><span class="lineCov">     340624 :     : rtl_opt_pass (pass_data_rtl_store_motion, ctxt)</span>
+<span class="lineNum">    1248 </span>            :   {}
+<span class="lineNum">    1249 </span>            : 
+<a name="1250"><span class="lineNum">    1250 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1251 </span>            :   virtual bool gate (function *);
+<span class="lineNum">    1252 </span><span class="lineCov">         30 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">    1253 </span>            :     {
+<span class="lineNum">    1254 </span><span class="lineCov">         30 :       return execute_rtl_store_motion ();</span>
+<span class="lineNum">    1255 </span>            :     }
+<span class="lineNum">    1256 </span>            : 
+<span class="lineNum">    1257 </span>            : }; // class pass_rtl_store_motion
+<a name="1258"><span class="lineNum">    1258 </span>            : </a>
+<span class="lineNum">    1259 </span>            : bool
+<span class="lineNum">    1260 </span><span class="lineCov">     832594 : pass_rtl_store_motion::gate (function *fun)</span>
+<span class="lineNum">    1261 </span>            : {
+<span class="lineNum">    1262 </span><span class="lineCov">     622499 :   return optimize &gt; 0 &amp;&amp; flag_gcse_sm</span>
+<span class="lineNum">    1263 </span><span class="lineCov">         31 :     &amp;&amp; !fun-&gt;calls_setjmp</span>
+<span class="lineNum">    1264 </span><span class="lineCov">         31 :     &amp;&amp; optimize_function_for_speed_p (fun)</span>
+<span class="lineNum">    1265 </span><span class="lineCov">     832624 :     &amp;&amp; dbg_cnt (store_motion);</span>
+<span class="lineNum">    1266 </span>            : }
+<span class="lineNum">    1267 </span>            : 
+<span class="lineNum">    1268 </span>            : } // anon namespace
+<a name="1269"><span class="lineNum">    1269 </span>            : </a>
+<span class="lineNum">    1270 </span>            : rtl_opt_pass *
+<span class="lineNum">    1271 </span><span class="lineCov">     170312 : make_pass_rtl_store_motion (gcc::context *ctxt)</span>
+<span class="lineNum">    1272 </span>            : {
+<span class="lineNum">    1273 </span><span class="lineCov">     170312 :   return new pass_rtl_store_motion (ctxt);</span>
+<span class="lineNum">    1274 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

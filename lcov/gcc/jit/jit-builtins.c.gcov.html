@@ -1,0 +1,674 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/jit/jit-builtins.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/jit</a> - jit-builtins.c<span style="font-size: 80%;"> (source / <a href="jit-builtins.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">120</td>
+            <td class="headerCovTableEntry">152</td>
+            <td class="headerCovTableEntryMed">78.9 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntryMed">88.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* jit-builtins.c -- Handling of builtin functions during JIT-compilation.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2014-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;jit-playback.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      26 </span>            : 
+<span class="lineNum">      27 </span>            : #include &quot;jit-builtins.h&quot;
+<span class="lineNum">      28 </span>            : 
+<span class="lineNum">      29 </span>            : namespace gcc {
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            : namespace jit {
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            : const char *const prefix = &quot;__builtin_&quot;;
+<span class="lineNum">      34 </span>            : const size_t prefix_len = strlen (prefix);
+<span class="lineNum">      35 </span>            : 
+<span class="lineNum">      36 </span>            : /* Create &quot;builtin_data&quot;, a const table of the data within builtins.def.  */
+<span class="lineNum">      37 </span>            : struct builtin_data
+<span class="lineNum">      38 </span>            : {
+<span class="lineNum">      39 </span>            :   const char *name;
+<span class="lineNum">      40 </span>            :   enum built_in_class fnclass;
+<span class="lineNum">      41 </span>            :   enum jit_builtin_type type;
+<span class="lineNum">      42 </span>            :   bool both_p;
+<span class="lineNum">      43 </span>            :   bool fallback_p;
+<span class="lineNum">      44 </span>            :   enum built_in_attribute attr;
+<span class="lineNum">      45 </span>            :   bool implicit_p;
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :   const char *get_asm_name () const
+<span class="lineNum">      48 </span>            :   {
+<span class="lineNum">      49 </span><span class="lineCov">         60 :     if (both_p &amp;&amp; fallback_p)</span>
+<span class="lineNum">      50 </span><span class="lineCov">         60 :       return name + prefix_len;</span>
+<span class="lineNum">      51 </span>            :     else
+<span class="lineNum">      52 </span><span class="lineCov">         60 :       return name;</span>
+<span class="lineNum">      53 </span>            :   }
+<span class="lineNum">      54 </span>            : };
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : #define DEF_BUILTIN(X, NAME, CLASS, TYPE, LT, BOTH_P, FALLBACK_P, \
+<span class="lineNum">      57 </span>            :                     NONANSI_P, ATTRS, IMPLICIT, COND)             \
+<span class="lineNum">      58 </span>            :   {NAME, CLASS, TYPE, BOTH_P, FALLBACK_P, ATTRS, IMPLICIT},
+<span class="lineNum">      59 </span>            : static const struct builtin_data builtin_data[] =
+<span class="lineNum">      60 </span>            : {
+<span class="lineNum">      61 </span>            : #include &quot;builtins.def&quot;
+<span class="lineNum">      62 </span>            : };
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : /* Helper function for find_builtin_by_name.  */
+<a name="65"><span class="lineNum">      65 </span>            : </a>
+<span class="lineNum">      66 </span>            : static bool
+<span class="lineNum">      67 </span><span class="lineCov">      70375 : matches_builtin (const char *in_name,</span>
+<span class="lineNum">      68 </span>            :                  const struct builtin_data&amp; bd)
+<span class="lineNum">      69 </span>            : {
+<span class="lineNum">      70 </span><span class="lineCov">      70375 :   const bool debug = 0;</span>
+<span class="lineNum">      71 </span>            : 
+<span class="lineNum">      72 </span>            :   /* Ignore entries with a NULL name.  */
+<span class="lineNum">      73 </span><span class="lineCov">      70375 :   if (!bd.name)</span>
+<span class="lineNum">      74 </span>            :     return false;
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span><span class="lineCov">      70365 :   if (debug)</span>
+<span class="lineNum">      77 </span>            :     fprintf (stderr, &quot;seen builtin: %s\n&quot;, bd.name);
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span><span class="lineCov">      70365 :   if (strcmp (bd.name, in_name) == 0)</span>
+<span class="lineNum">      80 </span>            :     return true;
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span><span class="lineCov">      70275 :   if (bd.both_p)</span>
+<span class="lineNum">      83 </span>            :     {
+<span class="lineNum">      84 </span>            :       /* Then the macros in builtins.def gave a &quot;__builtin_&quot;
+<span class="lineNum">      85 </span>            :          prefix to bd.name, but we should also recognize the form
+<span class="lineNum">      86 </span>            :          without the prefix.  */
+<span class="lineNum">      87 </span><span class="lineCov">      46795 :       gcc_assert (strncmp (bd.name, prefix, prefix_len) == 0);</span>
+<span class="lineNum">      88 </span><span class="lineCov">      46795 :       if (debug)</span>
+<span class="lineNum">      89 </span>            :         fprintf (stderr, &quot;testing without prefix as: %s\n&quot;,
+<span class="lineNum">      90 </span>            :                  bd.name + prefix_len);
+<span class="lineNum">      91 </span><span class="lineCov">      46795 :       if (strcmp (bd.name + prefix_len, in_name) == 0)</span>
+<span class="lineNum">      92 </span><span class="lineCov">         45 :         return true;</span>
+<span class="lineNum">      93 </span>            :     }
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :   return false;
+<span class="lineNum">      96 </span>            : }
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : /* Locate the built-in function that matches name IN_NAME,
+<span class="lineNum">      99 </span>            :    writing the result to OUT_ID and returning true if found,
+<span class="lineNum">     100 </span>            :    or returning false if not found.  */
+<a name="101"><span class="lineNum">     101 </span>            : </a>
+<span class="lineNum">     102 </span>            : static bool
+<span class="lineNum">     103 </span><span class="lineNoCov">          0 : find_builtin_by_name (const char *in_name,</span>
+<span class="lineNum">     104 </span>            :                       enum built_in_function *out_id)
+<span class="lineNum">     105 </span>            : {
+<span class="lineNum">     106 </span>            :   /* Locate builtin.  This currently works by performing repeated
+<span class="lineNum">     107 </span>            :      strcmp against every possible candidate, which is likely to
+<span class="lineNum">     108 </span>            :      inefficient.
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span>            :      We start at index 1 to skip the initial entry (BUILT_IN_NONE), which
+<span class="lineNum">     111 </span>            :      has a NULL name.  */
+<span class="lineNum">     112 </span><span class="lineCov">      70240 :   for (unsigned int i = 1;</span>
+<span class="lineNum">     113 </span><span class="lineCov">      70380 :        i &lt; sizeof (builtin_data) / sizeof (builtin_data[0]);</span>
+<span class="lineNum">     114 </span>            :        i++)
+<span class="lineNum">     115 </span>            :     {
+<span class="lineNum">     116 </span><span class="lineCov">      70375 :       const struct builtin_data&amp; bd = builtin_data[i];</span>
+<span class="lineNum">     117 </span><span class="lineCov">      70375 :       if (matches_builtin (in_name, bd))</span>
+<span class="lineNum">     118 </span>            :         {
+<span class="lineNum">     119 </span>            :           /* Found a match.  */
+<span class="lineNum">     120 </span><span class="lineNoCov">          0 :           *out_id = static_cast&lt;enum built_in_function&gt; (i);</span>
+<span class="lineNum">     121 </span><span class="lineNoCov">          0 :           return true;</span>
+<span class="lineNum">     122 </span>            :         }
+<span class="lineNum">     123 </span>            :     }
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            :   /* Not found.  */
+<span class="lineNum">     126 </span>            :   return false;
+<span class="lineNum">     127 </span>            : }
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : // class builtins_manager
+<span class="lineNum">     130 </span>            : 
+<a name="131"><span class="lineNum">     131 </span>            : /* Constructor for gcc::jit::builtins_manager.  */</a>
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">        843 : builtins_manager::builtins_manager (recording::context *ctxt)</span>
+<span class="lineNum">     134 </span><span class="lineCov">        843 :   : m_ctxt (ctxt)</span>
+<span class="lineNum">     135 </span>            : {
+<span class="lineNum">     136 </span><span class="lineCov">        843 :   memset (m_types, 0, sizeof (m_types));</span>
+<span class="lineNum">     137 </span><span class="lineCov">        843 :   memset (m_builtin_functions, 0, sizeof (m_builtin_functions));</span>
+<span class="lineNum">     138 </span><span class="lineCov">        843 :   memset (m_attributes, 0, sizeof (m_attributes));</span>
+<span class="lineNum">     139 </span><span class="lineCov">        843 : }</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span>            : /* Locate a builtin function by name.
+<span class="lineNum">     142 </span>            :    Create a recording::function of the appropriate type, reusing them
+<span class="lineNum">     143 </span>            :    if they've already been seen.  */
+<a name="144"><span class="lineNum">     144 </span>            : </a>
+<span class="lineNum">     145 </span>            : recording::function *
+<span class="lineNum">     146 </span><span class="lineCov">        140 : builtins_manager::get_builtin_function (const char *name)</span>
+<span class="lineNum">     147 </span>            : {
+<span class="lineNum">     148 </span><span class="lineCov">        140 :   enum built_in_function builtin_id;</span>
+<span class="lineNum">     149 </span><span class="lineCov">        280 :   if (!find_builtin_by_name (name, &amp;builtin_id))</span>
+<span class="lineNum">     150 </span>            :     {
+<span class="lineNum">     151 </span><span class="lineCov">          5 :       m_ctxt-&gt;add_error (NULL, &quot;builtin \&quot;%s\&quot; not found&quot;, name);</span>
+<span class="lineNum">     152 </span><span class="lineCov">          5 :       return NULL;</span>
+<span class="lineNum">     153 </span>            :     }
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span><span class="lineCov">        135 :   return get_builtin_function_by_id (builtin_id);</span>
+<span class="lineNum">     156 </span>            : }
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            : /* Locate a builtin function by id.
+<span class="lineNum">     159 </span>            :    Create a recording::function of the appropriate type, reusing them
+<span class="lineNum">     160 </span>            :    if they've already been seen.  */
+<a name="161"><span class="lineNum">     161 </span>            : </a>
+<span class="lineNum">     162 </span>            : recording::function *
+<span class="lineNum">     163 </span><span class="lineCov">        180 : builtins_manager::get_builtin_function_by_id (enum built_in_function builtin_id)</span>
+<span class="lineNum">     164 </span>            : {
+<span class="lineNum">     165 </span><span class="lineCov">        180 :   gcc_assert (builtin_id &gt;= 0);</span>
+<span class="lineNum">     166 </span><span class="lineCov">        180 :   gcc_assert (builtin_id &lt; END_BUILTINS);</span>
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            :   /* Lazily build the functions, caching them so that repeated calls for
+<span class="lineNum">     169 </span>            :      the same id on a context give back the same object.  */
+<span class="lineNum">     170 </span><span class="lineCov">        180 :   if (!m_builtin_functions[builtin_id])</span>
+<span class="lineNum">     171 </span>            :     {
+<span class="lineNum">     172 </span><span class="lineCov">        120 :       recording::function *fn = make_builtin_function (builtin_id);</span>
+<span class="lineNum">     173 </span><span class="lineCov">        120 :       if (fn)</span>
+<span class="lineNum">     174 </span>            :         {
+<span class="lineNum">     175 </span><span class="lineCov">        120 :           m_builtin_functions[builtin_id] = fn;</span>
+<span class="lineNum">     176 </span><span class="lineCov">        120 :           m_ctxt-&gt;record (fn);</span>
+<span class="lineNum">     177 </span>            :         }
+<span class="lineNum">     178 </span>            :     }
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span><span class="lineCov">        180 :   return m_builtin_functions[builtin_id];</span>
+<span class="lineNum">     181 </span>            : }
+<span class="lineNum">     182 </span>            : 
+<span class="lineNum">     183 </span>            : /* Create the recording::function for a given builtin function, by ID.  */
+<a name="184"><span class="lineNum">     184 </span>            : </a>
+<span class="lineNum">     185 </span>            : recording::function *
+<span class="lineNum">     186 </span><span class="lineCov">        120 : builtins_manager::make_builtin_function (enum built_in_function builtin_id)</span>
+<span class="lineNum">     187 </span>            : {
+<span class="lineNum">     188 </span><span class="lineCov">        120 :   const struct builtin_data&amp; bd = builtin_data[builtin_id];</span>
+<span class="lineNum">     189 </span><span class="lineCov">        120 :   enum jit_builtin_type type_id = bd.type;</span>
+<span class="lineNum">     190 </span><span class="lineCov">        120 :   recording::type *t = get_type (type_id);</span>
+<span class="lineNum">     191 </span><span class="lineCov">        120 :   if (!t)</span>
+<span class="lineNum">     192 </span>            :     return NULL;
+<span class="lineNum">     193 </span><span class="lineCov">        120 :   recording::function_type *func_type = t-&gt;as_a_function_type ();</span>
+<span class="lineNum">     194 </span><span class="lineCov">        120 :   if (!func_type)</span>
+<span class="lineNum">     195 </span>            :     return NULL;
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">        120 :   vec&lt;recording::type *&gt; param_types = func_type-&gt;get_param_types ();</span>
+<span class="lineNum">     198 </span><span class="lineCov">        120 :   recording::param **params = new recording::param *[param_types.length ()];</span>
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span><span class="lineCov">        120 :   int i;</span>
+<span class="lineNum">     201 </span><span class="lineCov">        120 :   recording::type *param_type;</span>
+<span class="lineNum">     202 </span><span class="lineCov">        240 :   FOR_EACH_VEC_ELT (param_types, i, param_type)</span>
+<span class="lineNum">     203 </span>            :     {
+<span class="lineNum">     204 </span><span class="lineCov">        120 :       char buf[16];</span>
+<span class="lineNum">     205 </span><span class="lineCov">        120 :       snprintf (buf, 16, &quot;arg%d&quot;, i);</span>
+<span class="lineNum">     206 </span><span class="lineCov">        120 :       params[i] = m_ctxt-&gt;new_param (NULL,</span>
+<span class="lineNum">     207 </span>            :                                      param_type,
+<span class="lineNum">     208 </span>            :                                      buf);
+<span class="lineNum">     209 </span>            :     }
+<span class="lineNum">     210 </span><span class="lineCov">        120 :   const char *asm_name = bd.get_asm_name ();</span>
+<span class="lineNum">     211 </span><span class="lineCov">        120 :   recording::function *result =</span>
+<span class="lineNum">     212 </span>            :     new recording::function (m_ctxt,
+<span class="lineNum">     213 </span>            :                              NULL,
+<span class="lineNum">     214 </span>            :                              GCC_JIT_FUNCTION_IMPORTED, // FIXME
+<span class="lineNum">     215 </span><span class="lineCov">        120 :                              func_type-&gt;get_return_type (),</span>
+<span class="lineNum">     216 </span><span class="lineCov">        120 :                              m_ctxt-&gt;new_string (asm_name),</span>
+<span class="lineNum">     217 </span><span class="lineCov">        120 :                              param_types.length (),</span>
+<span class="lineNum">     218 </span>            :                              params,
+<span class="lineNum">     219 </span><span class="lineCov">        120 :                              func_type-&gt;is_variadic (),</span>
+<span class="lineNum">     220 </span><span class="lineCov">        120 :                              builtin_id);</span>
+<span class="lineNum">     221 </span><span class="lineCov">        120 :   delete[] params;</span>
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            :   /* PR/64020 - If the client code is using builtin cos or sin,
+<span class="lineNum">     224 </span>            :      tree-ssa-math-opt.c's execute_cse_sincos_1 may attempt
+<span class="lineNum">     225 </span>            :      to optimize them to use __builtin_cexpi; for this,
+<span class="lineNum">     226 </span>            :      BUILT_IN_CEXPI needs to exist.
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span>            :      Hence query the cache for BUILT_IN_CEXPI to ensure it gets
+<span class="lineNum">     229 </span>            :      built.  */
+<span class="lineNum">     230 </span><span class="lineCov">        120 :   if (builtin_id == BUILT_IN_COS || builtin_id == BUILT_IN_SIN)</span>
+<span class="lineNum">     231 </span><span class="lineCov">         30 :     (void)get_builtin_function_by_id (BUILT_IN_CEXPI);</span>
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span>            :   /* builtins.c:expand_builtin_cexpi can optimize the various
+<span class="lineNum">     234 </span>            :      CEXP builtins to SINCOS builtins, and hence we may require
+<span class="lineNum">     235 </span>            :      SINCOS builtins latter.
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span>            :      Ensure the appropriate SINCOS builtin exists.  */
+<span class="lineNum">     238 </span><span class="lineCov">        120 :   if (builtin_id == BUILT_IN_CEXPIF)</span>
+<span class="lineNum">     239 </span><span class="lineNoCov">          0 :     (void)get_builtin_function_by_id (BUILT_IN_SINCOSF);</span>
+<span class="lineNum">     240 </span><span class="lineCov">        120 :   else if (builtin_id == BUILT_IN_CEXPI)</span>
+<span class="lineNum">     241 </span><span class="lineCov">         15 :     (void)get_builtin_function_by_id (BUILT_IN_SINCOS);</span>
+<span class="lineNum">     242 </span><span class="lineCov">        105 :   else if (builtin_id == BUILT_IN_CEXPIL)</span>
+<span class="lineNum">     243 </span><span class="lineNoCov">          0 :     (void)get_builtin_function_by_id (BUILT_IN_SINCOSL);</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            :   return result;
+<span class="lineNum">     246 </span>            : }
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            : /* Get the recording::type for a given type of builtin function,
+<span class="lineNum">     249 </span>            :    by ID, creating it if it doesn't already exist.  */
+<a name="250"><span class="lineNum">     250 </span>            : </a>
+<span class="lineNum">     251 </span>            : recording::type *
+<span class="lineNum">     252 </span><span class="lineCov">        300 : builtins_manager::get_type (enum jit_builtin_type type_id)</span>
+<span class="lineNum">     253 </span>            : {
+<span class="lineNum">     254 </span><span class="lineCov">        300 :   if (!m_types[type_id])</span>
+<span class="lineNum">     255 </span><span class="lineCov">        180 :     m_types[type_id] = make_type (type_id);</span>
+<span class="lineNum">     256 </span><span class="lineCov">        300 :   return m_types[type_id];</span>
+<span class="lineNum">     257 </span>            : }
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span>            : /* Create the recording::type for a given type of builtin function.  */
+<a name="260"><span class="lineNum">     260 </span>            : </a>
+<span class="lineNum">     261 </span>            : recording::type *
+<span class="lineNum">     262 </span><span class="lineCov">        180 : builtins_manager::make_type (enum jit_builtin_type type_id)</span>
+<span class="lineNum">     263 </span>            : {
+<span class="lineNum">     264 </span>            :   /* Use builtin-types.def to construct a switch statement, with each
+<span class="lineNum">     265 </span>            :      case deferring to one of the methods below:
+<span class="lineNum">     266 </span>            :        - DEF_PRIMITIVE_TYPE is handled as a call to make_primitive_type.
+<span class="lineNum">     267 </span>            :        - the various DEF_FUNCTION_TYPE_n are handled by variadic calls
+<span class="lineNum">     268 </span>            :          to make_fn_type.
+<span class="lineNum">     269 </span>            :        - similarly for DEF_FUNCTION_TYPE_VAR_n, but setting the
+<span class="lineNum">     270 </span>            :         &quot;is_variadic&quot; argument.
+<span class="lineNum">     271 </span>            :        - DEF_POINTER_TYPE is handled by make_ptr_type.
+<span class="lineNum">     272 </span>            :      That should handle everything, but just in case we also suppy a
+<span class="lineNum">     273 </span>            :      gcc_unreachable default clause.  */
+<span class="lineNum">     274 </span><span class="lineCov">        180 :   switch (type_id)</span>
+<span class="lineNum">     275 </span>            :     {
+<span class="lineNum">     276 </span>            : #define DEF_PRIMITIVE_TYPE(ENUM, VALUE) \
+<span class="lineNum">     277 </span>            :       case ENUM: return make_primitive_type (ENUM);
+<span class="lineNum">     278 </span>            : #define DEF_FUNCTION_TYPE_0(ENUM, RETURN) \
+<span class="lineNum">     279 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 0);
+<span class="lineNum">     280 </span>            : #define DEF_FUNCTION_TYPE_1(ENUM, RETURN, ARG1) \
+<span class="lineNum">     281 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 1, ARG1);
+<span class="lineNum">     282 </span>            : #define DEF_FUNCTION_TYPE_2(ENUM, RETURN, ARG1, ARG2) \
+<span class="lineNum">     283 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 2, ARG1, ARG2);
+<span class="lineNum">     284 </span>            : #define DEF_FUNCTION_TYPE_3(ENUM, RETURN, ARG1, ARG2, ARG3) \
+<span class="lineNum">     285 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 3, ARG1, ARG2, ARG3);
+<span class="lineNum">     286 </span>            : #define DEF_FUNCTION_TYPE_4(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4) \
+<span class="lineNum">     287 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 4, ARG1, ARG2, ARG3, \
+<span class="lineNum">     288 </span>            :                                       ARG4);
+<span class="lineNum">     289 </span>            : #define DEF_FUNCTION_TYPE_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
+<span class="lineNum">     290 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 5, ARG1, ARG2, ARG3, \
+<span class="lineNum">     291 </span>            :                                       ARG4, ARG5);
+<span class="lineNum">     292 </span>            : #define DEF_FUNCTION_TYPE_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     293 </span>            :                             ARG6)                                       \
+<span class="lineNum">     294 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 6, ARG1, ARG2, ARG3, \
+<span class="lineNum">     295 </span>            :                                       ARG4, ARG5, ARG6);
+<span class="lineNum">     296 </span>            : #define DEF_FUNCTION_TYPE_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     297 </span>            :                             ARG6, ARG7)                                 \
+<span class="lineNum">     298 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 7, ARG1, ARG2, ARG3, \
+<span class="lineNum">     299 </span>            :                                       ARG4, ARG5, ARG6, ARG7);
+<span class="lineNum">     300 </span>            : #define DEF_FUNCTION_TYPE_8(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     301 </span>            :                             ARG6, ARG7, ARG8)                           \
+<span class="lineNum">     302 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 8, ARG1, ARG2, ARG3, \
+<span class="lineNum">     303 </span>            :                                       ARG4, ARG5, ARG6, ARG7, ARG8);
+<span class="lineNum">     304 </span>            : #define DEF_FUNCTION_TYPE_9(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     305 </span>            :                             ARG6, ARG7, ARG8, ARG9)                     \
+<span class="lineNum">     306 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 9, ARG1, ARG2, ARG3, \
+<span class="lineNum">     307 </span>            :                                       ARG4, ARG5, ARG6, ARG7, ARG8, ARG9);
+<span class="lineNum">     308 </span>            : #define DEF_FUNCTION_TYPE_10(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     309 </span>            :                              ARG6, ARG7, ARG8, ARG9, ARG10)              \
+<span class="lineNum">     310 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 10, ARG1, ARG2, ARG3, \
+<span class="lineNum">     311 </span>            :                                       ARG4, ARG5, ARG6, ARG7, ARG8, ARG9, \
+<span class="lineNum">     312 </span>            :                                       ARG10);
+<span class="lineNum">     313 </span>            : #define DEF_FUNCTION_TYPE_11(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     314 </span>            :                              ARG6, ARG7, ARG8, ARG9, ARG10, ARG11)       \
+<span class="lineNum">     315 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 0, 11, ARG1, ARG2, ARG3, \
+<span class="lineNum">     316 </span>            :                                       ARG4, ARG5, ARG6, ARG7, ARG8, ARG9, \
+<span class="lineNum">     317 </span>            :                                       ARG10, ARG11);
+<span class="lineNum">     318 </span>            : #define DEF_FUNCTION_TYPE_VAR_0(ENUM, RETURN) \
+<span class="lineNum">     319 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 0);
+<span class="lineNum">     320 </span>            : #define DEF_FUNCTION_TYPE_VAR_1(ENUM, RETURN, ARG1) \
+<span class="lineNum">     321 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 1, ARG1);
+<span class="lineNum">     322 </span>            : #define DEF_FUNCTION_TYPE_VAR_2(ENUM, RETURN, ARG1, ARG2) \
+<span class="lineNum">     323 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 2, ARG1, ARG2);
+<span class="lineNum">     324 </span>            : #define DEF_FUNCTION_TYPE_VAR_3(ENUM, RETURN, ARG1, ARG2, ARG3) \
+<span class="lineNum">     325 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 3, ARG1, ARG2, ARG3);
+<span class="lineNum">     326 </span>            : #define DEF_FUNCTION_TYPE_VAR_4(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4) \
+<span class="lineNum">     327 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 4, ARG1, ARG2, ARG3, \
+<span class="lineNum">     328 </span>            :                                       ARG4);
+<span class="lineNum">     329 </span>            : #define DEF_FUNCTION_TYPE_VAR_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
+<span class="lineNum">     330 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 5, ARG1, ARG2, ARG3, \
+<span class="lineNum">     331 </span>            :                                       ARG4, ARG5);
+<span class="lineNum">     332 </span>            : #define DEF_FUNCTION_TYPE_VAR_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     333 </span>            :                                 ARG6)                                   \
+<span class="lineNum">     334 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 6, ARG1, ARG2, ARG3, \
+<span class="lineNum">     335 </span>            :                                       ARG4, ARG5, ARG6);
+<span class="lineNum">     336 </span>            : #define DEF_FUNCTION_TYPE_VAR_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+<span class="lineNum">     337 </span>            :                                 ARG6, ARG7)                             \
+<span class="lineNum">     338 </span>            :       case ENUM: return make_fn_type (ENUM, RETURN, 1, 7, ARG1, ARG2, ARG3, \
+<span class="lineNum">     339 </span>            :                                       ARG4, ARG5, ARG6, ARG7);
+<span class="lineNum">     340 </span>            : #define DEF_POINTER_TYPE(ENUM, TYPE) \
+<span class="lineNum">     341 </span>            :       case ENUM: return make_ptr_type (ENUM, TYPE);
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span>            : #include &quot;builtin-types.def&quot;
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span>            : #undef DEF_PRIMITIVE_TYPE
+<span class="lineNum">     346 </span>            : #undef DEF_FUNCTION_TYPE_0
+<span class="lineNum">     347 </span>            : #undef DEF_FUNCTION_TYPE_1
+<span class="lineNum">     348 </span>            : #undef DEF_FUNCTION_TYPE_2
+<span class="lineNum">     349 </span>            : #undef DEF_FUNCTION_TYPE_3
+<span class="lineNum">     350 </span>            : #undef DEF_FUNCTION_TYPE_4
+<span class="lineNum">     351 </span>            : #undef DEF_FUNCTION_TYPE_5
+<span class="lineNum">     352 </span>            : #undef DEF_FUNCTION_TYPE_6
+<span class="lineNum">     353 </span>            : #undef DEF_FUNCTION_TYPE_7
+<span class="lineNum">     354 </span>            : #undef DEF_FUNCTION_TYPE_8
+<span class="lineNum">     355 </span>            : #undef DEF_FUNCTION_TYPE_9
+<span class="lineNum">     356 </span>            : #undef DEF_FUNCTION_TYPE_10
+<span class="lineNum">     357 </span>            : #undef DEF_FUNCTION_TYPE_11
+<span class="lineNum">     358 </span>            : #undef DEF_FUNCTION_TYPE_VAR_0
+<span class="lineNum">     359 </span>            : #undef DEF_FUNCTION_TYPE_VAR_1
+<span class="lineNum">     360 </span>            : #undef DEF_FUNCTION_TYPE_VAR_2
+<span class="lineNum">     361 </span>            : #undef DEF_FUNCTION_TYPE_VAR_3
+<span class="lineNum">     362 </span>            : #undef DEF_FUNCTION_TYPE_VAR_4
+<span class="lineNum">     363 </span>            : #undef DEF_FUNCTION_TYPE_VAR_5
+<span class="lineNum">     364 </span>            : #undef DEF_FUNCTION_TYPE_VAR_6
+<span class="lineNum">     365 </span>            : #undef DEF_FUNCTION_TYPE_VAR_7
+<span class="lineNum">     366 </span>            : #undef DEF_POINTER_TYPE
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     369 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     370 </span>            :     }
+<span class="lineNum">     371 </span>            : }
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            : /* Create the recording::type for a given primitive type within the
+<span class="lineNum">     374 </span>            :    builtin system.
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span>            :    Only some types are currently supported.  */
+<a name="377"><span class="lineNum">     377 </span>            : </a>
+<span class="lineNum">     378 </span>            : recording::type*
+<span class="lineNum">     379 </span><span class="lineCov">        105 : builtins_manager::make_primitive_type (enum jit_builtin_type type_id)</span>
+<span class="lineNum">     380 </span>            : {
+<span class="lineNum">     381 </span><span class="lineCov">        105 :   switch (type_id)</span>
+<span class="lineNum">     382 </span>            :     {
+<span class="lineNum">     383 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     384 </span>            :       // only some of these types are implemented so far:
+<span class="lineNum">     385 </span><span class="lineNoCov">          0 :       m_ctxt-&gt;add_error (NULL,</span>
+<span class="lineNum">     386 </span>            :                          &quot;unimplemented primitive type for builtin: %d&quot;, type_id);
+<span class="lineNum">     387 </span><span class="lineNoCov">          0 :       return NULL;</span>
+<span class="lineNum">     388 </span>            : 
+<span class="lineNum">     389 </span><span class="lineCov">         15 :     case BT_VOID: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_VOID);</span>
+<span class="lineNum">     390 </span><span class="lineCov">         15 :     case BT_BOOL: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_BOOL);</span>
+<span class="lineNum">     391 </span><span class="lineCov">         15 :     case BT_INT: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_INT);</span>
+<span class="lineNum">     392 </span><span class="lineNoCov">          0 :     case BT_UINT: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_UNSIGNED_INT);</span>
+<span class="lineNum">     393 </span><span class="lineNoCov">          0 :     case BT_LONG: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_LONG);</span>
+<span class="lineNum">     394 </span><span class="lineNoCov">          0 :     case BT_ULONG: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_UNSIGNED_LONG);</span>
+<span class="lineNum">     395 </span><span class="lineNoCov">          0 :     case BT_LONGLONG: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_LONG_LONG);</span>
+<span class="lineNum">     396 </span><span class="lineNoCov">          0 :     case BT_ULONGLONG:</span>
+<span class="lineNum">     397 </span><span class="lineNoCov">          0 :       return m_ctxt-&gt;get_type (GCC_JIT_TYPE_UNSIGNED_LONG_LONG);</span>
+<span class="lineNum">     398 </span>            :     // case BT_INT128:
+<span class="lineNum">     399 </span>            :     // case BT_UINT128:
+<span class="lineNum">     400 </span>            :     // case BT_INTMAX:
+<span class="lineNum">     401 </span>            :     // case BT_UINTMAX:
+<span class="lineNum">     402 </span><span class="lineNoCov">          0 :     case BT_UINT16: return m_ctxt-&gt;get_int_type (2, false);</span>
+<span class="lineNum">     403 </span><span class="lineNoCov">          0 :     case BT_UINT32: return m_ctxt-&gt;get_int_type (4, false);</span>
+<span class="lineNum">     404 </span><span class="lineNoCov">          0 :     case BT_UINT64: return m_ctxt-&gt;get_int_type (8, false);</span>
+<span class="lineNum">     405 </span>            :     // case BT_WORD:
+<span class="lineNum">     406 </span>            :     // case BT_UNWINDWORD:
+<span class="lineNum">     407 </span><span class="lineNoCov">          0 :     case BT_FLOAT: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_FLOAT);</span>
+<span class="lineNum">     408 </span><span class="lineCov">         15 :     case BT_DOUBLE: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_DOUBLE);</span>
+<span class="lineNum">     409 </span><span class="lineNoCov">          0 :     case BT_LONGDOUBLE: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_LONG_DOUBLE);</span>
+<span class="lineNum">     410 </span><span class="lineNoCov">          0 :     case BT_COMPLEX_FLOAT:</span>
+<span class="lineNum">     411 </span><span class="lineNoCov">          0 :       return m_ctxt-&gt;get_type (GCC_JIT_TYPE_COMPLEX_FLOAT);</span>
+<span class="lineNum">     412 </span><span class="lineCov">         15 :     case BT_COMPLEX_DOUBLE:</span>
+<span class="lineNum">     413 </span><span class="lineCov">         15 :       return m_ctxt-&gt;get_type (GCC_JIT_TYPE_COMPLEX_DOUBLE);</span>
+<span class="lineNum">     414 </span><span class="lineNoCov">          0 :     case BT_COMPLEX_LONGDOUBLE:</span>
+<span class="lineNum">     415 </span><span class="lineNoCov">          0 :       return m_ctxt-&gt;get_type (GCC_JIT_TYPE_COMPLEX_LONG_DOUBLE);</span>
+<span class="lineNum">     416 </span><span class="lineNoCov">          0 :     case BT_PTR: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_VOID_PTR);</span>
+<span class="lineNum">     417 </span><span class="lineNoCov">          0 :     case BT_FILEPTR: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_FILE_PTR);</span>
+<span class="lineNum">     418 </span>            :     // case BT_CONST:
+<span class="lineNum">     419 </span>            :     // case BT_VOLATILE_PTR:
+<span class="lineNum">     420 </span>            :     // case BT_CONST_VOLATILE_PTR:
+<span class="lineNum">     421 </span>            :     // case BT_PTRMODE:
+<span class="lineNum">     422 </span>            :     // case BT_INT_PTR:
+<span class="lineNum">     423 </span>            :     // case BT_FLOAT_PTR:
+<span class="lineNum">     424 </span><span class="lineCov">         15 :     case BT_DOUBLE_PTR:</span>
+<span class="lineNum">     425 </span><span class="lineCov">         15 :       return m_ctxt-&gt;get_type (GCC_JIT_TYPE_DOUBLE)-&gt;get_pointer ();</span>
+<span class="lineNum">     426 </span>            :     // case BT_CONST_DOUBLE_PTR:
+<span class="lineNum">     427 </span>            :     // case BT_LONGDOUBLE_PTR:
+<span class="lineNum">     428 </span>            :     // case BT_PID:
+<span class="lineNum">     429 </span>            :     // case BT_SIZE:
+<span class="lineNum">     430 </span>            :     // case BT_SSIZE:
+<span class="lineNum">     431 </span>            :     // case BT_WINT:
+<span class="lineNum">     432 </span>            :     // case BT_STRING:
+<span class="lineNum">     433 </span><span class="lineCov">         15 :     case BT_CONST_STRING: return m_ctxt-&gt;get_type (GCC_JIT_TYPE_CONST_CHAR_PTR);</span>
+<span class="lineNum">     434 </span>            :     // case BT_DFLOAT32:
+<span class="lineNum">     435 </span>            :     // case BT_DFLOAT64:
+<span class="lineNum">     436 </span>            :     // case BT_DFLOAT128:
+<span class="lineNum">     437 </span>            :     // case BT_DFLOAT32_PTR:
+<span class="lineNum">     438 </span>            :     // case BT_DFLOAT64_PTR:
+<span class="lineNum">     439 </span>            :     // case BT_DFLOAT128_PTR:
+<span class="lineNum">     440 </span>            :     // case BT_VALIST_REF:
+<span class="lineNum">     441 </span>            :     // case BT_VALIST_ARG:
+<span class="lineNum">     442 </span>            :     // case BT_I1:
+<span class="lineNum">     443 </span>            :     // case BT_I2:
+<span class="lineNum">     444 </span>            :     // case BT_I4:
+<span class="lineNum">     445 </span>            :     // case BT_I8:
+<span class="lineNum">     446 </span>            :     // case BT_I16:
+<span class="lineNum">     447 </span>            :     }
+<span class="lineNum">     448 </span>            : }
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span>            : /* Create the recording::function_type for a given function type
+<span class="lineNum">     451 </span>            :    signature.  */
+<a name="452"><span class="lineNum">     452 </span>            : </a>
+<span class="lineNum">     453 </span>            : recording::function_type *
+<span class="lineNum">     454 </span><span class="lineCov">         75 : builtins_manager::make_fn_type (enum jit_builtin_type,</span>
+<span class="lineNum">     455 </span>            :                                 enum jit_builtin_type return_type_id,
+<span class="lineNum">     456 </span>            :                                 bool is_variadic,
+<span class="lineNum">     457 </span>            :                                 int num_args, ...)
+<span class="lineNum">     458 </span>            : {
+<span class="lineNum">     459 </span><span class="lineCov">         75 :   va_list list;</span>
+<span class="lineNum">     460 </span><span class="lineCov">         75 :   int i;</span>
+<span class="lineNum">     461 </span><span class="lineCov">         75 :   recording::type **param_types = new recording::type *[num_args];</span>
+<span class="lineNum">     462 </span><span class="lineCov">         75 :   recording::type *return_type = NULL;</span>
+<span class="lineNum">     463 </span><span class="lineCov">         75 :   recording::function_type *result = NULL;</span>
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span><span class="lineCov">         75 :   va_start (list, num_args);</span>
+<span class="lineNum">     466 </span><span class="lineCov">        180 :   for (i = 0; i &lt; num_args; ++i)</span>
+<span class="lineNum">     467 </span>            :     {
+<span class="lineNum">     468 </span><span class="lineCov">        105 :       enum jit_builtin_type arg_type_id =</span>
+<span class="lineNum">     469 </span><span class="lineCov">        105 :         (enum jit_builtin_type) va_arg (list, int);</span>
+<span class="lineNum">     470 </span><span class="lineCov">        105 :       param_types[i] = get_type (arg_type_id);</span>
+<span class="lineNum">     471 </span><span class="lineCov">        105 :       if (!param_types[i])</span>
+<span class="lineNum">     472 </span>            :         goto error;
+<span class="lineNum">     473 </span>            :     }
+<span class="lineNum">     474 </span><span class="lineCov">         75 :   va_end (list);</span>
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span><span class="lineCov">         75 :   return_type = get_type (return_type_id);</span>
+<span class="lineNum">     477 </span><span class="lineCov">         75 :   if (!return_type)</span>
+<span class="lineNum">     478 </span>            :     goto error;
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span><span class="lineCov">         75 :   result = m_ctxt-&gt;new_function_type (return_type,</span>
+<span class="lineNum">     481 </span>            :                                       num_args,
+<span class="lineNum">     482 </span>            :                                       param_types,
+<span class="lineNum">     483 </span>            :                                       is_variadic);
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span><span class="lineCov">         75 :  error:</span>
+<span class="lineNum">     486 </span><span class="lineCov">         75 :   delete[] param_types;</span>
+<span class="lineNum">     487 </span><span class="lineCov">         75 :   return result;</span>
+<span class="lineNum">     488 </span>            : }
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : /* Handler for DEF_POINTER_TYPE within builtins_manager::make_type.  */
+<a name="491"><span class="lineNum">     491 </span>            : </a>
+<span class="lineNum">     492 </span>            : recording::type *
+<span class="lineNum">     493 </span><span class="lineNoCov">          0 : builtins_manager::make_ptr_type (enum jit_builtin_type,</span>
+<span class="lineNum">     494 </span>            :                                  enum jit_builtin_type other_type_id)
+<span class="lineNum">     495 </span>            : {
+<span class="lineNum">     496 </span><span class="lineNoCov">          0 :   recording::type *base_type = get_type (other_type_id);</span>
+<span class="lineNum">     497 </span><span class="lineNoCov">          0 :   return base_type-&gt;get_pointer ();</span>
+<span class="lineNum">     498 </span>            : }
+<span class="lineNum">     499 </span>            : 
+<span class="lineNum">     500 </span>            : /* Playback support.  */
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span>            : /* A builtins_manager is associated with a recording::context
+<span class="lineNum">     503 </span>            :    and might be reused for multiple compiles on various
+<span class="lineNum">     504 </span>            :    playback::contexts, perhaps with different options.
+<span class="lineNum">     505 </span>            : 
+<span class="lineNum">     506 </span>            :    Purge any playback state.  Currently this is just the table of
+<span class="lineNum">     507 </span>            :    attributes.  */
+<a name="508"><span class="lineNum">     508 </span>            : </a>
+<span class="lineNum">     509 </span>            : void
+<span class="lineNum">     510 </span><span class="lineCov">        848 : builtins_manager::finish_playback (void)</span>
+<span class="lineNum">     511 </span>            : {
+<span class="lineNum">     512 </span><span class="lineCov">        848 :   memset (m_attributes, 0, sizeof (m_attributes));</span>
+<span class="lineNum">     513 </span><span class="lineCov">        848 : }</span>
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span>            : /* Get the enum built_in_class for BUILTIN_ID.  */
+<a name="516"><span class="lineNum">     516 </span>            : </a>
+<span class="lineNum">     517 </span>            : enum built_in_class
+<span class="lineNum">     518 </span><span class="lineCov">        120 : builtins_manager::get_class (enum built_in_function builtin_id)</span>
+<span class="lineNum">     519 </span>            : {
+<span class="lineNum">     520 </span><span class="lineCov">        120 :   return builtin_data[builtin_id].fnclass;</span>
+<span class="lineNum">     521 </span>            : }
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span>            : /* Is BUILTIN_ID implicit?  */
+<a name="524"><span class="lineNum">     524 </span>            : </a>
+<span class="lineNum">     525 </span>            : bool
+<span class="lineNum">     526 </span><span class="lineCov">        120 : builtins_manager::implicit_p (enum built_in_function builtin_id)</span>
+<span class="lineNum">     527 </span>            : {
+<span class="lineNum">     528 </span><span class="lineCov">        120 :   return builtin_data[builtin_id].implicit_p;</span>
+<span class="lineNum">     529 </span>            : }
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span>            : /* Get any attributes (in tree form) for the function declaration
+<span class="lineNum">     532 </span>            :    for BUILTIN_ID.
+<span class="lineNum">     533 </span>            : 
+<span class="lineNum">     534 </span>            :    These are created on-demand, and cached within the m_attributes
+<span class="lineNum">     535 </span>            :    array, until finish_playback.  */
+<a name="536"><span class="lineNum">     536 </span>            : </a>
+<span class="lineNum">     537 </span>            : tree
+<span class="lineNum">     538 </span><span class="lineCov">        120 : builtins_manager::get_attrs_tree (enum built_in_function builtin_id)</span>
+<span class="lineNum">     539 </span>            : {
+<span class="lineNum">     540 </span><span class="lineCov">        120 :   enum built_in_attribute attr = builtin_data[builtin_id].attr;</span>
+<span class="lineNum">     541 </span><span class="lineCov">        120 :   return get_attrs_tree (attr);</span>
+<span class="lineNum">     542 </span>            : }
+<span class="lineNum">     543 </span>            : 
+<span class="lineNum">     544 </span>            : /* As above, but for an enum built_in_attribute.  */
+<a name="545"><span class="lineNum">     545 </span>            : </a>
+<span class="lineNum">     546 </span>            : tree
+<span class="lineNum">     547 </span><span class="lineCov">        480 : builtins_manager::get_attrs_tree (enum built_in_attribute attr)</span>
+<span class="lineNum">     548 </span>            : {
+<span class="lineNum">     549 </span><span class="lineCov">        480 :   gcc_assert (attr &lt; ATTR_LAST);</span>
+<span class="lineNum">     550 </span><span class="lineCov">        480 :   if (!m_attributes [attr])</span>
+<span class="lineNum">     551 </span><span class="lineCov">        385 :     m_attributes [attr] = make_attrs_tree (attr);</span>
+<span class="lineNum">     552 </span><span class="lineCov">        480 :   return m_attributes [attr];</span>
+<span class="lineNum">     553 </span>            : }
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span>            : /* Handle a cache-miss within the m_attributes array by
+<span class="lineNum">     556 </span>            :    generating the attributes for enum built_in_attribute
+<span class="lineNum">     557 </span>            :    in tree form.  */
+<a name="558"><span class="lineNum">     558 </span>            : </a>
+<span class="lineNum">     559 </span>            : tree
+<span class="lineNum">     560 </span><span class="lineCov">        385 : builtins_manager::make_attrs_tree (enum built_in_attribute attr)</span>
+<span class="lineNum">     561 </span>            : {
+<span class="lineNum">     562 </span><span class="lineCov">        385 :   switch (attr)</span>
+<span class="lineNum">     563 </span>            :     {
+<span class="lineNum">     564 </span>            :       /* Generate cases from builtin-attrs.def.  */
+<span class="lineNum">     565 </span>            : #define DEF_ATTR_NULL_TREE(ENUM)                                \
+<span class="lineNum">     566 </span>            :       case ENUM: return NULL_TREE;
+<span class="lineNum">     567 </span>            : #define DEF_ATTR_INT(ENUM, VALUE)                               \
+<span class="lineNum">     568 </span>            :       case ENUM: return build_int_cst (integer_type_node, VALUE);
+<span class="lineNum">     569 </span>            : #define DEF_ATTR_STRING(ENUM, VALUE)                            \
+<span class="lineNum">     570 </span>            :       case ENUM: return build_string (strlen (VALUE), VALUE);
+<span class="lineNum">     571 </span>            : #define DEF_ATTR_IDENT(ENUM, STRING)                            \
+<span class="lineNum">     572 </span>            :       case ENUM: return get_identifier (STRING);
+<span class="lineNum">     573 </span>            : #define DEF_ATTR_TREE_LIST(ENUM, PURPOSE, VALUE, CHAIN) \
+<span class="lineNum">     574 </span>            :       case ENUM: return tree_cons (get_attrs_tree (PURPOSE),    \
+<span class="lineNum">     575 </span>            :                                    get_attrs_tree (VALUE),      \
+<span class="lineNum">     576 </span>            :                                    get_attrs_tree (CHAIN));
+<span class="lineNum">     577 </span>            : #include &quot;builtin-attrs.def&quot;
+<span class="lineNum">     578 </span>            : #undef DEF_ATTR_NULL_TREE
+<span class="lineNum">     579 </span>            : #undef DEF_ATTR_INT
+<span class="lineNum">     580 </span>            : #undef DEF_ATTR_IDENT
+<span class="lineNum">     581 </span>            : #undef DEF_ATTR_TREE_LIST
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">     584 </span>            :       /* We somehow got a value not covered by the autogenerated
+<span class="lineNum">     585 </span>            :          cases.  */
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     587 </span>            :       return NULL;
+<span class="lineNum">     588 </span>            :     }
+<span class="lineNum">     589 </span>            : }
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            : } // namespace jit
+<span class="lineNum">     592 </span>            : } // namespace gcc
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

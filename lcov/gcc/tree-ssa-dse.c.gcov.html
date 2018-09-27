@@ -1,0 +1,1103 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-dse.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-dse.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-dse.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">364</td>
+            <td class="headerCovTableEntry">371</td>
+            <td class="headerCovTableEntryHi">98.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntry">24</td>
+            <td class="headerCovTableEntryHi">95.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Dead store elimination</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;domwalk.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-cfgcleanup.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;alias.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-ssa-loop.h&quot;
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : /* This file implements dead store elimination.
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            :    A dead store is a store into a memory location which will later be
+<span class="lineNum">      43 </span>            :    overwritten by another store without any intervening loads.  In this
+<span class="lineNum">      44 </span>            :    case the earlier store can be deleted.
+<span class="lineNum">      45 </span>            : 
+<span class="lineNum">      46 </span>            :    In our SSA + virtual operand world we use immediate uses of virtual
+<span class="lineNum">      47 </span>            :    operands to detect dead stores.  If a store's virtual definition
+<span class="lineNum">      48 </span>            :    is used precisely once by a later store to the same location which
+<span class="lineNum">      49 </span>            :    post dominates the first store, then the first store is dead.
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            :    The single use of the store's virtual definition ensures that
+<span class="lineNum">      52 </span>            :    there are no intervening aliased loads and the requirement that
+<span class="lineNum">      53 </span>            :    the second load post dominate the first ensures that if the earlier
+<span class="lineNum">      54 </span>            :    store executes, then the later stores will execute before the function
+<span class="lineNum">      55 </span>            :    exits.
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            :    It may help to think of this as first moving the earlier store to
+<span class="lineNum">      58 </span>            :    the point immediately before the later store.  Again, the single
+<span class="lineNum">      59 </span>            :    use of the virtual definition and the post-dominance relationship
+<span class="lineNum">      60 </span>            :    ensure that such movement would be safe.  Clearly if there are
+<span class="lineNum">      61 </span>            :    back to back stores, then the second is redundant.
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :    Reviewing section 10.7.2 in Morgan's &quot;Building an Optimizing Compiler&quot;
+<span class="lineNum">      64 </span>            :    may also help in understanding this code since it discusses the
+<span class="lineNum">      65 </span>            :    relationship between dead store and redundant load elimination.  In
+<span class="lineNum">      66 </span>            :    fact, they are the same transformation applied to different views of
+<span class="lineNum">      67 </span>            :    the CFG.  */
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            : /* Bitmap of blocks that have had EH statements cleaned.  We should
+<span class="lineNum">      71 </span>            :    remove their dead edges eventually.  */
+<span class="lineNum">      72 </span>            : static bitmap need_eh_cleanup;
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            : /* Return value from dse_classify_store */
+<span class="lineNum">      75 </span>            : enum dse_store_status
+<span class="lineNum">      76 </span>            : {
+<span class="lineNum">      77 </span>            :   DSE_STORE_LIVE,
+<span class="lineNum">      78 </span>            :   DSE_STORE_MAYBE_PARTIAL_DEAD,
+<span class="lineNum">      79 </span>            :   DSE_STORE_DEAD
+<span class="lineNum">      80 </span>            : };
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            : /* STMT is a statement that may write into memory.  Analyze it and
+<span class="lineNum">      83 </span>            :    initialize WRITE to describe how STMT affects memory.
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            :    Return TRUE if the the statement was analyzed, FALSE otherwise.
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            :    It is always safe to return FALSE.  But typically better optimziation
+<span class="lineNum">      88 </span>            :    can be achieved by analyzing more statements.  */
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            : static bool
+<span class="lineNum">      91 </span><span class="lineCov">  131908706 : initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write)</span>
+<span class="lineNum">      92 </span>            : {
+<span class="lineNum">      93 </span>            :   /* It's advantageous to handle certain mem* functions.  */
+<span class="lineNum">      94 </span><span class="lineCov">  131908706 :   if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))</span>
+<span class="lineNum">      95 </span>            :     {
+<span class="lineNum">      96 </span><span class="lineCov">    1932511 :       switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))</span>
+<span class="lineNum">      97 </span>            :         {
+<span class="lineNum">      98 </span><span class="lineCov">     303096 :           case BUILT_IN_MEMCPY:</span>
+<span class="lineNum">      99 </span><span class="lineCov">     303096 :           case BUILT_IN_MEMMOVE:</span>
+<span class="lineNum">     100 </span><span class="lineCov">     303096 :           case BUILT_IN_MEMSET:</span>
+<span class="lineNum">     101 </span><span class="lineCov">     303096 :             {</span>
+<span class="lineNum">     102 </span><span class="lineCov">     303096 :               tree size = NULL_TREE;</span>
+<span class="lineNum">     103 </span><span class="lineCov">     303096 :               if (gimple_call_num_args (stmt) == 3)</span>
+<span class="lineNum">     104 </span><span class="lineCov">     303096 :                 size = gimple_call_arg (stmt, 2);</span>
+<span class="lineNum">     105 </span><span class="lineCov">     303096 :               tree ptr = gimple_call_arg (stmt, 0);</span>
+<span class="lineNum">     106 </span><span class="lineCov">     303096 :               ao_ref_init_from_ptr_and_size (write, ptr, size);</span>
+<span class="lineNum">     107 </span><span class="lineCov">     303096 :               return true;</span>
+<span class="lineNum">     108 </span>            :             }
+<span class="lineNum">     109 </span>            :           default:
+<span class="lineNum">     110 </span>            :             break;
+<span class="lineNum">     111 </span>            :         }
+<span class="lineNum">     112 </span>            :     }
+<span class="lineNum">     113 </span><span class="lineCov">  259952390 :   else if (is_gimple_assign (stmt))</span>
+<span class="lineNum">     114 </span>            :     {
+<span class="lineNum">     115 </span><span class="lineCov">  118623564 :       ao_ref_init (write, gimple_assign_lhs (stmt));</span>
+<span class="lineNum">     116 </span><span class="lineCov">  118623564 :       return true;</span>
+<span class="lineNum">     117 </span>            :     }
+<span class="lineNum">     118 </span>            :   return false;
+<span class="lineNum">     119 </span>            : }
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span>            : /* Given REF from the the alias oracle, return TRUE if it is a valid
+<span class="lineNum">     122 </span>            :    memory reference for dead store elimination, false otherwise.
+<span class="lineNum">     123 </span>            : 
+<span class="lineNum">     124 </span>            :    In particular, the reference must have a known base, known maximum
+<span class="lineNum">     125 </span>            :    size, start at a byte offset and have a size that is one or more
+<span class="lineNum">     126 </span>            :    bytes.  */
+<a name="127"><span class="lineNum">     127 </span>            : </a>
+<span class="lineNum">     128 </span>            : static bool
+<span class="lineNum">     129 </span><span class="lineCov">  120099101 : valid_ao_ref_for_dse (ao_ref *ref)</span>
+<span class="lineNum">     130 </span>            : {
+<span class="lineNum">     131 </span><span class="lineCov">  120099101 :   return (ao_ref_base (ref)</span>
+<span class="lineNum">     132 </span><span class="lineCov">  240198202 :           &amp;&amp; known_size_p (ref-&gt;max_size)</span>
+<span class="lineNum">     133 </span><span class="lineCov">  119865401 :           &amp;&amp; maybe_ne (ref-&gt;size, 0)</span>
+<span class="lineNum">     134 </span><span class="lineCov">  119864686 :           &amp;&amp; known_eq (ref-&gt;max_size, ref-&gt;size)</span>
+<span class="lineNum">     135 </span><span class="lineCov">  119406941 :           &amp;&amp; known_ge (ref-&gt;offset, 0)</span>
+<span class="lineNum">     136 </span><span class="lineCov">  238777584 :           &amp;&amp; multiple_p (ref-&gt;offset, BITS_PER_UNIT)</span>
+<span class="lineNum">     137 </span><span class="lineCov">  358812874 :           &amp;&amp; multiple_p (ref-&gt;size, BITS_PER_UNIT));</span>
+<span class="lineNum">     138 </span>            : }
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            : /* Try to normalize COPY (an ao_ref) relative to REF.  Essentially when we are
+<span class="lineNum">     141 </span>            :    done COPY will only refer bytes found within REF.  Return true if COPY
+<span class="lineNum">     142 </span>            :    is known to intersect at least one byte of REF.  */
+<a name="143"><span class="lineNum">     143 </span>            : </a>
+<span class="lineNum">     144 </span>            : static bool
+<span class="lineNum">     145 </span><span class="lineNoCov">          0 : normalize_ref (ao_ref *copy, ao_ref *ref)</span>
+<span class="lineNum">     146 </span>            : {
+<span class="lineNum">     147 </span><span class="lineCov">   78056399 :   if (!ordered_p (copy-&gt;offset, ref-&gt;offset))</span>
+<span class="lineNum">     148 </span>            :     return false;
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            :   /* If COPY starts before REF, then reset the beginning of
+<span class="lineNum">     151 </span>            :      COPY to match REF and decrease the size of COPY by the
+<span class="lineNum">     152 </span>            :      number of bytes removed from COPY.  */
+<span class="lineNum">     153 </span><span class="lineNoCov">          0 :   if (maybe_lt (copy-&gt;offset, ref-&gt;offset))</span>
+<span class="lineNum">     154 </span>            :     {
+<span class="lineNum">     155 </span><span class="lineCov">    3748881 :       poly_int64 diff = ref-&gt;offset - copy-&gt;offset;</span>
+<span class="lineNum">     156 </span><span class="lineCov">    3748881 :       if (maybe_le (copy-&gt;size, diff))</span>
+<span class="lineNum">     157 </span>            :         return false;
+<span class="lineNum">     158 </span><span class="lineCov">     124239 :       copy-&gt;size -= diff;</span>
+<span class="lineNum">     159 </span><span class="lineCov">     124239 :       copy-&gt;offset = ref-&gt;offset;</span>
+<span class="lineNum">     160 </span>            :     }
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span><span class="lineCov">   74431757 :   poly_int64 diff = copy-&gt;offset - ref-&gt;offset;</span>
+<span class="lineNum">     163 </span><span class="lineCov">   74431757 :   if (maybe_le (ref-&gt;size, diff))</span>
+<span class="lineNum">     164 </span>            :     return false;
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span>            :   /* If COPY extends beyond REF, chop off its size appropriately.  */
+<span class="lineNum">     167 </span><span class="lineCov">    2216184 :   poly_int64 limit = ref-&gt;size - diff;</span>
+<span class="lineNum">     168 </span><span class="lineCov">    2216184 :   if (!ordered_p (limit, copy-&gt;size))</span>
+<span class="lineNum">     169 </span>            :     return false;
+<span class="lineNum">     170 </span>            : 
+<span class="lineNum">     171 </span><span class="lineCov">    2216184 :   if (maybe_gt (copy-&gt;size, limit))</span>
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 :     copy-&gt;size = limit;</span>
+<span class="lineNum">     173 </span>            :   return true;
+<span class="lineNum">     174 </span>            : }
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            : /* Clear any bytes written by STMT from the bitmap LIVE_BYTES.  The base
+<span class="lineNum">     177 </span>            :    address written by STMT must match the one found in REF, which must
+<span class="lineNum">     178 </span>            :    have its base address previously initialized.
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            :    This routine must be conservative.  If we don't know the offset or
+<span class="lineNum">     181 </span>            :    actual size written, assume nothing was written.  */
+<a name="182"><span class="lineNum">     182 </span>            : </a>
+<span class="lineNum">     183 </span>            : static void
+<span class="lineNum">     184 </span><span class="lineCov">  108920578 : clear_bytes_written_by (sbitmap live_bytes, gimple *stmt, ao_ref *ref)</span>
+<span class="lineNum">     185 </span>            : {
+<span class="lineNum">     186 </span><span class="lineCov">  108920578 :   ao_ref write;</span>
+<span class="lineNum">     187 </span><span class="lineCov">  108920578 :   if (!initialize_ao_ref_for_dse (stmt, &amp;write))</span>
+<span class="lineNum">     188 </span><span class="lineCov">    3973217 :     return;</span>
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span>            :   /* Verify we have the same base memory address, the write
+<span class="lineNum">     191 </span>            :      has a known size and overlaps with REF.  */
+<span class="lineNum">     192 </span><span class="lineCov">  104947361 :   HOST_WIDE_INT start, size;</span>
+<span class="lineNum">     193 </span><span class="lineCov">  209894722 :   if (valid_ao_ref_for_dse (&amp;write)</span>
+<span class="lineNum">     194 </span><span class="lineCov">  104761128 :       &amp;&amp; operand_equal_p (write.base, ref-&gt;base, OEP_ADDRESS_OF)</span>
+<span class="lineNum">     195 </span><span class="lineCov">   77542173 :       &amp;&amp; known_eq (write.size, write.max_size)</span>
+<span class="lineNum">     196 </span><span class="lineCov">   77542444 :       &amp;&amp; normalize_ref (&amp;write, ref)</span>
+<span class="lineNum">     197 </span><span class="lineCov">    3403916 :       &amp;&amp; (write.offset - ref-&gt;offset).is_constant (&amp;start)</span>
+<span class="lineNum">     198 </span><span class="lineCov">  108351277 :       &amp;&amp; write.size.is_constant (&amp;size))</span>
+<span class="lineNum">     199 </span><span class="lineCov">    3403916 :     bitmap_clear_range (live_bytes, start / BITS_PER_UNIT,</span>
+<span class="lineNum">     200 </span><span class="lineCov">    1701958 :                         size / BITS_PER_UNIT);</span>
+<span class="lineNum">     201 </span>            : }
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span>            : /* REF is a memory write.  Extract relevant information from it and
+<span class="lineNum">     204 </span>            :    initialize the LIVE_BYTES bitmap.  If successful, return TRUE.
+<span class="lineNum">     205 </span>            :    Otherwise return FALSE.  */
+<a name="206"><span class="lineNum">     206 </span>            : </a>
+<span class="lineNum">     207 </span>            : static bool
+<span class="lineNum">     208 </span><span class="lineCov">   13979056 : setup_live_bytes_from_ref (ao_ref *ref, sbitmap live_bytes)</span>
+<span class="lineNum">     209 </span>            : {
+<span class="lineNum">     210 </span><span class="lineCov">   13979056 :   HOST_WIDE_INT const_size;</span>
+<span class="lineNum">     211 </span><span class="lineCov">   13979056 :   if (valid_ao_ref_for_dse (ref)</span>
+<span class="lineNum">     212 </span><span class="lineCov">   13525598 :       &amp;&amp; ref-&gt;size.is_constant (&amp;const_size)</span>
+<span class="lineNum">     213 </span><span class="lineCov">   13979056 :       &amp;&amp; (const_size / BITS_PER_UNIT</span>
+<span class="lineNum">     214 </span><span class="lineCov">   13525598 :           &lt;= PARAM_VALUE (PARAM_DSE_MAX_OBJECT_SIZE)))</span>
+<span class="lineNum">     215 </span>            :     {
+<span class="lineNum">     216 </span><span class="lineCov">   13455687 :       bitmap_clear (live_bytes);</span>
+<span class="lineNum">     217 </span><span class="lineCov">   13455687 :       bitmap_set_range (live_bytes, 0, const_size / BITS_PER_UNIT);</span>
+<span class="lineNum">     218 </span><span class="lineCov">   13455687 :       return true;</span>
+<span class="lineNum">     219 </span>            :     }
+<span class="lineNum">     220 </span>            :   return false;
+<span class="lineNum">     221 </span>            : }
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            : /* Compute the number of elements that we can trim from the head and
+<span class="lineNum">     224 </span>            :    tail of ORIG resulting in a bitmap that is a superset of LIVE.
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            :    Store the number of elements trimmed from the head and tail in
+<span class="lineNum">     227 </span>            :    TRIM_HEAD and TRIM_TAIL.
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span>            :    STMT is the statement being trimmed and is used for debugging dump
+<span class="lineNum">     230 </span>            :    output only.  */
+<a name="231"><span class="lineNum">     231 </span>            : </a>
+<span class="lineNum">     232 </span>            : static void
+<span class="lineNum">     233 </span><span class="lineCov">     244798 : compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,</span>
+<span class="lineNum">     234 </span>            :                gimple *stmt)
+<span class="lineNum">     235 </span>            : {
+<span class="lineNum">     236 </span>            :   /* We use sbitmaps biased such that ref-&gt;offset is bit zero and the bitmap
+<span class="lineNum">     237 </span>            :      extends through ref-&gt;size.  So we know that in the original bitmap
+<span class="lineNum">     238 </span>            :      bits 0..ref-&gt;size were true.  We don't actually need the bitmap, just
+<span class="lineNum">     239 </span>            :      the REF to compute the trims.  */
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            :   /* Now identify how much, if any of the tail we can chop off.  */
+<span class="lineNum">     242 </span><span class="lineCov">     244798 :   HOST_WIDE_INT const_size;</span>
+<span class="lineNum">     243 </span><span class="lineCov">     244798 :   int last_live = bitmap_last_set_bit (live);</span>
+<span class="lineNum">     244 </span><span class="lineCov">     244798 :   if (ref-&gt;size.is_constant (&amp;const_size))</span>
+<span class="lineNum">     245 </span>            :     {
+<span class="lineNum">     246 </span><span class="lineCov">     244798 :       int last_orig = (const_size / BITS_PER_UNIT) - 1;</span>
+<span class="lineNum">     247 </span>            :       /* We can leave inconvenient amounts on the tail as
+<span class="lineNum">     248 </span>            :          residual handling in mem* and str* functions is usually
+<span class="lineNum">     249 </span>            :          reasonably efficient.  */
+<span class="lineNum">     250 </span><span class="lineCov">     244798 :       *trim_tail = last_orig - last_live;</span>
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span>            :       /* But don't trim away out of bounds accesses, as this defeats
+<span class="lineNum">     253 </span>            :          proper warnings.
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span>            :          We could have a type with no TYPE_SIZE_UNIT or we could have a VLA
+<span class="lineNum">     256 </span>            :          where TYPE_SIZE_UNIT is not a constant.  */
+<span class="lineNum">     257 </span><span class="lineCov">     244798 :       if (*trim_tail</span>
+<span class="lineNum">     258 </span><span class="lineCov">       2023 :           &amp;&amp; TYPE_SIZE_UNIT (TREE_TYPE (ref-&gt;base))</span>
+<span class="lineNum">     259 </span><span class="lineCov">       6069 :           &amp;&amp; TREE_CODE (TYPE_SIZE_UNIT (TREE_TYPE (ref-&gt;base))) == INTEGER_CST</span>
+<span class="lineNum">     260 </span><span class="lineCov">     250846 :           &amp;&amp; compare_tree_int (TYPE_SIZE_UNIT (TREE_TYPE (ref-&gt;base)),</span>
+<span class="lineNum">     261 </span>            :                                last_orig) &lt;= 0)
+<span class="lineNum">     262 </span><span class="lineCov">         11 :         *trim_tail = 0;</span>
+<span class="lineNum">     263 </span>            :     }
+<span class="lineNum">     264 </span>            :   else
+<span class="lineNum">     265 </span>            :     *trim_tail = 0;
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            :   /* Identify how much, if any of the head we can chop off.  */
+<span class="lineNum">     268 </span><span class="lineCov">     244798 :   int first_orig = 0;</span>
+<span class="lineNum">     269 </span><span class="lineCov">     244798 :   int first_live = bitmap_first_set_bit (live);</span>
+<span class="lineNum">     270 </span><span class="lineCov">     244798 :   *trim_head = first_live - first_orig;</span>
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            :   /* If more than a word remains, then make sure to keep the
+<span class="lineNum">     273 </span>            :      starting point at least word aligned.  */
+<span class="lineNum">     274 </span><span class="lineCov">     276601 :   if (last_live - first_live &gt; UNITS_PER_WORD)</span>
+<span class="lineNum">     275 </span><span class="lineCov">     132586 :     *trim_head &amp;= ~(UNITS_PER_WORD - 1);</span>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">     195358 :   if ((*trim_head || *trim_tail)</span>
+<span class="lineNum">     278 </span><span class="lineCov">     246130 :       &amp;&amp; dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     279 </span>            :     {
+<span class="lineNum">     280 </span><span class="lineCov">          3 :       fprintf (dump_file, &quot;  Trimming statement (head = %d, tail = %d): &quot;,</span>
+<span class="lineNum">     281 </span>            :                *trim_head, *trim_tail);
+<span class="lineNum">     282 </span><span class="lineCov">          3 :       print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     283 </span><span class="lineCov">          3 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     284 </span>            :     }
+<span class="lineNum">     285 </span><span class="lineCov">     244798 : }</span>
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            : /* STMT initializes an object from COMPLEX_CST where one or more of the
+<span class="lineNum">     288 </span>            :    bytes written may be dead stores.  REF is a representation of the
+<span class="lineNum">     289 </span>            :    memory written.  LIVE is the bitmap of stores that are actually live.
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            :    Attempt to rewrite STMT so that only the real or imaginary part of
+<span class="lineNum">     292 </span>            :    the object is actually stored.  */
+<span class="lineNum">     293 </span>            : 
+<span class="lineNum">     294 </span>            : static void
+<span class="lineNum">     295 </span><span class="lineCov">       6203 : maybe_trim_complex_store (ao_ref *ref, sbitmap live, gimple *stmt)</span>
+<span class="lineNum">     296 </span>            : {
+<span class="lineNum">     297 </span><span class="lineCov">       6203 :   int trim_head, trim_tail;</span>
+<span class="lineNum">     298 </span><span class="lineCov">       6203 :   compute_trims (ref, live, &amp;trim_head, &amp;trim_tail, stmt);</span>
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span>            :   /* The amount of data trimmed from the head or tail must be at
+<span class="lineNum">     301 </span>            :      least half the size of the object to ensure we're trimming
+<span class="lineNum">     302 </span>            :      the entire real or imaginary half.  By writing things this
+<span class="lineNum">     303 </span>            :      way we avoid more O(n) bitmap operations.  */
+<span class="lineNum">     304 </span><span class="lineCov">      12406 :   if (known_ge (trim_tail * 2 * BITS_PER_UNIT, ref-&gt;size))</span>
+<span class="lineNum">     305 </span>            :     {
+<span class="lineNum">     306 </span>            :       /* TREE_REALPART is live */
+<span class="lineNum">     307 </span><span class="lineCov">          2 :       tree x = TREE_REALPART (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     308 </span><span class="lineCov">          2 :       tree y = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     309 </span><span class="lineCov">          2 :       y = build1 (REALPART_EXPR, TREE_TYPE (x), y);</span>
+<span class="lineNum">     310 </span><span class="lineCov">          2 :       gimple_assign_set_lhs (stmt, y);</span>
+<span class="lineNum">     311 </span><span class="lineCov">          2 :       gimple_assign_set_rhs1 (stmt, x);</span>
+<span class="lineNum">     312 </span>            :     }
+<span class="lineNum">     313 </span><span class="lineCov">      12402 :   else if (known_ge (trim_head * 2 * BITS_PER_UNIT, ref-&gt;size))</span>
+<span class="lineNum">     314 </span>            :     {
+<span class="lineNum">     315 </span>            :       /* TREE_IMAGPART is live */
+<span class="lineNum">     316 </span><span class="lineCov">          2 :       tree x = TREE_IMAGPART (gimple_assign_rhs1 (stmt));</span>
+<span class="lineNum">     317 </span><span class="lineCov">          2 :       tree y = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     318 </span><span class="lineCov">          2 :       y = build1 (IMAGPART_EXPR, TREE_TYPE (x), y);</span>
+<span class="lineNum">     319 </span><span class="lineCov">          2 :       gimple_assign_set_lhs (stmt, y);</span>
+<span class="lineNum">     320 </span><span class="lineCov">          2 :       gimple_assign_set_rhs1 (stmt, x);</span>
+<span class="lineNum">     321 </span>            :     }
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span>            :   /* Other cases indicate parts of both the real and imag subobjects
+<span class="lineNum">     324 </span>            :      are live.  We do not try to optimize those cases.  */
+<span class="lineNum">     325 </span><span class="lineCov">       6203 : }</span>
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            : /* STMT initializes an object using a CONSTRUCTOR where one or more of the
+<span class="lineNum">     328 </span>            :    bytes written are dead stores.  ORIG is the bitmap of bytes stored by
+<span class="lineNum">     329 </span>            :    STMT.  LIVE is the bitmap of stores that are actually live.
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span>            :    Attempt to rewrite STMT so that only the real or imaginary part of
+<span class="lineNum">     332 </span>            :    the object is actually stored.
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span>            :    The most common case for getting here is a CONSTRUCTOR with no elements
+<span class="lineNum">     335 </span>            :    being used to zero initialize an object.  We do not try to handle other
+<span class="lineNum">     336 </span>            :    cases as those would force us to fully cover the object with the
+<span class="lineNum">     337 </span>            :    CONSTRUCTOR node except for the components that are dead.  */
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : static void
+<span class="lineNum">     340 </span><span class="lineCov">     183848 : maybe_trim_constructor_store (ao_ref *ref, sbitmap live, gimple *stmt)</span>
+<span class="lineNum">     341 </span>            : {
+<span class="lineNum">     342 </span><span class="lineCov">     183848 :   tree ctor = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            :   /* This is the only case we currently handle.  It actually seems to
+<span class="lineNum">     345 </span>            :      catch most cases of actual interest.  */
+<span class="lineNum">     346 </span><span class="lineCov">     183848 :   gcc_assert (CONSTRUCTOR_NELTS (ctor) == 0);</span>
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span><span class="lineCov">     183848 :   int head_trim = 0;</span>
+<span class="lineNum">     349 </span><span class="lineCov">     183848 :   int tail_trim = 0;</span>
+<span class="lineNum">     350 </span><span class="lineCov">     183848 :   compute_trims (ref, live, &amp;head_trim, &amp;tail_trim, stmt);</span>
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            :   /* Now we want to replace the constructor initializer
+<span class="lineNum">     353 </span>            :      with memset (object + head_trim, 0, size - head_trim - tail_trim).  */
+<span class="lineNum">     354 </span><span class="lineCov">     183848 :   if (head_trim || tail_trim)</span>
+<span class="lineNum">     355 </span>            :     {
+<span class="lineNum">     356 </span>            :       /* We want &amp;lhs for the MEM_REF expression.  */
+<span class="lineNum">     357 </span><span class="lineCov">      50132 :       tree lhs_addr = build_fold_addr_expr (gimple_assign_lhs (stmt));</span>
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span><span class="lineCov">      50132 :       if (! is_gimple_min_invariant (lhs_addr))</span>
+<span class="lineNum">     360 </span><span class="lineCov">       4199 :         return;</span>
+<span class="lineNum">     361 </span>            : 
+<span class="lineNum">     362 </span>            :       /* The number of bytes for the new constructor.  */
+<span class="lineNum">     363 </span><span class="lineCov">      45933 :       poly_int64 ref_bytes = exact_div (ref-&gt;size, BITS_PER_UNIT);</span>
+<span class="lineNum">     364 </span><span class="lineCov">      91866 :       poly_int64 count = ref_bytes - head_trim - tail_trim;</span>
+<span class="lineNum">     365 </span>            : 
+<span class="lineNum">     366 </span>            :       /* And the new type for the CONSTRUCTOR.  Essentially it's just
+<span class="lineNum">     367 </span>            :          a char array large enough to cover the non-trimmed parts of
+<span class="lineNum">     368 </span>            :          the original CONSTRUCTOR.  Note we want explicit bounds here
+<span class="lineNum">     369 </span>            :          so that we know how many bytes to clear when expanding the
+<span class="lineNum">     370 </span>            :          CONSTRUCTOR.  */
+<span class="lineNum">     371 </span><span class="lineCov">      91866 :       tree type = build_array_type_nelts (char_type_node, count);</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            :       /* Build a suitable alias type rather than using alias set zero
+<span class="lineNum">     374 </span>            :          to avoid pessimizing.  */
+<span class="lineNum">     375 </span><span class="lineCov">      45933 :       tree alias_type = reference_alias_ptr_type (gimple_assign_lhs (stmt));</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span>            :       /* Build a MEM_REF representing the whole accessed area, starting
+<span class="lineNum">     378 </span>            :          at the first byte not trimmed.  */
+<span class="lineNum">     379 </span><span class="lineCov">      91866 :       tree exp = fold_build2 (MEM_REF, type, lhs_addr,</span>
+<span class="lineNum">     380 </span>            :                               build_int_cst (alias_type, head_trim));
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            :       /* Now update STMT with a new RHS and LHS.  */
+<span class="lineNum">     383 </span><span class="lineCov">      45933 :       gimple_assign_set_lhs (stmt, exp);</span>
+<span class="lineNum">     384 </span><span class="lineCov">      45933 :       gimple_assign_set_rhs1 (stmt, build_constructor (type, NULL));</span>
+<span class="lineNum">     385 </span>            :     }
+<span class="lineNum">     386 </span>            : }
+<span class="lineNum">     387 </span>            : 
+<span class="lineNum">     388 </span>            : /* STMT is a memcpy, memmove or memset.  Decrement the number of bytes
+<a name="389"><span class="lineNum">     389 </span>            :    copied/set by DECREMENT.  */</a>
+<span class="lineNum">     390 </span>            : static void
+<span class="lineNum">     391 </span><span class="lineCov">        631 : decrement_count (gimple *stmt, int decrement)</span>
+<span class="lineNum">     392 </span>            : {
+<span class="lineNum">     393 </span><span class="lineCov">        631 :   tree *countp = gimple_call_arg_ptr (stmt, 2);</span>
+<span class="lineNum">     394 </span><span class="lineCov">        631 :   gcc_assert (TREE_CODE (*countp) == INTEGER_CST);</span>
+<span class="lineNum">     395 </span><span class="lineCov">        631 :   *countp = wide_int_to_tree (TREE_TYPE (*countp), (TREE_INT_CST_LOW (*countp)</span>
+<span class="lineNum">     396 </span><span class="lineCov">        631 :                                                     - decrement));</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span><span class="lineCov">        631 : }</span>
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span>            : static void
+<span class="lineNum">     401 </span><span class="lineCov">        507 : increment_start_addr (gimple *stmt, tree *where, int increment)</span>
+<span class="lineNum">     402 </span>            : {
+<span class="lineNum">     403 </span><span class="lineCov">        507 :   if (TREE_CODE (*where) == SSA_NAME)</span>
+<span class="lineNum">     404 </span>            :     {
+<span class="lineNum">     405 </span><span class="lineCov">         82 :       tree tem = make_ssa_name (TREE_TYPE (*where));</span>
+<span class="lineNum">     406 </span><span class="lineCov">         82 :       gassign *newop</span>
+<span class="lineNum">     407 </span><span class="lineCov">        164 :         = gimple_build_assign (tem, POINTER_PLUS_EXPR, *where,</span>
+<span class="lineNum">     408 </span>            :                                build_int_cst (sizetype, increment));
+<span class="lineNum">     409 </span><span class="lineCov">         82 :       gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     410 </span><span class="lineCov">         82 :       gsi_insert_before (&amp;gsi, newop, GSI_SAME_STMT);</span>
+<span class="lineNum">     411 </span><span class="lineCov">         82 :       *where = tem;</span>
+<span class="lineNum">     412 </span><span class="lineCov">        164 :       update_stmt (gsi_stmt (gsi));</span>
+<span class="lineNum">     413 </span><span class="lineCov">         82 :       return;</span>
+<span class="lineNum">     414 </span>            :     }
+<span class="lineNum">     415 </span>            : 
+<span class="lineNum">     416 </span><span class="lineCov">        850 :   *where = build_fold_addr_expr (fold_build2 (MEM_REF, char_type_node,</span>
+<span class="lineNum">     417 </span>            :                                              *where,
+<span class="lineNum">     418 </span>            :                                              build_int_cst (ptr_type_node,
+<span class="lineNum">     419 </span>            :                                                             increment)));
+<span class="lineNum">     420 </span>            : }
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span>            : /* STMT is builtin call that writes bytes in bitmap ORIG, some bytes are dead
+<span class="lineNum">     423 </span>            :    (ORIG &amp; ~NEW) and need not be stored.  Try to rewrite STMT to reduce
+<span class="lineNum">     424 </span>            :    the amount of data it actually writes.
+<span class="lineNum">     425 </span>            : 
+<span class="lineNum">     426 </span>            :    Right now we only support trimming from the head or the tail of the
+<span class="lineNum">     427 </span>            :    memory region.  In theory we could split the mem* call, but it's
+<span class="lineNum">     428 </span>            :    likely of marginal value.  */
+<a name="429"><span class="lineNum">     429 </span>            : </a>
+<span class="lineNum">     430 </span>            : static void
+<span class="lineNum">     431 </span><span class="lineCov">      54747 : maybe_trim_memstar_call (ao_ref *ref, sbitmap live, gimple *stmt)</span>
+<span class="lineNum">     432 </span>            : {
+<span class="lineNum">     433 </span><span class="lineCov">      54747 :   switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))</span>
+<span class="lineNum">     434 </span>            :     {
+<span class="lineNum">     435 </span><span class="lineCov">      38125 :     case BUILT_IN_MEMCPY:</span>
+<span class="lineNum">     436 </span><span class="lineCov">      38125 :     case BUILT_IN_MEMMOVE:</span>
+<span class="lineNum">     437 </span><span class="lineCov">      38125 :       {</span>
+<span class="lineNum">     438 </span><span class="lineCov">      38125 :         int head_trim, tail_trim;</span>
+<span class="lineNum">     439 </span><span class="lineCov">      38125 :         compute_trims (ref, live, &amp;head_trim, &amp;tail_trim, stmt);</span>
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span>            :         /* Tail trimming is easy, we can just reduce the count.  */
+<span class="lineNum">     442 </span><span class="lineCov">      38125 :         if (tail_trim)</span>
+<span class="lineNum">     443 </span><span class="lineCov">        126 :           decrement_count (stmt, tail_trim);</span>
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span>            :         /* Head trimming requires adjusting all the arguments.  */
+<span class="lineNum">     446 </span><span class="lineCov">      38125 :         if (head_trim)</span>
+<span class="lineNum">     447 </span>            :           {
+<span class="lineNum">     448 </span><span class="lineCov">         54 :             tree *dst = gimple_call_arg_ptr (stmt, 0);</span>
+<span class="lineNum">     449 </span><span class="lineCov">         54 :             increment_start_addr (stmt, dst, head_trim);</span>
+<span class="lineNum">     450 </span><span class="lineCov">         54 :             tree *src = gimple_call_arg_ptr (stmt, 1);</span>
+<span class="lineNum">     451 </span><span class="lineCov">         54 :             increment_start_addr (stmt, src, head_trim);</span>
+<span class="lineNum">     452 </span><span class="lineCov">         54 :             decrement_count (stmt, head_trim);</span>
+<span class="lineNum">     453 </span>            :           }
+<span class="lineNum">     454 </span><span class="lineCov">      38125 :         break;</span>
+<span class="lineNum">     455 </span>            :       }
+<span class="lineNum">     456 </span>            : 
+<span class="lineNum">     457 </span><span class="lineCov">      16622 :     case BUILT_IN_MEMSET:</span>
+<span class="lineNum">     458 </span><span class="lineCov">      16622 :       {</span>
+<span class="lineNum">     459 </span><span class="lineCov">      16622 :         int head_trim, tail_trim;</span>
+<span class="lineNum">     460 </span><span class="lineCov">      16622 :         compute_trims (ref, live, &amp;head_trim, &amp;tail_trim, stmt);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span>            :         /* Tail trimming is easy, we can just reduce the count.  */
+<span class="lineNum">     463 </span><span class="lineCov">      16622 :         if (tail_trim)</span>
+<span class="lineNum">     464 </span><span class="lineCov">         52 :           decrement_count (stmt, tail_trim);</span>
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            :         /* Head trimming requires adjusting all the arguments.  */
+<span class="lineNum">     467 </span><span class="lineCov">      16622 :         if (head_trim)</span>
+<span class="lineNum">     468 </span>            :           {
+<span class="lineNum">     469 </span><span class="lineCov">        399 :             tree *dst = gimple_call_arg_ptr (stmt, 0);</span>
+<span class="lineNum">     470 </span><span class="lineCov">        399 :             increment_start_addr (stmt, dst, head_trim);</span>
+<span class="lineNum">     471 </span><span class="lineCov">        399 :             decrement_count (stmt, head_trim);</span>
+<span class="lineNum">     472 </span>            :           }
+<span class="lineNum">     473 </span><span class="lineCov">      16622 :         break;</span>
+<span class="lineNum">     474 </span>            :       }
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span>            :       default:
+<span class="lineNum">     477 </span>            :         break;
+<span class="lineNum">     478 </span>            :     }
+<span class="lineNum">     479 </span><span class="lineCov">      54747 : }</span>
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            : /* STMT is a memory write where one or more bytes written are dead
+<span class="lineNum">     482 </span>            :    stores.  ORIG is the bitmap of bytes stored by STMT.  LIVE is the
+<span class="lineNum">     483 </span>            :    bitmap of stores that are actually live.
+<span class="lineNum">     484 </span>            : 
+<span class="lineNum">     485 </span>            :    Attempt to rewrite STMT so that it writes fewer memory locations.  Right
+<span class="lineNum">     486 </span>            :    now we only support trimming at the start or end of the memory region.
+<span class="lineNum">     487 </span>            :    It's not clear how much there is to be gained by trimming from the middle
+<span class="lineNum">     488 </span>            :    of the region.  */
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : static void
+<span class="lineNum">     491 </span><span class="lineCov">   12013247 : maybe_trim_partially_dead_store (ao_ref *ref, sbitmap live, gimple *stmt)</span>
+<span class="lineNum">     492 </span>            : {
+<span class="lineNum">     493 </span><span class="lineCov">   12013247 :   if (is_gimple_assign (stmt)</span>
+<span class="lineNum">     494 </span><span class="lineCov">   12013247 :       &amp;&amp; TREE_CODE (gimple_assign_lhs (stmt)) != TARGET_MEM_REF)</span>
+<span class="lineNum">     495 </span>            :     {
+<span class="lineNum">     496 </span><span class="lineCov">   11896160 :       switch (gimple_assign_rhs_code (stmt))</span>
+<span class="lineNum">     497 </span>            :         {
+<span class="lineNum">     498 </span><span class="lineCov">     183848 :         case CONSTRUCTOR:</span>
+<span class="lineNum">     499 </span><span class="lineCov">     183848 :           maybe_trim_constructor_store (ref, live, stmt);</span>
+<span class="lineNum">     500 </span><span class="lineCov">     183848 :           break;</span>
+<span class="lineNum">     501 </span><span class="lineCov">       6203 :         case COMPLEX_CST:</span>
+<span class="lineNum">     502 </span><span class="lineCov">       6203 :           maybe_trim_complex_store (ref, live, stmt);</span>
+<span class="lineNum">     503 </span><span class="lineCov">       6203 :           break;</span>
+<span class="lineNum">     504 </span>            :         default:
+<span class="lineNum">     505 </span>            :           break;
+<span class="lineNum">     506 </span>            :         }
+<span class="lineNum">     507 </span>            :     }
+<span class="lineNum">     508 </span><span class="lineCov">   12013247 : }</span>
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span>            : /* Return TRUE if USE_REF reads bytes from LIVE where live is
+<span class="lineNum">     511 </span>            :    derived from REF, a write reference.
+<span class="lineNum">     512 </span>            : 
+<span class="lineNum">     513 </span>            :    While this routine may modify USE_REF, it's passed by value, not
+<span class="lineNum">     514 </span>            :    location.  So callers do not see those modifications.  */
+<a name="515"><span class="lineNum">     515 </span>            : </a>
+<span class="lineNum">     516 </span>            : static bool
+<span class="lineNum">     517 </span><span class="lineCov">     514226 : live_bytes_read (ao_ref use_ref, ao_ref *ref, sbitmap live)</span>
+<span class="lineNum">     518 </span>            : {
+<span class="lineNum">     519 </span>            :   /* We have already verified that USE_REF and REF hit the same object.
+<span class="lineNum">     520 </span>            :      Now verify that there's actually an overlap between USE_REF and REF.  */
+<span class="lineNum">     521 </span><span class="lineCov">     514226 :   HOST_WIDE_INT start, size;</span>
+<span class="lineNum">     522 </span><span class="lineCov">    1028452 :   if (normalize_ref (&amp;use_ref, ref)</span>
+<span class="lineNum">     523 </span>            :       &amp;&amp; (use_ref.offset - ref-&gt;offset).is_constant (&amp;start)
+<span class="lineNum">     524 </span>            :       &amp;&amp; use_ref.size.is_constant (&amp;size))
+<span class="lineNum">     525 </span>            :     {
+<span class="lineNum">     526 </span>            :       /* If USE_REF covers all of REF, then it will hit one or more
+<span class="lineNum">     527 </span>            :          live bytes.   This avoids useless iteration over the bitmap
+<span class="lineNum">     528 </span>            :          below.  */
+<span class="lineNum">     529 </span><span class="lineCov">     514226 :       if (start == 0 &amp;&amp; known_eq (size, ref-&gt;size))</span>
+<span class="lineNum">     530 </span>            :         return true;
+<span class="lineNum">     531 </span>            : 
+<span class="lineNum">     532 </span>            :       /* Now check if any of the remaining bits in use_ref are set in LIVE.  */
+<span class="lineNum">     533 </span><span class="lineCov">     493236 :       return bitmap_bit_in_range_p (live, start / BITS_PER_UNIT,</span>
+<span class="lineNum">     534 </span><span class="lineCov">     246618 :                                     (start + size - 1) / BITS_PER_UNIT);</span>
+<span class="lineNum">     535 </span>            :     }
+<span class="lineNum">     536 </span>            :   return true;
+<span class="lineNum">     537 </span>            : }
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span>            : /* Callback for dse_classify_store calling for_each_index.  Verify that
+<span class="lineNum">     540 </span>            :    indices are invariant in the loop with backedge PHI in basic-block DATA.  */
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span>            : static bool
+<span class="lineNum">     543 </span><span class="lineCov">     217871 : check_name (tree, tree *idx, void *data)</span>
+<span class="lineNum">     544 </span>            : {
+<span class="lineNum">     545 </span><span class="lineCov">     217871 :   basic_block phi_bb = (basic_block) data;</span>
+<span class="lineNum">     546 </span><span class="lineCov">     217871 :   if (TREE_CODE (*idx) == SSA_NAME</span>
+<span class="lineNum">     547 </span><span class="lineCov">     417478 :       &amp;&amp; !SSA_NAME_IS_DEFAULT_DEF (*idx)</span>
+<span class="lineNum">     548 </span><span class="lineCov">     820523 :       &amp;&amp; dominated_by_p (CDI_DOMINATORS, gimple_bb (SSA_NAME_DEF_STMT (*idx)),</span>
+<span class="lineNum">     549 </span>            :                          phi_bb))
+<span class="lineNum">     550 </span><span class="lineCov">     195937 :     return false;</span>
+<span class="lineNum">     551 </span>            :   return true;
+<span class="lineNum">     552 </span>            : }
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span>            : /* A helper of dse_optimize_stmt.
+<span class="lineNum">     555 </span>            :    Given a GIMPLE_ASSIGN in STMT that writes to REF, classify it
+<span class="lineNum">     556 </span>            :    according to downstream uses and defs.  Sets *BY_CLOBBER_P to true
+<span class="lineNum">     557 </span>            :    if only clobber statements influenced the classification result.
+<span class="lineNum">     558 </span>            :    Returns the classification.  */
+<span class="lineNum">     559 </span>            : 
+<span class="lineNum">     560 </span>            : static dse_store_status
+<span class="lineNum">     561 </span><span class="lineCov">   13979056 : dse_classify_store (ao_ref *ref, gimple *stmt,</span>
+<span class="lineNum">     562 </span>            :                     bool byte_tracking_enabled, sbitmap live_bytes,
+<span class="lineNum">     563 </span>            :                     bool *by_clobber_p = NULL)
+<span class="lineNum">     564 </span>            : {
+<span class="lineNum">     565 </span><span class="lineCov">   13979056 :   gimple *temp;</span>
+<span class="lineNum">     566 </span><span class="lineCov">   13979056 :   int cnt = 0;</span>
+<span class="lineNum">     567 </span><span class="lineCov">   13979056 :   auto_bitmap visited;</span>
+<span class="lineNum">     568 </span>            : 
+<span class="lineNum">     569 </span><span class="lineCov">   13979056 :   if (by_clobber_p)</span>
+<span class="lineNum">     570 </span><span class="lineCov">   13829299 :     *by_clobber_p = true;</span>
+<span class="lineNum">     571 </span>            : 
+<span class="lineNum">     572 </span>            :   /* Find the first dominated statement that clobbers (part of) the
+<span class="lineNum">     573 </span>            :      memory stmt stores to with no intermediate statement that may use
+<span class="lineNum">     574 </span>            :      part of the memory stmt stores.  That is, find a store that may
+<span class="lineNum">     575 </span>            :      prove stmt to be a dead store.  */
+<span class="lineNum">     576 </span>            :   temp = stmt;
+<span class="lineNum">     577 </span><span class="lineCov">  123871009 :   do</span>
+<span class="lineNum">     578 </span>            :     {
+<span class="lineNum">     579 </span><span class="lineCov">  123871009 :       gimple *use_stmt;</span>
+<span class="lineNum">     580 </span><span class="lineCov">  123871009 :       imm_use_iterator ui;</span>
+<span class="lineNum">     581 </span><span class="lineCov">  123871009 :       bool fail = false;</span>
+<span class="lineNum">     582 </span><span class="lineCov">  123871009 :       tree defvar;</span>
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span><span class="lineCov">  247742018 :       if (gimple_code (temp) == GIMPLE_PHI)</span>
+<span class="lineNum">     585 </span>            :         {
+<span class="lineNum">     586 </span>            :           /* If we visit this PHI by following a backedge then we have to
+<span class="lineNum">     587 </span>            :              make sure ref-&gt;ref only refers to SSA names that are invariant
+<span class="lineNum">     588 </span>            :              with respect to the loop represented by this PHI node.  */
+<span class="lineNum">     589 </span><span class="lineCov">    6551370 :           if (dominated_by_p (CDI_DOMINATORS, gimple_bb (stmt),</span>
+<span class="lineNum">     590 </span><span class="lineCov">    3275685 :                               gimple_bb (temp))</span>
+<span class="lineNum">     591 </span><span class="lineCov">    3275685 :               &amp;&amp; !for_each_index (ref-&gt;ref ? &amp;ref-&gt;ref : &amp;ref-&gt;base,</span>
+<span class="lineNum">     592 </span><span class="lineCov">     237831 :                                   check_name, gimple_bb (temp)))</span>
+<span class="lineNum">     593 </span><span class="lineCov">   13979056 :             return DSE_STORE_LIVE;</span>
+<span class="lineNum">     594 </span><span class="lineCov">    3079748 :           defvar = PHI_RESULT (temp);</span>
+<span class="lineNum">     595 </span><span class="lineCov">    3079748 :           bitmap_set_bit (visited, SSA_NAME_VERSION (defvar));</span>
+<span class="lineNum">     596 </span>            :         }
+<span class="lineNum">     597 </span>            :       else
+<span class="lineNum">     598 </span><span class="lineCov">  120595324 :         defvar = gimple_vdef (temp);</span>
+<span class="lineNum">     599 </span><span class="lineCov">  343458978 :       auto_vec&lt;gimple *, 10&gt; defs;</span>
+<span class="lineNum">     600 </span><span class="lineCov">  123675072 :       gimple *phi_def = NULL;</span>
+<span class="lineNum">     601 </span><span class="lineCov">  246221380 :       FOR_EACH_IMM_USE_STMT (use_stmt, ui, defvar)</span>
+<span class="lineNum">     602 </span>            :         {
+<span class="lineNum">     603 </span>            :           /* Limit stmt walking.  */
+<span class="lineNum">     604 </span><span class="lineCov">  134299779 :           if (++cnt &gt; PARAM_VALUE (PARAM_DSE_MAX_ALIAS_QUERIES_PER_STORE))</span>
+<span class="lineNum">     605 </span>            :             {
+<span class="lineNum">     606 </span><span class="lineCov">     140321 :               fail = true;</span>
+<span class="lineNum">     607 </span><span class="lineCov">     140321 :               BREAK_FROM_IMM_USE_STMT (ui);</span>
+<span class="lineNum">     608 </span>            :             }
+<span class="lineNum">     609 </span>            : 
+<span class="lineNum">     610 </span>            :           /* We have visited ourselves already so ignore STMT for the
+<span class="lineNum">     611 </span>            :              purpose of chaining.  */
+<span class="lineNum">     612 </span><span class="lineCov">  134159458 :           if (use_stmt == stmt)</span>
+<span class="lineNum">     613 </span>            :             ;
+<span class="lineNum">     614 </span>            :           /* In simple cases we can look through PHI nodes, but we
+<span class="lineNum">     615 </span>            :              have to be careful with loops and with memory references
+<span class="lineNum">     616 </span>            :              containing operands that are also operands of PHI nodes.
+<span class="lineNum">     617 </span>            :              See gcc.c-torture/execute/20051110-*.c.  */
+<span class="lineNum">     618 </span><span class="lineCov">  268297742 :           else if (gimple_code (use_stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">     619 </span>            :             {
+<span class="lineNum">     620 </span>            :               /* If we already visited this PHI ignore it for further
+<span class="lineNum">     621 </span>            :                  processing.  */
+<span class="lineNum">     622 </span><span class="lineCov">    5595475 :               if (!bitmap_bit_p (visited,</span>
+<span class="lineNum">     623 </span><span class="lineCov">   16786425 :                                  SSA_NAME_VERSION (PHI_RESULT (use_stmt))))</span>
+<span class="lineNum">     624 </span>            :                 {
+<span class="lineNum">     625 </span><span class="lineCov">    5440543 :                   defs.safe_push (use_stmt);</span>
+<span class="lineNum">     626 </span><span class="lineCov">    5440543 :                   phi_def = use_stmt;</span>
+<span class="lineNum">     627 </span>            :                 }
+<span class="lineNum">     628 </span>            :             }
+<span class="lineNum">     629 </span>            :           /* If the statement is a use the store is not dead.  */
+<span class="lineNum">     630 </span><span class="lineCov">  128553396 :           else if (ref_maybe_used_by_stmt_p (use_stmt, ref))</span>
+<span class="lineNum">     631 </span>            :             {
+<span class="lineNum">     632 </span>            :               /* Handle common cases where we can easily build an ao_ref
+<span class="lineNum">     633 </span>            :                  structure for USE_STMT and in doing so we find that the
+<span class="lineNum">     634 </span>            :                  references hit non-live bytes and thus can be ignored.  */
+<span class="lineNum">     635 </span><span class="lineCov">   11615079 :               if (byte_tracking_enabled</span>
+<span class="lineNum">     636 </span><span class="lineCov">   11615079 :                   &amp;&amp; is_gimple_assign (use_stmt))</span>
+<span class="lineNum">     637 </span>            :                 {
+<span class="lineNum">     638 </span><span class="lineCov">    1172684 :                   ao_ref use_ref;</span>
+<span class="lineNum">     639 </span><span class="lineCov">    2345368 :                   ao_ref_init (&amp;use_ref, gimple_assign_rhs1 (use_stmt));</span>
+<span class="lineNum">     640 </span><span class="lineCov">    1172684 :                   if (valid_ao_ref_for_dse (&amp;use_ref)</span>
+<span class="lineNum">     641 </span><span class="lineCov">    1056167 :                       &amp;&amp; use_ref.base == ref-&gt;base</span>
+<span class="lineNum">     642 </span><span class="lineCov">     514226 :                       &amp;&amp; known_eq (use_ref.size, use_ref.max_size)</span>
+<span class="lineNum">     643 </span><span class="lineCov">    1686910 :                       &amp;&amp; !live_bytes_read (use_ref, ref, live_bytes))</span>
+<span class="lineNum">     644 </span>            :                     {
+<span class="lineNum">     645 </span>            :                       /* If this is a store, remember it as we possibly
+<span class="lineNum">     646 </span>            :                          need to walk the defs uses.  */
+<span class="lineNum">     647 </span><span class="lineCov">       3858 :                       if (gimple_vdef (use_stmt))</span>
+<span class="lineNum">     648 </span><span class="lineCov">        620 :                         defs.safe_push (use_stmt);</span>
+<span class="lineNum">     649 </span><span class="lineCov">       1929 :                       continue;</span>
+<span class="lineNum">     650 </span>            :                     }
+<span class="lineNum">     651 </span>            :                 }
+<span class="lineNum">     652 </span>            : 
+<span class="lineNum">     653 </span><span class="lineCov">   11613150 :               fail = true;</span>
+<span class="lineNum">     654 </span><span class="lineCov">   11613150 :               BREAK_FROM_IMM_USE_STMT (ui);</span>
+<span class="lineNum">     655 </span>            :             }
+<span class="lineNum">     656 </span>            :           /* If this is a store, remember it as we possibly need to walk the
+<span class="lineNum">     657 </span>            :              defs uses.  */
+<span class="lineNum">     658 </span><span class="lineCov">  233876634 :           else if (gimple_vdef (use_stmt))</span>
+<span class="lineNum">     659 </span><span class="lineCov">  109504171 :             defs.safe_push (use_stmt);</span>
+<span class="lineNum">     660 </span>            :         }
+<span class="lineNum">     661 </span>            : 
+<span class="lineNum">     662 </span><span class="lineCov">   11753471 :       if (fail)</span>
+<span class="lineNum">     663 </span>            :         {
+<span class="lineNum">     664 </span>            :           /* STMT might be partially dead and we may be able to reduce
+<span class="lineNum">     665 </span>            :              how many memory locations it stores into.  */
+<span class="lineNum">     666 </span><span class="lineCov">   11753471 :           if (byte_tracking_enabled &amp;&amp; !gimple_clobber_p (stmt))</span>
+<span class="lineNum">     667 </span><span class="lineCov">   13783119 :             return DSE_STORE_MAYBE_PARTIAL_DEAD;</span>
+<span class="lineNum">     668 </span>            :           return DSE_STORE_LIVE;
+<span class="lineNum">     669 </span>            :         }
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            :       /* If we didn't find any definition this means the store is dead
+<span class="lineNum">     672 </span>            :          if it isn't a store to global reachable memory.  In this case
+<span class="lineNum">     673 </span>            :          just pretend the stmt makes itself dead.  Otherwise fail.  */
+<span class="lineNum">     674 </span><span class="lineCov">  111921601 :       if (defs.is_empty ())</span>
+<span class="lineNum">     675 </span>            :         {
+<span class="lineNum">     676 </span><span class="lineCov">     115796 :           if (ref_may_alias_global_p (ref))</span>
+<span class="lineNum">     677 </span>            :             return DSE_STORE_LIVE;
+<span class="lineNum">     678 </span>            : 
+<span class="lineNum">     679 </span><span class="lineCov">      88853 :           if (by_clobber_p)</span>
+<span class="lineNum">     680 </span><span class="lineCov">      88364 :             *by_clobber_p = false;</span>
+<span class="lineNum">     681 </span><span class="lineCov">      88853 :           return DSE_STORE_DEAD;</span>
+<span class="lineNum">     682 </span>            :         }
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span>            :       /* Process defs and remove those we need not process further.  */
+<span class="lineNum">     685 </span><span class="lineCov">  450917288 :       for (unsigned i = 0; i &lt; defs.length ();)</span>
+<span class="lineNum">     686 </span>            :         {
+<span class="lineNum">     687 </span><span class="lineCov">  113652839 :           gimple *def = defs[i];</span>
+<span class="lineNum">     688 </span><span class="lineCov">  113652839 :           gimple *use_stmt;</span>
+<span class="lineNum">     689 </span><span class="lineCov">  113652839 :           use_operand_p use_p;</span>
+<span class="lineNum">     690 </span>            :           /* If the path to check starts with a kill we do not need to
+<span class="lineNum">     691 </span>            :              process it further.
+<span class="lineNum">     692 </span>            :              ???  With byte tracking we need only kill the bytes currently
+<span class="lineNum">     693 </span>            :              live.  */
+<span class="lineNum">     694 </span><span class="lineCov">  113652839 :           if (stmt_kills_ref_p (def, ref))</span>
+<span class="lineNum">     695 </span>            :             {
+<span class="lineNum">     696 </span><span class="lineCov">     608214 :               if (by_clobber_p &amp;&amp; !gimple_clobber_p (def))</span>
+<span class="lineNum">     697 </span><span class="lineCov">     276436 :                 *by_clobber_p = false;</span>
+<span class="lineNum">     698 </span><span class="lineCov">     608214 :               defs.unordered_remove (i);</span>
+<span class="lineNum">     699 </span>            :             }
+<span class="lineNum">     700 </span>            :           /* In addition to kills we can remove defs whose only use
+<span class="lineNum">     701 </span>            :              is another def in defs.  That can only ever be PHIs of which
+<span class="lineNum">     702 </span>            :              we track a single for simplicity reasons (we fail for multiple
+<span class="lineNum">     703 </span>            :              PHIs anyways).  We can also ignore defs that feed only into
+<span class="lineNum">     704 </span>            :              already visited PHIs.  */
+<span class="lineNum">     705 </span><span class="lineCov">  113044625 :           else if (gimple_code (def) != GIMPLE_PHI</span>
+<span class="lineNum">     706 </span><span class="lineCov">  216502034 :                    &amp;&amp; single_imm_use (gimple_vdef (def), &amp;use_p, &amp;use_stmt)</span>
+<span class="lineNum">     707 </span><span class="lineCov">  216274826 :                    &amp;&amp; (use_stmt == phi_def</span>
+<span class="lineNum">     708 </span><span class="lineCov">  206065148 :                        || (gimple_code (use_stmt) == GIMPLE_PHI</span>
+<span class="lineNum">     709 </span><span class="lineCov">    1732176 :                            &amp;&amp; bitmap_bit_p (visited,</span>
+<span class="lineNum">     710 </span><span class="lineCov">    5196528 :                                             SSA_NAME_VERSION</span>
+<span class="lineNum">     711 </span>            :                                               (PHI_RESULT (use_stmt))))))
+<span class="lineNum">     712 </span><span class="lineCov">     297340 :             defs.unordered_remove (i);</span>
+<span class="lineNum">     713 </span>            :           else
+<span class="lineNum">     714 </span><span class="lineCov">  112747285 :             ++i;</span>
+<span class="lineNum">     715 </span>            :         }
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span>            :       /* If all defs kill the ref we are done.  */
+<span class="lineNum">     718 </span><span class="lineCov">  111805805 :       if (defs.is_empty ())</span>
+<span class="lineNum">     719 </span>            :         return DSE_STORE_DEAD;
+<span class="lineNum">     720 </span>            :       /* If more than one def survives fail.  */
+<span class="lineNum">     721 </span><span class="lineCov">  222583894 :       if (defs.length () &gt; 1)</span>
+<span class="lineNum">     722 </span>            :         {
+<span class="lineNum">     723 </span>            :           /* STMT might be partially dead and we may be able to reduce
+<span class="lineNum">     724 </span>            :              how many memory locations it stores into.  */
+<span class="lineNum">     725 </span><span class="lineCov">    1209842 :           if (byte_tracking_enabled &amp;&amp; !gimple_clobber_p (stmt))</span>
+<span class="lineNum">     726 </span><span class="lineCov">    1019194 :             return DSE_STORE_MAYBE_PARTIAL_DEAD;</span>
+<span class="lineNum">     727 </span>            :           return DSE_STORE_LIVE;
+<span class="lineNum">     728 </span>            :         }
+<span class="lineNum">     729 </span><span class="lineCov">  110082105 :       temp = defs[0];</span>
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            :       /* Track partial kills.  */
+<span class="lineNum">     732 </span><span class="lineCov">  110082105 :       if (byte_tracking_enabled)</span>
+<span class="lineNum">     733 </span>            :         {
+<span class="lineNum">     734 </span><span class="lineCov">  108920578 :           clear_bytes_written_by (live_bytes, temp, ref);</span>
+<span class="lineNum">     735 </span><span class="lineCov">  108920578 :           if (bitmap_empty_p (live_bytes))</span>
+<span class="lineNum">     736 </span>            :             {
+<span class="lineNum">     737 </span><span class="lineCov">     190152 :               if (by_clobber_p &amp;&amp; !gimple_clobber_p (temp))</span>
+<span class="lineNum">     738 </span><span class="lineCov">     188183 :                 *by_clobber_p = false;</span>
+<span class="lineNum">     739 </span><span class="lineCov">     190152 :               return DSE_STORE_DEAD;</span>
+<span class="lineNum">     740 </span>            :             }
+<span class="lineNum">     741 </span>            :         }
+<span class="lineNum">     742 </span>            :     }
+<span class="lineNum">     743 </span>            :   /* Continue walking until there are no more live bytes.  */
+<span class="lineNum">     744 </span>            :   while (1);
+<span class="lineNum">     745 </span>            : }
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span><span class="lineCov">    2651202 : class dse_dom_walker : public dom_walker</span>
+<a name="749"><span class="lineNum">     749 </span>            : {</a>
+<span class="lineNum">     750 </span>            : public:
+<span class="lineNum">     751 </span><span class="lineCov">    2651202 :   dse_dom_walker (cdi_direction direction)</span>
+<span class="lineNum">     752 </span><span class="lineCov">    2651202 :     : dom_walker (direction),</span>
+<span class="lineNum">     753 </span><span class="lineCov">    2651202 :     m_live_bytes (PARAM_VALUE (PARAM_DSE_MAX_OBJECT_SIZE)),</span>
+<span class="lineNum">     754 </span><span class="lineCov">    2651202 :     m_byte_tracking_enabled (false) {}</span>
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span>            :   virtual edge before_dom_children (basic_block);
+<span class="lineNum">     757 </span>            : 
+<span class="lineNum">     758 </span>            : private:
+<span class="lineNum">     759 </span>            :   auto_sbitmap m_live_bytes;
+<span class="lineNum">     760 </span>            :   bool m_byte_tracking_enabled;
+<span class="lineNum">     761 </span>            :   void dse_optimize_stmt (gimple_stmt_iterator *);
+<span class="lineNum">     762 </span>            : };
+<span class="lineNum">     763 </span>            : 
+<span class="lineNum">     764 </span>            : /* Delete a dead call at GSI, which is mem* call of some kind.  */
+<span class="lineNum">     765 </span>            : static void
+<span class="lineNum">     766 </span><span class="lineCov">       4428 : delete_dead_call (gimple_stmt_iterator *gsi)</span>
+<span class="lineNum">     767 </span>            : {
+<span class="lineNum">     768 </span><span class="lineCov">       4428 :   gimple *stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     769 </span><span class="lineCov">       4428 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     770 </span>            :     {
+<span class="lineNum">     771 </span><span class="lineCov">          8 :       fprintf (dump_file, &quot;  Deleted dead call: &quot;);</span>
+<span class="lineNum">     772 </span><span class="lineCov">          8 :       print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     773 </span><span class="lineCov">          8 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     774 </span>            :     }
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span><span class="lineCov">       4428 :   tree lhs = gimple_call_lhs (stmt);</span>
+<span class="lineNum">     777 </span><span class="lineCov">       4428 :   if (lhs)</span>
+<span class="lineNum">     778 </span>            :     {
+<span class="lineNum">     779 </span><span class="lineCov">        124 :       tree ptr = gimple_call_arg (stmt, 0);</span>
+<span class="lineNum">     780 </span><span class="lineCov">        124 :       gimple *new_stmt = gimple_build_assign (lhs, ptr);</span>
+<span class="lineNum">     781 </span><span class="lineCov">        124 :       unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     782 </span><span class="lineCov">        124 :       if (gsi_replace (gsi, new_stmt, true))</span>
+<span class="lineNum">     783 </span><span class="lineNoCov">          0 :         bitmap_set_bit (need_eh_cleanup, gimple_bb (stmt)-&gt;index);</span>
+<span class="lineNum">     784 </span>            :     }
+<span class="lineNum">     785 </span>            :   else
+<span class="lineNum">     786 </span>            :     {
+<span class="lineNum">     787 </span>            :       /* Then we need to fix the operand of the consuming stmt.  */
+<span class="lineNum">     788 </span><span class="lineCov">       4304 :       unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     789 </span>            : 
+<span class="lineNum">     790 </span>            :       /* Remove the dead store.  */
+<span class="lineNum">     791 </span><span class="lineCov">       4304 :       if (gsi_remove (gsi, true))</span>
+<span class="lineNum">     792 </span><span class="lineNoCov">          0 :         bitmap_set_bit (need_eh_cleanup, gimple_bb (stmt)-&gt;index);</span>
+<span class="lineNum">     793 </span><span class="lineCov">       4304 :       release_defs (stmt);</span>
+<span class="lineNum">     794 </span>            :     }
+<span class="lineNum">     795 </span><span class="lineCov">       4428 : }</span>
+<span class="lineNum">     796 </span>            : 
+<span class="lineNum">     797 </span>            : /* Delete a dead store at GSI, which is a gimple assignment. */
+<span class="lineNum">     798 </span>            : 
+<span class="lineNum">     799 </span>            : static void
+<span class="lineNum">     800 </span><span class="lineCov">     451086 : delete_dead_assignment (gimple_stmt_iterator *gsi)</span>
+<span class="lineNum">     801 </span>            : {
+<span class="lineNum">     802 </span><span class="lineCov">     451086 :   gimple *stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     803 </span><span class="lineCov">     451086 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     804 </span>            :     {
+<span class="lineNum">     805 </span><span class="lineCov">         27 :       fprintf (dump_file, &quot;  Deleted dead store: &quot;);</span>
+<span class="lineNum">     806 </span><span class="lineCov">         27 :       print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     807 </span><span class="lineCov">         27 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     808 </span>            :     }
+<span class="lineNum">     809 </span>            : 
+<span class="lineNum">     810 </span>            :   /* Then we need to fix the operand of the consuming stmt.  */
+<span class="lineNum">     811 </span><span class="lineCov">     451086 :   unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     812 </span>            : 
+<span class="lineNum">     813 </span>            :   /* Remove the dead store.  */
+<span class="lineNum">     814 </span><span class="lineCov">     451086 :   basic_block bb = gimple_bb (stmt);</span>
+<span class="lineNum">     815 </span><span class="lineCov">     451086 :   if (gsi_remove (gsi, true))</span>
+<span class="lineNum">     816 </span><span class="lineCov">         24 :     bitmap_set_bit (need_eh_cleanup, bb-&gt;index);</span>
+<span class="lineNum">     817 </span>            : 
+<span class="lineNum">     818 </span>            :   /* And release any SSA_NAMEs set in this statement back to the
+<span class="lineNum">     819 </span>            :      SSA_NAME manager.  */
+<span class="lineNum">     820 </span><span class="lineCov">     451086 :   release_defs (stmt);</span>
+<span class="lineNum">     821 </span><span class="lineCov">     451086 : }</span>
+<span class="lineNum">     822 </span>            : 
+<span class="lineNum">     823 </span>            : /* Attempt to eliminate dead stores in the statement referenced by BSI.
+<span class="lineNum">     824 </span>            : 
+<span class="lineNum">     825 </span>            :    A dead store is a store into a memory location which will later be
+<span class="lineNum">     826 </span>            :    overwritten by another store without any intervening loads.  In this
+<span class="lineNum">     827 </span>            :    case the earlier store can be deleted.
+<span class="lineNum">     828 </span>            : 
+<span class="lineNum">     829 </span>            :    In our SSA + virtual operand world we use immediate uses of virtual
+<span class="lineNum">     830 </span>            :    operands to detect dead stores.  If a store's virtual definition
+<span class="lineNum">     831 </span>            :    is used precisely once by a later store to the same location which
+<span class="lineNum">     832 </span>            :    post dominates the first store, then the first store is dead.  */
+<span class="lineNum">     833 </span>            : 
+<span class="lineNum">     834 </span>            : void
+<span class="lineNum">     835 </span><span class="lineCov">  154156837 : dse_dom_walker::dse_optimize_stmt (gimple_stmt_iterator *gsi)</span>
+<span class="lineNum">     836 </span>            : {
+<span class="lineNum">     837 </span><span class="lineCov">  154156837 :   gimple *stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :   /* If this statement has no virtual defs, then there is nothing
+<span class="lineNum">     840 </span>            :      to do.  */
+<span class="lineNum">     841 </span><span class="lineCov">  209503361 :   if (!gimple_vdef (stmt))</span>
+<span class="lineNum">     842 </span><span class="lineCov">  153705751 :     return;</span>
+<span class="lineNum">     843 </span>            : 
+<span class="lineNum">     844 </span>            :   /* Don't return early on *this_2(D) ={v} {CLOBBER}.  */
+<span class="lineNum">     845 </span><span class="lineCov">   25400791 :   if (gimple_has_volatile_ops (stmt)</span>
+<span class="lineNum">     846 </span><span class="lineCov">   25400791 :       &amp;&amp; (!gimple_clobber_p (stmt)</span>
+<span class="lineNum">     847 </span><span class="lineCov">    2752806 :           || TREE_CODE (gimple_assign_lhs (stmt)) != MEM_REF))</span>
+<span class="lineNum">     848 </span>            :     return;
+<span class="lineNum">     849 </span>            : 
+<span class="lineNum">     850 </span><span class="lineCov">   22988128 :   ao_ref ref;</span>
+<span class="lineNum">     851 </span><span class="lineCov">   22988128 :   if (!initialize_ao_ref_for_dse (stmt, &amp;ref))</span>
+<span class="lineNum">     852 </span>            :     return;
+<span class="lineNum">     853 </span>            : 
+<span class="lineNum">     854 </span>            :   /* We know we have virtual definitions.  We can handle assignments and
+<span class="lineNum">     855 </span>            :      some builtin calls.  */
+<span class="lineNum">     856 </span><span class="lineCov">   13979299 :   if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))</span>
+<span class="lineNum">     857 </span>            :     {
+<span class="lineNum">     858 </span><span class="lineCov">     149757 :       switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))</span>
+<span class="lineNum">     859 </span>            :         {
+<span class="lineNum">     860 </span><span class="lineCov">     149757 :           case BUILT_IN_MEMCPY:</span>
+<span class="lineNum">     861 </span><span class="lineCov">     149757 :           case BUILT_IN_MEMMOVE:</span>
+<span class="lineNum">     862 </span><span class="lineCov">     149757 :           case BUILT_IN_MEMSET:</span>
+<span class="lineNum">     863 </span><span class="lineCov">     149757 :             {</span>
+<span class="lineNum">     864 </span>            :               /* Occasionally calls with an explicit length of zero
+<span class="lineNum">     865 </span>            :                  show up in the IL.  It's pointless to do analysis
+<span class="lineNum">     866 </span>            :                  on them, they're trivially dead.  */
+<span class="lineNum">     867 </span><span class="lineCov">     149757 :               tree size = gimple_call_arg (stmt, 2);</span>
+<span class="lineNum">     868 </span><span class="lineCov">     149757 :               if (integer_zerop (size))</span>
+<span class="lineNum">     869 </span>            :                 {
+<span class="lineNum">     870 </span><span class="lineNoCov">          0 :                   delete_dead_call (gsi);</span>
+<span class="lineNum">     871 </span><span class="lineNoCov">          0 :                   return;</span>
+<span class="lineNum">     872 </span>            :                 }
+<span class="lineNum">     873 </span>            : 
+<span class="lineNum">     874 </span><span class="lineCov">     149757 :               enum dse_store_status store_status;</span>
+<span class="lineNum">     875 </span><span class="lineCov">     149757 :               m_byte_tracking_enabled</span>
+<span class="lineNum">     876 </span><span class="lineCov">     299514 :                 = setup_live_bytes_from_ref (&amp;ref, m_live_bytes);</span>
+<span class="lineNum">     877 </span><span class="lineCov">     299514 :               store_status = dse_classify_store (&amp;ref, stmt,</span>
+<span class="lineNum">     878 </span>            :                                                  m_byte_tracking_enabled,
+<span class="lineNum">     879 </span>            :                                                  m_live_bytes);
+<span class="lineNum">     880 </span><span class="lineCov">     149757 :               if (store_status == DSE_STORE_LIVE)</span>
+<span class="lineNum">     881 </span>            :                 return;
+<span class="lineNum">     882 </span>            : 
+<span class="lineNum">     883 </span><span class="lineCov">      59175 :               if (store_status == DSE_STORE_MAYBE_PARTIAL_DEAD)</span>
+<span class="lineNum">     884 </span>            :                 {
+<span class="lineNum">     885 </span><span class="lineCov">      54747 :                   maybe_trim_memstar_call (&amp;ref, m_live_bytes, stmt);</span>
+<span class="lineNum">     886 </span><span class="lineCov">      54747 :                   return;</span>
+<span class="lineNum">     887 </span>            :                 }
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span><span class="lineCov">       4428 :               if (store_status == DSE_STORE_DEAD)</span>
+<span class="lineNum">     890 </span><span class="lineCov">       4428 :                 delete_dead_call (gsi);</span>
+<span class="lineNum">     891 </span><span class="lineCov">       4428 :               return;</span>
+<span class="lineNum">     892 </span>            :             }
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span>            :           default:
+<span class="lineNum">     895 </span>            :             return;
+<span class="lineNum">     896 </span>            :         }
+<span class="lineNum">     897 </span>            :     }
+<span class="lineNum">     898 </span>            : 
+<span class="lineNum">     899 </span><span class="lineCov">   27659084 :   if (is_gimple_assign (stmt))</span>
+<span class="lineNum">     900 </span>            :     {
+<span class="lineNum">     901 </span><span class="lineCov">   13829542 :       bool by_clobber_p = false;</span>
+<span class="lineNum">     902 </span>            : 
+<span class="lineNum">     903 </span>            :       /* Self-assignments are zombies.  */
+<span class="lineNum">     904 </span><span class="lineCov">   13829542 :       if (operand_equal_p (gimple_assign_rhs1 (stmt),</span>
+<span class="lineNum">     905 </span><span class="lineCov">   27659084 :                            gimple_assign_lhs (stmt), 0))</span>
+<span class="lineNum">     906 </span>            :         ;
+<span class="lineNum">     907 </span>            :       else
+<span class="lineNum">     908 </span>            :         {
+<span class="lineNum">     909 </span><span class="lineCov">   13829299 :           m_byte_tracking_enabled</span>
+<span class="lineNum">     910 </span><span class="lineCov">   27658598 :             = setup_live_bytes_from_ref (&amp;ref, m_live_bytes);</span>
+<span class="lineNum">     911 </span><span class="lineCov">   13829299 :           enum dse_store_status store_status;</span>
+<span class="lineNum">     912 </span><span class="lineCov">   27658598 :           store_status = dse_classify_store (&amp;ref, stmt,</span>
+<span class="lineNum">     913 </span>            :                                              m_byte_tracking_enabled,
+<span class="lineNum">     914 </span>            :                                              m_live_bytes, &amp;by_clobber_p);
+<span class="lineNum">     915 </span><span class="lineCov">   13829299 :           if (store_status == DSE_STORE_LIVE)</span>
+<span class="lineNum">     916 </span><span class="lineCov">   13378456 :             return;</span>
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span><span class="lineCov">   12801682 :           if (store_status == DSE_STORE_MAYBE_PARTIAL_DEAD)</span>
+<span class="lineNum">     919 </span>            :             {
+<span class="lineNum">     920 </span><span class="lineCov">   12013247 :               maybe_trim_partially_dead_store (&amp;ref, m_live_bytes, stmt);</span>
+<span class="lineNum">     921 </span><span class="lineCov">   12013247 :               return;</span>
+<span class="lineNum">     922 </span>            :             }
+<span class="lineNum">     923 </span>            :         }
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span>            :       /* Now we know that use_stmt kills the LHS of stmt.  */
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span>            :       /* But only remove *this_2(D) ={v} {CLOBBER} if killed by
+<span class="lineNum">     928 </span>            :          another clobber stmt.  */
+<span class="lineNum">     929 </span><span class="lineCov">     788678 :       if (gimple_clobber_p (stmt)</span>
+<span class="lineNum">     930 </span><span class="lineCov">     788678 :           &amp;&amp; !by_clobber_p)</span>
+<span class="lineNum">     931 </span>            :         return;
+<span class="lineNum">     932 </span>            : 
+<span class="lineNum">     933 </span><span class="lineCov">     451086 :       delete_dead_assignment (gsi);</span>
+<span class="lineNum">     934 </span>            :     }
+<span class="lineNum">     935 </span>            : }
+<span class="lineNum">     936 </span>            : 
+<span class="lineNum">     937 </span>            : edge
+<span class="lineNum">     938 </span><span class="lineCov">   21304182 : dse_dom_walker::before_dom_children (basic_block bb)</span>
+<span class="lineNum">     939 </span>            : {
+<span class="lineNum">     940 </span><span class="lineCov">   21304182 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     941 </span>            : 
+<span class="lineNum">     942 </span><span class="lineCov">  350922038 :   for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi);)</span>
+<span class="lineNum">     943 </span>            :     {
+<span class="lineNum">     944 </span><span class="lineCov">  154156837 :       dse_optimize_stmt (&amp;gsi);</span>
+<span class="lineNum">     945 </span><span class="lineCov">  308313674 :       if (gsi_end_p (gsi))</span>
+<span class="lineNum">     946 </span><span class="lineCov">      56272 :         gsi = gsi_last_bb (bb);</span>
+<span class="lineNum">     947 </span>            :       else
+<span class="lineNum">     948 </span><span class="lineCov">  154128701 :         gsi_prev (&amp;gsi);</span>
+<span class="lineNum">     949 </span>            :     }
+<span class="lineNum">     950 </span><span class="lineCov">   21304182 :   return NULL;</span>
+<span class="lineNum">     951 </span>            : }
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span>            : namespace {
+<span class="lineNum">     954 </span>            : 
+<span class="lineNum">     955 </span>            : const pass_data pass_data_dse =
+<span class="lineNum">     956 </span>            : {
+<span class="lineNum">     957 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     958 </span>            :   &quot;dse&quot;, /* name */
+<span class="lineNum">     959 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     960 </span>            :   TV_TREE_DSE, /* tv_id */
+<span class="lineNum">     961 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">     962 </span>            :   0, /* properties_provided */
+<span class="lineNum">     963 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     964 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     965 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     966 </span>            : };
+<span class="lineNum">     967 </span>            : 
+<span class="lineNum">     968 </span>            : class pass_dse : public gimple_opt_pass
+<span class="lineNum">     969 </span>            : {
+<span class="lineNum">     970 </span>            : public:
+<span class="lineNum">     971 </span>            :   pass_dse (gcc::context *ctxt)
+<span class="lineNum">     972 </span><span class="lineCov">    1021872 :     : gimple_opt_pass (pass_data_dse, ctxt)</span>
+<span class="lineNum">     973 </span>            :   {}
+<a name="974"><span class="lineNum">     974 </span>            : </a>
+<a name="975"><span class="lineNum">     975 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     976 </span><span class="lineCov">     340624 :   opt_pass * clone () { return new pass_dse (m_ctxt); }</span>
+<span class="lineNum">     977 </span><span class="lineCov">    2651247 :   virtual bool gate (function *) { return flag_tree_dse != 0; }</span>
+<span class="lineNum">     978 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     979 </span>            : 
+<span class="lineNum">     980 </span>            : }; // class pass_dse
+<a name="981"><span class="lineNum">     981 </span>            : </a>
+<span class="lineNum">     982 </span>            : unsigned int
+<span class="lineNum">     983 </span><span class="lineCov">    2651202 : pass_dse::execute (function *fun)</span>
+<span class="lineNum">     984 </span>            : {
+<span class="lineNum">     985 </span><span class="lineCov">    2651202 :   need_eh_cleanup = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span><span class="lineCov">    2651202 :   renumber_gimple_stmt_uids ();</span>
+<span class="lineNum">     988 </span>            : 
+<span class="lineNum">     989 </span>            :   /* We might consider making this a property of each pass so that it
+<span class="lineNum">     990 </span>            :      can be [re]computed on an as-needed basis.  Particularly since
+<span class="lineNum">     991 </span>            :      this pass could be seen as an extension of DCE which needs post
+<span class="lineNum">     992 </span>            :      dominators.  */
+<span class="lineNum">     993 </span><span class="lineCov">    2651202 :   calculate_dominance_info (CDI_POST_DOMINATORS);</span>
+<span class="lineNum">     994 </span><span class="lineCov">    2651202 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span>            :   /* Dead store elimination is fundamentally a walk of the post-dominator
+<span class="lineNum">     997 </span>            :      tree and a backwards walk of statements within each block.  */
+<span class="lineNum">     998 </span><span class="lineCov">    2651202 :   dse_dom_walker (CDI_POST_DOMINATORS).walk (fun-&gt;cfg-&gt;x_exit_block_ptr);</span>
+<span class="lineNum">     999 </span>            : 
+<span class="lineNum">    1000 </span>            :   /* Removal of stores may make some EH edges dead.  Purge such edges from
+<span class="lineNum">    1001 </span>            :      the CFG as needed.  */
+<span class="lineNum">    1002 </span><span class="lineCov">    5302404 :   if (!bitmap_empty_p (need_eh_cleanup))</span>
+<span class="lineNum">    1003 </span>            :     {
+<span class="lineNum">    1004 </span><span class="lineCov">         16 :       gimple_purge_all_dead_eh_edges (need_eh_cleanup);</span>
+<span class="lineNum">    1005 </span><span class="lineCov">         16 :       cleanup_tree_cfg ();</span>
+<span class="lineNum">    1006 </span>            :     }
+<span class="lineNum">    1007 </span>            : 
+<span class="lineNum">    1008 </span><span class="lineCov">    2651202 :   BITMAP_FREE (need_eh_cleanup);</span>
+<span class="lineNum">    1009 </span>            : 
+<span class="lineNum">    1010 </span>            :   /* For now, just wipe the post-dominator information.  */
+<span class="lineNum">    1011 </span><span class="lineCov">    2651202 :   free_dominance_info (CDI_POST_DOMINATORS);</span>
+<span class="lineNum">    1012 </span><span class="lineCov">    2651202 :   return 0;</span>
+<span class="lineNum">    1013 </span>            : }
+<span class="lineNum">    1014 </span>            : 
+<span class="lineNum">    1015 </span>            : } // anon namespace
+<a name="1016"><span class="lineNum">    1016 </span>            : </a>
+<span class="lineNum">    1017 </span>            : gimple_opt_pass *
+<span class="lineNum">    1018 </span><span class="lineCov">     170312 : make_pass_dse (gcc::context *ctxt)</span>
+<span class="lineNum">    1019 </span>            : {
+<span class="lineNum">    1020 </span><span class="lineCov">     170312 :   return new pass_dse (ctxt);</span>
+<span class="lineNum">    1021 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

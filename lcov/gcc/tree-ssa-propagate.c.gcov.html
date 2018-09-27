@@ -1,0 +1,1523 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-propagate.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-propagate.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-propagate.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">504</td>
+            <td class="headerCovTableEntry">561</td>
+            <td class="headerCovTableEntryMed">89.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Generic SSA value propagation engine.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2004-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Diego Novillo &lt;dnovillo@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            :    This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            :    GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       8 </span>            :    under the terms of the GNU General Public License as published by the
+<span class="lineNum">       9 </span>            :    Free Software Foundation; either version 3, or (at your option) any
+<span class="lineNum">      10 </span>            :    later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            :    GCC is distributed in the hope that it will be useful, but WITHOUT
+<span class="lineNum">      13 </span>            :    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            :    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            :    for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            :    You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            :    along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            :    &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimple-fold.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;tree-eh.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-ssa-propagate.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;domwalk.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-cfgcleanup.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : /* This file implements a generic value propagation engine based on
+<span class="lineNum">      43 </span>            :    the same propagation used by the SSA-CCP algorithm [1].
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :    Propagation is performed by simulating the execution of every
+<span class="lineNum">      46 </span>            :    statement that produces the value being propagated.  Simulation
+<span class="lineNum">      47 </span>            :    proceeds as follows:
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :    1- Initially, all edges of the CFG are marked not executable and
+<span class="lineNum">      50 </span>            :       the CFG worklist is seeded with all the statements in the entry
+<span class="lineNum">      51 </span>            :       basic block (block 0).
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            :    2- Every statement S is simulated with a call to the call-back
+<span class="lineNum">      54 </span>            :       function SSA_PROP_VISIT_STMT.  This evaluation may produce 3
+<span class="lineNum">      55 </span>            :       results:
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            :         SSA_PROP_NOT_INTERESTING: Statement S produces nothing of
+<span class="lineNum">      58 </span>            :             interest and does not affect any of the work lists.
+<span class="lineNum">      59 </span>            :             The statement may be simulated again if any of its input
+<span class="lineNum">      60 </span>            :             operands change in future iterations of the simulator.
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            :         SSA_PROP_VARYING: The value produced by S cannot be determined
+<span class="lineNum">      63 </span>            :             at compile time.  Further simulation of S is not required.
+<span class="lineNum">      64 </span>            :             If S is a conditional jump, all the outgoing edges for the
+<span class="lineNum">      65 </span>            :             block are considered executable and added to the work
+<span class="lineNum">      66 </span>            :             list.
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            :         SSA_PROP_INTERESTING: S produces a value that can be computed
+<span class="lineNum">      69 </span>            :             at compile time.  Its result can be propagated into the
+<span class="lineNum">      70 </span>            :             statements that feed from S.  Furthermore, if S is a
+<span class="lineNum">      71 </span>            :             conditional jump, only the edge known to be taken is added
+<span class="lineNum">      72 </span>            :             to the work list.  Edges that are known not to execute are
+<span class="lineNum">      73 </span>            :             never simulated.
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            :    3- PHI nodes are simulated with a call to SSA_PROP_VISIT_PHI.  The
+<span class="lineNum">      76 </span>            :       return value from SSA_PROP_VISIT_PHI has the same semantics as
+<span class="lineNum">      77 </span>            :       described in #2.
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            :    4- Three work lists are kept.  Statements are only added to these
+<span class="lineNum">      80 </span>            :       lists if they produce one of SSA_PROP_INTERESTING or
+<span class="lineNum">      81 </span>            :       SSA_PROP_VARYING.
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            :         CFG_BLOCKS contains the list of blocks to be simulated.
+<span class="lineNum">      84 </span>            :             Blocks are added to this list if their incoming edges are
+<span class="lineNum">      85 </span>            :             found executable.
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            :         SSA_EDGE_WORKLIST contains the list of statements that we 
+<span class="lineNum">      88 </span>            :             need to revisit.
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            :    5- Simulation terminates when all three work lists are drained.
+<span class="lineNum">      91 </span>            : 
+<span class="lineNum">      92 </span>            :    Before calling ssa_propagate, it is important to clear
+<span class="lineNum">      93 </span>            :    prop_simulate_again_p for all the statements in the program that
+<span class="lineNum">      94 </span>            :    should be simulated.  This initialization allows an implementation
+<span class="lineNum">      95 </span>            :    to specify which statements should never be simulated.
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            :    It is also important to compute def-use information before calling
+<span class="lineNum">      98 </span>            :    ssa_propagate.
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            :    References:
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            :      [1] Constant propagation with conditional branches,
+<span class="lineNum">     103 </span>            :          Wegman and Zadeck, ACM TOPLAS 13(2):181-210.
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            :      [2] Building an Optimizing Compiler,
+<span class="lineNum">     106 </span>            :          Robert Morgan, Butterworth-Heinemann, 1998, Section 8.9.
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            :      [3] Advanced Compiler Design and Implementation,
+<span class="lineNum">     109 </span>            :          Steven Muchnick, Morgan Kaufmann, 1997, Section 12.6  */
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* Worklist of control flow edge destinations.  This contains
+<span class="lineNum">     112 </span>            :    the CFG order number of the blocks so we can iterate in CFG
+<span class="lineNum">     113 </span>            :    order by visiting in bit-order.  */
+<span class="lineNum">     114 </span>            : static bitmap cfg_blocks;
+<span class="lineNum">     115 </span>            : static int *bb_to_cfg_order;
+<span class="lineNum">     116 </span>            : static int *cfg_order_to_bb;
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            : /* Worklist of SSA edges which will need reexamination as their
+<span class="lineNum">     119 </span>            :    definition has changed.  SSA edges are def-use edges in the SSA
+<span class="lineNum">     120 </span>            :    web.  For each D-U edge, we store the target statement or PHI node
+<span class="lineNum">     121 </span>            :    UID in a bitmap.  UIDs order stmts in execution order.   */
+<span class="lineNum">     122 </span>            : static bitmap ssa_edge_worklist;
+<span class="lineNum">     123 </span>            : static vec&lt;gimple *&gt; uid_to_stmt;
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            : /* Return true if the block worklist empty.  */
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span>            : static inline bool
+<span class="lineNum">     128 </span>            : cfg_blocks_empty_p (void)
+<span class="lineNum">     129 </span>            : {
+<span class="lineNum">     130 </span><span class="lineCov">  291673820 :   return bitmap_empty_p (cfg_blocks);</span>
+<span class="lineNum">     131 </span>            : }
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span>            : /* Add a basic block to the worklist.  The block must not be the ENTRY
+<span class="lineNum">     135 </span>            :    or EXIT block.  */
+<a name="136"><span class="lineNum">     136 </span>            : </a>
+<span class="lineNum">     137 </span>            : static void
+<span class="lineNum">     138 </span><span class="lineCov">   59737869 : cfg_blocks_add (basic_block bb)</span>
+<span class="lineNum">     139 </span>            : {
+<span class="lineNum">     140 </span><span class="lineCov">   59737869 :   gcc_assert (bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     141 </span>            :               &amp;&amp; bb != EXIT_BLOCK_PTR_FOR_FN (cfun));
+<span class="lineNum">     142 </span><span class="lineCov">   59737869 :   bitmap_set_bit (cfg_blocks, bb_to_cfg_order[bb-&gt;index]);</span>
+<span class="lineNum">     143 </span><span class="lineCov">   59737869 : }</span>
+<span class="lineNum">     144 </span>            : 
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            : /* Remove a block from the worklist.  */
+<a name="147"><span class="lineNum">     147 </span>            : </a>
+<span class="lineNum">     148 </span>            : static basic_block
+<span class="lineNum">     149 </span><span class="lineCov">   45219402 : cfg_blocks_get (void)</span>
+<span class="lineNum">     150 </span>            : {
+<span class="lineNum">     151 </span><span class="lineCov">   90438804 :   gcc_assert (!cfg_blocks_empty_p ());</span>
+<span class="lineNum">     152 </span><span class="lineCov">   45219402 :   int order_index = bitmap_first_set_bit (cfg_blocks);</span>
+<span class="lineNum">     153 </span><span class="lineCov">   45219402 :   bitmap_clear_bit (cfg_blocks, order_index);</span>
+<span class="lineNum">     154 </span><span class="lineCov">   45219402 :   return BASIC_BLOCK_FOR_FN (cfun, cfg_order_to_bb [order_index]);</span>
+<span class="lineNum">     155 </span>            : }
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            : /* We have just defined a new value for VAR.  If IS_VARYING is true,
+<span class="lineNum">     159 </span>            :    add all immediate uses of VAR to VARYING_SSA_EDGES, otherwise add
+<span class="lineNum">     160 </span>            :    them to INTERESTING_SSA_EDGES.  */
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span>            : static void
+<span class="lineNum">     163 </span><span class="lineCov">  126926870 : add_ssa_edge (tree var)</span>
+<span class="lineNum">     164 </span>            : {
+<span class="lineNum">     165 </span><span class="lineCov">  126926870 :   imm_use_iterator iter;</span>
+<span class="lineNum">     166 </span><span class="lineCov">  126926870 :   use_operand_p use_p;</span>
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span><span class="lineCov">  412793084 :   FOR_EACH_IMM_USE_FAST (use_p, iter, var)</span>
+<span class="lineNum">     169 </span>            :     {
+<span class="lineNum">     170 </span><span class="lineCov">  285866214 :       gimple *use_stmt = USE_STMT (use_p);</span>
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span>            :       /* If we did not yet simulate the block wait for this to happen
+<span class="lineNum">     173 </span>            :          and do not add the stmt to the SSA edge worklist.  */
+<span class="lineNum">     174 </span><span class="lineCov">  571732428 :       if (! (gimple_bb (use_stmt)-&gt;flags &amp; BB_VISITED))</span>
+<span class="lineNum">     175 </span>            :         continue;
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span><span class="lineCov">  176561552 :       if (prop_simulate_again_p (use_stmt)</span>
+<span class="lineNum">     178 </span><span class="lineCov">  176561552 :           &amp;&amp; bitmap_set_bit (ssa_edge_worklist, gimple_uid (use_stmt)))</span>
+<span class="lineNum">     179 </span>            :         {
+<span class="lineNum">     180 </span><span class="lineCov">  156170104 :           uid_to_stmt[gimple_uid (use_stmt)] = use_stmt;</span>
+<span class="lineNum">     181 </span><span class="lineCov">   78085052 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     182 </span>            :             {
+<span class="lineNum">     183 </span><span class="lineCov">        149 :               fprintf (dump_file, &quot;ssa_edge_worklist: adding SSA use in &quot;);</span>
+<span class="lineNum">     184 </span><span class="lineCov">        149 :               print_gimple_stmt (dump_file, use_stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">     185 </span>            :             }
+<span class="lineNum">     186 </span>            :         }
+<span class="lineNum">     187 </span>            :     }
+<span class="lineNum">     188 </span><span class="lineCov">  126926870 : }</span>
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span>            : 
+<span class="lineNum">     191 </span>            : /* Add edge E to the control flow worklist.  */
+<a name="192"><span class="lineNum">     192 </span>            : </a>
+<span class="lineNum">     193 </span>            : static void
+<span class="lineNum">     194 </span><span class="lineCov">   79258625 : add_control_edge (edge e)</span>
+<span class="lineNum">     195 </span>            : {
+<span class="lineNum">     196 </span><span class="lineCov">   79258625 :   basic_block bb = e-&gt;dest;</span>
+<span class="lineNum">     197 </span><span class="lineCov">   79258625 :   if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     198 </span>            :     return;
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            :   /* If the edge had already been executed, skip it.  */
+<span class="lineNum">     201 </span><span class="lineCov">   70296874 :   if (e-&gt;flags &amp; EDGE_EXECUTABLE)</span>
+<span class="lineNum">     202 </span>            :     return;
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span><span class="lineCov">   59737869 :   e-&gt;flags |= EDGE_EXECUTABLE;</span>
+<span class="lineNum">     205 </span>            : 
+<span class="lineNum">     206 </span><span class="lineCov">   59737869 :   cfg_blocks_add (bb);</span>
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span><span class="lineCov">   59737869 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     209 </span><span class="lineCov">       1563 :     fprintf (dump_file, &quot;Adding destination of edge (%d -&gt; %d) to worklist\n&quot;,</span>
+<span class="lineNum">     210 </span><span class="lineCov">        521 :         e-&gt;src-&gt;index, e-&gt;dest-&gt;index);</span>
+<span class="lineNum">     211 </span>            : }
+<span class="lineNum">     212 </span>            : 
+<span class="lineNum">     213 </span>            : 
+<span class="lineNum">     214 </span>            : /* Simulate the execution of STMT and update the work lists accordingly.  */
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            : void
+<span class="lineNum">     217 </span><span class="lineCov">  440241486 : ssa_propagation_engine::simulate_stmt (gimple *stmt)</span>
+<span class="lineNum">     218 </span>            : {
+<span class="lineNum">     219 </span><span class="lineCov">  440241486 :   enum ssa_prop_result val = SSA_PROP_NOT_INTERESTING;</span>
+<span class="lineNum">     220 </span><span class="lineCov">  440241486 :   edge taken_edge = NULL;</span>
+<span class="lineNum">     221 </span><span class="lineCov">  440241486 :   tree output_name = NULL_TREE;</span>
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            :   /* Pull the stmt off the SSA edge worklist.  */
+<span class="lineNum">     224 </span><span class="lineCov">  880482972 :   bitmap_clear_bit (ssa_edge_worklist, gimple_uid (stmt));</span>
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span>            :   /* Don't bother visiting statements that are already
+<span class="lineNum">     227 </span>            :      considered varying by the propagator.  */
+<span class="lineNum">     228 </span><span class="lineCov">  880482972 :   if (!prop_simulate_again_p (stmt))</span>
+<span class="lineNum">     229 </span><span class="lineCov">  333599376 :     return;</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span><span class="lineCov">  332330314 :   if (gimple_code (stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">     232 </span>            :     {
+<span class="lineNum">     233 </span><span class="lineCov">   77762728 :       val = visit_phi (as_a &lt;gphi *&gt; (stmt));</span>
+<span class="lineNum">     234 </span><span class="lineCov">   38881364 :       output_name = gimple_phi_result (stmt);</span>
+<span class="lineNum">     235 </span>            :     }
+<span class="lineNum">     236 </span>            :   else
+<span class="lineNum">     237 </span><span class="lineCov">  127283793 :     val = visit_stmt (stmt, &amp;taken_edge, &amp;output_name);</span>
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span><span class="lineCov">  166165157 :   if (val == SSA_PROP_VARYING)</span>
+<span class="lineNum">     240 </span>            :     {
+<span class="lineNum">     241 </span><span class="lineCov">   59523047 :       prop_set_simulate_again (stmt, false);</span>
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span>            :       /* If the statement produced a new varying value, add the SSA
+<span class="lineNum">     244 </span>            :          edges coming out of OUTPUT_NAME.  */
+<span class="lineNum">     245 </span><span class="lineCov">   59523047 :       if (output_name)</span>
+<span class="lineNum">     246 </span><span class="lineCov">   33659828 :         add_ssa_edge (output_name);</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            :       /* If STMT transfers control out of its basic block, add
+<span class="lineNum">     249 </span>            :          all outgoing edges to the work list.  */
+<span class="lineNum">     250 </span><span class="lineCov">   59523047 :       if (stmt_ends_bb_p (stmt))</span>
+<span class="lineNum">     251 </span>            :         {
+<span class="lineNum">     252 </span><span class="lineCov">   26796197 :           edge e;</span>
+<span class="lineNum">     253 </span><span class="lineCov">   26796197 :           edge_iterator ei;</span>
+<span class="lineNum">     254 </span><span class="lineCov">   26796197 :           basic_block bb = gimple_bb (stmt);</span>
+<span class="lineNum">     255 </span><span class="lineCov">   98372494 :           FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     256 </span><span class="lineCov">   44780100 :             add_control_edge (e);</span>
+<span class="lineNum">     257 </span>            :         }
+<span class="lineNum">     258 </span><span class="lineCov">   59523047 :       return;</span>
+<span class="lineNum">     259 </span>            :     }
+<span class="lineNum">     260 </span><span class="lineCov">  106642110 :   else if (val == SSA_PROP_INTERESTING)</span>
+<span class="lineNum">     261 </span>            :     {
+<span class="lineNum">     262 </span>            :       /* If the statement produced new value, add the SSA edges coming
+<span class="lineNum">     263 </span>            :          out of OUTPUT_NAME.  */
+<span class="lineNum">     264 </span><span class="lineCov">   95537289 :       if (output_name)</span>
+<span class="lineNum">     265 </span><span class="lineCov">   93267042 :         add_ssa_edge (output_name);</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            :       /* If we know which edge is going to be taken out of this block,
+<span class="lineNum">     268 </span>            :          add it to the CFG work list.  */
+<span class="lineNum">     269 </span><span class="lineCov">   95537289 :       if (taken_edge)</span>
+<span class="lineNum">     270 </span><span class="lineCov">    2270247 :         add_control_edge (taken_edge);</span>
+<span class="lineNum">     271 </span>            :     }
+<span class="lineNum">     272 </span>            : 
+<span class="lineNum">     273 </span>            :   /* If there are no SSA uses on the stmt whose defs are simulated
+<span class="lineNum">     274 </span>            :      again then this stmt will be never visited again.  */
+<span class="lineNum">     275 </span><span class="lineCov">  106642110 :   bool has_simulate_again_uses = false;</span>
+<span class="lineNum">     276 </span><span class="lineCov">  106642110 :   use_operand_p use_p;</span>
+<span class="lineNum">     277 </span><span class="lineCov">  106642110 :   ssa_op_iter iter;</span>
+<span class="lineNum">     278 </span><span class="lineCov">  213284220 :   if (gimple_code  (stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">     279 </span>            :     {
+<span class="lineNum">     280 </span><span class="lineCov">   33180076 :       edge_iterator ei;</span>
+<span class="lineNum">     281 </span><span class="lineCov">   33180076 :       edge e;</span>
+<span class="lineNum">     282 </span><span class="lineCov">   33180076 :       tree arg;</span>
+<span class="lineNum">     283 </span><span class="lineCov">  126431067 :       FOR_EACH_EDGE (e, ei, gimple_bb (stmt)-&gt;preds)</span>
+<span class="lineNum">     284 </span><span class="lineCov">   58434688 :         if (!(e-&gt;flags &amp; EDGE_EXECUTABLE)</span>
+<span class="lineNum">     285 </span><span class="lineCov">   58434688 :             || ((arg = PHI_ARG_DEF_FROM_EDGE (stmt, e))</span>
+<span class="lineNum">     286 </span><span class="lineCov">   54805995 :                 &amp;&amp; TREE_CODE (arg) == SSA_NAME</span>
+<span class="lineNum">     287 </span><span class="lineCov">   82595404 :                 &amp;&amp; !SSA_NAME_IS_DEFAULT_DEF (arg)</span>
+<span class="lineNum">     288 </span><span class="lineCov">  123353235 :                 &amp;&amp; prop_simulate_again_p (SSA_NAME_DEF_STMT (arg))))</span>
+<span class="lineNum">     289 </span>            :           {
+<span class="lineNum">     290 </span>            :             has_simulate_again_uses = true;
+<span class="lineNum">     291 </span>            :             break;
+<span class="lineNum">     292 </span>            :           }
+<span class="lineNum">     293 </span>            :     }
+<span class="lineNum">     294 </span>            :   else
+<span class="lineNum">     295 </span><span class="lineCov">   98595700 :     FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)</span>
+<span class="lineNum">     296 </span>            :       {
+<span class="lineNum">     297 </span><span class="lineCov">  156945290 :         gimple *def_stmt = SSA_NAME_DEF_STMT (USE_FROM_PTR (use_p));</span>
+<span class="lineNum">     298 </span><span class="lineCov">   78472645 :         if (!gimple_nop_p (def_stmt)</span>
+<span class="lineNum">     299 </span><span class="lineCov">   78472645 :             &amp;&amp; prop_simulate_again_p (def_stmt))</span>
+<span class="lineNum">     300 </span>            :           {
+<span class="lineNum">     301 </span>            :             has_simulate_again_uses = true;
+<span class="lineNum">     302 </span>            :             break;
+<span class="lineNum">     303 </span>            :           }
+<span class="lineNum">     304 </span>            :       }
+<span class="lineNum">     305 </span><span class="lineCov">  106642110 :   if (!has_simulate_again_uses)</span>
+<span class="lineNum">     306 </span>            :     {
+<span class="lineNum">     307 </span><span class="lineCov">   21759282 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     308 </span><span class="lineCov">        557 :         fprintf (dump_file, &quot;marking stmt to be not simulated again\n&quot;);</span>
+<span class="lineNum">     309 </span><span class="lineCov">   21759282 :       prop_set_simulate_again (stmt, false);</span>
+<span class="lineNum">     310 </span>            :     }
+<span class="lineNum">     311 </span>            : }
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span>            : /* Process an SSA edge worklist.  WORKLIST is the SSA edge worklist to
+<span class="lineNum">     314 </span>            :    drain.  This pops statements off the given WORKLIST and processes
+<span class="lineNum">     315 </span>            :    them until one statement was simulated or there are no more statements
+<span class="lineNum">     316 </span>            :    on WORKLIST.  We take a pointer to WORKLIST because it may be reallocated
+<span class="lineNum">     317 </span>            :    when an SSA edge is added to it in simulate_stmt.  Return true if a stmt
+<span class="lineNum">     318 </span>            :    was simulated.  */
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span>            : void
+<span class="lineNum">     321 </span><span class="lineCov">   75718052 : ssa_propagation_engine::process_ssa_edge_worklist (void)</span>
+<span class="lineNum">     322 </span>            : {
+<span class="lineNum">     323 </span>            :   /* Process the next entry from the worklist.  */
+<span class="lineNum">     324 </span><span class="lineCov">   75718052 :   unsigned stmt_uid = bitmap_first_set_bit (ssa_edge_worklist);</span>
+<span class="lineNum">     325 </span><span class="lineCov">   75718052 :   bitmap_clear_bit (ssa_edge_worklist, stmt_uid);</span>
+<span class="lineNum">     326 </span><span class="lineCov">   75718052 :   gimple *stmt = uid_to_stmt[stmt_uid];</span>
+<span class="lineNum">     327 </span>            : 
+<span class="lineNum">     328 </span>            :   /* We should not have stmts in not yet simulated BBs on the worklist.  */
+<span class="lineNum">     329 </span><span class="lineCov">  151436104 :   gcc_assert (gimple_bb (stmt)-&gt;flags &amp; BB_VISITED);</span>
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineCov">   75718052 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     332 </span>            :     {
+<span class="lineNum">     333 </span><span class="lineCov">        133 :       fprintf (dump_file, &quot;\nSimulating statement: &quot;);</span>
+<span class="lineNum">     334 </span><span class="lineCov">        133 :       print_gimple_stmt (dump_file, stmt, 0, dump_flags);</span>
+<span class="lineNum">     335 </span>            :     }
+<span class="lineNum">     336 </span>            : 
+<span class="lineNum">     337 </span><span class="lineCov">   75718052 :   simulate_stmt (stmt);</span>
+<span class="lineNum">     338 </span><span class="lineCov">   75718052 : }</span>
+<span class="lineNum">     339 </span>            : 
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span>            : /* Simulate the execution of BLOCK.  Evaluate the statement associated
+<span class="lineNum">     342 </span>            :    with each variable reference inside the block.  */
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            : void
+<span class="lineNum">     345 </span><span class="lineCov">   45219402 : ssa_propagation_engine::simulate_block (basic_block block)</span>
+<span class="lineNum">     346 </span>            : {
+<span class="lineNum">     347 </span><span class="lineCov">   45219402 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span>            :   /* There is nothing to do for the exit block.  */
+<span class="lineNum">     350 </span><span class="lineCov">   45219402 :   if (block == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     351 </span><span class="lineNoCov">          0 :     return;</span>
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span><span class="lineCov">   45219402 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     354 </span><span class="lineCov">        392 :     fprintf (dump_file, &quot;\nSimulating block %d\n&quot;, block-&gt;index);</span>
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span>            :   /* Always simulate PHI nodes, even if we have simulated this block
+<span class="lineNum">     357 </span>            :      before.  */
+<span class="lineNum">     358 </span><span class="lineCov">   67296416 :   for (gsi = gsi_start_phis (block); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     359 </span><span class="lineCov">   44154028 :     simulate_stmt (gsi_stmt (gsi));</span>
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span>            :   /* If this is the first time we've simulated this block, then we
+<span class="lineNum">     362 </span>            :      must simulate each of its statements.  */
+<span class="lineNum">     363 </span><span class="lineCov">   45219402 :   if (! (block-&gt;flags &amp; BB_VISITED))</span>
+<span class="lineNum">     364 </span>            :     {
+<span class="lineNum">     365 </span><span class="lineCov">   42329842 :       gimple_stmt_iterator j;</span>
+<span class="lineNum">     366 </span><span class="lineCov">   42329842 :       unsigned int normal_edge_count;</span>
+<span class="lineNum">     367 </span><span class="lineCov">   42329842 :       edge e, normal_edge;</span>
+<span class="lineNum">     368 </span><span class="lineCov">   42329842 :       edge_iterator ei;</span>
+<span class="lineNum">     369 </span>            : 
+<span class="lineNum">     370 </span><span class="lineCov">  427106104 :       for (j = gsi_start_bb (block); !gsi_end_p (j); gsi_next (&amp;j))</span>
+<span class="lineNum">     371 </span><span class="lineCov">  684892840 :         simulate_stmt (gsi_stmt (j));</span>
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            :       /* Note that we have simulated this block.  */
+<span class="lineNum">     374 </span><span class="lineCov">   42329842 :       block-&gt;flags |= BB_VISITED;</span>
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span>            :       /* We can not predict when abnormal and EH edges will be executed, so
+<span class="lineNum">     377 </span>            :          once a block is considered executable, we consider any
+<span class="lineNum">     378 </span>            :          outgoing abnormal edges as executable.
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            :          TODO: This is not exactly true.  Simplifying statement might
+<span class="lineNum">     381 </span>            :          prove it non-throwing and also computed goto can be handled
+<span class="lineNum">     382 </span>            :          when destination is known.
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            :          At the same time, if this block has only one successor that is
+<span class="lineNum">     385 </span>            :          reached by non-abnormal edges, then add that successor to the
+<span class="lineNum">     386 </span>            :          worklist.  */
+<span class="lineNum">     387 </span><span class="lineCov">   42329842 :       normal_edge_count = 0;</span>
+<span class="lineNum">     388 </span><span class="lineCov">   42329842 :       normal_edge = NULL;</span>
+<span class="lineNum">     389 </span><span class="lineCov">  144557047 :       FOR_EACH_EDGE (e, ei, block-&gt;succs)</span>
+<span class="lineNum">     390 </span>            :         {
+<span class="lineNum">     391 </span><span class="lineCov">   59897363 :           if (e-&gt;flags &amp; (EDGE_ABNORMAL | EDGE_EH))</span>
+<span class="lineNum">     392 </span><span class="lineCov">    5347505 :             add_control_edge (e);</span>
+<span class="lineNum">     393 </span>            :           else
+<span class="lineNum">     394 </span>            :             {
+<span class="lineNum">     395 </span><span class="lineCov">   54549858 :               normal_edge_count++;</span>
+<span class="lineNum">     396 </span><span class="lineCov">   54549858 :               normal_edge = e;</span>
+<span class="lineNum">     397 </span>            :             }
+<span class="lineNum">     398 </span>            :         }
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span><span class="lineCov">   42329842 :       if (normal_edge_count == 1)</span>
+<span class="lineNum">     401 </span><span class="lineCov">   22281263 :         add_control_edge (normal_edge);</span>
+<span class="lineNum">     402 </span>            :     }
+<span class="lineNum">     403 </span>            : }
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            : /* Initialize local data structures and work lists.  */
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span>            : static void
+<span class="lineNum">     409 </span><span class="lineCov">    4579510 : ssa_prop_init (void)</span>
+<span class="lineNum">     410 </span>            : {
+<span class="lineNum">     411 </span><span class="lineCov">    4579510 :   edge e;</span>
+<span class="lineNum">     412 </span><span class="lineCov">    4579510 :   edge_iterator ei;</span>
+<span class="lineNum">     413 </span><span class="lineCov">    4579510 :   basic_block bb;</span>
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span>            :   /* Worklists of SSA edges.  */
+<span class="lineNum">     416 </span><span class="lineCov">    4579510 :   ssa_edge_worklist = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span>            :   /* Worklist of basic-blocks.  */
+<span class="lineNum">     419 </span><span class="lineCov">    4579510 :   bb_to_cfg_order = XNEWVEC (int, last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">     420 </span><span class="lineCov">    4579510 :   cfg_order_to_bb = XNEWVEC (int, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     421 </span><span class="lineCov">    4579510 :   int n = pre_and_rev_post_order_compute_fn (cfun, NULL,</span>
+<span class="lineNum">     422 </span>            :                                              cfg_order_to_bb, false);
+<span class="lineNum">     423 </span><span class="lineCov">   47090101 :   for (int i = 0; i &lt; n; ++i)</span>
+<span class="lineNum">     424 </span><span class="lineCov">   42510591 :     bb_to_cfg_order[cfg_order_to_bb[i]] = i;</span>
+<span class="lineNum">     425 </span><span class="lineCov">    4579510 :   cfg_blocks = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span><span class="lineCov">    4579510 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     428 </span><span class="lineCov">         47 :     dump_immediate_uses (dump_file);</span>
+<span class="lineNum">     429 </span>            : 
+<span class="lineNum">     430 </span>            :   /* Initially assume that every edge in the CFG is not executable.
+<span class="lineNum">     431 </span>            :      (including the edges coming out of the entry block).  Mark blocks
+<span class="lineNum">     432 </span>            :      as not visited, blocks not yet visited will have all their statements
+<span class="lineNum">     433 </span>            :      simulated once an incoming edge gets executable.  */
+<span class="lineNum">     434 </span><span class="lineCov">    4579510 :   set_gimple_stmt_max_uid (cfun, 0);</span>
+<span class="lineNum">     435 </span><span class="lineCov">   47090101 :   for (int i = 0; i &lt; n; ++i)</span>
+<span class="lineNum">     436 </span>            :     {
+<span class="lineNum">     437 </span><span class="lineCov">   42510591 :       gimple_stmt_iterator si;</span>
+<span class="lineNum">     438 </span><span class="lineCov">   42510591 :       bb = BASIC_BLOCK_FOR_FN (cfun, cfg_order_to_bb[i]);</span>
+<span class="lineNum">     439 </span>            : 
+<span class="lineNum">     440 </span><span class="lineCov">   74667741 :       for (si = gsi_start_phis (bb); !gsi_end_p (si); gsi_next (&amp;si))</span>
+<span class="lineNum">     441 </span>            :         {
+<span class="lineNum">     442 </span><span class="lineCov">   16078575 :           gimple *stmt = gsi_stmt (si);</span>
+<span class="lineNum">     443 </span><span class="lineCov">   48235725 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">     444 </span>            :         }
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span><span class="lineCov">  771427736 :       for (si = gsi_start_bb (bb); !gsi_end_p (si); gsi_next (&amp;si))</span>
+<span class="lineNum">     447 </span>            :         {
+<span class="lineNum">     448 </span><span class="lineCov">  343203277 :           gimple *stmt = gsi_stmt (si);</span>
+<span class="lineNum">     449 </span><span class="lineCov"> 1029609831 :           gimple_set_uid (stmt, inc_gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">     450 </span>            :         }
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span><span class="lineCov">   42510591 :       bb-&gt;flags &amp;= ~BB_VISITED;</span>
+<span class="lineNum">     453 </span><span class="lineCov">  145061283 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     454 </span><span class="lineCov">   60040101 :         e-&gt;flags &amp;= ~EDGE_EXECUTABLE;</span>
+<span class="lineNum">     455 </span>            :     }
+<span class="lineNum">     456 </span><span class="lineCov">    9159020 :   uid_to_stmt.safe_grow (gimple_stmt_max_uid (cfun));</span>
+<span class="lineNum">     457 </span>            : 
+<span class="lineNum">     458 </span>            :   /* Seed the algorithm by adding the successors of the entry block to the
+<span class="lineNum">     459 </span>            :      edge worklist.  */
+<span class="lineNum">     460 </span><span class="lineCov">   13738530 :   FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;succs)</span>
+<span class="lineNum">     461 </span>            :     {
+<span class="lineNum">     462 </span><span class="lineCov">    4579510 :       e-&gt;flags &amp;= ~EDGE_EXECUTABLE;</span>
+<span class="lineNum">     463 </span><span class="lineCov">    4579510 :       add_control_edge (e);</span>
+<span class="lineNum">     464 </span>            :     }
+<span class="lineNum">     465 </span><span class="lineCov">    4579510 : }</span>
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            : 
+<span class="lineNum">     468 </span>            : /* Free allocated storage.  */
+<a name="469"><span class="lineNum">     469 </span>            : </a>
+<span class="lineNum">     470 </span>            : static void
+<span class="lineNum">     471 </span><span class="lineCov">    4579510 : ssa_prop_fini (void)</span>
+<span class="lineNum">     472 </span>            : {
+<span class="lineNum">     473 </span><span class="lineCov">    4579510 :   BITMAP_FREE (cfg_blocks);</span>
+<span class="lineNum">     474 </span><span class="lineCov">    4579510 :   free (bb_to_cfg_order);</span>
+<span class="lineNum">     475 </span><span class="lineCov">    4579510 :   free (cfg_order_to_bb);</span>
+<span class="lineNum">     476 </span><span class="lineCov">    4579510 :   BITMAP_FREE (ssa_edge_worklist);</span>
+<span class="lineNum">     477 </span><span class="lineCov">    4579510 :   uid_to_stmt.release ();</span>
+<span class="lineNum">     478 </span><span class="lineCov">    4579510 : }</span>
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            : /* Return true if EXPR is an acceptable right-hand-side for a
+<span class="lineNum">     482 </span>            :    GIMPLE assignment.  We validate the entire tree, not just
+<span class="lineNum">     483 </span>            :    the root node, thus catching expressions that embed complex
+<span class="lineNum">     484 </span>            :    operands that are not permitted in GIMPLE.  This function
+<span class="lineNum">     485 </span>            :    is needed because the folding routines in fold-const.c
+<span class="lineNum">     486 </span>            :    may return such expressions in some cases, e.g., an array
+<span class="lineNum">     487 </span>            :    access with an embedded index addition.  It may make more
+<span class="lineNum">     488 </span>            :    sense to have folding routines that are sensitive to the
+<span class="lineNum">     489 </span>            :    constraints on GIMPLE operands, rather than abandoning any
+<span class="lineNum">     490 </span>            :    any attempt to fold if the usual folding turns out to be too
+<span class="lineNum">     491 </span>            :    aggressive.  */
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            : bool
+<span class="lineNum">     494 </span><span class="lineCov">     229067 : valid_gimple_rhs_p (tree expr)</span>
+<span class="lineNum">     495 </span>            : {
+<span class="lineNum">     496 </span><span class="lineCov">     229067 :   enum tree_code code = TREE_CODE (expr);</span>
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span><span class="lineCov">     229067 :   switch (TREE_CODE_CLASS (code))</span>
+<span class="lineNum">     499 </span>            :     {
+<span class="lineNum">     500 </span><span class="lineCov">        179 :     case tcc_declaration:</span>
+<span class="lineNum">     501 </span><span class="lineCov">        179 :       if (!is_gimple_variable (expr))</span>
+<span class="lineNum">     502 </span><span class="lineNoCov">          0 :         return false;</span>
+<span class="lineNum">     503 </span>            :       break;
+<span class="lineNum">     504 </span>            : 
+<span class="lineNum">     505 </span>            :     case tcc_constant:
+<span class="lineNum">     506 </span>            :       /* All constants are ok.  */
+<span class="lineNum">     507 </span>            :       break;
+<span class="lineNum">     508 </span>            : 
+<span class="lineNum">     509 </span><span class="lineCov">          3 :     case tcc_comparison:</span>
+<span class="lineNum">     510 </span>            :       /* GENERIC allows comparisons with non-boolean types, reject
+<span class="lineNum">     511 </span>            :          those for GIMPLE.  Let vector-typed comparisons pass - rules
+<span class="lineNum">     512 </span>            :          for GENERIC and GIMPLE are the same here.  */
+<span class="lineNum">     513 </span><span class="lineCov">          9 :       if (!(INTEGRAL_TYPE_P (TREE_TYPE (expr))</span>
+<span class="lineNum">     514 </span><span class="lineCov">          6 :             &amp;&amp; (TREE_CODE (TREE_TYPE (expr)) == BOOLEAN_TYPE</span>
+<span class="lineNum">     515 </span><span class="lineCov">          6 :                 || TYPE_PRECISION (TREE_TYPE (expr)) == 1))</span>
+<span class="lineNum">     516 </span><span class="lineCov">          9 :           &amp;&amp; ! VECTOR_TYPE_P (TREE_TYPE (expr)))</span>
+<span class="lineNum">     517 </span>            :         return false;
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span>            :       /* Fallthru.  */
+<span class="lineNum">     520 </span><span class="lineCov">      21429 :     case tcc_binary:</span>
+<span class="lineNum">     521 </span><span class="lineCov">      21429 :       if (!is_gimple_val (TREE_OPERAND (expr, 0))</span>
+<span class="lineNum">     522 </span><span class="lineCov">      21429 :           || !is_gimple_val (TREE_OPERAND (expr, 1)))</span>
+<span class="lineNum">     523 </span><span class="lineCov">       2532 :         return false;</span>
+<span class="lineNum">     524 </span>            :       break;
+<span class="lineNum">     525 </span>            : 
+<span class="lineNum">     526 </span><span class="lineCov">      95918 :     case tcc_unary:</span>
+<span class="lineNum">     527 </span><span class="lineCov">      95918 :       if (!is_gimple_val (TREE_OPERAND (expr, 0)))</span>
+<span class="lineNum">     528 </span><span class="lineCov">      33060 :         return false;</span>
+<span class="lineNum">     529 </span>            :       break;
+<span class="lineNum">     530 </span>            : 
+<span class="lineNum">     531 </span><span class="lineCov">       7197 :     case tcc_expression:</span>
+<span class="lineNum">     532 </span><span class="lineCov">       7197 :       switch (code)</span>
+<span class="lineNum">     533 </span>            :         {
+<span class="lineNum">     534 </span><span class="lineCov">        196 :         case ADDR_EXPR:</span>
+<span class="lineNum">     535 </span><span class="lineCov">        196 :           {</span>
+<span class="lineNum">     536 </span><span class="lineCov">        196 :             tree t;</span>
+<span class="lineNum">     537 </span><span class="lineCov">        196 :             if (is_gimple_min_invariant (expr))</span>
+<span class="lineNum">     538 </span>            :               return true;
+<span class="lineNum">     539 </span><span class="lineNoCov">          0 :             t = TREE_OPERAND (expr, 0);</span>
+<span class="lineNum">     540 </span><span class="lineNoCov">          0 :             while (handled_component_p (t))</span>
+<span class="lineNum">     541 </span>            :               {
+<span class="lineNum">     542 </span>            :                 /* ??? More checks needed, see the GIMPLE verifier.  */
+<span class="lineNum">     543 </span><span class="lineNoCov">          0 :                 if ((TREE_CODE (t) == ARRAY_REF</span>
+<span class="lineNum">     544 </span><span class="lineNoCov">          0 :                      || TREE_CODE (t) == ARRAY_RANGE_REF)</span>
+<span class="lineNum">     545 </span><span class="lineNoCov">          0 :                     &amp;&amp; !is_gimple_val (TREE_OPERAND (t, 1)))</span>
+<span class="lineNum">     546 </span>            :                   return false;
+<span class="lineNum">     547 </span><span class="lineNoCov">          0 :                 t = TREE_OPERAND (t, 0);</span>
+<span class="lineNum">     548 </span>            :               }
+<span class="lineNum">     549 </span><span class="lineNoCov">          0 :             if (!is_gimple_id (t))</span>
+<span class="lineNum">     550 </span><span class="lineNoCov">          0 :               return false;</span>
+<span class="lineNum">     551 </span>            :           }
+<span class="lineNum">     552 </span>            :           break;
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span><span class="lineCov">       7001 :         default:</span>
+<span class="lineNum">     555 </span><span class="lineCov">      14002 :           if (get_gimple_rhs_class (code) == GIMPLE_TERNARY_RHS)</span>
+<span class="lineNum">     556 </span>            :             {
+<span class="lineNum">     557 </span><span class="lineCov">       6602 :               if (((code == VEC_COND_EXPR || code == COND_EXPR)</span>
+<span class="lineNum">     558 </span><span class="lineCov">       6602 :                    ? !is_gimple_condexpr (TREE_OPERAND (expr, 0))</span>
+<span class="lineNum">     559 </span><span class="lineCov">       3224 :                    : !is_gimple_val (TREE_OPERAND (expr, 0)))</span>
+<span class="lineNum">     560 </span><span class="lineCov">       6602 :                   || !is_gimple_val (TREE_OPERAND (expr, 1))</span>
+<span class="lineNum">     561 </span><span class="lineCov">      16582 :                   || !is_gimple_val (TREE_OPERAND (expr, 2)))</span>
+<span class="lineNum">     562 </span><span class="lineNoCov">          0 :                 return false;</span>
+<span class="lineNum">     563 </span>            :               break;
+<span class="lineNum">     564 </span>            :             }
+<span class="lineNum">     565 </span>            :           return false;
+<span class="lineNum">     566 </span>            :         }
+<span class="lineNum">     567 </span>            :       break;
+<span class="lineNum">     568 </span>            : 
+<span class="lineNum">     569 </span>            :     case tcc_vl_exp:
+<span class="lineNum">     570 </span>            :       return false;
+<span class="lineNum">     571 </span>            : 
+<span class="lineNum">     572 </span><span class="lineCov">      50424 :     case tcc_exceptional:</span>
+<span class="lineNum">     573 </span><span class="lineCov">      50424 :       if (code == CONSTRUCTOR)</span>
+<span class="lineNum">     574 </span>            :         {
+<span class="lineNum">     575 </span>            :           unsigned i;
+<span class="lineNum">     576 </span>            :           tree elt;
+<span class="lineNum">     577 </span><span class="lineNoCov">          0 :           FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (expr), i, elt)</span>
+<span class="lineNum">     578 </span><span class="lineNoCov">          0 :             if (!is_gimple_val (elt))</span>
+<span class="lineNum">     579 </span>            :               return false;
+<span class="lineNum">     580 </span>            :           return true;
+<span class="lineNum">     581 </span><span class="lineCov">      50424 :         }</span>
+<span class="lineNum">     582 </span><span class="lineCov">      50424 :       if (code != SSA_NAME)</span>
+<span class="lineNum">     583 </span><span class="lineNoCov">          0 :         return false;</span>
+<span class="lineNum">     584 </span>            :       break;
+<span class="lineNum">     585 </span>            : 
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :     case tcc_reference:</span>
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :       if (code == BIT_FIELD_REF)</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :         return is_gimple_val (TREE_OPERAND (expr, 0));</span>
+<span class="lineNum">     589 </span>            :       return false;
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            :     default:
+<span class="lineNum">     592 </span>            :       return false;
+<span class="lineNum">     593 </span>            :     }
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span>            :   return true;
+<span class="lineNum">     596 </span>            : }
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span>            : /* Return true if EXPR is a CALL_EXPR suitable for representation
+<span class="lineNum">     600 </span>            :    as a single GIMPLE_CALL statement.  If the arguments require
+<span class="lineNum">     601 </span>            :    further gimplification, return false.  */
+<a name="602"><span class="lineNum">     602 </span>            : </a>
+<span class="lineNum">     603 </span>            : static bool
+<span class="lineNum">     604 </span><span class="lineCov">      57746 : valid_gimple_call_p (tree expr)</span>
+<span class="lineNum">     605 </span>            : {
+<span class="lineNum">     606 </span><span class="lineCov">      57746 :   unsigned i, nargs;</span>
+<span class="lineNum">     607 </span>            : 
+<span class="lineNum">     608 </span><span class="lineCov">      57746 :   if (TREE_CODE (expr) != CALL_EXPR)</span>
+<span class="lineNum">     609 </span>            :     return false;
+<span class="lineNum">     610 </span>            : 
+<span class="lineNum">     611 </span><span class="lineNoCov">          0 :   nargs = call_expr_nargs (expr);</span>
+<span class="lineNum">     612 </span><span class="lineNoCov">          0 :   for (i = 0; i &lt; nargs; i++)</span>
+<span class="lineNum">     613 </span>            :     {
+<span class="lineNum">     614 </span><span class="lineNoCov">          0 :       tree arg = CALL_EXPR_ARG (expr, i);</span>
+<span class="lineNum">     615 </span><span class="lineNoCov">          0 :       if (is_gimple_reg_type (TREE_TYPE (arg)))</span>
+<span class="lineNum">     616 </span>            :         {
+<span class="lineNum">     617 </span><span class="lineNoCov">          0 :           if (!is_gimple_val (arg))</span>
+<span class="lineNum">     618 </span>            :             return false;
+<span class="lineNum">     619 </span>            :         }
+<span class="lineNum">     620 </span>            :       else
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :         if (!is_gimple_lvalue (arg))</span>
+<span class="lineNum">     622 </span>            :           return false;
+<span class="lineNum">     623 </span>            :     }
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span>            :   return true;
+<span class="lineNum">     626 </span>            : }
+<span class="lineNum">     627 </span>            : 
+<span class="lineNum">     628 </span>            : 
+<span class="lineNum">     629 </span>            : /* Make SSA names defined by OLD_STMT point to NEW_STMT
+<span class="lineNum">     630 </span>            :    as their defining statement.  */
+<a name="631"><span class="lineNum">     631 </span>            : </a>
+<span class="lineNum">     632 </span>            : void
+<span class="lineNum">     633 </span><span class="lineCov">      54060 : move_ssa_defining_stmt_for_defs (gimple *new_stmt, gimple *old_stmt)</span>
+<span class="lineNum">     634 </span>            : {
+<span class="lineNum">     635 </span><span class="lineCov">      54060 :   tree var;</span>
+<span class="lineNum">     636 </span><span class="lineCov">      54060 :   ssa_op_iter iter;</span>
+<span class="lineNum">     637 </span>            : 
+<span class="lineNum">     638 </span><span class="lineCov">      54060 :   if (gimple_in_ssa_p (cfun))</span>
+<span class="lineNum">     639 </span>            :     {
+<span class="lineNum">     640 </span>            :       /* Make defined SSA_NAMEs point to the new
+<span class="lineNum">     641 </span>            :          statement as their definition.  */
+<span class="lineNum">     642 </span><span class="lineCov">      93859 :       FOR_EACH_SSA_TREE_OPERAND (var, old_stmt, iter, SSA_OP_ALL_DEFS)</span>
+<span class="lineNum">     643 </span>            :         {
+<span class="lineNum">     644 </span><span class="lineCov">      47798 :           if (TREE_CODE (var) == SSA_NAME)</span>
+<span class="lineNum">     645 </span><span class="lineCov">      95596 :             SSA_NAME_DEF_STMT (var) = new_stmt;</span>
+<span class="lineNum">     646 </span>            :         }
+<span class="lineNum">     647 </span>            :     }
+<span class="lineNum">     648 </span><span class="lineCov">      54060 : }</span>
+<span class="lineNum">     649 </span>            : 
+<span class="lineNum">     650 </span>            : /* Helper function for update_gimple_call and update_call_from_tree.
+<span class="lineNum">     651 </span>            :    A GIMPLE_CALL STMT is being replaced with GIMPLE_CALL NEW_STMT.  */
+<span class="lineNum">     652 </span>            : 
+<span class="lineNum">     653 </span>            : static void
+<span class="lineNum">     654 </span><span class="lineCov">       1037 : finish_update_gimple_call (gimple_stmt_iterator *si_p, gimple *new_stmt,</span>
+<span class="lineNum">     655 </span>            :                            gimple *stmt)
+<span class="lineNum">     656 </span>            : {
+<span class="lineNum">     657 </span><span class="lineCov">       1037 :   gimple_call_set_lhs (new_stmt, gimple_call_lhs (stmt));</span>
+<span class="lineNum">     658 </span><span class="lineCov">       1037 :   move_ssa_defining_stmt_for_defs (new_stmt, stmt);</span>
+<span class="lineNum">     659 </span><span class="lineCov">       2074 :   gimple_set_vuse (new_stmt, gimple_vuse (stmt));</span>
+<span class="lineNum">     660 </span><span class="lineCov">       2074 :   gimple_set_vdef (new_stmt, gimple_vdef (stmt));</span>
+<span class="lineNum">     661 </span><span class="lineCov">       2074 :   gimple_set_location (new_stmt, gimple_location (stmt));</span>
+<span class="lineNum">     662 </span><span class="lineCov">       2074 :   if (gimple_block (new_stmt) == NULL_TREE)</span>
+<span class="lineNum">     663 </span><span class="lineNoCov">          0 :     gimple_set_block (new_stmt, gimple_block (stmt));</span>
+<span class="lineNum">     664 </span><span class="lineCov">       1037 :   gsi_replace (si_p, new_stmt, false);</span>
+<span class="lineNum">     665 </span><span class="lineCov">       1037 : }</span>
+<span class="lineNum">     666 </span>            : 
+<span class="lineNum">     667 </span>            : /* Update a GIMPLE_CALL statement at iterator *SI_P to call to FN
+<span class="lineNum">     668 </span>            :    with number of arguments NARGS, where the arguments in GIMPLE form
+<span class="lineNum">     669 </span>            :    follow NARGS argument.  */
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            : bool
+<span class="lineNum">     672 </span><span class="lineCov">       1037 : update_gimple_call (gimple_stmt_iterator *si_p, tree fn, int nargs, ...)</span>
+<span class="lineNum">     673 </span>            : {
+<span class="lineNum">     674 </span><span class="lineCov">       1037 :   va_list ap;</span>
+<span class="lineNum">     675 </span><span class="lineCov">       2074 :   gcall *new_stmt, *stmt = as_a &lt;gcall *&gt; (gsi_stmt (*si_p));</span>
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span><span class="lineCov">       1037 :   gcc_assert (is_gimple_call (stmt));</span>
+<span class="lineNum">     678 </span><span class="lineCov">       1037 :   va_start (ap, nargs);</span>
+<span class="lineNum">     679 </span><span class="lineCov">       1037 :   new_stmt = gimple_build_call_valist (fn, nargs, ap);</span>
+<span class="lineNum">     680 </span><span class="lineCov">       1037 :   finish_update_gimple_call (si_p, new_stmt, stmt);</span>
+<span class="lineNum">     681 </span><span class="lineCov">       1037 :   va_end (ap);</span>
+<span class="lineNum">     682 </span><span class="lineCov">       1037 :   return true;</span>
+<span class="lineNum">     683 </span>            : }
+<span class="lineNum">     684 </span>            : 
+<span class="lineNum">     685 </span>            : /* Update a GIMPLE_CALL statement at iterator *SI_P to reflect the
+<span class="lineNum">     686 </span>            :    value of EXPR, which is expected to be the result of folding the
+<span class="lineNum">     687 </span>            :    call.  This can only be done if EXPR is a CALL_EXPR with valid
+<span class="lineNum">     688 </span>            :    GIMPLE operands as arguments, or if it is a suitable RHS expression
+<span class="lineNum">     689 </span>            :    for a GIMPLE_ASSIGN.  More complex expressions will require
+<span class="lineNum">     690 </span>            :    gimplification, which will introduce additional statements.  In this
+<span class="lineNum">     691 </span>            :    event, no update is performed, and the function returns false.
+<span class="lineNum">     692 </span>            :    Note that we cannot mutate a GIMPLE_CALL in-place, so we always
+<span class="lineNum">     693 </span>            :    replace the statement at *SI_P with an entirely new statement.
+<span class="lineNum">     694 </span>            :    The new statement need not be a call, e.g., if the original call
+<span class="lineNum">     695 </span>            :    folded to a constant.  */
+<span class="lineNum">     696 </span>            : 
+<span class="lineNum">     697 </span>            : bool
+<span class="lineNum">     698 </span><span class="lineCov">      57746 : update_call_from_tree (gimple_stmt_iterator *si_p, tree expr)</span>
+<span class="lineNum">     699 </span>            : {
+<span class="lineNum">     700 </span><span class="lineCov">      57746 :   gimple *stmt = gsi_stmt (*si_p);</span>
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span><span class="lineCov">      57746 :   if (valid_gimple_call_p (expr))</span>
+<span class="lineNum">     703 </span>            :     {
+<span class="lineNum">     704 </span>            :       /* The call has simplified to another call.  */
+<span class="lineNum">     705 </span><span class="lineNoCov">          0 :       tree fn = CALL_EXPR_FN (expr);</span>
+<span class="lineNum">     706 </span><span class="lineNoCov">          0 :       unsigned i;</span>
+<span class="lineNum">     707 </span><span class="lineNoCov">          0 :       unsigned nargs = call_expr_nargs (expr);</span>
+<span class="lineNum">     708 </span><span class="lineNoCov">          0 :       vec&lt;tree&gt; args = vNULL;</span>
+<span class="lineNum">     709 </span><span class="lineNoCov">          0 :       gcall *new_stmt;</span>
+<span class="lineNum">     710 </span>            : 
+<span class="lineNum">     711 </span><span class="lineNoCov">          0 :       if (nargs &gt; 0)</span>
+<span class="lineNum">     712 </span>            :         {
+<span class="lineNum">     713 </span><span class="lineNoCov">          0 :           args.create (nargs);</span>
+<span class="lineNum">     714 </span><span class="lineNoCov">          0 :           args.safe_grow_cleared (nargs);</span>
+<span class="lineNum">     715 </span>            : 
+<span class="lineNum">     716 </span><span class="lineNoCov">          0 :           for (i = 0; i &lt; nargs; i++)</span>
+<span class="lineNum">     717 </span><span class="lineNoCov">          0 :             args[i] = CALL_EXPR_ARG (expr, i);</span>
+<span class="lineNum">     718 </span>            :         }
+<span class="lineNum">     719 </span>            : 
+<span class="lineNum">     720 </span><span class="lineNoCov">          0 :       new_stmt = gimple_build_call_vec (fn, args);</span>
+<span class="lineNum">     721 </span><span class="lineNoCov">          0 :       finish_update_gimple_call (si_p, new_stmt, stmt);</span>
+<span class="lineNum">     722 </span><span class="lineNoCov">          0 :       args.release ();</span>
+<span class="lineNum">     723 </span>            : 
+<span class="lineNum">     724 </span><span class="lineNoCov">          0 :       return true;</span>
+<span class="lineNum">     725 </span>            :     }
+<span class="lineNum">     726 </span><span class="lineCov">      57746 :   else if (valid_gimple_rhs_p (expr))</span>
+<span class="lineNum">     727 </span>            :     {
+<span class="lineNum">     728 </span><span class="lineCov">      57219 :       tree lhs = gimple_call_lhs (stmt);</span>
+<span class="lineNum">     729 </span><span class="lineCov">      57219 :       gimple *new_stmt;</span>
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            :       /* The call has simplified to an expression
+<span class="lineNum">     732 </span>            :          that cannot be represented as a GIMPLE_CALL. */
+<span class="lineNum">     733 </span><span class="lineCov">      57219 :       if (lhs)</span>
+<span class="lineNum">     734 </span>            :         {
+<span class="lineNum">     735 </span>            :           /* A value is expected.
+<span class="lineNum">     736 </span>            :              Introduce a new GIMPLE_ASSIGN statement.  */
+<span class="lineNum">     737 </span><span class="lineCov">      53023 :           STRIP_USELESS_TYPE_CONVERSION (expr);</span>
+<span class="lineNum">     738 </span><span class="lineCov">      53023 :           new_stmt = gimple_build_assign (lhs, expr);</span>
+<span class="lineNum">     739 </span><span class="lineCov">      53023 :           move_ssa_defining_stmt_for_defs (new_stmt, stmt);</span>
+<span class="lineNum">     740 </span><span class="lineCov">     106046 :           gimple_set_vuse (new_stmt, gimple_vuse (stmt));</span>
+<span class="lineNum">     741 </span><span class="lineCov">     106046 :           gimple_set_vdef (new_stmt, gimple_vdef (stmt));</span>
+<span class="lineNum">     742 </span>            :         }
+<span class="lineNum">     743 </span><span class="lineCov">       4196 :       else if (!TREE_SIDE_EFFECTS (expr))</span>
+<span class="lineNum">     744 </span>            :         {
+<span class="lineNum">     745 </span>            :           /* No value is expected, and EXPR has no effect.
+<span class="lineNum">     746 </span>            :              Replace it with an empty statement.  */
+<span class="lineNum">     747 </span><span class="lineCov">       4196 :           new_stmt = gimple_build_nop ();</span>
+<span class="lineNum">     748 </span><span class="lineCov">       4196 :           if (gimple_in_ssa_p (cfun))</span>
+<span class="lineNum">     749 </span>            :             {
+<span class="lineNum">     750 </span><span class="lineCov">       4196 :               unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     751 </span><span class="lineCov">       4196 :               release_defs (stmt);</span>
+<span class="lineNum">     752 </span>            :             }
+<span class="lineNum">     753 </span>            :         }
+<span class="lineNum">     754 </span>            :       else
+<span class="lineNum">     755 </span>            :         {
+<span class="lineNum">     756 </span>            :           /* No value is expected, but EXPR has an effect,
+<span class="lineNum">     757 </span>            :              e.g., it could be a reference to a volatile
+<span class="lineNum">     758 </span>            :              variable.  Create an assignment statement
+<span class="lineNum">     759 </span>            :              with a dummy (unused) lhs variable.  */
+<span class="lineNum">     760 </span><span class="lineNoCov">          0 :           STRIP_USELESS_TYPE_CONVERSION (expr);</span>
+<span class="lineNum">     761 </span><span class="lineNoCov">          0 :           if (gimple_in_ssa_p (cfun))</span>
+<span class="lineNum">     762 </span><span class="lineNoCov">          0 :             lhs = make_ssa_name (TREE_TYPE (expr));</span>
+<span class="lineNum">     763 </span>            :           else
+<span class="lineNum">     764 </span><span class="lineNoCov">          0 :             lhs = create_tmp_var (TREE_TYPE (expr));</span>
+<span class="lineNum">     765 </span><span class="lineNoCov">          0 :           new_stmt = gimple_build_assign (lhs, expr);</span>
+<span class="lineNum">     766 </span><span class="lineNoCov">          0 :           gimple_set_vuse (new_stmt, gimple_vuse (stmt));</span>
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :           gimple_set_vdef (new_stmt, gimple_vdef (stmt));</span>
+<span class="lineNum">     768 </span><span class="lineNoCov">          0 :           move_ssa_defining_stmt_for_defs (new_stmt, stmt);</span>
+<span class="lineNum">     769 </span>            :         }
+<span class="lineNum">     770 </span><span class="lineCov">     114438 :       gimple_set_location (new_stmt, gimple_location (stmt));</span>
+<span class="lineNum">     771 </span><span class="lineCov">      57219 :       gsi_replace (si_p, new_stmt, false);</span>
+<span class="lineNum">     772 </span><span class="lineCov">      57219 :       return true;</span>
+<span class="lineNum">     773 </span>            :     }
+<span class="lineNum">     774 </span>            :   else
+<span class="lineNum">     775 </span>            :     /* The call simplified to an expression that is
+<span class="lineNum">     776 </span>            :        not a valid GIMPLE RHS.  */
+<span class="lineNum">     777 </span>            :     return false;
+<span class="lineNum">     778 </span>            : }
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span>            : /* Entry point to the propagation engine.
+<span class="lineNum">     781 </span>            : 
+<span class="lineNum">     782 </span>            :    The VISIT_STMT virtual function is called for every statement
+<span class="lineNum">     783 </span>            :    visited and the VISIT_PHI virtual function is called for every PHI
+<span class="lineNum">     784 </span>            :    node visited.  */
+<a name="785"><span class="lineNum">     785 </span>            : </a>
+<span class="lineNum">     786 </span>            : void
+<span class="lineNum">     787 </span><span class="lineCov">    4579510 : ssa_propagation_engine::ssa_propagate (void)</span>
+<span class="lineNum">     788 </span>            : {
+<span class="lineNum">     789 </span><span class="lineCov">    4579510 :   ssa_prop_init ();</span>
+<span class="lineNum">     790 </span>            : 
+<span class="lineNum">     791 </span>            :   /* Iterate until the worklists are empty.  */
+<span class="lineNum">     792 </span><span class="lineCov">  125516964 :   while (! cfg_blocks_empty_p ()</span>
+<span class="lineNum">     793 </span><span class="lineCov">  125516964 :          || ! bitmap_empty_p (ssa_edge_worklist))</span>
+<span class="lineNum">     794 </span>            :     {
+<span class="lineNum">     795 </span>            :       /* First simulate whole blocks.  */
+<span class="lineNum">     796 </span><span class="lineCov">  241874908 :       if (! cfg_blocks_empty_p ())</span>
+<span class="lineNum">     797 </span>            :         {
+<span class="lineNum">     798 </span>            :           /* Pull the next block to simulate off the worklist.  */
+<span class="lineNum">     799 </span><span class="lineCov">   45219402 :           basic_block dest_block = cfg_blocks_get ();</span>
+<span class="lineNum">     800 </span><span class="lineCov">   45219402 :           simulate_block (dest_block);</span>
+<span class="lineNum">     801 </span><span class="lineCov">   45219402 :           continue;</span>
+<span class="lineNum">     802 </span>            :         }
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span>            :       /* Then simulate from the SSA edge worklist.  */
+<span class="lineNum">     805 </span><span class="lineCov">   75718052 :       process_ssa_edge_worklist ();</span>
+<span class="lineNum">     806 </span>            :     }
+<span class="lineNum">     807 </span>            : 
+<span class="lineNum">     808 </span><span class="lineCov">    4579510 :   ssa_prop_fini ();</span>
+<span class="lineNum">     809 </span><span class="lineCov">    4579510 : }</span>
+<span class="lineNum">     810 </span>            : 
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span>            : /* Return true if STMT is of the form 'mem_ref = RHS', where 'mem_ref'
+<span class="lineNum">     813 </span>            :    is a non-volatile pointer dereference, a structure reference or a
+<span class="lineNum">     814 </span>            :    reference to a single _DECL.  Ignore volatile memory references
+<span class="lineNum">     815 </span>            :    because they are not interesting for the optimizers.  */
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span>            : bool
+<span class="lineNum">     818 </span><span class="lineCov">   15017805 : stmt_makes_single_store (gimple *stmt)</span>
+<span class="lineNum">     819 </span>            : {
+<span class="lineNum">     820 </span><span class="lineCov">   15017805 :   tree lhs;</span>
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span><span class="lineCov">   15017805 :   if (gimple_code (stmt) != GIMPLE_ASSIGN</span>
+<span class="lineNum">     823 </span><span class="lineCov">   15017805 :       &amp;&amp; gimple_code (stmt) != GIMPLE_CALL)</span>
+<span class="lineNum">     824 </span>            :     return false;
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span><span class="lineCov">    3621050 :   if (!gimple_vdef (stmt))</span>
+<span class="lineNum">     827 </span>            :     return false;
+<span class="lineNum">     828 </span>            : 
+<span class="lineNum">     829 </span><span class="lineCov">    1572878 :   lhs = gimple_get_lhs (stmt);</span>
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span>            :   /* A call statement may have a null LHS.  */
+<span class="lineNum">     832 </span><span class="lineCov">    1572878 :   if (!lhs)</span>
+<span class="lineNum">     833 </span>            :     return false;
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span><span class="lineCov">    1572878 :   return (!TREE_THIS_VOLATILE (lhs)</span>
+<span class="lineNum">     836 </span><span class="lineCov">    1572878 :           &amp;&amp; (DECL_P (lhs)</span>
+<span class="lineNum">     837 </span><span class="lineCov">    1559240 :               || REFERENCE_CLASS_P (lhs)));</span>
+<span class="lineNum">     838 </span>            : }
+<span class="lineNum">     839 </span>            : 
+<span class="lineNum">     840 </span>            : 
+<span class="lineNum">     841 </span>            : /* Propagation statistics.  */
+<span class="lineNum">     842 </span>            : struct prop_stats_d
+<span class="lineNum">     843 </span>            : {
+<span class="lineNum">     844 </span>            :   long num_const_prop;
+<span class="lineNum">     845 </span>            :   long num_copy_prop;
+<span class="lineNum">     846 </span>            :   long num_stmts_folded;
+<span class="lineNum">     847 </span>            :   long num_dce;
+<span class="lineNum">     848 </span>            : };
+<span class="lineNum">     849 </span>            : 
+<span class="lineNum">     850 </span>            : static struct prop_stats_d prop_stats;
+<span class="lineNum">     851 </span>            : 
+<span class="lineNum">     852 </span>            : /* Replace USE references in statement STMT with the values stored in
+<span class="lineNum">     853 </span>            :    PROP_VALUE. Return true if at least one reference was replaced.  */
+<span class="lineNum">     854 </span>            : 
+<span class="lineNum">     855 </span>            : bool
+<span class="lineNum">     856 </span><span class="lineCov">  385152721 : substitute_and_fold_engine::replace_uses_in (gimple *stmt)</span>
+<span class="lineNum">     857 </span>            : {
+<span class="lineNum">     858 </span><span class="lineCov">  385152721 :   bool replaced = false;</span>
+<span class="lineNum">     859 </span><span class="lineCov">  385152721 :   use_operand_p use;</span>
+<span class="lineNum">     860 </span><span class="lineCov">  385152721 :   ssa_op_iter iter;</span>
+<span class="lineNum">     861 </span>            : 
+<span class="lineNum">     862 </span><span class="lineCov">  560795122 :   FOR_EACH_SSA_USE_OPERAND (use, stmt, iter, SSA_OP_USE)</span>
+<span class="lineNum">     863 </span>            :     {
+<span class="lineNum">     864 </span><span class="lineCov">  175642401 :       tree tuse = USE_FROM_PTR (use);</span>
+<span class="lineNum">     865 </span><span class="lineCov">  175642401 :       tree val = get_value (tuse);</span>
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span><span class="lineCov">  175642401 :       if (val == tuse || val == NULL_TREE)</span>
+<span class="lineNum">     868 </span>            :         continue;
+<span class="lineNum">     869 </span>            : 
+<span class="lineNum">     870 </span><span class="lineCov">    6733474 :       if (gimple_code (stmt) == GIMPLE_ASM</span>
+<span class="lineNum">     871 </span><span class="lineCov">    6733474 :           &amp;&amp; !may_propagate_copy_into_asm (tuse))</span>
+<span class="lineNum">     872 </span>            :         continue;
+<span class="lineNum">     873 </span>            : 
+<span class="lineNum">     874 </span><span class="lineCov">    6733474 :       if (!may_propagate_copy (tuse, val))</span>
+<span class="lineNum">     875 </span>            :         continue;
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span><span class="lineCov">    6732972 :       if (TREE_CODE (val) != SSA_NAME)</span>
+<span class="lineNum">     878 </span><span class="lineCov">    2506885 :         prop_stats.num_const_prop++;</span>
+<span class="lineNum">     879 </span>            :       else
+<span class="lineNum">     880 </span><span class="lineCov">    4226087 :         prop_stats.num_copy_prop++;</span>
+<span class="lineNum">     881 </span>            : 
+<span class="lineNum">     882 </span><span class="lineCov">    6732972 :       propagate_value (use, val);</span>
+<span class="lineNum">     883 </span>            : 
+<span class="lineNum">     884 </span><span class="lineCov">    6732972 :       replaced = true;</span>
+<span class="lineNum">     885 </span>            :     }
+<span class="lineNum">     886 </span>            : 
+<span class="lineNum">     887 </span><span class="lineCov">  385152721 :   return replaced;</span>
+<span class="lineNum">     888 </span>            : }
+<span class="lineNum">     889 </span>            : 
+<span class="lineNum">     890 </span>            : 
+<span class="lineNum">     891 </span>            : /* Replace propagated values into all the arguments for PHI using the
+<span class="lineNum">     892 </span>            :    values from PROP_VALUE.  */
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span>            : bool
+<span class="lineNum">     895 </span><span class="lineCov">    8294355 : substitute_and_fold_engine::replace_phi_args_in (gphi *phi)</span>
+<span class="lineNum">     896 </span>            : {
+<span class="lineNum">     897 </span><span class="lineCov">    8294355 :   size_t i;</span>
+<span class="lineNum">     898 </span><span class="lineCov">    8294355 :   bool replaced = false;</span>
+<span class="lineNum">     899 </span>            : 
+<span class="lineNum">     900 </span><span class="lineCov">    8294355 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     901 </span>            :     {
+<span class="lineNum">     902 </span><span class="lineCov">        120 :       fprintf (dump_file, &quot;Folding PHI node: &quot;);</span>
+<span class="lineNum">     903 </span><span class="lineCov">        120 :       print_gimple_stmt (dump_file, phi, 0, TDF_SLIM);</span>
+<span class="lineNum">     904 </span>            :     }
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span><span class="lineCov">   26144874 :   for (i = 0; i &lt; gimple_phi_num_args (phi); i++)</span>
+<span class="lineNum">     907 </span>            :     {
+<span class="lineNum">     908 </span><span class="lineCov">   17850519 :       tree arg = gimple_phi_arg_def (phi, i);</span>
+<span class="lineNum">     909 </span>            : 
+<span class="lineNum">     910 </span><span class="lineCov">   17850519 :       if (TREE_CODE (arg) == SSA_NAME)</span>
+<span class="lineNum">     911 </span>            :         {
+<span class="lineNum">     912 </span><span class="lineCov">   13706505 :           tree val = get_value (arg);</span>
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span><span class="lineCov">   13706505 :           if (val &amp;&amp; val != arg &amp;&amp; may_propagate_copy (arg, val))</span>
+<span class="lineNum">     915 </span>            :             {
+<span class="lineNum">     916 </span><span class="lineCov">    1293076 :               edge e = gimple_phi_arg_edge (phi, i);</span>
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span><span class="lineCov">    1293076 :               if (TREE_CODE (val) != SSA_NAME)</span>
+<span class="lineNum">     919 </span><span class="lineCov">     875808 :                 prop_stats.num_const_prop++;</span>
+<span class="lineNum">     920 </span>            :               else
+<span class="lineNum">     921 </span><span class="lineCov">     417268 :                 prop_stats.num_copy_prop++;</span>
+<span class="lineNum">     922 </span>            : 
+<span class="lineNum">     923 </span><span class="lineCov">    1293076 :               propagate_value (PHI_ARG_DEF_PTR (phi, i), val);</span>
+<span class="lineNum">     924 </span><span class="lineCov">    1293076 :               replaced = true;</span>
+<span class="lineNum">     925 </span>            : 
+<span class="lineNum">     926 </span>            :               /* If we propagated a copy and this argument flows
+<span class="lineNum">     927 </span>            :                  through an abnormal edge, update the replacement
+<span class="lineNum">     928 </span>            :                  accordingly.  */
+<span class="lineNum">     929 </span><span class="lineCov">    1293076 :               if (TREE_CODE (val) == SSA_NAME</span>
+<span class="lineNum">     930 </span><span class="lineCov">     417268 :                   &amp;&amp; e-&gt;flags &amp; EDGE_ABNORMAL</span>
+<span class="lineNum">     931 </span><span class="lineCov">    1293076 :                   &amp;&amp; !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (val))</span>
+<span class="lineNum">     932 </span>            :                 {
+<span class="lineNum">     933 </span>            :                   /* This can only occur for virtual operands, since
+<span class="lineNum">     934 </span>            :                      for the real ones SSA_NAME_OCCURS_IN_ABNORMAL_PHI (val))
+<span class="lineNum">     935 </span>            :                      would prevent replacement.  */
+<span class="lineNum">     936 </span><span class="lineNoCov">          0 :                   gcc_checking_assert (virtual_operand_p (val));</span>
+<span class="lineNum">     937 </span><span class="lineNoCov">          0 :                   SSA_NAME_OCCURS_IN_ABNORMAL_PHI (val) = 1;</span>
+<span class="lineNum">     938 </span>            :                 }
+<span class="lineNum">     939 </span>            :             }
+<span class="lineNum">     940 </span>            :         }
+<span class="lineNum">     941 </span>            :     }
+<span class="lineNum">     942 </span>            : 
+<span class="lineNum">     943 </span><span class="lineCov">    8294355 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     944 </span>            :     {
+<span class="lineNum">     945 </span><span class="lineCov">        120 :       if (!replaced)</span>
+<span class="lineNum">     946 </span><span class="lineCov">        110 :         fprintf (dump_file, &quot;No folding possible\n&quot;);</span>
+<span class="lineNum">     947 </span>            :       else
+<span class="lineNum">     948 </span>            :         {
+<span class="lineNum">     949 </span><span class="lineCov">         10 :           fprintf (dump_file, &quot;Folded into: &quot;);</span>
+<span class="lineNum">     950 </span><span class="lineCov">         10 :           print_gimple_stmt (dump_file, phi, 0, TDF_SLIM);</span>
+<span class="lineNum">     951 </span><span class="lineCov">         10 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     952 </span>            :         }
+<span class="lineNum">     953 </span>            :     }
+<span class="lineNum">     954 </span>            : 
+<span class="lineNum">     955 </span><span class="lineCov">    8294355 :   return replaced;</span>
+<span class="lineNum">     956 </span>            : }
+<span class="lineNum">     957 </span>            : 
+<span class="lineNum">     958 </span>            : 
+<span class="lineNum">     959 </span>            : class substitute_and_fold_dom_walker : public dom_walker
+<a name="960"><span class="lineNum">     960 </span>            : {</a>
+<span class="lineNum">     961 </span>            : public:
+<span class="lineNum">     962 </span><span class="lineCov">    4576262 :     substitute_and_fold_dom_walker (cdi_direction direction,</span>
+<span class="lineNum">     963 </span>            :                                     class substitute_and_fold_engine *engine)
+<span class="lineNum">     964 </span><span class="lineCov">    4576262 :         : dom_walker (direction),</span>
+<span class="lineNum">     965 </span>            :           something_changed (false),
+<span class="lineNum">     966 </span><span class="lineCov">    4576262 :           substitute_and_fold_engine (engine)</span>
+<span class="lineNum">     967 </span>            :     {
+<span class="lineNum">     968 </span><span class="lineCov">    4576262 :       stmts_to_remove.create (0);</span>
+<span class="lineNum">     969 </span><span class="lineCov">    4576262 :       stmts_to_fixup.create (0);</span>
+<a name="970"><span class="lineNum">     970 </span><span class="lineCov">    4576262 :       need_eh_cleanup = BITMAP_ALLOC (NULL);</span></a>
+<span class="lineNum">     971 </span><span class="lineCov">    4576262 :     }</span>
+<span class="lineNum">     972 </span><span class="lineCov">    4576262 :     ~substitute_and_fold_dom_walker ()</span>
+<span class="lineNum">     973 </span><span class="lineCov">   13728786 :     {</span>
+<span class="lineNum">     974 </span><span class="lineCov">    4576262 :       stmts_to_remove.release ();</span>
+<span class="lineNum">     975 </span><span class="lineCov">    4576262 :       stmts_to_fixup.release ();</span>
+<span class="lineNum">     976 </span><span class="lineCov">    4576262 :       BITMAP_FREE (need_eh_cleanup);</span>
+<span class="lineNum">     977 </span><span class="lineCov">    4576262 :     }</span>
+<a name="978"><span class="lineNum">     978 </span>            : </a>
+<span class="lineNum">     979 </span>            :     virtual edge before_dom_children (basic_block);
+<span class="lineNum">     980 </span><span class="lineCov">   46891252 :     virtual void after_dom_children (basic_block) {}</span>
+<span class="lineNum">     981 </span>            : 
+<span class="lineNum">     982 </span>            :     bool something_changed;
+<span class="lineNum">     983 </span>            :     vec&lt;gimple *&gt; stmts_to_remove;
+<span class="lineNum">     984 </span>            :     vec&lt;gimple *&gt; stmts_to_fixup;
+<span class="lineNum">     985 </span>            :     bitmap need_eh_cleanup;
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span>            :     class substitute_and_fold_engine *substitute_and_fold_engine;
+<span class="lineNum">     988 </span>            : };
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span>            : edge
+<span class="lineNum">     991 </span><span class="lineCov">   46891252 : substitute_and_fold_dom_walker::before_dom_children (basic_block bb)</span>
+<span class="lineNum">     992 </span>            : {
+<span class="lineNum">     993 </span>            :   /* Propagate known values into PHI nodes.  */
+<span class="lineNum">     994 </span><span class="lineCov">   46891252 :   for (gphi_iterator i = gsi_start_phis (bb);</span>
+<span class="lineNum">     995 </span><span class="lineCov">  125837814 :        !gsi_end_p (i);</span>
+<span class="lineNum">     996 </span><span class="lineCov">   16027655 :        gsi_next (&amp;i))</span>
+<span class="lineNum">     997 </span>            :     {
+<span class="lineNum">     998 </span><span class="lineCov">   16027655 :       gphi *phi = i.phi ();</span>
+<span class="lineNum">     999 </span><span class="lineCov">   16027655 :       tree res = gimple_phi_result (phi);</span>
+<span class="lineNum">    1000 </span><span class="lineCov">   32055310 :       if (virtual_operand_p (res))</span>
+<span class="lineNum">    1001 </span>            :         continue;
+<span class="lineNum">    1002 </span><span class="lineCov">    8993976 :       if (res &amp;&amp; TREE_CODE (res) == SSA_NAME)</span>
+<span class="lineNum">    1003 </span>            :         {
+<span class="lineNum">    1004 </span><span class="lineCov">    8993976 :           tree sprime = substitute_and_fold_engine-&gt;get_value (res);</span>
+<span class="lineNum">    1005 </span><span class="lineCov">    8993976 :           if (sprime</span>
+<span class="lineNum">    1006 </span><span class="lineCov">     699862 :               &amp;&amp; sprime != res</span>
+<span class="lineNum">    1007 </span><span class="lineCov">    9693838 :               &amp;&amp; may_propagate_copy (res, sprime))</span>
+<span class="lineNum">    1008 </span>            :             {
+<span class="lineNum">    1009 </span><span class="lineCov">     699621 :               stmts_to_remove.safe_push (phi);</span>
+<span class="lineNum">    1010 </span><span class="lineCov">     699621 :               continue;</span>
+<span class="lineNum">    1011 </span>            :             }
+<span class="lineNum">    1012 </span>            :         }
+<span class="lineNum">    1013 </span><span class="lineCov">    8294355 :       something_changed |= substitute_and_fold_engine-&gt;replace_phi_args_in (phi);</span>
+<span class="lineNum">    1014 </span>            :     }
+<span class="lineNum">    1015 </span>            : 
+<span class="lineNum">    1016 </span>            :   /* Propagate known values into stmts.  In some case it exposes
+<span class="lineNum">    1017 </span>            :      more trivially deletable stmts to walk backward.  */
+<span class="lineNum">    1018 </span><span class="lineCov">   46891252 :   for (gimple_stmt_iterator i = gsi_start_bb (bb);</span>
+<span class="lineNum">    1019 </span><span class="lineCov">  778450578 :        !gsi_end_p (i);</span>
+<span class="lineNum">    1020 </span><span class="lineCov">  342334037 :        gsi_next (&amp;i))</span>
+<span class="lineNum">    1021 </span>            :     {
+<span class="lineNum">    1022 </span><span class="lineCov">  342334037 :       bool did_replace;</span>
+<span class="lineNum">    1023 </span><span class="lineCov">  342334037 :       gimple *stmt = gsi_stmt (i);</span>
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span>            :       /* No point propagating into a stmt we have a value for we
+<span class="lineNum">    1026 </span>            :          can propagate into all uses.  Mark it for removal instead.  */
+<span class="lineNum">    1027 </span><span class="lineCov">  342334037 :       tree lhs = gimple_get_lhs (stmt);</span>
+<span class="lineNum">    1028 </span><span class="lineCov">  342334037 :       if (lhs &amp;&amp; TREE_CODE (lhs) == SSA_NAME)</span>
+<span class="lineNum">    1029 </span>            :         {
+<span class="lineNum">    1030 </span><span class="lineCov">   74377677 :           tree sprime = substitute_and_fold_engine-&gt;get_value (lhs);</span>
+<span class="lineNum">    1031 </span><span class="lineCov">   74377677 :           if (sprime</span>
+<span class="lineNum">    1032 </span><span class="lineCov">    7248753 :               &amp;&amp; sprime != lhs</span>
+<span class="lineNum">    1033 </span><span class="lineCov">    7248753 :               &amp;&amp; may_propagate_copy (lhs, sprime)</span>
+<span class="lineNum">    1034 </span><span class="lineCov">    7247251 :               &amp;&amp; !stmt_could_throw_p (stmt)</span>
+<span class="lineNum">    1035 </span><span class="lineCov">    7245565 :               &amp;&amp; !gimple_has_side_effects (stmt)</span>
+<span class="lineNum">    1036 </span>            :               /* We have to leave ASSERT_EXPRs around for jump-threading.  */
+<span class="lineNum">    1037 </span><span class="lineCov">   88868091 :               &amp;&amp; (!is_gimple_assign (stmt)</span>
+<span class="lineNum">    1038 </span><span class="lineCov">    7206073 :                   || gimple_assign_rhs_code (stmt) != ASSERT_EXPR))</span>
+<span class="lineNum">    1039 </span>            :             {
+<span class="lineNum">    1040 </span><span class="lineCov">    6987029 :               stmts_to_remove.safe_push (stmt);</span>
+<span class="lineNum">    1041 </span><span class="lineCov">    6987029 :               continue;</span>
+<span class="lineNum">    1042 </span>            :             }
+<span class="lineNum">    1043 </span>            :         }
+<span class="lineNum">    1044 </span>            : 
+<span class="lineNum">    1045 </span>            :       /* Replace the statement with its folded version and mark it
+<span class="lineNum">    1046 </span>            :          folded.  */
+<span class="lineNum">    1047 </span><span class="lineCov">  335347008 :       did_replace = false;</span>
+<span class="lineNum">    1048 </span><span class="lineCov">  335347008 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1049 </span>            :         {
+<span class="lineNum">    1050 </span><span class="lineCov">        957 :           fprintf (dump_file, &quot;Folding statement: &quot;);</span>
+<span class="lineNum">    1051 </span><span class="lineCov">        957 :           print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">    1052 </span>            :         }
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span><span class="lineCov">  335347008 :       gimple *old_stmt = stmt;</span>
+<span class="lineNum">    1055 </span><span class="lineCov">  335347008 :       bool was_noreturn = (is_gimple_call (stmt)</span>
+<span class="lineNum">    1056 </span><span class="lineCov">  335347008 :                            &amp;&amp; gimple_call_noreturn_p (stmt));</span>
+<span class="lineNum">    1057 </span>            : 
+<span class="lineNum">    1058 </span>            :       /* Replace real uses in the statement.  */
+<span class="lineNum">    1059 </span><span class="lineCov">  335347008 :       did_replace |= substitute_and_fold_engine-&gt;replace_uses_in (stmt);</span>
+<span class="lineNum">    1060 </span>            : 
+<span class="lineNum">    1061 </span>            :       /* If we made a replacement, fold the statement.  */
+<span class="lineNum">    1062 </span><span class="lineCov">  335347008 :       if (did_replace)</span>
+<span class="lineNum">    1063 </span>            :         {
+<span class="lineNum">    1064 </span><span class="lineCov">    6356773 :           fold_stmt (&amp;i, follow_single_use_edges);</span>
+<span class="lineNum">    1065 </span><span class="lineCov">    6356773 :           stmt = gsi_stmt (i);</span>
+<span class="lineNum">    1066 </span><span class="lineCov">    6356773 :           gimple_set_modified (stmt, true);</span>
+<span class="lineNum">    1067 </span>            :         }
+<span class="lineNum">    1068 </span>            : 
+<span class="lineNum">    1069 </span>            :       /* Some statements may be simplified using propagator
+<span class="lineNum">    1070 </span>            :          specific information.  Do this before propagating
+<span class="lineNum">    1071 </span>            :          into the stmt to not disturb pass specific information.  */
+<span class="lineNum">    1072 </span><span class="lineCov">  335347008 :       update_stmt_if_modified (stmt);</span>
+<span class="lineNum">    1073 </span><span class="lineCov">  335347008 :       if (substitute_and_fold_engine-&gt;fold_stmt(&amp;i))</span>
+<span class="lineNum">    1074 </span>            :         {
+<span class="lineNum">    1075 </span><span class="lineCov">     323296 :           did_replace = true;</span>
+<span class="lineNum">    1076 </span><span class="lineCov">     323296 :           prop_stats.num_stmts_folded++;</span>
+<span class="lineNum">    1077 </span><span class="lineCov">     323296 :           stmt = gsi_stmt (i);</span>
+<span class="lineNum">    1078 </span><span class="lineCov">     323296 :           gimple_set_modified (stmt, true);</span>
+<span class="lineNum">    1079 </span>            :         }
+<span class="lineNum">    1080 </span>            : 
+<span class="lineNum">    1081 </span>            :       /* If this is a control statement the propagator left edges
+<span class="lineNum">    1082 </span>            :          unexecuted on force the condition in a way consistent with
+<span class="lineNum">    1083 </span>            :          that.  See PR66945 for cases where the propagator can end
+<span class="lineNum">    1084 </span>            :          up with a different idea of a taken edge than folding
+<span class="lineNum">    1085 </span>            :          (once undefined behavior is involved).  */
+<span class="lineNum">    1086 </span><span class="lineCov">  670694016 :       if (gimple_code (stmt) == GIMPLE_COND)</span>
+<span class="lineNum">    1087 </span>            :         {
+<span class="lineNum">    1088 </span><span class="lineCov">   15834154 :           if ((EDGE_SUCC (bb, 0)-&gt;flags &amp; EDGE_EXECUTABLE)</span>
+<span class="lineNum">    1089 </span><span class="lineCov">   15834154 :               ^ (EDGE_SUCC (bb, 1)-&gt;flags &amp; EDGE_EXECUTABLE))</span>
+<span class="lineNum">    1090 </span>            :             {
+<span class="lineNum">    1091 </span><span class="lineCov">     509630 :               if (((EDGE_SUCC (bb, 0)-&gt;flags &amp; EDGE_TRUE_VALUE) != 0)</span>
+<span class="lineNum">    1092 </span><span class="lineCov">     254815 :                   == ((EDGE_SUCC (bb, 0)-&gt;flags &amp; EDGE_EXECUTABLE) != 0))</span>
+<span class="lineNum">    1093 </span><span class="lineCov">      95300 :                 gimple_cond_make_true (as_a &lt;gcond *&gt; (stmt));</span>
+<span class="lineNum">    1094 </span>            :               else
+<span class="lineNum">    1095 </span><span class="lineCov">     414330 :                 gimple_cond_make_false (as_a &lt;gcond *&gt; (stmt));</span>
+<span class="lineNum">    1096 </span><span class="lineCov">     254815 :               gimple_set_modified (stmt, true);</span>
+<span class="lineNum">    1097 </span>            :               did_replace = true;
+<span class="lineNum">    1098 </span>            :             }
+<span class="lineNum">    1099 </span>            :         }
+<span class="lineNum">    1100 </span>            : 
+<span class="lineNum">    1101 </span>            :       /* Now cleanup.  */
+<span class="lineNum">    1102 </span><span class="lineCov">  335092193 :       if (did_replace)</span>
+<span class="lineNum">    1103 </span>            :         {
+<span class="lineNum">    1104 </span>            :           /* If we cleaned up EH information from the statement,
+<span class="lineNum">    1105 </span>            :              remove EH edges.  */
+<span class="lineNum">    1106 </span><span class="lineCov">    6453222 :           if (maybe_clean_or_replace_eh_stmt (old_stmt, stmt))</span>
+<span class="lineNum">    1107 </span><span class="lineCov">      13940 :             bitmap_set_bit (need_eh_cleanup, bb-&gt;index);</span>
+<span class="lineNum">    1108 </span>            : 
+<span class="lineNum">    1109 </span>            :           /* If we turned a not noreturn call into a noreturn one
+<span class="lineNum">    1110 </span>            :              schedule it for fixup.  */
+<span class="lineNum">    1111 </span><span class="lineCov">    6453222 :           if (!was_noreturn</span>
+<span class="lineNum">    1112 </span><span class="lineCov">   12871060 :               &amp;&amp; is_gimple_call (stmt)</span>
+<span class="lineNum">    1113 </span><span class="lineCov">    7097303 :               &amp;&amp; gimple_call_noreturn_p (stmt))</span>
+<span class="lineNum">    1114 </span><span class="lineCov">         39 :             stmts_to_fixup.safe_push (stmt);</span>
+<span class="lineNum">    1115 </span>            : 
+<span class="lineNum">    1116 </span><span class="lineCov">    6453222 :           if (gimple_assign_single_p (stmt))</span>
+<span class="lineNum">    1117 </span>            :             {
+<span class="lineNum">    1118 </span><span class="lineCov">    1626764 :               tree rhs = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1119 </span>            : 
+<span class="lineNum">    1120 </span><span class="lineCov">    1626764 :               if (TREE_CODE (rhs) == ADDR_EXPR)</span>
+<span class="lineNum">    1121 </span><span class="lineCov">     217692 :                 recompute_tree_invariant_for_addr_expr (rhs);</span>
+<span class="lineNum">    1122 </span>            :             }
+<span class="lineNum">    1123 </span>            : 
+<span class="lineNum">    1124 </span>            :           /* Determine what needs to be done to update the SSA form.  */
+<span class="lineNum">    1125 </span><span class="lineCov">    6453222 :           update_stmt_if_modified (stmt);</span>
+<span class="lineNum">    1126 </span><span class="lineCov">   12906444 :           if (!is_gimple_debug (stmt))</span>
+<span class="lineNum">    1127 </span><span class="lineCov">    4438344 :             something_changed = true;</span>
+<span class="lineNum">    1128 </span>            :         }
+<span class="lineNum">    1129 </span>            : 
+<span class="lineNum">    1130 </span><span class="lineCov">  335347008 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1131 </span>            :         {
+<span class="lineNum">    1132 </span><span class="lineCov">        957 :           if (did_replace)</span>
+<span class="lineNum">    1133 </span>            :             {
+<span class="lineNum">    1134 </span><span class="lineCov">         33 :               fprintf (dump_file, &quot;Folded into: &quot;);</span>
+<span class="lineNum">    1135 </span><span class="lineCov">         33 :               print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">    1136 </span><span class="lineCov">         33 :               fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1137 </span>            :             }
+<span class="lineNum">    1138 </span>            :           else
+<span class="lineNum">    1139 </span><span class="lineCov">        924 :             fprintf (dump_file, &quot;Not folded\n&quot;);</span>
+<span class="lineNum">    1140 </span>            :         }
+<span class="lineNum">    1141 </span>            :     }
+<span class="lineNum">    1142 </span><span class="lineCov">   46891252 :   return NULL;</span>
+<span class="lineNum">    1143 </span>            : }
+<span class="lineNum">    1144 </span>            : 
+<span class="lineNum">    1145 </span>            : 
+<span class="lineNum">    1146 </span>            : 
+<span class="lineNum">    1147 </span>            : /* Perform final substitution and folding of propagated values.
+<span class="lineNum">    1148 </span>            : 
+<span class="lineNum">    1149 </span>            :    PROP_VALUE[I] contains the single value that should be substituted
+<span class="lineNum">    1150 </span>            :    at every use of SSA name N_I.  If PROP_VALUE is NULL, no values are
+<span class="lineNum">    1151 </span>            :    substituted.
+<span class="lineNum">    1152 </span>            : 
+<span class="lineNum">    1153 </span>            :    If FOLD_FN is non-NULL the function will be invoked on all statements
+<span class="lineNum">    1154 </span>            :    before propagating values for pass specific simplification.
+<span class="lineNum">    1155 </span>            : 
+<span class="lineNum">    1156 </span>            :    DO_DCE is true if trivially dead stmts can be removed.
+<span class="lineNum">    1157 </span>            : 
+<span class="lineNum">    1158 </span>            :    If DO_DCE is true, the statements within a BB are walked from
+<span class="lineNum">    1159 </span>            :    last to first element.  Otherwise we scan from first to last element.
+<span class="lineNum">    1160 </span>            : 
+<span class="lineNum">    1161 </span>            :    Return TRUE when something changed.  */
+<span class="lineNum">    1162 </span>            : 
+<span class="lineNum">    1163 </span>            : bool
+<span class="lineNum">    1164 </span><span class="lineCov">    4576262 : substitute_and_fold_engine::substitute_and_fold (void)</span>
+<span class="lineNum">    1165 </span>            : {
+<span class="lineNum">    1166 </span><span class="lineCov">    4576262 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">    1167 </span><span class="lineCov">         47 :     fprintf (dump_file, &quot;\nSubstituting values and folding statements\n\n&quot;);</span>
+<span class="lineNum">    1168 </span>            : 
+<span class="lineNum">    1169 </span><span class="lineCov">    4576262 :   memset (&amp;prop_stats, 0, sizeof (prop_stats));</span>
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span><span class="lineCov">    4576262 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">    1172 </span><span class="lineCov">    4576262 :   substitute_and_fold_dom_walker walker (CDI_DOMINATORS, this);</span>
+<span class="lineNum">    1173 </span><span class="lineCov">    4576262 :   walker.walk (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1174 </span>            : 
+<span class="lineNum">    1175 </span>            :   /* We cannot remove stmts during the BB walk, especially not release
+<span class="lineNum">    1176 </span>            :      SSA names there as that destroys the lattice of our callers.
+<span class="lineNum">    1177 </span>            :      Remove stmts in reverse order to make debug stmt creation possible.  */
+<span class="lineNum">    1178 </span><span class="lineCov">   12262912 :   while (!walker.stmts_to_remove.is_empty ())</span>
+<span class="lineNum">    1179 </span>            :     {
+<span class="lineNum">    1180 </span><span class="lineCov">    7686650 :       gimple *stmt = walker.stmts_to_remove.pop ();</span>
+<span class="lineNum">    1181 </span><span class="lineCov">    7686650 :       if (dump_file &amp;&amp; dump_flags &amp; TDF_DETAILS)</span>
+<span class="lineNum">    1182 </span>            :         {
+<span class="lineNum">    1183 </span><span class="lineCov">         76 :           fprintf (dump_file, &quot;Removing dead stmt &quot;);</span>
+<span class="lineNum">    1184 </span><span class="lineCov">         76 :           print_gimple_stmt (dump_file, stmt, 0);</span>
+<span class="lineNum">    1185 </span><span class="lineCov">         76 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1186 </span>            :         }
+<span class="lineNum">    1187 </span><span class="lineCov">    7686650 :       prop_stats.num_dce++;</span>
+<span class="lineNum">    1188 </span><span class="lineCov">    7686650 :       gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">    1189 </span><span class="lineCov">   15373300 :       if (gimple_code (stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">    1190 </span><span class="lineCov">     699621 :         remove_phi_node (&amp;gsi, true);</span>
+<span class="lineNum">    1191 </span>            :       else
+<span class="lineNum">    1192 </span>            :         {
+<span class="lineNum">    1193 </span><span class="lineCov">    6987029 :           unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">    1194 </span><span class="lineCov">    6987029 :           gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">    1195 </span><span class="lineCov">    6987029 :           release_defs (stmt);</span>
+<span class="lineNum">    1196 </span>            :         }
+<span class="lineNum">    1197 </span>            :     }
+<span class="lineNum">    1198 </span>            : 
+<span class="lineNum">    1199 </span><span class="lineCov">    9152524 :   if (!bitmap_empty_p (walker.need_eh_cleanup))</span>
+<span class="lineNum">    1200 </span><span class="lineCov">       2370 :     gimple_purge_all_dead_eh_edges (walker.need_eh_cleanup);</span>
+<span class="lineNum">    1201 </span>            : 
+<span class="lineNum">    1202 </span>            :   /* Fixup stmts that became noreturn calls.  This may require splitting
+<span class="lineNum">    1203 </span>            :      blocks and thus isn't possible during the dominator walk.  Do this
+<span class="lineNum">    1204 </span>            :      in reverse order so we don't inadvertedly remove a stmt we want to
+<span class="lineNum">    1205 </span>            :      fixup by visiting a dominating now noreturn call first.  */
+<span class="lineNum">    1206 </span><span class="lineCov">    4576301 :   while (!walker.stmts_to_fixup.is_empty ())</span>
+<span class="lineNum">    1207 </span>            :     {
+<span class="lineNum">    1208 </span><span class="lineCov">         39 :       gimple *stmt = walker.stmts_to_fixup.pop ();</span>
+<span class="lineNum">    1209 </span><span class="lineCov">         39 :       if (dump_file &amp;&amp; dump_flags &amp; TDF_DETAILS)</span>
+<span class="lineNum">    1210 </span>            :         {
+<span class="lineNum">    1211 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;Fixing up noreturn call &quot;);</span>
+<span class="lineNum">    1212 </span><span class="lineNoCov">          0 :           print_gimple_stmt (dump_file, stmt, 0);</span>
+<span class="lineNum">    1213 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">    1214 </span>            :         }
+<span class="lineNum">    1215 </span><span class="lineCov">         39 :       fixup_noreturn_call (stmt);</span>
+<span class="lineNum">    1216 </span>            :     }
+<span class="lineNum">    1217 </span>            : 
+<span class="lineNum">    1218 </span><span class="lineCov">    9152524 :   statistics_counter_event (cfun, &quot;Constants propagated&quot;,</span>
+<span class="lineNum">    1219 </span><span class="lineCov">    4576262 :                             prop_stats.num_const_prop);</span>
+<span class="lineNum">    1220 </span><span class="lineCov">    9152524 :   statistics_counter_event (cfun, &quot;Copies propagated&quot;,</span>
+<span class="lineNum">    1221 </span><span class="lineCov">    4576262 :                             prop_stats.num_copy_prop);</span>
+<span class="lineNum">    1222 </span><span class="lineCov">    9152524 :   statistics_counter_event (cfun, &quot;Statements folded&quot;,</span>
+<span class="lineNum">    1223 </span><span class="lineCov">    4576262 :                             prop_stats.num_stmts_folded);</span>
+<span class="lineNum">    1224 </span><span class="lineCov">    9152524 :   statistics_counter_event (cfun, &quot;Statements deleted&quot;,</span>
+<span class="lineNum">    1225 </span><span class="lineCov">    4576262 :                             prop_stats.num_dce);</span>
+<span class="lineNum">    1226 </span>            : 
+<span class="lineNum">    1227 </span><span class="lineCov">    4576262 :   return walker.something_changed;</span>
+<span class="lineNum">    1228 </span>            : }
+<span class="lineNum">    1229 </span>            : 
+<span class="lineNum">    1230 </span>            : 
+<span class="lineNum">    1231 </span>            : /* Return true if we may propagate ORIG into DEST, false otherwise.  */
+<a name="1232"><span class="lineNum">    1232 </span>            : </a>
+<span class="lineNum">    1233 </span>            : bool
+<span class="lineNum">    1234 </span><span class="lineCov">   62251925 : may_propagate_copy (tree dest, tree orig)</span>
+<span class="lineNum">    1235 </span>            : {
+<span class="lineNum">    1236 </span><span class="lineCov">   62251925 :   tree type_d = TREE_TYPE (dest);</span>
+<span class="lineNum">    1237 </span><span class="lineCov">   62251925 :   tree type_o = TREE_TYPE (orig);</span>
+<span class="lineNum">    1238 </span>            : 
+<span class="lineNum">    1239 </span>            :   /* If ORIG is a default definition which flows in from an abnormal edge
+<span class="lineNum">    1240 </span>            :      then the copy can be propagated.  It is important that we do so to avoid
+<span class="lineNum">    1241 </span>            :      uninitialized copies.  */
+<span class="lineNum">    1242 </span><span class="lineCov">   62251925 :   if (TREE_CODE (orig) == SSA_NAME</span>
+<span class="lineNum">    1243 </span><span class="lineCov">   98226794 :       &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig)</span>
+<span class="lineNum">    1244 </span><span class="lineCov">      25568 :       &amp;&amp; SSA_NAME_IS_DEFAULT_DEF (orig)</span>
+<span class="lineNum">    1245 </span><span class="lineCov">   62256813 :       &amp;&amp; (SSA_NAME_VAR (orig) == NULL_TREE</span>
+<span class="lineNum">    1246 </span><span class="lineCov">       4888 :           || TREE_CODE (SSA_NAME_VAR (orig)) == VAR_DECL))</span>
+<span class="lineNum">    1247 </span>            :     ;
+<span class="lineNum">    1248 </span>            :   /* Otherwise if ORIG just flows in from an abnormal edge then the copy cannot
+<span class="lineNum">    1249 </span>            :      be propagated.  */
+<span class="lineNum">    1250 </span><span class="lineCov">   62249657 :   else if (TREE_CODE (orig) == SSA_NAME</span>
+<span class="lineNum">    1251 </span><span class="lineCov">   62249657 :            &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig))</span>
+<span class="lineNum">    1252 </span>            :     return false;
+<span class="lineNum">    1253 </span>            :   /* Similarly if DEST flows in from an abnormal edge then the copy cannot be
+<span class="lineNum">    1254 </span>            :      propagated.  */
+<span class="lineNum">    1255 </span><span class="lineCov">   62239141 :   else if (TREE_CODE (dest) == SSA_NAME</span>
+<span class="lineNum">    1256 </span><span class="lineCov">   62239141 :            &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (dest))</span>
+<span class="lineNum">    1257 </span>            :     return false;
+<span class="lineNum">    1258 </span>            : 
+<span class="lineNum">    1259 </span>            :   /* Do not copy between types for which we *do* need a conversion.  */
+<span class="lineNum">    1260 </span><span class="lineCov">   62229826 :   if (!useless_type_conversion_p (type_d, type_o))</span>
+<span class="lineNum">    1261 </span>            :     return false;
+<span class="lineNum">    1262 </span>            : 
+<span class="lineNum">    1263 </span>            :   /* Generally propagating virtual operands is not ok as that may
+<span class="lineNum">    1264 </span>            :      create overlapping life-ranges.  */
+<span class="lineNum">    1265 </span><span class="lineCov">   62229804 :   if (TREE_CODE (dest) == SSA_NAME &amp;&amp; virtual_operand_p (dest))</span>
+<span class="lineNum">    1266 </span><span class="lineCov">     134213 :     return false;</span>
+<span class="lineNum">    1267 </span>            : 
+<span class="lineNum">    1268 </span>            :   /* Anything else is OK.  */
+<span class="lineNum">    1269 </span>            :   return true;
+<span class="lineNum">    1270 </span>            : }
+<span class="lineNum">    1271 </span>            : 
+<span class="lineNum">    1272 </span>            : /* Like may_propagate_copy, but use as the destination expression
+<span class="lineNum">    1273 </span>            :    the principal expression (typically, the RHS) contained in
+<span class="lineNum">    1274 </span>            :    statement DEST.  This is more efficient when working with the
+<span class="lineNum">    1275 </span>            :    gimple tuples representation.  */
+<span class="lineNum">    1276 </span>            : 
+<span class="lineNum">    1277 </span>            : bool
+<span class="lineNum">    1278 </span><span class="lineCov">     573572 : may_propagate_copy_into_stmt (gimple *dest, tree orig)</span>
+<span class="lineNum">    1279 </span>            : {
+<span class="lineNum">    1280 </span><span class="lineCov">     573572 :   tree type_d;</span>
+<span class="lineNum">    1281 </span><span class="lineCov">     573572 :   tree type_o;</span>
+<span class="lineNum">    1282 </span>            : 
+<span class="lineNum">    1283 </span>            :   /* If the statement is a switch or a single-rhs assignment,
+<span class="lineNum">    1284 </span>            :      then the expression to be replaced by the propagation may
+<span class="lineNum">    1285 </span>            :      be an SSA_NAME.  Fortunately, there is an explicit tree
+<span class="lineNum">    1286 </span>            :      for the expression, so we delegate to may_propagate_copy.  */
+<span class="lineNum">    1287 </span>            : 
+<span class="lineNum">    1288 </span><span class="lineCov">     573572 :   if (gimple_assign_single_p (dest))</span>
+<span class="lineNum">    1289 </span><span class="lineCov">     199362 :     return may_propagate_copy (gimple_assign_rhs1 (dest), orig);</span>
+<span class="lineNum">    1290 </span><span class="lineCov">     473891 :   else if (gswitch *dest_swtch = dyn_cast &lt;gswitch *&gt; (dest))</span>
+<span class="lineNum">    1291 </span><span class="lineNoCov">          0 :     return may_propagate_copy (gimple_switch_index (dest_swtch), orig);</span>
+<span class="lineNum">    1292 </span>            : 
+<span class="lineNum">    1293 </span>            :   /* In other cases, the expression is not materialized, so there
+<span class="lineNum">    1294 </span>            :      is no destination to pass to may_propagate_copy.  On the other
+<span class="lineNum">    1295 </span>            :      hand, the expression cannot be an SSA_NAME, so the analysis
+<span class="lineNum">    1296 </span>            :      is much simpler.  */
+<span class="lineNum">    1297 </span>            : 
+<span class="lineNum">    1298 </span><span class="lineCov">     473891 :   if (TREE_CODE (orig) == SSA_NAME</span>
+<span class="lineNum">    1299 </span><span class="lineCov">     473891 :       &amp;&amp; SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig))</span>
+<span class="lineNum">    1300 </span>            :     return false;
+<span class="lineNum">    1301 </span>            : 
+<span class="lineNum">    1302 </span><span class="lineCov">     947782 :   if (is_gimple_assign (dest))</span>
+<span class="lineNum">    1303 </span><span class="lineCov">     918310 :     type_d = TREE_TYPE (gimple_assign_lhs (dest));</span>
+<span class="lineNum">    1304 </span><span class="lineCov">      29472 :   else if (gimple_code (dest) == GIMPLE_COND)</span>
+<span class="lineNum">    1305 </span><span class="lineCov">      14101 :     type_d = boolean_type_node;</span>
+<span class="lineNum">    1306 </span><span class="lineCov">        635 :   else if (is_gimple_call (dest)</span>
+<span class="lineNum">    1307 </span><span class="lineCov">        635 :            &amp;&amp; gimple_call_lhs (dest) != NULL_TREE)</span>
+<span class="lineNum">    1308 </span><span class="lineCov">       1270 :     type_d = TREE_TYPE (gimple_call_lhs (dest));</span>
+<span class="lineNum">    1309 </span>            :   else
+<span class="lineNum">    1310 </span><span class="lineNoCov">          0 :     gcc_unreachable ();</span>
+<span class="lineNum">    1311 </span>            : 
+<span class="lineNum">    1312 </span><span class="lineCov">     473891 :   type_o = TREE_TYPE (orig);</span>
+<span class="lineNum">    1313 </span>            : 
+<span class="lineNum">    1314 </span><span class="lineCov">     473891 :   if (!useless_type_conversion_p (type_d, type_o))</span>
+<span class="lineNum">    1315 </span><span class="lineNoCov">          0 :     return false;</span>
+<span class="lineNum">    1316 </span>            : 
+<span class="lineNum">    1317 </span>            :   return true;
+<span class="lineNum">    1318 </span>            : }
+<span class="lineNum">    1319 </span>            : 
+<span class="lineNum">    1320 </span>            : /* Similarly, but we know that we're propagating into an ASM_EXPR.  */
+<a name="1321"><span class="lineNum">    1321 </span>            : </a>
+<span class="lineNum">    1322 </span>            : bool
+<span class="lineNum">    1323 </span><span class="lineCov">      14394 : may_propagate_copy_into_asm (tree dest ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">    1324 </span>            : {
+<span class="lineNum">    1325 </span><span class="lineCov">      14394 :   return true;</span>
+<span class="lineNum">    1326 </span>            : }
+<span class="lineNum">    1327 </span>            : 
+<span class="lineNum">    1328 </span>            : 
+<span class="lineNum">    1329 </span>            : /* Common code for propagate_value and replace_exp.
+<span class="lineNum">    1330 </span>            : 
+<span class="lineNum">    1331 </span>            :    Replace use operand OP_P with VAL.  FOR_PROPAGATION indicates if the
+<span class="lineNum">    1332 </span>            :    replacement is done to propagate a value or not.  */
+<a name="1333"><span class="lineNum">    1333 </span>            : </a>
+<span class="lineNum">    1334 </span>            : static void
+<span class="lineNum">    1335 </span><span class="lineCov">   25916076 : replace_exp_1 (use_operand_p op_p, tree val,</span>
+<span class="lineNum">    1336 </span>            :                bool for_propagation ATTRIBUTE_UNUSED)
+<span class="lineNum">    1337 </span>            : {
+<span class="lineNum">    1338 </span><span class="lineCov">   25916076 :   if (flag_checking)</span>
+<span class="lineNum">    1339 </span>            :     {
+<span class="lineNum">    1340 </span><span class="lineCov">   25915345 :       tree op = USE_FROM_PTR (op_p);</span>
+<span class="lineNum">    1341 </span><span class="lineCov">   25915345 :       gcc_assert (!(for_propagation</span>
+<span class="lineNum">    1342 </span>            :                   &amp;&amp; TREE_CODE (op) == SSA_NAME
+<span class="lineNum">    1343 </span>            :                   &amp;&amp; TREE_CODE (val) == SSA_NAME
+<span class="lineNum">    1344 </span>            :                   &amp;&amp; !may_propagate_copy (op, val)));
+<span class="lineNum">    1345 </span>            :     }
+<span class="lineNum">    1346 </span>            : 
+<span class="lineNum">    1347 </span><span class="lineCov">   25916076 :   if (TREE_CODE (val) == SSA_NAME)</span>
+<span class="lineNum">    1348 </span><span class="lineCov">   19531813 :     SET_USE (op_p, val);</span>
+<span class="lineNum">    1349 </span>            :   else
+<span class="lineNum">    1350 </span><span class="lineCov">    6384263 :     SET_USE (op_p, unshare_expr (val));</span>
+<span class="lineNum">    1351 </span><span class="lineCov">   25916076 : }</span>
+<span class="lineNum">    1352 </span>            : 
+<span class="lineNum">    1353 </span>            : 
+<span class="lineNum">    1354 </span>            : /* Propagate the value VAL (assumed to be a constant or another SSA_NAME)
+<span class="lineNum">    1355 </span>            :    into the operand pointed to by OP_P.
+<span class="lineNum">    1356 </span>            : 
+<span class="lineNum">    1357 </span>            :    Use this version for const/copy propagation as it will perform additional
+<span class="lineNum">    1358 </span>            :    checks to ensure validity of the const/copy propagation.  */
+<a name="1359"><span class="lineNum">    1359 </span>            : </a>
+<span class="lineNum">    1360 </span>            : void
+<span class="lineNum">    1361 </span><span class="lineCov">   23396151 : propagate_value (use_operand_p op_p, tree val)</span>
+<span class="lineNum">    1362 </span>            : {
+<span class="lineNum">    1363 </span><span class="lineCov">   23396151 :   replace_exp_1 (op_p, val, true);</span>
+<span class="lineNum">    1364 </span><span class="lineCov">   23396151 : }</span>
+<span class="lineNum">    1365 </span>            : 
+<span class="lineNum">    1366 </span>            : /* Replace *OP_P with value VAL (assumed to be a constant or another SSA_NAME).
+<span class="lineNum">    1367 </span>            : 
+<span class="lineNum">    1368 </span>            :    Use this version when not const/copy propagating values.  For example,
+<span class="lineNum">    1369 </span>            :    PRE uses this version when building expressions as they would appear
+<span class="lineNum">    1370 </span>            :    in specific blocks taking into account actions of PHI nodes.
+<span class="lineNum">    1371 </span>            : 
+<span class="lineNum">    1372 </span>            :    The statement in which an expression has been replaced should be
+<span class="lineNum">    1373 </span>            :    folded using fold_stmt_inplace.  */
+<a name="1374"><span class="lineNum">    1374 </span>            : </a>
+<span class="lineNum">    1375 </span>            : void
+<span class="lineNum">    1376 </span><span class="lineCov">    2519925 : replace_exp (use_operand_p op_p, tree val)</span>
+<span class="lineNum">    1377 </span>            : {
+<span class="lineNum">    1378 </span><span class="lineCov">    2519925 :   replace_exp_1 (op_p, val, false);</span>
+<span class="lineNum">    1379 </span><span class="lineCov">    2519925 : }</span>
+<span class="lineNum">    1380 </span>            : 
+<span class="lineNum">    1381 </span>            : 
+<span class="lineNum">    1382 </span>            : /* Propagate the value VAL (assumed to be a constant or another SSA_NAME)
+<span class="lineNum">    1383 </span>            :    into the tree pointed to by OP_P.
+<span class="lineNum">    1384 </span>            : 
+<span class="lineNum">    1385 </span>            :    Use this version for const/copy propagation when SSA operands are not
+<span class="lineNum">    1386 </span>            :    available.  It will perform the additional checks to ensure validity of
+<span class="lineNum">    1387 </span>            :    the const/copy propagation, but will not update any operand information.
+<span class="lineNum">    1388 </span>            :    Be sure to mark the stmt as modified.  */
+<a name="1389"><span class="lineNum">    1389 </span>            : </a>
+<span class="lineNum">    1390 </span>            : void
+<span class="lineNum">    1391 </span><span class="lineCov">     629327 : propagate_tree_value (tree *op_p, tree val)</span>
+<span class="lineNum">    1392 </span>            : {
+<span class="lineNum">    1393 </span><span class="lineCov">     629327 :   if (TREE_CODE (val) == SSA_NAME)</span>
+<span class="lineNum">    1394 </span><span class="lineCov">     573562 :     *op_p = val;</span>
+<span class="lineNum">    1395 </span>            :   else
+<span class="lineNum">    1396 </span><span class="lineCov">      55765 :     *op_p = unshare_expr (val);</span>
+<span class="lineNum">    1397 </span><span class="lineCov">     629327 : }</span>
+<span class="lineNum">    1398 </span>            : 
+<span class="lineNum">    1399 </span>            : 
+<span class="lineNum">    1400 </span>            : /* Like propagate_tree_value, but use as the operand to replace
+<span class="lineNum">    1401 </span>            :    the principal expression (typically, the RHS) contained in the
+<span class="lineNum">    1402 </span>            :    statement referenced by iterator GSI.  Note that it is not
+<span class="lineNum">    1403 </span>            :    always possible to update the statement in-place, so a new
+<span class="lineNum">    1404 </span>            :    statement may be created to replace the original.  */
+<span class="lineNum">    1405 </span>            : 
+<span class="lineNum">    1406 </span>            : void
+<span class="lineNum">    1407 </span><span class="lineCov">     629327 : propagate_tree_value_into_stmt (gimple_stmt_iterator *gsi, tree val)</span>
+<span class="lineNum">    1408 </span>            : {
+<span class="lineNum">    1409 </span><span class="lineCov">     629327 :   gimple *stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">    1410 </span>            : 
+<span class="lineNum">    1411 </span><span class="lineCov">    1258654 :   if (is_gimple_assign (stmt))</span>
+<span class="lineNum">    1412 </span>            :     {
+<span class="lineNum">    1413 </span><span class="lineCov">     603191 :       tree expr = NULL_TREE;</span>
+<span class="lineNum">    1414 </span><span class="lineCov">     603191 :       if (gimple_assign_single_p (stmt))</span>
+<span class="lineNum">    1415 </span><span class="lineCov">     232332 :         expr = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">    1416 </span><span class="lineCov">     603191 :       propagate_tree_value (&amp;expr, val);</span>
+<span class="lineNum">    1417 </span><span class="lineCov">     603191 :       gimple_assign_set_rhs_from_tree (gsi, expr);</span>
+<span class="lineNum">    1418 </span>            :     }
+<span class="lineNum">    1419 </span><span class="lineCov">      26136 :   else if (gcond *cond_stmt = dyn_cast &lt;gcond *&gt; (stmt))</span>
+<span class="lineNum">    1420 </span>            :     {
+<span class="lineNum">    1421 </span><span class="lineCov">      15736 :       tree lhs = NULL_TREE;</span>
+<span class="lineNum">    1422 </span><span class="lineCov">      15736 :       tree rhs = build_zero_cst (TREE_TYPE (val));</span>
+<span class="lineNum">    1423 </span><span class="lineCov">      15736 :       propagate_tree_value (&amp;lhs, val);</span>
+<span class="lineNum">    1424 </span><span class="lineCov">      15736 :       gimple_cond_set_code (cond_stmt, NE_EXPR);</span>
+<span class="lineNum">    1425 </span><span class="lineCov">      15736 :       gimple_cond_set_lhs (cond_stmt, lhs);</span>
+<span class="lineNum">    1426 </span><span class="lineCov">      31472 :       gimple_cond_set_rhs (cond_stmt, rhs);</span>
+<span class="lineNum">    1427 </span>            :     }
+<span class="lineNum">    1428 </span><span class="lineCov">      10400 :   else if (is_gimple_call (stmt)</span>
+<span class="lineNum">    1429 </span><span class="lineCov">      10400 :            &amp;&amp; gimple_call_lhs (stmt) != NULL_TREE)</span>
+<span class="lineNum">    1430 </span>            :     {
+<span class="lineNum">    1431 </span><span class="lineCov">      10400 :       tree expr = NULL_TREE;</span>
+<span class="lineNum">    1432 </span><span class="lineCov">      10400 :       bool res;</span>
+<span class="lineNum">    1433 </span><span class="lineCov">      10400 :       propagate_tree_value (&amp;expr, val);</span>
+<span class="lineNum">    1434 </span><span class="lineCov">      10400 :       res = update_call_from_tree (gsi, expr);</span>
+<span class="lineNum">    1435 </span><span class="lineCov">      10400 :       gcc_assert (res);</span>
+<span class="lineNum">    1436 </span>            :     }
+<span class="lineNum">    1437 </span><span class="lineNoCov">          0 :   else if (gswitch *swtch_stmt = dyn_cast &lt;gswitch *&gt; (stmt))</span>
+<span class="lineNum">    1438 </span><span class="lineNoCov">          0 :     propagate_tree_value (gimple_switch_index_ptr (swtch_stmt), val);</span>
+<span class="lineNum">    1439 </span>            :   else
+<span class="lineNum">    1440 </span><span class="lineNoCov">          0 :     gcc_unreachable ();</span>
+<span class="lineNum">    1441 </span><span class="lineCov">     629327 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

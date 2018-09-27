@@ -1,0 +1,597 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-phinodes.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-phinodes.c<span style="font-size: 80%;"> (source / <a href="tree-phinodes.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">181</td>
+            <td class="headerCovTableEntry">187</td>
+            <td class="headerCovTableEntryHi">96.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntryMed">87.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Generic routines for manipulating PHIs</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            : /* Rewriting a function into SSA form can create a huge number of PHIs
+<span class="lineNum">      32 </span>            :    many of which may be thrown away shortly after their creation if jumps
+<span class="lineNum">      33 </span>            :    were threaded through PHI nodes.
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            :    While our garbage collection mechanisms will handle this situation, it
+<span class="lineNum">      36 </span>            :    is extremely wasteful to create nodes and throw them away, especially
+<span class="lineNum">      37 </span>            :    when the nodes can be reused.
+<span class="lineNum">      38 </span>            : 
+<span class="lineNum">      39 </span>            :    For PR 8361, we can significantly reduce the number of nodes allocated
+<span class="lineNum">      40 </span>            :    and thus the total amount of memory allocated by managing PHIs a
+<span class="lineNum">      41 </span>            :    little.  This additionally helps reduce the amount of work done by the
+<span class="lineNum">      42 </span>            :    garbage collector.  Similar results have been seen on a wider variety
+<span class="lineNum">      43 </span>            :    of tests (such as the compiler itself).
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :    PHI nodes have different sizes, so we can't have a single list of all
+<span class="lineNum">      46 </span>            :    the PHI nodes as it would be too expensive to walk down that list to
+<span class="lineNum">      47 </span>            :    find a PHI of a suitable size.
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :    Instead we have an array of lists of free PHI nodes.  The array is
+<span class="lineNum">      50 </span>            :    indexed by the number of PHI alternatives that PHI node can hold.
+<span class="lineNum">      51 </span>            :    Except for the last array member, which holds all remaining PHI
+<span class="lineNum">      52 </span>            :    nodes.
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :    So to find a free PHI node, we compute its index into the free PHI
+<span class="lineNum">      55 </span>            :    node array and see if there are any elements with an exact match.
+<span class="lineNum">      56 </span>            :    If so, then we are done.  Otherwise, we test the next larger size
+<span class="lineNum">      57 </span>            :    up and continue until we are in the last array element.
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :    We do not actually walk members of the last array element.  While it
+<span class="lineNum">      60 </span>            :    might allow us to pick up a few reusable PHI nodes, it could potentially
+<span class="lineNum">      61 </span>            :    be very expensive if the program has released a bunch of large PHI nodes,
+<span class="lineNum">      62 </span>            :    but keeps asking for even larger PHI nodes.  Experiments have shown that
+<span class="lineNum">      63 </span>            :    walking the elements of the last array entry would result in finding less
+<span class="lineNum">      64 </span>            :    than .1% additional reusable PHI nodes.
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :    Note that we can never have less than two PHI argument slots.  Thus,
+<span class="lineNum">      67 </span>            :    the -2 on all the calculations below.  */
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            : #define NUM_BUCKETS 10
+<span class="lineNum">      70 </span>            : static GTY ((deletable (&quot;&quot;))) vec&lt;gimple *, va_gc&gt; *free_phinodes[NUM_BUCKETS - 2];
+<span class="lineNum">      71 </span>            : static unsigned long free_phinode_count;
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            : static int ideal_phi_node_len (int);
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : unsigned int phi_nodes_reused;
+<span class="lineNum">      76 </span>            : unsigned int phi_nodes_created;
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* Dump some simple statistics regarding the re-use of PHI nodes.  */
+<a name="79"><span class="lineNum">      79 </span>            : </a>
+<span class="lineNum">      80 </span>            : void
+<span class="lineNum">      81 </span><span class="lineNoCov">          0 : phinodes_print_statistics (void)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;PHI nodes allocated: %u\n&quot;, phi_nodes_created);</span>
+<span class="lineNum">      84 </span><span class="lineNoCov">          0 :   fprintf (stderr, &quot;PHI nodes reused: %u\n&quot;, phi_nodes_reused);</span>
+<span class="lineNum">      85 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            : /* Allocate a PHI node with at least LEN arguments.  If the free list
+<span class="lineNum">      88 </span>            :    happens to contain a PHI node with LEN arguments or more, return
+<span class="lineNum">      89 </span>            :    that one.  */
+<a name="90"><span class="lineNum">      90 </span>            : </a>
+<span class="lineNum">      91 </span>            : static inline gphi *
+<span class="lineNum">      92 </span><span class="lineCov">    9839733 : allocate_phi_node (size_t len)</span>
+<span class="lineNum">      93 </span>            : {
+<span class="lineNum">      94 </span><span class="lineCov">    9839733 :   gphi *phi;</span>
+<span class="lineNum">      95 </span><span class="lineCov">    9839733 :   size_t bucket = NUM_BUCKETS - 2;</span>
+<span class="lineNum">      96 </span><span class="lineCov">   19679466 :   size_t size = sizeof (struct gphi)</span>
+<span class="lineNum">      97 </span><span class="lineCov">    9839733 :                 + (len - 1) * sizeof (struct phi_arg_d);</span>
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span><span class="lineCov">    9839733 :   if (free_phinode_count)</span>
+<span class="lineNum">     100 </span><span class="lineCov">   10809111 :     for (bucket = len - 2; bucket &lt; NUM_BUCKETS - 2; bucket++)</span>
+<span class="lineNum">     101 </span><span class="lineCov">    9886874 :       if (free_phinodes[bucket])</span>
+<span class="lineNum">     102 </span>            :         break;
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span>            :   /* If our free list has an element, then use it.  */
+<span class="lineNum">     105 </span><span class="lineCov">    5883480 :   if (bucket &lt; NUM_BUCKETS - 2</span>
+<span class="lineNum">     106 </span><span class="lineCov">    5883480 :       &amp;&amp; gimple_phi_capacity ((*free_phinodes[bucket])[0]) &gt;= len)</span>
+<span class="lineNum">     107 </span>            :     {
+<span class="lineNum">     108 </span><span class="lineCov">    4961243 :       free_phinode_count--;</span>
+<span class="lineNum">     109 </span><span class="lineCov">    9922486 :       phi = as_a &lt;gphi *&gt; (free_phinodes[bucket]-&gt;pop ());</span>
+<span class="lineNum">     110 </span><span class="lineCov">    4961243 :       if (free_phinodes[bucket]-&gt;is_empty ())</span>
+<span class="lineNum">     111 </span><span class="lineCov">     267394 :         vec_free (free_phinodes[bucket]);</span>
+<span class="lineNum">     112 </span>            :       if (GATHER_STATISTICS)
+<span class="lineNum">     113 </span>            :         phi_nodes_reused++;
+<span class="lineNum">     114 </span>            :     }
+<span class="lineNum">     115 </span>            :   else
+<span class="lineNum">     116 </span>            :     {
+<span class="lineNum">     117 </span><span class="lineCov">    4878490 :       phi = static_cast &lt;gphi *&gt; (ggc_internal_alloc (size));</span>
+<span class="lineNum">     118 </span><span class="lineCov">    4878490 :       if (GATHER_STATISTICS)</span>
+<span class="lineNum">     119 </span>            :         {
+<span class="lineNum">     120 </span>            :           enum gimple_alloc_kind kind = gimple_alloc_kind (GIMPLE_PHI);
+<span class="lineNum">     121 </span>            :           phi_nodes_created++;
+<span class="lineNum">     122 </span>            :           gimple_alloc_counts[(int) kind]++;
+<span class="lineNum">     123 </span>            :           gimple_alloc_sizes[(int) kind] += size;
+<span class="lineNum">     124 </span>            :         }
+<span class="lineNum">     125 </span>            :     }
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span><span class="lineCov">    9839733 :   return phi;</span>
+<span class="lineNum">     128 </span>            : }
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span>            : /* Given LEN, the original number of requested PHI arguments, return
+<span class="lineNum">     131 </span>            :    a new, &quot;ideal&quot; length for the PHI node.  The &quot;ideal&quot; length rounds
+<span class="lineNum">     132 </span>            :    the total size of the PHI node up to the next power of two bytes.
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span>            :    Rounding up will not result in wasting any memory since the size request
+<span class="lineNum">     135 </span>            :    will be rounded up by the GC system anyway.  [ Note this is not entirely
+<span class="lineNum">     136 </span>            :    true since the original length might have fit on one of the special
+<span class="lineNum">     137 </span>            :    GC pages. ]  By rounding up, we may avoid the need to reallocate the
+<span class="lineNum">     138 </span>            :    PHI node later if we increase the number of arguments for the PHI.  */
+<a name="139"><span class="lineNum">     139 </span>            : </a>
+<span class="lineNum">     140 </span>            : static int
+<span class="lineNum">     141 </span><span class="lineNoCov">          0 : ideal_phi_node_len (int len)</span>
+<span class="lineNum">     142 </span>            : {
+<span class="lineNum">     143 </span><span class="lineCov">   31645874 :   size_t size, new_size;</span>
+<span class="lineNum">     144 </span><span class="lineCov">   31645874 :   int log2, new_len;</span>
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            :   /* We do not support allocations of less than two PHI argument slots.  */
+<span class="lineNum">     147 </span><span class="lineNoCov">          0 :   if (len &lt; 2)</span>
+<span class="lineNum">     148 </span><span class="lineCov">    3124822 :     len = 2;</span>
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            :   /* Compute the number of bytes of the original request.  */
+<span class="lineNum">     151 </span><span class="lineCov">   63291748 :   size = sizeof (struct gphi)</span>
+<span class="lineNum">     152 </span><span class="lineCov">   31645874 :          + (len - 1) * sizeof (struct phi_arg_d);</span>
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span>            :   /* Round it up to the next power of two.  */
+<span class="lineNum">     155 </span><span class="lineCov">   31645874 :   log2 = ceil_log2 (size);</span>
+<span class="lineNum">     156 </span><span class="lineCov">   31645874 :   new_size = 1 &lt;&lt; log2;</span>
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            :   /* Now compute and return the number of PHI argument slots given an
+<span class="lineNum">     159 </span>            :      ideal size allocation.  */
+<span class="lineNum">     160 </span><span class="lineCov">   31645874 :   new_len = len + (new_size - size) / sizeof (struct phi_arg_d);</span>
+<span class="lineNum">     161 </span><span class="lineCov">   31645874 :   return new_len;</span>
+<span class="lineNum">     162 </span>            : }
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            : /* Return a PHI node with LEN argument slots for variable VAR.  */
+<a name="165"><span class="lineNum">     165 </span>            : </a>
+<span class="lineNum">     166 </span>            : static gphi *
+<span class="lineNum">     167 </span><span class="lineCov">    9535018 : make_phi_node (tree var, int len)</span>
+<span class="lineNum">     168 </span>            : {
+<span class="lineNum">     169 </span><span class="lineCov">    9535018 :   gphi *phi;</span>
+<span class="lineNum">     170 </span><span class="lineCov">    9535018 :   int capacity, i;</span>
+<span class="lineNum">     171 </span>            : 
+<span class="lineNum">     172 </span><span class="lineCov">    9535018 :   capacity = ideal_phi_node_len (len);</span>
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span><span class="lineCov">    9535018 :   phi = allocate_phi_node (capacity);</span>
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            :   /* We need to clear the entire PHI node, including the argument
+<span class="lineNum">     177 </span>            :      portion, because we represent a &quot;missing PHI argument&quot; by placing
+<span class="lineNum">     178 </span>            :      NULL_TREE in PHI_ARG_DEF.  */
+<span class="lineNum">     179 </span><span class="lineCov">   19070036 :   memset (phi, 0, (sizeof (struct gphi)</span>
+<span class="lineNum">     180 </span>            :                    - sizeof (struct phi_arg_d)
+<span class="lineNum">     181 </span><span class="lineCov">    9535018 :                    + sizeof (struct phi_arg_d) * len));</span>
+<span class="lineNum">     182 </span><span class="lineCov">    9535018 :   phi-&gt;code = GIMPLE_PHI;</span>
+<span class="lineNum">     183 </span><span class="lineCov">    9535018 :   gimple_init_singleton (phi);</span>
+<span class="lineNum">     184 </span><span class="lineCov">    9535018 :   phi-&gt;nargs = len;</span>
+<span class="lineNum">     185 </span><span class="lineCov">    9535018 :   phi-&gt;capacity = capacity;</span>
+<span class="lineNum">     186 </span><span class="lineCov">    9535018 :   if (!var)</span>
+<span class="lineNum">     187 </span>            :     ;
+<span class="lineNum">     188 </span><span class="lineCov">    6560493 :   else if (TREE_CODE (var) == SSA_NAME)</span>
+<span class="lineNum">     189 </span><span class="lineCov">    2964903 :     gimple_phi_set_result (phi, var);</span>
+<span class="lineNum">     190 </span>            :   else
+<span class="lineNum">     191 </span><span class="lineCov">    3595590 :     gimple_phi_set_result (phi, make_ssa_name (var, phi));</span>
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span><span class="lineCov">   26166096 :   for (i = 0; i &lt; len; i++)</span>
+<span class="lineNum">     194 </span>            :     {
+<span class="lineNum">     195 </span><span class="lineCov">   16631078 :       use_operand_p  imm;</span>
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">   16631078 :       gimple_phi_arg_set_location (phi, i, UNKNOWN_LOCATION);</span>
+<span class="lineNum">     198 </span><span class="lineCov">   16631078 :       imm = gimple_phi_arg_imm_use_ptr (phi, i);</span>
+<span class="lineNum">     199 </span><span class="lineCov">   16631078 :       imm-&gt;use = gimple_phi_arg_def_ptr (phi, i);</span>
+<span class="lineNum">     200 </span><span class="lineCov">   16631078 :       imm-&gt;prev = NULL;</span>
+<span class="lineNum">     201 </span><span class="lineCov">   16631078 :       imm-&gt;next = NULL;</span>
+<span class="lineNum">     202 </span><span class="lineCov">   16631078 :       imm-&gt;loc.stmt = phi;</span>
+<span class="lineNum">     203 </span>            :     }
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span><span class="lineCov">    9535018 :   return phi;</span>
+<span class="lineNum">     206 </span>            : }
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span>            : /* We no longer need PHI, release it so that it may be reused.  */
+<a name="209"><span class="lineNum">     209 </span>            : </a>
+<span class="lineNum">     210 </span>            : static void
+<span class="lineNum">     211 </span><span class="lineCov">    7695972 : release_phi_node (gimple *phi)</span>
+<span class="lineNum">     212 </span>            : {
+<span class="lineNum">     213 </span><span class="lineCov">    7695972 :   size_t bucket;</span>
+<span class="lineNum">     214 </span><span class="lineCov">    7695972 :   size_t len = gimple_phi_capacity (phi);</span>
+<span class="lineNum">     215 </span><span class="lineCov">    7695972 :   size_t x;</span>
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span><span class="lineCov">   19887350 :   for (x = 0; x &lt; gimple_phi_num_args (phi); x++)</span>
+<span class="lineNum">     218 </span>            :     {
+<span class="lineNum">     219 </span><span class="lineCov">   12191378 :       use_operand_p  imm;</span>
+<span class="lineNum">     220 </span><span class="lineCov">   12191378 :       imm = gimple_phi_arg_imm_use_ptr (phi, x);</span>
+<span class="lineNum">     221 </span><span class="lineCov">   12191378 :       delink_imm_use (imm);</span>
+<span class="lineNum">     222 </span>            :     }
+<span class="lineNum">     223 </span>            : 
+<span class="lineNum">     224 </span><span class="lineCov">    7695972 :   bucket = len &gt; NUM_BUCKETS - 1 ? NUM_BUCKETS - 1 : len;</span>
+<span class="lineNum">     225 </span><span class="lineCov">    7695972 :   bucket -= 2;</span>
+<span class="lineNum">     226 </span><span class="lineCov">    7695972 :   vec_safe_push (free_phinodes[bucket], phi);</span>
+<span class="lineNum">     227 </span><span class="lineCov">    7695972 :   free_phinode_count++;</span>
+<span class="lineNum">     228 </span><span class="lineCov">    7695972 : }</span>
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            : /* Resize an existing PHI node.  The only way is up.  Return the
+<span class="lineNum">     232 </span>            :    possibly relocated phi.  */
+<a name="233"><span class="lineNum">     233 </span>            : </a>
+<span class="lineNum">     234 </span>            : static gphi *
+<span class="lineNum">     235 </span><span class="lineCov">     304715 : resize_phi_node (gphi *phi, size_t len)</span>
+<span class="lineNum">     236 </span>            : {
+<span class="lineNum">     237 </span><span class="lineCov">     304715 :   size_t old_size, i;</span>
+<span class="lineNum">     238 </span><span class="lineCov">     304715 :   gphi *new_phi;</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span><span class="lineCov">     304715 :   gcc_assert (len &gt; gimple_phi_capacity (phi));</span>
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span>            :   /* The garbage collector will not look at the PHI node beyond the
+<span class="lineNum">     243 </span>            :      first PHI_NUM_ARGS elements.  Therefore, all we have to copy is a
+<span class="lineNum">     244 </span>            :      portion of the PHI node currently in use.  */
+<span class="lineNum">     245 </span><span class="lineCov">     609430 :   old_size = sizeof (struct gphi)</span>
+<span class="lineNum">     246 </span><span class="lineCov">     304715 :              + (gimple_phi_num_args (phi) - 1) * sizeof (struct phi_arg_d);</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">     304715 :   new_phi = allocate_phi_node (len);</span>
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span><span class="lineCov">     304715 :   memcpy (new_phi, phi, old_size);</span>
+<span class="lineNum">     251 </span><span class="lineCov">     609430 :   memset ((char *)new_phi + old_size, 0,</span>
+<span class="lineNum">     252 </span>            :           (sizeof (struct gphi)
+<span class="lineNum">     253 </span>            :            - sizeof (struct phi_arg_d)
+<span class="lineNum">     254 </span><span class="lineCov">     304715 :            + sizeof (struct phi_arg_d) * len) - old_size);</span>
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">    1995516 :   for (i = 0; i &lt; gimple_phi_num_args (new_phi); i++)</span>
+<span class="lineNum">     257 </span>            :     {
+<span class="lineNum">     258 </span><span class="lineCov">    1690801 :       use_operand_p imm, old_imm;</span>
+<span class="lineNum">     259 </span><span class="lineCov">    1690801 :       imm = gimple_phi_arg_imm_use_ptr (new_phi, i);</span>
+<span class="lineNum">     260 </span><span class="lineCov">    1690801 :       old_imm = gimple_phi_arg_imm_use_ptr (phi, i);</span>
+<span class="lineNum">     261 </span><span class="lineCov">    1690801 :       imm-&gt;use = gimple_phi_arg_def_ptr (new_phi, i);</span>
+<span class="lineNum">     262 </span><span class="lineCov">    1690801 :       relink_imm_use_stmt (imm, old_imm, new_phi);</span>
+<span class="lineNum">     263 </span>            :     }
+<span class="lineNum">     264 </span>            : 
+<span class="lineNum">     265 </span><span class="lineCov">     304715 :   new_phi-&gt;capacity = len;</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span><span class="lineCov">     304715 :   return new_phi;</span>
+<span class="lineNum">     268 </span>            : }
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span>            : /* Reserve PHI arguments for a new edge to basic block BB.  */
+<a name="271"><span class="lineNum">     271 </span>            : </a>
+<span class="lineNum">     272 </span>            : void
+<span class="lineNum">     273 </span><span class="lineCov">   22110856 : reserve_phi_args_for_new_edge (basic_block bb)</span>
+<span class="lineNum">     274 </span>            : {
+<span class="lineNum">     275 </span><span class="lineCov">   22110856 :   size_t len = EDGE_COUNT (bb-&gt;preds);</span>
+<span class="lineNum">     276 </span><span class="lineCov">   22110856 :   size_t cap = ideal_phi_node_len (len + 4);</span>
+<span class="lineNum">     277 </span><span class="lineCov">   22110856 :   gphi_iterator gsi;</span>
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span><span class="lineCov">  104637336 :   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     280 </span>            :     {
+<span class="lineNum">     281 </span><span class="lineCov">   41263240 :       gphi *stmt = gsi.phi ();</span>
+<span class="lineNum">     282 </span>            : 
+<span class="lineNum">     283 </span><span class="lineCov">   82526480 :       if (len &gt; gimple_phi_capacity (stmt))</span>
+<span class="lineNum">     284 </span>            :         {
+<span class="lineNum">     285 </span><span class="lineCov">     304715 :           gphi *new_phi = resize_phi_node (stmt, cap);</span>
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            :           /* The result of the PHI is defined by this PHI node.  */
+<span class="lineNum">     288 </span><span class="lineCov">     609430 :           SSA_NAME_DEF_STMT (gimple_phi_result (new_phi)) = new_phi;</span>
+<span class="lineNum">     289 </span><span class="lineCov">     304715 :           gsi_set_stmt (&amp;gsi, new_phi);</span>
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span><span class="lineCov">     304715 :           release_phi_node (stmt);</span>
+<span class="lineNum">     292 </span><span class="lineCov">     304715 :           stmt = new_phi;</span>
+<span class="lineNum">     293 </span>            :         }
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">   41263240 :       stmt-&gt;nargs++;</span>
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            :       /* We represent a &quot;missing PHI argument&quot; by placing NULL_TREE in
+<span class="lineNum">     298 </span>            :          the corresponding slot.  If PHI arguments were added
+<span class="lineNum">     299 </span>            :          immediately after an edge is created, this zeroing would not
+<span class="lineNum">     300 </span>            :          be necessary, but unfortunately this is not the case.  For
+<span class="lineNum">     301 </span>            :          example, the loop optimizer duplicates several basic blocks,
+<span class="lineNum">     302 </span>            :          redirects edges, and then fixes up PHI arguments later in
+<span class="lineNum">     303 </span>            :          batch.  */
+<span class="lineNum">     304 </span><span class="lineCov">   41263240 :       use_operand_p imm = gimple_phi_arg_imm_use_ptr (stmt, len - 1);</span>
+<span class="lineNum">     305 </span><span class="lineCov">   41263240 :       imm-&gt;use = gimple_phi_arg_def_ptr (stmt, len - 1);</span>
+<span class="lineNum">     306 </span><span class="lineCov">   41263240 :       imm-&gt;prev = NULL;</span>
+<span class="lineNum">     307 </span><span class="lineCov">   41263240 :       imm-&gt;next = NULL;</span>
+<span class="lineNum">     308 </span><span class="lineCov">   41263240 :       imm-&gt;loc.stmt = stmt;</span>
+<span class="lineNum">     309 </span><span class="lineCov">   41263240 :       SET_PHI_ARG_DEF (stmt, len - 1, NULL_TREE);</span>
+<span class="lineNum">     310 </span><span class="lineCov">   41263240 :       gimple_phi_arg_set_location (stmt, len - 1, UNKNOWN_LOCATION);</span>
+<span class="lineNum">     311 </span>            :     }
+<span class="lineNum">     312 </span><span class="lineCov">   22110856 : }</span>
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span>            : /* Adds PHI to BB.  */
+<a name="315"><span class="lineNum">     315 </span>            : </a>
+<span class="lineNum">     316 </span>            : void
+<span class="lineNum">     317 </span><span class="lineCov">    9535018 : add_phi_node_to_bb (gphi *phi, basic_block bb)</span>
+<span class="lineNum">     318 </span>            : {
+<span class="lineNum">     319 </span><span class="lineCov">    9535018 :   gimple_seq seq = phi_nodes (bb);</span>
+<span class="lineNum">     320 </span>            :   /* Add the new PHI node to the list of PHI nodes for block BB.  */
+<span class="lineNum">     321 </span><span class="lineCov">    9535018 :   if (seq == NULL)</span>
+<span class="lineNum">     322 </span><span class="lineCov">    5221427 :     set_phi_nodes (bb, gimple_seq_alloc_with_stmt (phi));</span>
+<span class="lineNum">     323 </span>            :   else
+<span class="lineNum">     324 </span>            :     {
+<span class="lineNum">     325 </span><span class="lineCov">    4313591 :       gimple_seq_add_stmt (&amp;seq, phi);</span>
+<span class="lineNum">     326 </span><span class="lineCov">    4313591 :       gcc_assert (seq == phi_nodes (bb));</span>
+<span class="lineNum">     327 </span>            :     }
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span>            :   /* Associate BB to the PHI node.  */
+<span class="lineNum">     330 </span><span class="lineCov">    9535018 :   gimple_set_bb (phi, bb);</span>
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span><span class="lineCov">    9535018 : }</span>
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span>            : /* Create a new PHI node for variable VAR at basic block BB.  */
+<a name="335"><span class="lineNum">     335 </span>            : </a>
+<span class="lineNum">     336 </span>            : gphi *
+<span class="lineNum">     337 </span><span class="lineCov">    9535018 : create_phi_node (tree var, basic_block bb)</span>
+<span class="lineNum">     338 </span>            : {
+<span class="lineNum">     339 </span><span class="lineCov">   17001536 :   gphi *phi = make_phi_node (var, EDGE_COUNT (bb-&gt;preds));</span>
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span><span class="lineCov">    9535018 :   add_phi_node_to_bb (phi, bb);</span>
+<span class="lineNum">     342 </span><span class="lineCov">    9535018 :   return phi;</span>
+<span class="lineNum">     343 </span>            : }
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span>            : 
+<span class="lineNum">     346 </span>            : /* Add a new argument to PHI node PHI.  DEF is the incoming reaching
+<span class="lineNum">     347 </span>            :    definition and E is the edge through which DEF reaches PHI.  The new
+<span class="lineNum">     348 </span>            :    argument is added at the end of the argument list.
+<span class="lineNum">     349 </span>            :    If PHI has reached its maximum capacity, add a few slots.  In this case,
+<span class="lineNum">     350 </span>            :    PHI points to the reallocated phi node when we return.  */
+<a name="351"><span class="lineNum">     351 </span>            : </a>
+<span class="lineNum">     352 </span>            : void
+<span class="lineNum">     353 </span><span class="lineCov">   53671798 : add_phi_arg (gphi *phi, tree def, edge e, source_location locus)</span>
+<span class="lineNum">     354 </span>            : {
+<span class="lineNum">     355 </span><span class="lineCov">   53671798 :   basic_block bb = e-&gt;dest;</span>
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span><span class="lineCov">  107343596 :   gcc_assert (bb == gimple_bb (phi));</span>
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :   /* We resize PHI nodes upon edge creation.  We should always have
+<span class="lineNum">     360 </span>            :      enough room at this point.  */
+<span class="lineNum">     361 </span><span class="lineCov">   53671798 :   gcc_assert (gimple_phi_num_args (phi) &lt;= gimple_phi_capacity (phi));</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span>            :   /* We resize PHI nodes upon edge creation.  We should always have
+<span class="lineNum">     364 </span>            :      enough room at this point.  */
+<span class="lineNum">     365 </span><span class="lineCov">  107343596 :   gcc_assert (e-&gt;dest_idx &lt; gimple_phi_num_args (phi));</span>
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            :   /* Copy propagation needs to know what object occur in abnormal
+<span class="lineNum">     368 </span>            :      PHI nodes.  This is a convenient place to record such information.  */
+<span class="lineNum">     369 </span><span class="lineCov">   53671798 :   if (e-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">     370 </span>            :     {
+<span class="lineNum">     371 </span><span class="lineCov">     200165 :       SSA_NAME_OCCURS_IN_ABNORMAL_PHI (def) = 1;</span>
+<span class="lineNum">     372 </span><span class="lineCov">     600495 :       SSA_NAME_OCCURS_IN_ABNORMAL_PHI (PHI_RESULT (phi)) = 1;</span>
+<span class="lineNum">     373 </span>            :     }
+<span class="lineNum">     374 </span>            : 
+<span class="lineNum">     375 </span><span class="lineCov">   53671798 :   SET_PHI_ARG_DEF (phi, e-&gt;dest_idx, def);</span>
+<span class="lineNum">     376 </span><span class="lineCov">   53671798 :   gimple_phi_arg_set_location (phi, e-&gt;dest_idx, locus);</span>
+<span class="lineNum">     377 </span><span class="lineCov">   53671798 : }</span>
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            : 
+<span class="lineNum">     380 </span>            : /* Remove the Ith argument from PHI's argument list.  This routine
+<span class="lineNum">     381 </span>            :    implements removal by swapping the last alternative with the
+<span class="lineNum">     382 </span>            :    alternative we want to delete and then shrinking the vector, which
+<span class="lineNum">     383 </span>            :    is consistent with how we remove an edge from the edge vector.  */
+<a name="384"><span class="lineNum">     384 </span>            : </a>
+<span class="lineNum">     385 </span>            : static void
+<span class="lineNum">     386 </span><span class="lineCov">   42375799 : remove_phi_arg_num (gphi *phi, int i)</span>
+<span class="lineNum">     387 </span>            : {
+<span class="lineNum">     388 </span><span class="lineCov">   42375799 :   int num_elem = gimple_phi_num_args (phi);</span>
+<span class="lineNum">     389 </span>            : 
+<span class="lineNum">     390 </span><span class="lineCov">   42375799 :   gcc_assert (i &lt; num_elem);</span>
+<span class="lineNum">     391 </span>            : 
+<span class="lineNum">     392 </span>            :   /* Delink the item which is being removed.  */
+<span class="lineNum">     393 </span><span class="lineCov">   42375799 :   delink_imm_use (gimple_phi_arg_imm_use_ptr (phi, i));</span>
+<span class="lineNum">     394 </span>            : 
+<span class="lineNum">     395 </span>            :   /* If it is not the last element, move the last element
+<span class="lineNum">     396 </span>            :      to the element we want to delete, resetting all the links. */
+<span class="lineNum">     397 </span><span class="lineCov">   42375799 :   if (i != num_elem - 1)</span>
+<span class="lineNum">     398 </span>            :     {
+<span class="lineNum">     399 </span><span class="lineCov">   33091963 :       use_operand_p old_p, new_p;</span>
+<span class="lineNum">     400 </span><span class="lineCov">   33091963 :       old_p = gimple_phi_arg_imm_use_ptr (phi, num_elem - 1);</span>
+<span class="lineNum">     401 </span><span class="lineCov">   33091963 :       new_p = gimple_phi_arg_imm_use_ptr (phi, i);</span>
+<span class="lineNum">     402 </span>            :       /* Set use on new node, and link into last element's place.  */
+<span class="lineNum">     403 </span><span class="lineCov">   33091963 :       *(new_p-&gt;use) = *(old_p-&gt;use);</span>
+<span class="lineNum">     404 </span><span class="lineCov">   33091963 :       relink_imm_use (new_p, old_p);</span>
+<span class="lineNum">     405 </span>            :       /* Move the location as well.  */
+<span class="lineNum">     406 </span><span class="lineCov">   33091963 :       gimple_phi_arg_set_location (phi, i,</span>
+<span class="lineNum">     407 </span>            :                                    gimple_phi_arg_location (phi, num_elem - 1));
+<span class="lineNum">     408 </span>            :     }
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span>            :   /* Shrink the vector and return.  Note that we do not have to clear
+<span class="lineNum">     411 </span>            :      PHI_ARG_DEF because the garbage collector will not look at those
+<span class="lineNum">     412 </span>            :      elements beyond the first PHI_NUM_ARGS elements of the array.  */
+<span class="lineNum">     413 </span><span class="lineCov">   42375799 :   phi-&gt;nargs--;</span>
+<span class="lineNum">     414 </span><span class="lineCov">   42375799 : }</span>
+<span class="lineNum">     415 </span>            : 
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            : /* Remove all PHI arguments associated with edge E.  */
+<a name="418"><span class="lineNum">     418 </span>            : </a>
+<span class="lineNum">     419 </span>            : void
+<span class="lineNum">     420 </span><span class="lineCov">   23394767 : remove_phi_args (edge e)</span>
+<span class="lineNum">     421 </span>            : {
+<span class="lineNum">     422 </span><span class="lineCov">   23394767 :   gphi_iterator gsi;</span>
+<span class="lineNum">     423 </span>            : 
+<span class="lineNum">     424 </span><span class="lineCov">   65770566 :   for (gsi = gsi_start_phis (e-&gt;dest); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     425 </span><span class="lineCov">   42375799 :     remove_phi_arg_num (gsi.phi (),</span>
+<span class="lineNum">     426 </span><span class="lineCov">   42375799 :                         e-&gt;dest_idx);</span>
+<span class="lineNum">     427 </span><span class="lineCov">   23394767 : }</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            : 
+<span class="lineNum">     430 </span>            : /* Remove the PHI node pointed-to by iterator GSI from basic block BB.  After
+<span class="lineNum">     431 </span>            :    removal, iterator GSI is updated to point to the next PHI node in the
+<span class="lineNum">     432 </span>            :    sequence. If RELEASE_LHS_P is true, the LHS of this PHI node is released
+<span class="lineNum">     433 </span>            :    into the free pool of SSA names.  */
+<a name="434"><span class="lineNum">     434 </span>            : </a>
+<span class="lineNum">     435 </span>            : void
+<span class="lineNum">     436 </span><span class="lineCov">    7391257 : remove_phi_node (gimple_stmt_iterator *gsi, bool release_lhs_p)</span>
+<span class="lineNum">     437 </span>            : {
+<span class="lineNum">     438 </span><span class="lineCov">    7391257 :   gimple *phi = gsi_stmt (*gsi);</span>
+<span class="lineNum">     439 </span>            : 
+<span class="lineNum">     440 </span><span class="lineCov">    7391257 :   if (release_lhs_p)</span>
+<span class="lineNum">     441 </span><span class="lineCov">    7338388 :     insert_debug_temps_for_defs (gsi);</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span><span class="lineCov">    7391257 :   gsi_remove (gsi, false);</span>
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span>            :   /* If we are deleting the PHI node, then we should release the
+<span class="lineNum">     446 </span>            :      SSA_NAME node so that it can be reused.  */
+<span class="lineNum">     447 </span><span class="lineCov">    7391257 :   release_phi_node (phi);</span>
+<span class="lineNum">     448 </span><span class="lineCov">    7391257 :   if (release_lhs_p)</span>
+<span class="lineNum">     449 </span><span class="lineCov">    7338388 :     release_ssa_name (gimple_phi_result (phi));</span>
+<span class="lineNum">     450 </span><span class="lineCov">    7391257 : }</span>
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span>            : /* Remove all the phi nodes from BB.  */
+<a name="453"><span class="lineNum">     453 </span>            : </a>
+<span class="lineNum">     454 </span>            : void
+<span class="lineNum">     455 </span><span class="lineCov">   16281430 : remove_phi_nodes (basic_block bb)</span>
+<span class="lineNum">     456 </span>            : {
+<span class="lineNum">     457 </span><span class="lineCov">   16281430 :   gphi_iterator gsi;</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span><span class="lineCov">   16999418 :   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); )</span>
+<span class="lineNum">     460 </span><span class="lineCov">     717988 :     remove_phi_node (&amp;gsi, true);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineCov">   16281430 :   set_phi_nodes (bb, NULL);</span>
+<span class="lineNum">     463 </span><span class="lineCov">   16281430 : }</span>
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span>            : /* Given PHI, return its RHS if the PHI is a degenerate, otherwise return
+<span class="lineNum">     466 </span>            :    NULL.  */
+<a name="467"><span class="lineNum">     467 </span>            : </a>
+<span class="lineNum">     468 </span>            : tree
+<span class="lineNum">     469 </span><span class="lineCov">    7606112 : degenerate_phi_result (gphi *phi)</span>
+<span class="lineNum">     470 </span>            : {
+<span class="lineNum">     471 </span><span class="lineCov">    7606112 :   tree lhs = gimple_phi_result (phi);</span>
+<span class="lineNum">     472 </span><span class="lineCov">    7606112 :   tree val = NULL;</span>
+<span class="lineNum">     473 </span><span class="lineCov">    7606112 :   size_t i;</span>
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span>            :   /* Ignoring arguments which are the same as LHS, if all the remaining
+<span class="lineNum">     476 </span>            :      arguments are the same, then the PHI is a degenerate and has the
+<span class="lineNum">     477 </span>            :      value of that common argument.  */
+<span class="lineNum">     478 </span><span class="lineCov">   15581466 :   for (i = 0; i &lt; gimple_phi_num_args (phi); i++)</span>
+<span class="lineNum">     479 </span>            :     {
+<span class="lineNum">     480 </span><span class="lineCov">   14621629 :       tree arg = gimple_phi_arg_def (phi, i);</span>
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span><span class="lineCov">   14621629 :       if (arg == lhs)</span>
+<span class="lineNum">     483 </span>            :         continue;
+<span class="lineNum">     484 </span><span class="lineCov">   14605123 :       else if (!arg)</span>
+<span class="lineNum">     485 </span>            :         break;
+<span class="lineNum">     486 </span><span class="lineCov">   14605123 :       else if (!val)</span>
+<span class="lineNum">     487 </span>            :         val = arg;
+<span class="lineNum">     488 </span><span class="lineCov">    7000058 :       else if (arg == val)</span>
+<span class="lineNum">     489 </span>            :         continue;
+<span class="lineNum">     490 </span>            :       /* We bring in some of operand_equal_p not only to speed things
+<span class="lineNum">     491 </span>            :          up, but also to avoid crashing when dereferencing the type of
+<span class="lineNum">     492 </span>            :          a released SSA name.  */
+<span class="lineNum">     493 </span><span class="lineCov">    6648592 :       else if (TREE_CODE (val) != TREE_CODE (arg)</span>
+<span class="lineNum">     494 </span><span class="lineCov">    4455095 :                || TREE_CODE (val) == SSA_NAME</span>
+<span class="lineNum">     495 </span><span class="lineCov">    6754404 :                || !operand_equal_p (arg, val, 0))</span>
+<span class="lineNum">     496 </span>            :         break;
+<span class="lineNum">     497 </span>            :     }
+<span class="lineNum">     498 </span><span class="lineCov">    7606112 :   return (i == gimple_phi_num_args (phi) ? val : NULL);</span>
+<span class="lineNum">     499 </span>            : }
+<span class="lineNum">     500 </span>            : 
+<span class="lineNum">     501 </span>            : /* Set PHI nodes of a basic block BB to SEQ.  */
+<a name="502"><span class="lineNum">     502 </span>            : </a>
+<span class="lineNum">     503 </span>            : void
+<span class="lineNum">     504 </span><span class="lineCov">   22270232 : set_phi_nodes (basic_block bb, gimple_seq seq)</span>
+<span class="lineNum">     505 </span>            : {
+<span class="lineNum">     506 </span><span class="lineCov">   22270232 :   gimple_stmt_iterator i;</span>
+<span class="lineNum">     507 </span>            : 
+<span class="lineNum">     508 </span><span class="lineCov">   22270232 :   gcc_checking_assert (!(bb-&gt;flags &amp; BB_RTL));</span>
+<span class="lineNum">     509 </span><span class="lineCov">   22270232 :   bb-&gt;il.gimple.phi_nodes = seq;</span>
+<span class="lineNum">     510 </span><span class="lineCov">   22270232 :   if (seq)</span>
+<span class="lineNum">     511 </span><span class="lineCov">   15664281 :     for (i = gsi_start (seq); !gsi_end_p (i); gsi_next (&amp;i))</span>
+<span class="lineNum">     512 </span><span class="lineCov">   10442854 :       gimple_set_bb (gsi_stmt (i), bb);</span>
+<span class="lineNum">     513 </span><span class="lineCov">   22270232 : }</span>
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span>            : #include &quot;gt-tree-phinodes.h&quot;
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

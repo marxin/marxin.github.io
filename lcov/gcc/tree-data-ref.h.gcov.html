@@ -1,0 +1,774 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-data-ref.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-data-ref.h<span style="font-size: 80%;"> (source / <a href="tree-data-ref.h.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">25</td>
+            <td class="headerCovTableEntry">25</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Data references and dependences detectors.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Sebastian Pop &lt;pop@cri.ensmp.fr&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #ifndef GCC_TREE_DATA_REF_H
+<span class="lineNum">      22 </span>            : #define GCC_TREE_DATA_REF_H
+<span class="lineNum">      23 </span>            : 
+<span class="lineNum">      24 </span>            : #include &quot;graphds.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;tree-chrec.h&quot;
+<span class="lineNum">      26 </span>            : 
+<span class="lineNum">      27 </span>            : /*
+<span class="lineNum">      28 </span>            :   innermost_loop_behavior describes the evolution of the address of the memory
+<span class="lineNum">      29 </span>            :   reference in the innermost enclosing loop.  The address is expressed as
+<span class="lineNum">      30 </span>            :   BASE + STEP * # of iteration, and base is further decomposed as the base
+<span class="lineNum">      31 </span>            :   pointer (BASE_ADDRESS),  loop invariant offset (OFFSET) and
+<span class="lineNum">      32 </span>            :   constant offset (INIT).  Examples, in loop nest
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            :   for (i = 0; i &lt; 100; i++)
+<span class="lineNum">      35 </span>            :     for (j = 3; j &lt; 100; j++)
+<span class="lineNum">      36 </span>            : 
+<span class="lineNum">      37 </span>            :                        Example 1                      Example 2
+<span class="lineNum">      38 </span>            :       data-ref         a[j].b[i][j]                   *(p + x + 16B + 4B * j)
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            :   innermost_loop_behavior
+<span class="lineNum">      42 </span>            :       base_address     &amp;a                             p
+<span class="lineNum">      43 </span>            :       offset           i * D_i                        x
+<span class="lineNum">      44 </span>            :       init             3 * D_j + offsetof (b)         28
+<span class="lineNum">      45 </span>            :       step             D_j                            4
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :   */
+<span class="lineNum">      48 </span>            : struct innermost_loop_behavior
+<span class="lineNum">      49 </span>            : {
+<span class="lineNum">      50 </span>            :   tree base_address;
+<span class="lineNum">      51 </span>            :   tree offset;
+<span class="lineNum">      52 </span>            :   tree init;
+<span class="lineNum">      53 </span>            :   tree step;
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            :   /* BASE_ADDRESS is known to be misaligned by BASE_MISALIGNMENT bytes
+<span class="lineNum">      56 </span>            :      from an alignment boundary of BASE_ALIGNMENT bytes.  For example,
+<span class="lineNum">      57 </span>            :      if we had:
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :        struct S __attribute__((aligned(16))) { ... };
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            :        char *ptr;
+<span class="lineNum">      62 </span>            :        ... *(struct S *) (ptr - 4) ...;
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            :      the information would be:
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :        base_address:      ptr
+<span class="lineNum">      67 </span>            :        base_aligment:      16
+<span class="lineNum">      68 </span>            :        base_misalignment:   4
+<span class="lineNum">      69 </span>            :        init:               -4
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            :      where init cancels the base misalignment.  If instead we had a
+<span class="lineNum">      72 </span>            :      reference to a particular field:
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :        struct S __attribute__((aligned(16))) { ... int f; ... };
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            :        char *ptr;
+<span class="lineNum">      77 </span>            :        ... ((struct S *) (ptr - 4))-&gt;f ...;
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            :      the information would be:
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            :        base_address:      ptr
+<span class="lineNum">      82 </span>            :        base_aligment:      16
+<span class="lineNum">      83 </span>            :        base_misalignment:   4
+<span class="lineNum">      84 </span>            :        init:               -4 + offsetof (S, f)
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :      where base_address + init might also be misaligned, and by a different
+<span class="lineNum">      87 </span>            :      amount from base_address.  */
+<span class="lineNum">      88 </span>            :   unsigned int base_alignment;
+<span class="lineNum">      89 </span>            :   unsigned int base_misalignment;
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            :   /* The largest power of two that divides OFFSET, capped to a suitably
+<span class="lineNum">      92 </span>            :      high value if the offset is zero.  This is a byte rather than a bit
+<span class="lineNum">      93 </span>            :      quantity.  */
+<span class="lineNum">      94 </span>            :   unsigned int offset_alignment;
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            :   /* Likewise for STEP.  */
+<span class="lineNum">      97 </span>            :   unsigned int step_alignment;
+<span class="lineNum">      98 </span>            : };
+<span class="lineNum">      99 </span>            : 
+<span class="lineNum">     100 </span>            : /* Describes the evolutions of indices of the memory reference.  The indices
+<span class="lineNum">     101 </span>            :    are indices of the ARRAY_REFs, indexes in artificial dimensions
+<span class="lineNum">     102 </span>            :    added for member selection of records and the operands of MEM_REFs.
+<span class="lineNum">     103 </span>            :    BASE_OBJECT is the part of the reference that is loop-invariant
+<span class="lineNum">     104 </span>            :    (note that this reference does not have to cover the whole object
+<span class="lineNum">     105 </span>            :    being accessed, in which case UNCONSTRAINED_BASE is set; hence it is
+<span class="lineNum">     106 </span>            :    not recommended to use BASE_OBJECT in any code generation).
+<span class="lineNum">     107 </span>            :    For the examples above,
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            :    base_object:        a                              *(p + x + 4B * j_0)
+<span class="lineNum">     110 </span>            :    indices:            {j_0, +, 1}_2                  {16, +, 4}_2
+<span class="lineNum">     111 </span>            :                        4
+<span class="lineNum">     112 </span>            :                        {i_0, +, 1}_1
+<span class="lineNum">     113 </span>            :                        {j_0, +, 1}_2
+<span class="lineNum">     114 </span>            : */
+<span class="lineNum">     115 </span>            : 
+<span class="lineNum">     116 </span>            : struct indices
+<span class="lineNum">     117 </span>            : {
+<span class="lineNum">     118 </span>            :   /* The object.  */
+<span class="lineNum">     119 </span>            :   tree base_object;
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span>            :   /* A list of chrecs.  Access functions of the indices.  */
+<span class="lineNum">     122 </span>            :   vec&lt;tree&gt; access_fns;
+<span class="lineNum">     123 </span>            : 
+<span class="lineNum">     124 </span>            :   /* Whether BASE_OBJECT is an access representing the whole object
+<span class="lineNum">     125 </span>            :      or whether the access could not be constrained.  */
+<span class="lineNum">     126 </span>            :   bool unconstrained_base;
+<span class="lineNum">     127 </span>            : };
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            : struct dr_alias
+<span class="lineNum">     130 </span>            : {
+<span class="lineNum">     131 </span>            :   /* The alias information that should be used for new pointers to this
+<span class="lineNum">     132 </span>            :      location.  */
+<span class="lineNum">     133 </span>            :   struct ptr_info_def *ptr_info;
+<span class="lineNum">     134 </span>            : };
+<span class="lineNum">     135 </span>            : 
+<span class="lineNum">     136 </span>            : /* An integer vector.  A vector formally consists of an element of a vector
+<span class="lineNum">     137 </span>            :    space. A vector space is a set that is closed under vector addition
+<span class="lineNum">     138 </span>            :    and scalar multiplication.  In this vector space, an element is a list of
+<span class="lineNum">     139 </span>            :    integers.  */
+<span class="lineNum">     140 </span>            : typedef int *lambda_vector;
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            : /* An integer matrix.  A matrix consists of m vectors of length n (IE
+<span class="lineNum">     143 </span>            :    all vectors are the same length).  */
+<span class="lineNum">     144 </span>            : typedef lambda_vector *lambda_matrix;
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span>            : 
+<span class="lineNum">     148 </span>            : struct data_reference
+<span class="lineNum">     149 </span>            : {
+<span class="lineNum">     150 </span>            :   /* A pointer to the statement that contains this DR.  */
+<span class="lineNum">     151 </span>            :   gimple *stmt;
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            :   /* A pointer to the memory reference.  */
+<span class="lineNum">     154 </span>            :   tree ref;
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :   /* Auxiliary info specific to a pass.  */
+<span class="lineNum">     157 </span>            :   void *aux;
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span>            :   /* True when the data reference is in RHS of a stmt.  */
+<span class="lineNum">     160 </span>            :   bool is_read;
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span>            :   /* True when the data reference is conditional within STMT,
+<span class="lineNum">     163 </span>            :      i.e. if it might not occur even when the statement is executed
+<span class="lineNum">     164 </span>            :      and runs to completion.  */
+<span class="lineNum">     165 </span>            :   bool is_conditional_in_stmt;
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span>            :   /* Behavior of the memory reference in the innermost loop.  */
+<span class="lineNum">     168 </span>            :   struct innermost_loop_behavior innermost;
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span>            :   /* Subscripts of this data reference.  */
+<span class="lineNum">     171 </span>            :   struct indices indices;
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span>            :   /* Alias information for the data reference.  */
+<span class="lineNum">     174 </span>            :   struct dr_alias alias;
+<span class="lineNum">     175 </span>            : };
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            : #define DR_STMT(DR)                (DR)-&gt;stmt
+<span class="lineNum">     178 </span>            : #define DR_REF(DR)                 (DR)-&gt;ref
+<span class="lineNum">     179 </span>            : #define DR_BASE_OBJECT(DR)         (DR)-&gt;indices.base_object
+<span class="lineNum">     180 </span>            : #define DR_UNCONSTRAINED_BASE(DR)  (DR)-&gt;indices.unconstrained_base
+<span class="lineNum">     181 </span>            : #define DR_ACCESS_FNS(DR)          (DR)-&gt;indices.access_fns
+<span class="lineNum">     182 </span>            : #define DR_ACCESS_FN(DR, I)        DR_ACCESS_FNS (DR)[I]
+<span class="lineNum">     183 </span>            : #define DR_NUM_DIMENSIONS(DR)      DR_ACCESS_FNS (DR).length ()
+<span class="lineNum">     184 </span>            : #define DR_IS_READ(DR)             (DR)-&gt;is_read
+<span class="lineNum">     185 </span>            : #define DR_IS_WRITE(DR)            (!DR_IS_READ (DR))
+<span class="lineNum">     186 </span>            : #define DR_IS_CONDITIONAL_IN_STMT(DR) (DR)-&gt;is_conditional_in_stmt
+<span class="lineNum">     187 </span>            : #define DR_BASE_ADDRESS(DR)        (DR)-&gt;innermost.base_address
+<span class="lineNum">     188 </span>            : #define DR_OFFSET(DR)              (DR)-&gt;innermost.offset
+<span class="lineNum">     189 </span>            : #define DR_INIT(DR)                (DR)-&gt;innermost.init
+<span class="lineNum">     190 </span>            : #define DR_STEP(DR)                (DR)-&gt;innermost.step
+<span class="lineNum">     191 </span>            : #define DR_PTR_INFO(DR)            (DR)-&gt;alias.ptr_info
+<span class="lineNum">     192 </span>            : #define DR_BASE_ALIGNMENT(DR)      (DR)-&gt;innermost.base_alignment
+<span class="lineNum">     193 </span>            : #define DR_BASE_MISALIGNMENT(DR)   (DR)-&gt;innermost.base_misalignment
+<span class="lineNum">     194 </span>            : #define DR_OFFSET_ALIGNMENT(DR)    (DR)-&gt;innermost.offset_alignment
+<span class="lineNum">     195 </span>            : #define DR_STEP_ALIGNMENT(DR)      (DR)-&gt;innermost.step_alignment
+<span class="lineNum">     196 </span>            : #define DR_INNERMOST(DR)           (DR)-&gt;innermost
+<span class="lineNum">     197 </span>            : 
+<span class="lineNum">     198 </span>            : typedef struct data_reference *data_reference_p;
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            : /* This struct is used to store the information of a data reference,
+<span class="lineNum">     201 </span>            :    including the data ref itself and the segment length for aliasing
+<span class="lineNum">     202 </span>            :    checks.  This is used to merge alias checks.  */
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span>            : struct dr_with_seg_len
+<span class="lineNum">     205 </span>            : {
+<span class="lineNum">     206 </span>            :   dr_with_seg_len (data_reference_p d, tree len, unsigned HOST_WIDE_INT size,
+<span class="lineNum">     207 </span>            :                    unsigned int a)
+<span class="lineNum">     208 </span><span class="lineCov">      56224 :     : dr (d), seg_len (len), access_size (size), align (a) {}</span>
+<span class="lineNum">     209 </span>            : 
+<span class="lineNum">     210 </span>            :   data_reference_p dr;
+<span class="lineNum">     211 </span>            :   /* The offset of the last access that needs to be checked minus
+<span class="lineNum">     212 </span>            :      the offset of the first.  */
+<span class="lineNum">     213 </span>            :   tree seg_len;
+<span class="lineNum">     214 </span>            :   /* A value that, when added to abs (SEG_LEN), gives the total number of
+<span class="lineNum">     215 </span>            :      bytes in the segment.  */
+<span class="lineNum">     216 </span>            :   poly_uint64 access_size;
+<span class="lineNum">     217 </span>            :   /* The minimum common alignment of DR's start address, SEG_LEN and
+<span class="lineNum">     218 </span>            :      ACCESS_SIZE.  */
+<span class="lineNum">     219 </span>            :   unsigned int align;
+<span class="lineNum">     220 </span>            : };
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span>            : /* This struct contains two dr_with_seg_len objects with aliasing data
+<span class="lineNum">     223 </span>            :    refs.  Two comparisons are generated from them.  */
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            : struct dr_with_seg_len_pair_t
+<span class="lineNum">     226 </span>            : {
+<span class="lineNum">     227 </span>            :   dr_with_seg_len_pair_t (const dr_with_seg_len&amp; d1,
+<span class="lineNum">     228 </span>            :                                const dr_with_seg_len&amp; d2)
+<span class="lineNum">     229 </span><span class="lineCov">      14056 :     : first (d1), second (d2) {}</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            :   dr_with_seg_len first;
+<span class="lineNum">     232 </span>            :   dr_with_seg_len second;
+<span class="lineNum">     233 </span>            : };
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span>            : enum data_dependence_direction {
+<span class="lineNum">     236 </span>            :   dir_positive,
+<span class="lineNum">     237 </span>            :   dir_negative,
+<span class="lineNum">     238 </span>            :   dir_equal,
+<span class="lineNum">     239 </span>            :   dir_positive_or_negative,
+<span class="lineNum">     240 </span>            :   dir_positive_or_equal,
+<span class="lineNum">     241 </span>            :   dir_negative_or_equal,
+<span class="lineNum">     242 </span>            :   dir_star,
+<span class="lineNum">     243 </span>            :   dir_independent
+<span class="lineNum">     244 </span>            : };
+<span class="lineNum">     245 </span>            : 
+<span class="lineNum">     246 </span>            : /* The description of the grid of iterations that overlap.  At most
+<span class="lineNum">     247 </span>            :    two loops are considered at the same time just now, hence at most
+<span class="lineNum">     248 </span>            :    two functions are needed.  For each of the functions, we store
+<span class="lineNum">     249 </span>            :    the vector of coefficients, f[0] + x * f[1] + y * f[2] + ...,
+<span class="lineNum">     250 </span>            :    where x, y, ... are variables.  */
+<span class="lineNum">     251 </span>            : 
+<span class="lineNum">     252 </span>            : #define MAX_DIM 2
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span>            : /* Special values of N.  */
+<span class="lineNum">     255 </span>            : #define NO_DEPENDENCE 0
+<span class="lineNum">     256 </span>            : #define NOT_KNOWN (MAX_DIM + 1)
+<span class="lineNum">     257 </span>            : #define CF_NONTRIVIAL_P(CF) ((CF)-&gt;n != NO_DEPENDENCE &amp;&amp; (CF)-&gt;n != NOT_KNOWN)
+<span class="lineNum">     258 </span>            : #define CF_NOT_KNOWN_P(CF) ((CF)-&gt;n == NOT_KNOWN)
+<span class="lineNum">     259 </span>            : #define CF_NO_DEPENDENCE_P(CF) ((CF)-&gt;n == NO_DEPENDENCE)
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span>            : typedef vec&lt;tree&gt; affine_fn;
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span>            : struct conflict_function
+<span class="lineNum">     264 </span>            : {
+<span class="lineNum">     265 </span>            :   unsigned n;
+<span class="lineNum">     266 </span>            :   affine_fn fns[MAX_DIM];
+<span class="lineNum">     267 </span>            : };
+<span class="lineNum">     268 </span>            : 
+<span class="lineNum">     269 </span>            : /* What is a subscript?  Given two array accesses a subscript is the
+<span class="lineNum">     270 </span>            :    tuple composed of the access functions for a given dimension.
+<span class="lineNum">     271 </span>            :    Example: Given A[f1][f2][f3] and B[g1][g2][g3], there are three
+<span class="lineNum">     272 </span>            :    subscripts: (f1, g1), (f2, g2), (f3, g3).  These three subscripts
+<span class="lineNum">     273 </span>            :    are stored in the data_dependence_relation structure under the form
+<span class="lineNum">     274 </span>            :    of an array of subscripts.  */
+<span class="lineNum">     275 </span>            : 
+<span class="lineNum">     276 </span>            : struct subscript
+<span class="lineNum">     277 </span>            : {
+<span class="lineNum">     278 </span>            :   /* The access functions of the two references.  */
+<span class="lineNum">     279 </span>            :   tree access_fn[2];
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            :   /* A description of the iterations for which the elements are
+<span class="lineNum">     282 </span>            :      accessed twice.  */
+<span class="lineNum">     283 </span>            :   conflict_function *conflicting_iterations_in_a;
+<span class="lineNum">     284 </span>            :   conflict_function *conflicting_iterations_in_b;
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span>            :   /* This field stores the information about the iteration domain
+<span class="lineNum">     287 </span>            :      validity of the dependence relation.  */
+<span class="lineNum">     288 </span>            :   tree last_conflict;
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span>            :   /* Distance from the iteration that access a conflicting element in
+<span class="lineNum">     291 </span>            :      A to the iteration that access this same conflicting element in
+<span class="lineNum">     292 </span>            :      B.  The distance is a tree scalar expression, i.e. a constant or a
+<span class="lineNum">     293 </span>            :      symbolic expression, but certainly not a chrec function.  */
+<span class="lineNum">     294 </span>            :   tree distance;
+<span class="lineNum">     295 </span>            : };
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            : typedef struct subscript *subscript_p;
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span>            : #define SUB_ACCESS_FN(SUB, I) (SUB)-&gt;access_fn[I]
+<span class="lineNum">     300 </span>            : #define SUB_CONFLICTS_IN_A(SUB) (SUB)-&gt;conflicting_iterations_in_a
+<span class="lineNum">     301 </span>            : #define SUB_CONFLICTS_IN_B(SUB) (SUB)-&gt;conflicting_iterations_in_b
+<span class="lineNum">     302 </span>            : #define SUB_LAST_CONFLICT(SUB) (SUB)-&gt;last_conflict
+<span class="lineNum">     303 </span>            : #define SUB_DISTANCE(SUB) (SUB)-&gt;distance
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span>            : /* A data_dependence_relation represents a relation between two
+<span class="lineNum">     306 </span>            :    data_references A and B.  */
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : struct data_dependence_relation
+<span class="lineNum">     309 </span>            : {
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span>            :   struct data_reference *a;
+<span class="lineNum">     312 </span>            :   struct data_reference *b;
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span>            :   /* A &quot;yes/no/maybe&quot; field for the dependence relation:
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span>            :      - when &quot;ARE_DEPENDENT == NULL_TREE&quot;, there exist a dependence
+<span class="lineNum">     317 </span>            :        relation between A and B, and the description of this relation
+<span class="lineNum">     318 </span>            :        is given in the SUBSCRIPTS array,
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span>            :      - when &quot;ARE_DEPENDENT == chrec_known&quot;, there is no dependence and
+<span class="lineNum">     321 </span>            :        SUBSCRIPTS is empty,
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span>            :      - when &quot;ARE_DEPENDENT == chrec_dont_know&quot;, there may be a dependence,
+<span class="lineNum">     324 </span>            :        but the analyzer cannot be more specific.  */
+<span class="lineNum">     325 </span>            :   tree are_dependent;
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            :   /* If nonnull, COULD_BE_INDEPENDENT_P is true and the accesses are
+<span class="lineNum">     328 </span>            :      independent when the runtime addresses of OBJECT_A and OBJECT_B
+<span class="lineNum">     329 </span>            :      are different.  The addresses of both objects are invariant in the
+<span class="lineNum">     330 </span>            :      loop nest.  */
+<span class="lineNum">     331 </span>            :   tree object_a;
+<span class="lineNum">     332 </span>            :   tree object_b;
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span>            :   /* For each subscript in the dependence test, there is an element in
+<span class="lineNum">     335 </span>            :      this array.  This is the attribute that labels the edge A-&gt;B of
+<span class="lineNum">     336 </span>            :      the data_dependence_relation.  */
+<span class="lineNum">     337 </span>            :   vec&lt;subscript_p&gt; subscripts;
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            :   /* The analyzed loop nest.  */
+<span class="lineNum">     340 </span>            :   vec&lt;loop_p&gt; loop_nest;
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span>            :   /* The classic direction vector.  */
+<span class="lineNum">     343 </span>            :   vec&lt;lambda_vector&gt; dir_vects;
+<span class="lineNum">     344 </span>            : 
+<span class="lineNum">     345 </span>            :   /* The classic distance vector.  */
+<span class="lineNum">     346 </span>            :   vec&lt;lambda_vector&gt; dist_vects;
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span>            :   /* An index in loop_nest for the innermost loop that varies for
+<span class="lineNum">     349 </span>            :      this data dependence relation.  */
+<span class="lineNum">     350 </span>            :   unsigned inner_loop;
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span>            :   /* Is the dependence reversed with respect to the lexicographic order?  */
+<span class="lineNum">     353 </span>            :   bool reversed_p;
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span>            :   /* When the dependence relation is affine, it can be represented by
+<span class="lineNum">     356 </span>            :      a distance vector.  */
+<span class="lineNum">     357 </span>            :   bool affine_p;
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :   /* Set to true when the dependence relation is on the same data
+<span class="lineNum">     360 </span>            :      access.  */
+<span class="lineNum">     361 </span>            :   bool self_reference_p;
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span>            :   /* True if the dependence described is conservatively correct rather
+<span class="lineNum">     364 </span>            :      than exact, and if it is still possible for the accesses to be
+<span class="lineNum">     365 </span>            :      conditionally independent.  For example, the a and b references in:
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            :        struct s *a, *b;
+<span class="lineNum">     368 </span>            :        for (int i = 0; i &lt; n; ++i)
+<span class="lineNum">     369 </span>            :          a-&gt;f[i] += b-&gt;f[i];
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span>            :      conservatively have a distance vector of (0), for the case in which
+<span class="lineNum">     372 </span>            :      a == b, but the accesses are independent if a != b.  Similarly,
+<span class="lineNum">     373 </span>            :      the a and b references in:
+<span class="lineNum">     374 </span>            : 
+<span class="lineNum">     375 </span>            :        struct s *a, *b;
+<span class="lineNum">     376 </span>            :        for (int i = 0; i &lt; n; ++i)
+<span class="lineNum">     377 </span>            :          a[0].f[i] += b[i].f[i];
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span>            :      conservatively have a distance vector of (0), but they are indepenent
+<span class="lineNum">     380 </span>            :      when a != b + i.  In contrast, the references in:
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span>            :        struct s *a;
+<span class="lineNum">     383 </span>            :        for (int i = 0; i &lt; n; ++i)
+<span class="lineNum">     384 </span>            :          a-&gt;f[i] += a-&gt;f[i];
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span>            :      have the same distance vector of (0), but the accesses can never be
+<span class="lineNum">     387 </span>            :      independent.  */
+<span class="lineNum">     388 </span>            :   bool could_be_independent_p;
+<span class="lineNum">     389 </span>            : };
+<span class="lineNum">     390 </span>            : 
+<span class="lineNum">     391 </span>            : typedef struct data_dependence_relation *ddr_p;
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span>            : #define DDR_A(DDR) (DDR)-&gt;a
+<span class="lineNum">     394 </span>            : #define DDR_B(DDR) (DDR)-&gt;b
+<span class="lineNum">     395 </span>            : #define DDR_AFFINE_P(DDR) (DDR)-&gt;affine_p
+<span class="lineNum">     396 </span>            : #define DDR_ARE_DEPENDENT(DDR) (DDR)-&gt;are_dependent
+<span class="lineNum">     397 </span>            : #define DDR_OBJECT_A(DDR) (DDR)-&gt;object_a
+<span class="lineNum">     398 </span>            : #define DDR_OBJECT_B(DDR) (DDR)-&gt;object_b
+<span class="lineNum">     399 </span>            : #define DDR_SUBSCRIPTS(DDR) (DDR)-&gt;subscripts
+<span class="lineNum">     400 </span>            : #define DDR_SUBSCRIPT(DDR, I) DDR_SUBSCRIPTS (DDR)[I]
+<span class="lineNum">     401 </span>            : #define DDR_NUM_SUBSCRIPTS(DDR) DDR_SUBSCRIPTS (DDR).length ()
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            : #define DDR_LOOP_NEST(DDR) (DDR)-&gt;loop_nest
+<span class="lineNum">     404 </span>            : /* The size of the direction/distance vectors: the number of loops in
+<span class="lineNum">     405 </span>            :    the loop nest.  */
+<span class="lineNum">     406 </span>            : #define DDR_NB_LOOPS(DDR) (DDR_LOOP_NEST (DDR).length ())
+<span class="lineNum">     407 </span>            : #define DDR_INNER_LOOP(DDR) (DDR)-&gt;inner_loop
+<span class="lineNum">     408 </span>            : #define DDR_SELF_REFERENCE(DDR) (DDR)-&gt;self_reference_p
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span>            : #define DDR_DIST_VECTS(DDR) ((DDR)-&gt;dist_vects)
+<span class="lineNum">     411 </span>            : #define DDR_DIR_VECTS(DDR) ((DDR)-&gt;dir_vects)
+<span class="lineNum">     412 </span>            : #define DDR_NUM_DIST_VECTS(DDR) \
+<span class="lineNum">     413 </span>            :   (DDR_DIST_VECTS (DDR).length ())
+<span class="lineNum">     414 </span>            : #define DDR_NUM_DIR_VECTS(DDR) \
+<span class="lineNum">     415 </span>            :   (DDR_DIR_VECTS (DDR).length ())
+<span class="lineNum">     416 </span>            : #define DDR_DIR_VECT(DDR, I) \
+<span class="lineNum">     417 </span>            :   DDR_DIR_VECTS (DDR)[I]
+<span class="lineNum">     418 </span>            : #define DDR_DIST_VECT(DDR, I) \
+<span class="lineNum">     419 </span>            :   DDR_DIST_VECTS (DDR)[I]
+<span class="lineNum">     420 </span>            : #define DDR_REVERSED_P(DDR) (DDR)-&gt;reversed_p
+<span class="lineNum">     421 </span>            : #define DDR_COULD_BE_INDEPENDENT_P(DDR) (DDR)-&gt;could_be_independent_p
+<span class="lineNum">     422 </span>            : 
+<span class="lineNum">     423 </span>            : 
+<span class="lineNum">     424 </span>            : bool dr_analyze_innermost (innermost_loop_behavior *, tree, struct loop *);
+<span class="lineNum">     425 </span>            : extern bool compute_data_dependences_for_loop (struct loop *, bool,
+<span class="lineNum">     426 </span>            :                                                vec&lt;loop_p&gt; *,
+<span class="lineNum">     427 </span>            :                                                vec&lt;data_reference_p&gt; *,
+<span class="lineNum">     428 </span>            :                                                vec&lt;ddr_p&gt; *);
+<span class="lineNum">     429 </span>            : extern void debug_ddrs (vec&lt;ddr_p&gt; );
+<span class="lineNum">     430 </span>            : extern void dump_data_reference (FILE *, struct data_reference *);
+<span class="lineNum">     431 </span>            : extern void debug (data_reference &amp;ref);
+<span class="lineNum">     432 </span>            : extern void debug (data_reference *ptr);
+<span class="lineNum">     433 </span>            : extern void debug_data_reference (struct data_reference *);
+<span class="lineNum">     434 </span>            : extern void debug_data_references (vec&lt;data_reference_p&gt; );
+<span class="lineNum">     435 </span>            : extern void debug (vec&lt;data_reference_p&gt; &amp;ref);
+<span class="lineNum">     436 </span>            : extern void debug (vec&lt;data_reference_p&gt; *ptr);
+<span class="lineNum">     437 </span>            : extern void debug_data_dependence_relation (struct data_dependence_relation *);
+<span class="lineNum">     438 </span>            : extern void dump_data_dependence_relations (FILE *, vec&lt;ddr_p&gt; );
+<span class="lineNum">     439 </span>            : extern void debug (vec&lt;ddr_p&gt; &amp;ref);
+<span class="lineNum">     440 </span>            : extern void debug (vec&lt;ddr_p&gt; *ptr);
+<span class="lineNum">     441 </span>            : extern void debug_data_dependence_relations (vec&lt;ddr_p&gt; );
+<span class="lineNum">     442 </span>            : extern void free_dependence_relation (struct data_dependence_relation *);
+<span class="lineNum">     443 </span>            : extern void free_dependence_relations (vec&lt;ddr_p&gt; );
+<span class="lineNum">     444 </span>            : extern void free_data_ref (data_reference_p);
+<span class="lineNum">     445 </span>            : extern void free_data_refs (vec&lt;data_reference_p&gt; );
+<span class="lineNum">     446 </span>            : extern bool find_data_references_in_stmt (struct loop *, gimple *,
+<span class="lineNum">     447 </span>            :                                           vec&lt;data_reference_p&gt; *);
+<span class="lineNum">     448 </span>            : extern bool graphite_find_data_references_in_stmt (edge, loop_p, gimple *,
+<span class="lineNum">     449 </span>            :                                                    vec&lt;data_reference_p&gt; *);
+<span class="lineNum">     450 </span>            : tree find_data_references_in_loop (struct loop *, vec&lt;data_reference_p&gt; *);
+<span class="lineNum">     451 </span>            : bool loop_nest_has_data_refs (loop_p loop);
+<span class="lineNum">     452 </span>            : struct data_reference *create_data_ref (edge, loop_p, tree, gimple *, bool,
+<span class="lineNum">     453 </span>            :                                         bool);
+<span class="lineNum">     454 </span>            : extern bool find_loop_nest (struct loop *, vec&lt;loop_p&gt; *);
+<span class="lineNum">     455 </span>            : extern struct data_dependence_relation *initialize_data_dependence_relation
+<span class="lineNum">     456 </span>            :      (struct data_reference *, struct data_reference *, vec&lt;loop_p&gt;);
+<span class="lineNum">     457 </span>            : extern void compute_affine_dependence (struct data_dependence_relation *,
+<span class="lineNum">     458 </span>            :                                        loop_p);
+<span class="lineNum">     459 </span>            : extern void compute_self_dependence (struct data_dependence_relation *);
+<span class="lineNum">     460 </span>            : extern bool compute_all_dependences (vec&lt;data_reference_p&gt; ,
+<span class="lineNum">     461 </span>            :                                      vec&lt;ddr_p&gt; *,
+<span class="lineNum">     462 </span>            :                                      vec&lt;loop_p&gt;, bool);
+<span class="lineNum">     463 </span>            : extern tree find_data_references_in_bb (struct loop *, basic_block,
+<span class="lineNum">     464 </span>            :                                         vec&lt;data_reference_p&gt; *);
+<span class="lineNum">     465 </span>            : extern unsigned int dr_alignment (innermost_loop_behavior *);
+<span class="lineNum">     466 </span>            : extern tree get_base_for_alignment (tree, unsigned int *);
+<span class="lineNum">     467 </span>            : 
+<span class="lineNum">     468 </span>            : /* Return the alignment in bytes that DR is guaranteed to have at all
+<span class="lineNum">     469 </span>            :    times.  */
+<span class="lineNum">     470 </span>            : 
+<span class="lineNum">     471 </span>            : inline unsigned int
+<span class="lineNum">     472 </span>            : dr_alignment (data_reference *dr)
+<span class="lineNum">     473 </span>            : {
+<span class="lineNum">     474 </span>            :   return dr_alignment (&amp;DR_INNERMOST (dr));
+<span class="lineNum">     475 </span>            : }
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span>            : extern bool dr_may_alias_p (const struct data_reference *,
+<span class="lineNum">     478 </span>            :                             const struct data_reference *, bool);
+<span class="lineNum">     479 </span>            : extern bool dr_equal_offsets_p (struct data_reference *,
+<span class="lineNum">     480 </span>            :                                 struct data_reference *);
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            : extern bool runtime_alias_check_p (ddr_p, struct loop *, bool);
+<span class="lineNum">     483 </span>            : extern int data_ref_compare_tree (tree, tree);
+<span class="lineNum">     484 </span>            : extern void prune_runtime_alias_test_list (vec&lt;dr_with_seg_len_pair_t&gt; *,
+<span class="lineNum">     485 </span>            :                                            poly_uint64);
+<span class="lineNum">     486 </span>            : extern void create_runtime_alias_checks (struct loop *,
+<span class="lineNum">     487 </span>            :                                          vec&lt;dr_with_seg_len_pair_t&gt; *, tree*);
+<span class="lineNum">     488 </span>            : extern tree dr_direction_indicator (struct data_reference *);
+<span class="lineNum">     489 </span>            : extern tree dr_zero_step_indicator (struct data_reference *);
+<span class="lineNum">     490 </span>            : extern bool dr_known_forward_stride_p (struct data_reference *);
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span>            : /* Return true when the base objects of data references A and B are
+<span class="lineNum">     493 </span>            :    the same memory object.  */
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span>            : static inline bool
+<span class="lineNum">     496 </span>            : same_data_refs_base_objects (data_reference_p a, data_reference_p b)
+<span class="lineNum">     497 </span>            : {
+<span class="lineNum">     498 </span>            :   return DR_NUM_DIMENSIONS (a) == DR_NUM_DIMENSIONS (b)
+<span class="lineNum">     499 </span>            :     &amp;&amp; operand_equal_p (DR_BASE_OBJECT (a), DR_BASE_OBJECT (b), 0);
+<span class="lineNum">     500 </span>            : }
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span>            : /* Return true when the data references A and B are accessing the same
+<span class="lineNum">     503 </span>            :    memory object with the same access functions.  */
+<span class="lineNum">     504 </span>            : 
+<span class="lineNum">     505 </span>            : static inline bool
+<span class="lineNum">     506 </span>            : same_data_refs (data_reference_p a, data_reference_p b)
+<span class="lineNum">     507 </span>            : {
+<span class="lineNum">     508 </span>            :   unsigned int i;
+<span class="lineNum">     509 </span>            : 
+<span class="lineNum">     510 </span>            :   /* The references are exactly the same.  */
+<span class="lineNum">     511 </span>            :   if (operand_equal_p (DR_REF (a), DR_REF (b), 0))
+<span class="lineNum">     512 </span>            :     return true;
+<span class="lineNum">     513 </span>            : 
+<span class="lineNum">     514 </span>            :   if (!same_data_refs_base_objects (a, b))
+<span class="lineNum">     515 </span>            :     return false;
+<span class="lineNum">     516 </span>            : 
+<span class="lineNum">     517 </span>            :   for (i = 0; i &lt; DR_NUM_DIMENSIONS (a); i++)
+<span class="lineNum">     518 </span>            :     if (!eq_evolutions_p (DR_ACCESS_FN (a, i), DR_ACCESS_FN (b, i)))
+<span class="lineNum">     519 </span>            :       return false;
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span>            :   return true;
+<span class="lineNum">     522 </span>            : }
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span>            : /* Returns true when all the dependences are computable.  */
+<span class="lineNum">     525 </span>            : 
+<span class="lineNum">     526 </span>            : inline bool
+<span class="lineNum">     527 </span>            : known_dependences_p (vec&lt;ddr_p&gt; dependence_relations)
+<span class="lineNum">     528 </span>            : {
+<span class="lineNum">     529 </span>            :   ddr_p ddr;
+<span class="lineNum">     530 </span>            :   unsigned int i;
+<span class="lineNum">     531 </span>            : 
+<span class="lineNum">     532 </span>            :   FOR_EACH_VEC_ELT (dependence_relations, i, ddr)
+<span class="lineNum">     533 </span>            :     if (DDR_ARE_DEPENDENT (ddr) == chrec_dont_know)
+<span class="lineNum">     534 </span>            :       return false;
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span>            :   return true;
+<span class="lineNum">     537 </span>            : }
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span>            : /* Returns the dependence level for a vector DIST of size LENGTH.
+<span class="lineNum">     540 </span>            :    LEVEL = 0 means a lexicographic dependence, i.e. a dependence due
+<span class="lineNum">     541 </span>            :    to the sequence of statements, not carried by any loop.  */
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            : static inline unsigned
+<span class="lineNum">     544 </span>            : dependence_level (lambda_vector dist_vect, int length)
+<span class="lineNum">     545 </span>            : {
+<span class="lineNum">     546 </span>            :   int i;
+<span class="lineNum">     547 </span>            : 
+<span class="lineNum">     548 </span><span class="lineCov">        223 :   for (i = 0; i &lt; length; i++)</span>
+<span class="lineNum">     549 </span><span class="lineCov">        173 :     if (dist_vect[i] != 0)</span>
+<span class="lineNum">     550 </span><span class="lineCov">         71 :       return i + 1;</span>
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span>            :   return 0;
+<span class="lineNum">     553 </span>            : }
+<span class="lineNum">     554 </span>            : 
+<span class="lineNum">     555 </span>            : /* Return the dependence level for the DDR relation.  */
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span>            : static inline unsigned
+<span class="lineNum">     558 </span>            : ddr_dependence_level (ddr_p ddr)
+<span class="lineNum">     559 </span>            : {
+<span class="lineNum">     560 </span>            :   unsigned vector;
+<span class="lineNum">     561 </span>            :   unsigned level = 0;
+<span class="lineNum">     562 </span>            : 
+<span class="lineNum">     563 </span>            :   if (DDR_DIST_VECTS (ddr).exists ())
+<span class="lineNum">     564 </span>            :     level = dependence_level (DDR_DIST_VECT (ddr, 0), DDR_NB_LOOPS (ddr));
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span>            :   for (vector = 1; vector &lt; DDR_NUM_DIST_VECTS (ddr); vector++)
+<span class="lineNum">     567 </span>            :     level = MIN (level, dependence_level (DDR_DIST_VECT (ddr, vector),
+<span class="lineNum">     568 </span>            :                                           DDR_NB_LOOPS (ddr)));
+<span class="lineNum">     569 </span>            :   return level;
+<span class="lineNum">     570 </span>            : }
+<span class="lineNum">     571 </span>            : 
+<span class="lineNum">     572 </span>            : /* Return the index of the variable VAR in the LOOP_NEST array.  */
+<span class="lineNum">     573 </span>            : 
+<span class="lineNum">     574 </span>            : static inline int
+<span class="lineNum">     575 </span>            : index_in_loop_nest (int var, vec&lt;loop_p&gt; loop_nest)
+<span class="lineNum">     576 </span>            : {
+<span class="lineNum">     577 </span><span class="lineCov">      15593 :   struct loop *loopi;</span>
+<span class="lineNum">     578 </span><span class="lineCov">      15593 :   int var_index;</span>
+<span class="lineNum">     579 </span>            : 
+<span class="lineNum">     580 </span><span class="lineCov">      33123 :   for (var_index = 0; loop_nest.iterate (var_index, &amp;loopi);</span>
+<span class="lineNum">     581 </span>            :        var_index++)
+<span class="lineNum">     582 </span><span class="lineCov">      33123 :     if (loopi-&gt;num == var)</span>
+<span class="lineNum">     583 </span>            :       break;
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">      20593 :   return var_index;</span>
+<span class="lineNum">     586 </span>            : }
+<span class="lineNum">     587 </span>            : 
+<span class="lineNum">     588 </span>            : /* Returns true when the data reference DR the form &quot;A[i] = ...&quot;
+<span class="lineNum">     589 </span>            :    with a stride equal to its unit type size.  */
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            : static inline bool
+<span class="lineNum">     592 </span>            : adjacent_dr_p (struct data_reference *dr)
+<span class="lineNum">     593 </span>            : {
+<span class="lineNum">     594 </span>            :   /* If this is a bitfield store bail out.  */
+<span class="lineNum">     595 </span>            :   if (TREE_CODE (DR_REF (dr)) == COMPONENT_REF
+<span class="lineNum">     596 </span>            :       &amp;&amp; DECL_BIT_FIELD (TREE_OPERAND (DR_REF (dr), 1)))
+<span class="lineNum">     597 </span>            :     return false;
+<span class="lineNum">     598 </span>            : 
+<span class="lineNum">     599 </span>            :   if (!DR_STEP (dr)
+<span class="lineNum">     600 </span>            :       || TREE_CODE (DR_STEP (dr)) != INTEGER_CST)
+<span class="lineNum">     601 </span>            :     return false;
+<span class="lineNum">     602 </span>            : 
+<span class="lineNum">     603 </span>            :   return tree_int_cst_equal (fold_unary (ABS_EXPR, TREE_TYPE (DR_STEP (dr)),
+<span class="lineNum">     604 </span>            :                                          DR_STEP (dr)),
+<span class="lineNum">     605 </span>            :                              TYPE_SIZE_UNIT (TREE_TYPE (DR_REF (dr))));
+<span class="lineNum">     606 </span>            : }
+<span class="lineNum">     607 </span>            : 
+<span class="lineNum">     608 </span>            : void split_constant_offset (tree , tree *, tree *);
+<span class="lineNum">     609 </span>            : 
+<span class="lineNum">     610 </span>            : /* Compute the greatest common divisor of a VECTOR of SIZE numbers.  */
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span>            : static inline int
+<span class="lineNum">     613 </span>            : lambda_vector_gcd (lambda_vector vector, int size)
+<span class="lineNum">     614 </span>            : {
+<span class="lineNum">     615 </span>            :   int i;
+<span class="lineNum">     616 </span>            :   int gcd1 = 0;
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span>            :   if (size &gt; 0)
+<span class="lineNum">     619 </span>            :     {
+<span class="lineNum">     620 </span>            :       gcd1 = vector[0];
+<span class="lineNum">     621 </span>            :       for (i = 1; i &lt; size; i++)
+<span class="lineNum">     622 </span>            :         gcd1 = gcd (gcd1, vector[i]);
+<span class="lineNum">     623 </span>            :     }
+<span class="lineNum">     624 </span>            :   return gcd1;
+<span class="lineNum">     625 </span>            : }
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            : /* Allocate a new vector of given SIZE.  */
+<span class="lineNum">     628 </span>            : 
+<span class="lineNum">     629 </span>            : static inline lambda_vector
+<span class="lineNum">     630 </span>            : lambda_vector_new (int size)
+<span class="lineNum">     631 </span>            : {
+<span class="lineNum">     632 </span>            :   /* ???  We shouldn't abuse the GC allocator here.  */
+<span class="lineNum">     633 </span><span class="lineCov">     679246 :   return ggc_cleared_vec_alloc&lt;int&gt; (size);</span>
+<span class="lineNum">     634 </span>            : }
+<span class="lineNum">     635 </span>            : 
+<span class="lineNum">     636 </span>            : /* Clear out vector VEC1 of length SIZE.  */
+<span class="lineNum">     637 </span>            : 
+<span class="lineNum">     638 </span>            : static inline void
+<span class="lineNum">     639 </span>            : lambda_vector_clear (lambda_vector vec1, int size)
+<span class="lineNum">     640 </span>            : {
+<span class="lineNum">     641 </span><span class="lineCov">        536 :   memset (vec1, 0, size * sizeof (*vec1));</span>
+<span class="lineNum">     642 </span>            : }
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span>            : /* Returns true when the vector V is lexicographically positive, in
+<span class="lineNum">     645 </span>            :    other words, when the first nonzero element is positive.  */
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span>            : static inline bool
+<span class="lineNum">     648 </span>            : lambda_vector_lexico_pos (lambda_vector v,
+<span class="lineNum">     649 </span>            :                           unsigned n)
+<span class="lineNum">     650 </span>            : {
+<span class="lineNum">     651 </span>            :   unsigned i;
+<span class="lineNum">     652 </span><span class="lineCov">      11313 :   for (i = 0; i &lt; n; i++)</span>
+<span class="lineNum">     653 </span>            :     {
+<span class="lineNum">     654 </span><span class="lineCov">       8525 :       if (v[i] == 0)</span>
+<span class="lineNum">     655 </span><span class="lineCov">       2801 :         continue;</span>
+<span class="lineNum">     656 </span><span class="lineCov">       5724 :       if (v[i] &lt; 0)</span>
+<span class="lineNum">     657 </span>            :         return false;
+<span class="lineNum">     658 </span>            :       if (v[i] &gt; 0)
+<span class="lineNum">     659 </span>            :         return true;
+<span class="lineNum">     660 </span>            :     }
+<span class="lineNum">     661 </span>            :   return true;
+<span class="lineNum">     662 </span>            : }
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span>            : /* Return true if vector VEC1 of length SIZE is the zero vector.  */
+<span class="lineNum">     665 </span>            : 
+<span class="lineNum">     666 </span>            : static inline bool
+<span class="lineNum">     667 </span>            : lambda_vector_zerop (lambda_vector vec1, int size)
+<span class="lineNum">     668 </span>            : {
+<span class="lineNum">     669 </span>            :   int i;
+<span class="lineNum">     670 </span><span class="lineCov">      26987 :   for (i = 0; i &lt; size; i++)</span>
+<span class="lineNum">     671 </span><span class="lineCov">      13872 :     if (vec1[i] != 0)</span>
+<span class="lineNum">     672 </span>            :       return false;
+<span class="lineNum">     673 </span>            :   return true;
+<span class="lineNum">     674 </span>            : }
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span>            : /* Allocate a matrix of M rows x  N cols.  */
+<a name="677"><span class="lineNum">     677 </span>            : </a>
+<span class="lineNum">     678 </span>            : static inline lambda_matrix
+<span class="lineNum">     679 </span><span class="lineCov">    1435678 : lambda_matrix_new (int m, int n, struct obstack *lambda_obstack)</span>
+<span class="lineNum">     680 </span>            : {
+<span class="lineNum">     681 </span><span class="lineCov">    1435678 :   lambda_matrix mat;</span>
+<span class="lineNum">     682 </span><span class="lineCov">    1435678 :   int i;</span>
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span><span class="lineCov">    1435678 :   mat = XOBNEWVEC (lambda_obstack, lambda_vector, m);</span>
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span><span class="lineCov">    4307441 :   for (i = 0; i &lt; m; i++)</span>
+<span class="lineNum">     687 </span><span class="lineCov">    2871763 :     mat[i] = XOBNEWVEC (lambda_obstack, int, n);</span>
+<span class="lineNum">     688 </span>            : 
+<span class="lineNum">     689 </span><span class="lineCov">    1435678 :   return mat;</span>
+<span class="lineNum">     690 </span>            : }
+<span class="lineNum">     691 </span>            : 
+<span class="lineNum">     692 </span>            : #endif  /* GCC_TREE_DATA_REF_H  */
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

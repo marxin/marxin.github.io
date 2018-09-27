@@ -1,0 +1,1818 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/omp-simd-clone.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - omp-simd-clone.c<span style="font-size: 80%;"> (source / <a href="omp-simd-clone.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">888</td>
+            <td class="headerCovTableEntry">951</td>
+            <td class="headerCovTableEntryHi">93.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntryHi">90.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* OMP constructs' SIMD clone supporting code.</a>
+<span class="lineNum">       2 </span>            : 
+<span class="lineNum">       3 </span>            : Copyright (C) 2005-2018 Free Software Foundation, Inc.
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;alloc-pool.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;pretty-print.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;gimple-walk.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;langhooks.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;tree-into-ssa.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;symbol-summary.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;ipa-param-manipulation.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;tree-eh.h&quot;
+<span class="lineNum">      50 </span>            : #include &quot;varasm.h&quot;
+<span class="lineNum">      51 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      52 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      53 </span>            : #include &quot;omp-simd-clone.h&quot;
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            : /* Return the number of elements in vector type VECTYPE, which is associated
+<span class="lineNum">      56 </span>            :    with a SIMD clone.  At present these always have a constant length.  */
+<a name="57"><span class="lineNum">      57 </span>            : </a>
+<span class="lineNum">      58 </span>            : static unsigned HOST_WIDE_INT
+<span class="lineNum">      59 </span><span class="lineNoCov">          0 : simd_clone_subparts (tree vectype)</span>
+<span class="lineNum">      60 </span>            : {
+<span class="lineNum">      61 </span><span class="lineCov">       9462 :   return TYPE_VECTOR_SUBPARTS (vectype).to_constant ();</span>
+<span class="lineNum">      62 </span>            : }
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : /* Allocate a fresh `simd_clone' and return it.  NARGS is the number
+<span class="lineNum">      65 </span>            :    of arguments to reserve space for.  */
+<a name="66"><span class="lineNum">      66 </span>            : </a>
+<span class="lineNum">      67 </span>            : static struct cgraph_simd_clone *
+<span class="lineNum">      68 </span><span class="lineNoCov">          0 : simd_clone_struct_alloc (int nargs)</span>
+<span class="lineNum">      69 </span>            : {
+<span class="lineNum">      70 </span><span class="lineCov">       3235 :   struct cgraph_simd_clone *clone_info;</span>
+<span class="lineNum">      71 </span><span class="lineCov">       6470 :   size_t len = (sizeof (struct cgraph_simd_clone)</span>
+<span class="lineNum">      72 </span><span class="lineCov">       3235 :                 + nargs * sizeof (struct cgraph_simd_clone_arg));</span>
+<span class="lineNum">      73 </span><span class="lineCov">       3235 :   clone_info = (struct cgraph_simd_clone *)</span>
+<span class="lineNum">      74 </span><span class="lineNoCov">          0 :                ggc_internal_cleared_alloc (len);</span>
+<span class="lineNum">      75 </span><span class="lineCov">       3235 :   return clone_info;</span>
+<span class="lineNum">      76 </span>            : }
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* Make a copy of the `struct cgraph_simd_clone' in FROM to TO.  */
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : static inline void
+<span class="lineNum">      81 </span>            : simd_clone_struct_copy (struct cgraph_simd_clone *to,
+<span class="lineNum">      82 </span>            :                         struct cgraph_simd_clone *from)
+<span class="lineNum">      83 </span>            : {
+<span class="lineNum">      84 </span><span class="lineCov">       5280 :   memcpy (to, from, (sizeof (struct cgraph_simd_clone)</span>
+<span class="lineNum">      85 </span><span class="lineCov">       2640 :                      + ((from-&gt;nargs - from-&gt;inbranch)</span>
+<span class="lineNum">      86 </span><span class="lineCov">       2640 :                         * sizeof (struct cgraph_simd_clone_arg))));</span>
+<span class="lineNum">      87 </span>            : }
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : /* Return vector of parameter types of function FNDECL.  This uses
+<span class="lineNum">      90 </span>            :    TYPE_ARG_TYPES if available, otherwise falls back to types of
+<span class="lineNum">      91 </span>            :    DECL_ARGUMENTS types.  */
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : static vec&lt;tree&gt;
+<span class="lineNum">      94 </span><span class="lineCov">       1211 : simd_clone_vector_of_formal_parm_types (tree fndecl)</span>
+<span class="lineNum">      95 </span>            : {
+<span class="lineNum">      96 </span><span class="lineCov">       1493 :   if (TYPE_ARG_TYPES (TREE_TYPE (fndecl)))</span>
+<span class="lineNum">      97 </span><span class="lineCov">       2418 :     return ipa_get_vector_of_formal_parm_types (TREE_TYPE (fndecl));</span>
+<span class="lineNum">      98 </span><span class="lineCov">          2 :   vec&lt;tree&gt; args = ipa_get_vector_of_formal_parms (fndecl);</span>
+<span class="lineNum">      99 </span><span class="lineCov">          2 :   unsigned int i;</span>
+<span class="lineNum">     100 </span><span class="lineCov">          2 :   tree arg;</span>
+<span class="lineNum">     101 </span><span class="lineCov">          7 :   FOR_EACH_VEC_ELT (args, i, arg)</span>
+<span class="lineNum">     102 </span><span class="lineCov">         10 :     args[i] = TREE_TYPE (args[i]);</span>
+<span class="lineNum">     103 </span><span class="lineCov">          2 :   return args;</span>
+<span class="lineNum">     104 </span>            : }
+<span class="lineNum">     105 </span>            : 
+<span class="lineNum">     106 </span>            : /* Given a simd function in NODE, extract the simd specific
+<span class="lineNum">     107 </span>            :    information from the OMP clauses passed in CLAUSES, and return
+<span class="lineNum">     108 </span>            :    the struct cgraph_simd_clone * if it should be cloned.  *INBRANCH_SPECIFIED
+<span class="lineNum">     109 </span>            :    is set to TRUE if the `inbranch' or `notinbranch' clause specified,
+<span class="lineNum">     110 </span>            :    otherwise set to FALSE.  */
+<span class="lineNum">     111 </span>            : 
+<span class="lineNum">     112 </span>            : static struct cgraph_simd_clone *
+<span class="lineNum">     113 </span><span class="lineCov">        595 : simd_clone_clauses_extract (struct cgraph_node *node, tree clauses,</span>
+<span class="lineNum">     114 </span>            :                             bool *inbranch_specified)
+<span class="lineNum">     115 </span>            : {
+<span class="lineNum">     116 </span><span class="lineCov">        595 :   vec&lt;tree&gt; args = simd_clone_vector_of_formal_parm_types (node-&gt;decl);</span>
+<span class="lineNum">     117 </span><span class="lineCov">        595 :   tree t;</span>
+<span class="lineNum">     118 </span><span class="lineCov">        595 :   int n;</span>
+<span class="lineNum">     119 </span><span class="lineCov">        595 :   *inbranch_specified = false;</span>
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span><span class="lineCov">        595 :   n = args.length ();</span>
+<span class="lineNum">     122 </span><span class="lineCov">        595 :   if (n &gt; 0 &amp;&amp; args.last () == void_type_node)</span>
+<span class="lineNum">     123 </span><span class="lineCov">        593 :     n--;</span>
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            :   /* Allocate one more than needed just in case this is an in-branch
+<span class="lineNum">     126 </span>            :      clone which will require a mask argument.  */
+<span class="lineNum">     127 </span><span class="lineCov">        595 :   struct cgraph_simd_clone *clone_info = simd_clone_struct_alloc (n + 1);</span>
+<span class="lineNum">     128 </span><span class="lineCov">        595 :   clone_info-&gt;nargs = n;</span>
+<span class="lineNum">     129 </span>            : 
+<span class="lineNum">     130 </span><span class="lineCov">        595 :   if (!clauses)</span>
+<span class="lineNum">     131 </span>            :     goto out;
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">        507 :   clauses = TREE_VALUE (clauses);</span>
+<span class="lineNum">     134 </span><span class="lineCov">        507 :   if (!clauses || TREE_CODE (clauses) != OMP_CLAUSE)</span>
+<span class="lineNum">     135 </span>            :     goto out;
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span><span class="lineCov">       1735 :   for (t = clauses; t; t = OMP_CLAUSE_CHAIN (t))</span>
+<span class="lineNum">     138 </span>            :     {
+<span class="lineNum">     139 </span><span class="lineCov">       1246 :       switch (OMP_CLAUSE_CODE (t))</span>
+<span class="lineNum">     140 </span>            :         {
+<span class="lineNum">     141 </span><span class="lineCov">         25 :         case OMP_CLAUSE_INBRANCH:</span>
+<span class="lineNum">     142 </span><span class="lineCov">         25 :           clone_info-&gt;inbranch = 1;</span>
+<span class="lineNum">     143 </span><span class="lineCov">         25 :           *inbranch_specified = true;</span>
+<span class="lineNum">     144 </span><span class="lineCov">         25 :           break;</span>
+<span class="lineNum">     145 </span><span class="lineCov">        277 :         case OMP_CLAUSE_NOTINBRANCH:</span>
+<span class="lineNum">     146 </span><span class="lineCov">        277 :           clone_info-&gt;inbranch = 0;</span>
+<span class="lineNum">     147 </span><span class="lineCov">        277 :           *inbranch_specified = true;</span>
+<span class="lineNum">     148 </span><span class="lineCov">        277 :           break;</span>
+<span class="lineNum">     149 </span><span class="lineCov">        150 :         case OMP_CLAUSE_SIMDLEN:</span>
+<span class="lineNum">     150 </span><span class="lineCov">        150 :           clone_info-&gt;simdlen</span>
+<span class="lineNum">     151 </span><span class="lineCov">        150 :             = TREE_INT_CST_LOW (OMP_CLAUSE_SIMDLEN_EXPR (t));</span>
+<span class="lineNum">     152 </span><span class="lineCov">        150 :           break;</span>
+<span class="lineNum">     153 </span><span class="lineCov">        423 :         case OMP_CLAUSE_LINEAR:</span>
+<span class="lineNum">     154 </span><span class="lineCov">        423 :           {</span>
+<span class="lineNum">     155 </span><span class="lineCov">        846 :             tree decl = OMP_CLAUSE_DECL (t);</span>
+<span class="lineNum">     156 </span><span class="lineCov">        423 :             tree step = OMP_CLAUSE_LINEAR_STEP (t);</span>
+<span class="lineNum">     157 </span><span class="lineCov">        423 :             int argno = TREE_INT_CST_LOW (decl);</span>
+<span class="lineNum">     158 </span><span class="lineCov">        423 :             if (OMP_CLAUSE_LINEAR_VARIABLE_STRIDE (t))</span>
+<span class="lineNum">     159 </span>            :               {
+<span class="lineNum">     160 </span><span class="lineCov">         31 :                 enum cgraph_simd_clone_arg_type arg_type;</span>
+<span class="lineNum">     161 </span><span class="lineCov">         31 :                 if (TREE_CODE (args[argno]) == REFERENCE_TYPE)</span>
+<span class="lineNum">     162 </span><span class="lineCov">         11 :                   switch (OMP_CLAUSE_LINEAR_KIND (t))</span>
+<span class="lineNum">     163 </span>            :                     {
+<span class="lineNum">     164 </span>            :                     case OMP_CLAUSE_LINEAR_REF:
+<span class="lineNum">     165 </span>            :                       arg_type
+<span class="lineNum">     166 </span>            :                         = SIMD_CLONE_ARG_TYPE_LINEAR_REF_VARIABLE_STEP;
+<span class="lineNum">     167 </span>            :                       break;
+<span class="lineNum">     168 </span>            :                     case OMP_CLAUSE_LINEAR_UVAL:
+<span class="lineNum">     169 </span>            :                       arg_type
+<span class="lineNum">     170 </span>            :                         = SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_VARIABLE_STEP;
+<span class="lineNum">     171 </span>            :                       break;
+<span class="lineNum">     172 </span>            :                     case OMP_CLAUSE_LINEAR_VAL:
+<span class="lineNum">     173 </span>            :                     case OMP_CLAUSE_LINEAR_DEFAULT:
+<span class="lineNum">     174 </span>            :                       arg_type
+<span class="lineNum">     175 </span>            :                         = SIMD_CLONE_ARG_TYPE_LINEAR_VAL_VARIABLE_STEP;
+<span class="lineNum">     176 </span>            :                       break;
+<span class="lineNum">     177 </span><span class="lineNoCov">          0 :                     default:</span>
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :                       gcc_unreachable ();</span>
+<span class="lineNum">     179 </span>            :                     }
+<span class="lineNum">     180 </span>            :                 else
+<span class="lineNum">     181 </span>            :                   arg_type = SIMD_CLONE_ARG_TYPE_LINEAR_VARIABLE_STEP;
+<span class="lineNum">     182 </span><span class="lineCov">         31 :                 clone_info-&gt;args[argno].arg_type = arg_type;</span>
+<span class="lineNum">     183 </span><span class="lineCov">         31 :                 clone_info-&gt;args[argno].linear_step = tree_to_shwi (step);</span>
+<span class="lineNum">     184 </span><span class="lineCov">         31 :                 gcc_assert (clone_info-&gt;args[argno].linear_step &gt;= 0</span>
+<span class="lineNum">     185 </span>            :                             &amp;&amp; clone_info-&gt;args[argno].linear_step &lt; n);
+<span class="lineNum">     186 </span>            :               }
+<span class="lineNum">     187 </span>            :             else
+<span class="lineNum">     188 </span>            :               {
+<span class="lineNum">     189 </span><span class="lineCov">        392 :                 if (POINTER_TYPE_P (args[argno]))</span>
+<span class="lineNum">     190 </span><span class="lineCov">        165 :                   step = fold_convert (ssizetype, step);</span>
+<span class="lineNum">     191 </span><span class="lineCov">        392 :                 if (!tree_fits_shwi_p (step))</span>
+<span class="lineNum">     192 </span>            :                   {
+<span class="lineNum">     193 </span><span class="lineNoCov">          0 :                     warning_at (OMP_CLAUSE_LOCATION (t), 0,</span>
+<span class="lineNum">     194 </span>            :                                 &quot;ignoring large linear step&quot;);
+<span class="lineNum">     195 </span><span class="lineNoCov">          0 :                     args.release ();</span>
+<span class="lineNum">     196 </span><span class="lineNoCov">          0 :                     return NULL;</span>
+<span class="lineNum">     197 </span>            :                   }
+<span class="lineNum">     198 </span><span class="lineCov">        392 :                 else if (integer_zerop (step))</span>
+<span class="lineNum">     199 </span>            :                   {
+<span class="lineNum">     200 </span><span class="lineNoCov">          0 :                     warning_at (OMP_CLAUSE_LOCATION (t), 0,</span>
+<span class="lineNum">     201 </span>            :                                 &quot;ignoring zero linear step&quot;);
+<span class="lineNum">     202 </span><span class="lineNoCov">          0 :                     args.release ();</span>
+<span class="lineNum">     203 </span><span class="lineNoCov">          0 :                     return NULL;</span>
+<span class="lineNum">     204 </span>            :                   }
+<span class="lineNum">     205 </span>            :                 else
+<span class="lineNum">     206 </span>            :                   {
+<span class="lineNum">     207 </span><span class="lineCov">        392 :                     enum cgraph_simd_clone_arg_type arg_type;</span>
+<span class="lineNum">     208 </span><span class="lineCov">        392 :                     if (TREE_CODE (args[argno]) == REFERENCE_TYPE)</span>
+<span class="lineNum">     209 </span><span class="lineCov">        102 :                       switch (OMP_CLAUSE_LINEAR_KIND (t))</span>
+<span class="lineNum">     210 </span>            :                         {
+<span class="lineNum">     211 </span>            :                         case OMP_CLAUSE_LINEAR_REF:
+<span class="lineNum">     212 </span>            :                           arg_type
+<span class="lineNum">     213 </span>            :                             = SIMD_CLONE_ARG_TYPE_LINEAR_REF_CONSTANT_STEP;
+<span class="lineNum">     214 </span>            :                           break;
+<span class="lineNum">     215 </span>            :                         case OMP_CLAUSE_LINEAR_UVAL:
+<span class="lineNum">     216 </span>            :                           arg_type
+<span class="lineNum">     217 </span>            :                             = SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_CONSTANT_STEP;
+<span class="lineNum">     218 </span>            :                           break;
+<span class="lineNum">     219 </span>            :                         case OMP_CLAUSE_LINEAR_VAL:
+<span class="lineNum">     220 </span>            :                         case OMP_CLAUSE_LINEAR_DEFAULT:
+<span class="lineNum">     221 </span>            :                           arg_type
+<span class="lineNum">     222 </span>            :                             = SIMD_CLONE_ARG_TYPE_LINEAR_VAL_CONSTANT_STEP;
+<span class="lineNum">     223 </span>            :                           break;
+<span class="lineNum">     224 </span><span class="lineNoCov">          0 :                         default:</span>
+<span class="lineNum">     225 </span><span class="lineNoCov">          0 :                           gcc_unreachable ();</span>
+<span class="lineNum">     226 </span>            :                         }
+<span class="lineNum">     227 </span>            :                     else
+<span class="lineNum">     228 </span>            :                       arg_type = SIMD_CLONE_ARG_TYPE_LINEAR_CONSTANT_STEP;
+<span class="lineNum">     229 </span><span class="lineCov">        392 :                     clone_info-&gt;args[argno].arg_type = arg_type;</span>
+<span class="lineNum">     230 </span><span class="lineCov">        392 :                     clone_info-&gt;args[argno].linear_step = tree_to_shwi (step);</span>
+<span class="lineNum">     231 </span>            :                   }
+<span class="lineNum">     232 </span>            :               }
+<span class="lineNum">     233 </span>            :             break;
+<span class="lineNum">     234 </span>            :           }
+<span class="lineNum">     235 </span><span class="lineCov">        294 :         case OMP_CLAUSE_UNIFORM:</span>
+<span class="lineNum">     236 </span><span class="lineCov">        294 :           {</span>
+<span class="lineNum">     237 </span><span class="lineCov">        588 :             tree decl = OMP_CLAUSE_DECL (t);</span>
+<span class="lineNum">     238 </span><span class="lineCov">        294 :             int argno = tree_to_uhwi (decl);</span>
+<span class="lineNum">     239 </span><span class="lineCov">        294 :             clone_info-&gt;args[argno].arg_type</span>
+<span class="lineNum">     240 </span><span class="lineCov">        294 :               = SIMD_CLONE_ARG_TYPE_UNIFORM;</span>
+<span class="lineNum">     241 </span><span class="lineCov">        294 :             break;</span>
+<span class="lineNum">     242 </span>            :           }
+<span class="lineNum">     243 </span><span class="lineCov">         77 :         case OMP_CLAUSE_ALIGNED:</span>
+<span class="lineNum">     244 </span><span class="lineCov">         77 :           {</span>
+<span class="lineNum">     245 </span><span class="lineCov">        154 :             tree decl = OMP_CLAUSE_DECL (t);</span>
+<span class="lineNum">     246 </span><span class="lineCov">         77 :             int argno = tree_to_uhwi (decl);</span>
+<span class="lineNum">     247 </span><span class="lineCov">         77 :             clone_info-&gt;args[argno].alignment</span>
+<span class="lineNum">     248 </span><span class="lineCov">         77 :               = TREE_INT_CST_LOW (OMP_CLAUSE_ALIGNED_ALIGNMENT (t));</span>
+<span class="lineNum">     249 </span><span class="lineCov">         77 :             break;</span>
+<span class="lineNum">     250 </span>            :           }
+<span class="lineNum">     251 </span>            :         default:
+<span class="lineNum">     252 </span>            :           break;
+<span class="lineNum">     253 </span>            :         }
+<span class="lineNum">     254 </span>            :     }
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">        489 :  out:</span>
+<span class="lineNum">     257 </span><span class="lineCov">        595 :   if (TYPE_ATOMIC (TREE_TYPE (TREE_TYPE (node-&gt;decl))))</span>
+<span class="lineNum">     258 </span>            :     {
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 :       warning_at (DECL_SOURCE_LOCATION (node-&gt;decl), 0,</span>
+<span class="lineNum">     260 </span>            :                   &quot;ignoring %&lt;#pragma omp declare simd%&gt; on function &quot;
+<span class="lineNum">     261 </span>            :                   &quot;with %&lt;_Atomic%&gt; qualified return type&quot;);
+<span class="lineNum">     262 </span><span class="lineNoCov">          0 :       args.release ();</span>
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 :       return NULL;</span>
+<span class="lineNum">     264 </span>            :     }
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span><span class="lineCov">       2111 :   for (unsigned int argno = 0; argno &lt; clone_info-&gt;nargs; argno++)</span>
+<span class="lineNum">     267 </span><span class="lineCov">       1517 :     if (TYPE_ATOMIC (args[argno])</span>
+<span class="lineNum">     268 </span><span class="lineCov">       1517 :         &amp;&amp; clone_info-&gt;args[argno].arg_type != SIMD_CLONE_ARG_TYPE_UNIFORM)</span>
+<span class="lineNum">     269 </span>            :       {
+<span class="lineNum">     270 </span><span class="lineCov">          1 :         warning_at (DECL_SOURCE_LOCATION (node-&gt;decl), 0,</span>
+<span class="lineNum">     271 </span>            :                     &quot;ignoring %&lt;#pragma omp declare simd%&gt; on function &quot;
+<span class="lineNum">     272 </span>            :                     &quot;with %&lt;_Atomic%&gt; qualified non-%&lt;uniform%&gt; argument&quot;);
+<span class="lineNum">     273 </span><span class="lineCov">          1 :         args.release ();</span>
+<span class="lineNum">     274 </span><span class="lineCov">          1 :         return NULL;</span>
+<span class="lineNum">     275 </span>            :       }
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">        594 :   args.release ();</span>
+<span class="lineNum">     278 </span>            :   return clone_info;
+<span class="lineNum">     279 </span>            : }
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            : /* Given a SIMD clone in NODE, calculate the characteristic data
+<span class="lineNum">     282 </span>            :    type and return the coresponding type.  The characteristic data
+<span class="lineNum">     283 </span>            :    type is computed as described in the Intel Vector ABI.  */
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            : static tree
+<span class="lineNum">     286 </span><span class="lineCov">       1676 : simd_clone_compute_base_data_type (struct cgraph_node *node,</span>
+<span class="lineNum">     287 </span>            :                                    struct cgraph_simd_clone *clone_info)
+<span class="lineNum">     288 </span>            : {
+<span class="lineNum">     289 </span><span class="lineCov">       1676 :   tree type = integer_type_node;</span>
+<span class="lineNum">     290 </span><span class="lineCov">       1676 :   tree fndecl = node-&gt;decl;</span>
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span>            :   /* a) For non-void function, the characteristic data type is the
+<span class="lineNum">     293 </span>            :         return type.  */
+<span class="lineNum">     294 </span><span class="lineCov">       1676 :   if (TREE_CODE (TREE_TYPE (TREE_TYPE (fndecl))) != VOID_TYPE)</span>
+<span class="lineNum">     295 </span>            :     type = TREE_TYPE (TREE_TYPE (fndecl));
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            :   /* b) If the function has any non-uniform, non-linear parameters,
+<span class="lineNum">     298 </span>            :         then the characteristic data type is the type of the first
+<span class="lineNum">     299 </span>            :         such parameter.  */
+<span class="lineNum">     300 </span>            :   else
+<span class="lineNum">     301 </span>            :     {
+<span class="lineNum">     302 </span><span class="lineCov">         80 :       vec&lt;tree&gt; map = simd_clone_vector_of_formal_parm_types (fndecl);</span>
+<span class="lineNum">     303 </span><span class="lineCov">        149 :       for (unsigned int i = 0; i &lt; clone_info-&gt;nargs; ++i)</span>
+<span class="lineNum">     304 </span><span class="lineCov">        114 :         if (clone_info-&gt;args[i].arg_type == SIMD_CLONE_ARG_TYPE_VECTOR)</span>
+<span class="lineNum">     305 </span>            :           {
+<span class="lineNum">     306 </span><span class="lineCov">         45 :             type = map[i];</span>
+<span class="lineNum">     307 </span><span class="lineCov">         45 :             break;</span>
+<span class="lineNum">     308 </span>            :           }
+<span class="lineNum">     309 </span><span class="lineCov">         80 :       map.release ();</span>
+<span class="lineNum">     310 </span>            :     }
+<span class="lineNum">     311 </span>            : 
+<span class="lineNum">     312 </span>            :   /* c) If the characteristic data type determined by a) or b) above
+<span class="lineNum">     313 </span>            :         is struct, union, or class type which is pass-by-value (except
+<span class="lineNum">     314 </span>            :         for the type that maps to the built-in complex data type), the
+<span class="lineNum">     315 </span>            :         characteristic data type is int.  */
+<span class="lineNum">     316 </span><span class="lineCov">       1676 :   if (RECORD_OR_UNION_TYPE_P (type)</span>
+<span class="lineNum">     317 </span><span class="lineNoCov">          0 :       &amp;&amp; !aggregate_value_p (type, NULL)</span>
+<span class="lineNum">     318 </span><span class="lineCov">       1676 :       &amp;&amp; TREE_CODE (type) != COMPLEX_TYPE)</span>
+<span class="lineNum">     319 </span><span class="lineNoCov">          0 :     return integer_type_node;</span>
+<span class="lineNum">     320 </span>            : 
+<span class="lineNum">     321 </span>            :   /* d) If none of the above three classes is applicable, the
+<span class="lineNum">     322 </span>            :         characteristic data type is int.  */
+<span class="lineNum">     323 </span>            : 
+<span class="lineNum">     324 </span>            :   return type;
+<span class="lineNum">     325 </span>            : 
+<span class="lineNum">     326 </span>            :   /* e) For Intel Xeon Phi native and offload compilation, if the
+<span class="lineNum">     327 </span>            :         resulting characteristic data type is 8-bit or 16-bit integer
+<span class="lineNum">     328 </span>            :         data type, the characteristic data type is int.  */
+<span class="lineNum">     329 </span>            :   /* Well, we don't handle Xeon Phi yet.  */
+<span class="lineNum">     330 </span>            : }
+<a name="331"><span class="lineNum">     331 </span>            : </a>
+<span class="lineNum">     332 </span>            : static tree
+<span class="lineNum">     333 </span><span class="lineCov">       3230 : simd_clone_mangle (struct cgraph_node *node,</span>
+<span class="lineNum">     334 </span>            :                    struct cgraph_simd_clone *clone_info)
+<span class="lineNum">     335 </span>            : {
+<span class="lineNum">     336 </span><span class="lineCov">       3230 :   char vecsize_mangle = clone_info-&gt;vecsize_mangle;</span>
+<span class="lineNum">     337 </span><span class="lineCov">       3230 :   char mask = clone_info-&gt;inbranch ? 'M' : 'N';</span>
+<span class="lineNum">     338 </span><span class="lineCov">       3230 :   unsigned int simdlen = clone_info-&gt;simdlen;</span>
+<span class="lineNum">     339 </span><span class="lineCov">       3230 :   unsigned int n;</span>
+<span class="lineNum">     340 </span><span class="lineCov">       6460 :   pretty_printer pp;</span>
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span><span class="lineCov">       3230 :   gcc_assert (vecsize_mangle &amp;&amp; simdlen);</span>
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span><span class="lineCov">       3230 :   pp_string (&amp;pp, &quot;_ZGV&quot;);</span>
+<span class="lineNum">     345 </span><span class="lineCov">       3230 :   pp_character (&amp;pp, vecsize_mangle);</span>
+<span class="lineNum">     346 </span><span class="lineCov">       3230 :   pp_character (&amp;pp, mask);</span>
+<span class="lineNum">     347 </span><span class="lineCov">       3230 :   pp_decimal_int (&amp;pp, simdlen);</span>
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span><span class="lineCov">      11351 :   for (n = 0; n &lt; clone_info-&gt;nargs; ++n)</span>
+<span class="lineNum">     350 </span>            :     {
+<span class="lineNum">     351 </span><span class="lineCov">       8121 :       struct cgraph_simd_clone_arg arg = clone_info-&gt;args[n];</span>
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span><span class="lineCov">       8121 :       switch (arg.arg_type)</span>
+<span class="lineNum">     354 </span>            :         {
+<span class="lineNum">     355 </span><span class="lineCov">       1639 :         case SIMD_CLONE_ARG_TYPE_UNIFORM:</span>
+<span class="lineNum">     356 </span><span class="lineCov">       1639 :           pp_character (&amp;pp, 'u');</span>
+<span class="lineNum">     357 </span><span class="lineCov">       1639 :           break;</span>
+<span class="lineNum">     358 </span><span class="lineCov">       1615 :         case SIMD_CLONE_ARG_TYPE_LINEAR_CONSTANT_STEP:</span>
+<span class="lineNum">     359 </span><span class="lineCov">       1615 :           pp_character (&amp;pp, 'l');</span>
+<span class="lineNum">     360 </span><span class="lineCov">       1615 :           goto mangle_linear;</span>
+<span class="lineNum">     361 </span><span class="lineCov">        244 :         case SIMD_CLONE_ARG_TYPE_LINEAR_REF_CONSTANT_STEP:</span>
+<span class="lineNum">     362 </span><span class="lineCov">        244 :           pp_character (&amp;pp, 'R');</span>
+<span class="lineNum">     363 </span><span class="lineCov">        244 :           goto mangle_linear;</span>
+<span class="lineNum">     364 </span><span class="lineCov">        160 :         case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_CONSTANT_STEP:</span>
+<span class="lineNum">     365 </span><span class="lineCov">        160 :           pp_character (&amp;pp, 'L');</span>
+<span class="lineNum">     366 </span><span class="lineCov">        160 :           goto mangle_linear;</span>
+<span class="lineNum">     367 </span><span class="lineCov">        160 :         case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_CONSTANT_STEP:</span>
+<span class="lineNum">     368 </span><span class="lineCov">        160 :           pp_character (&amp;pp, 'U');</span>
+<span class="lineNum">     369 </span><span class="lineCov">        160 :           goto mangle_linear;</span>
+<span class="lineNum">     370 </span><span class="lineCov">       2179 :         mangle_linear:</span>
+<span class="lineNum">     371 </span><span class="lineCov">       2179 :           gcc_assert (arg.linear_step != 0);</span>
+<span class="lineNum">     372 </span><span class="lineCov">       2179 :           if (arg.linear_step &gt; 1)</span>
+<span class="lineNum">     373 </span><span class="lineCov">       1154 :             pp_unsigned_wide_integer (&amp;pp, arg.linear_step);</span>
+<span class="lineNum">     374 </span><span class="lineCov">       1025 :           else if (arg.linear_step &lt; 0)</span>
+<span class="lineNum">     375 </span>            :             {
+<span class="lineNum">     376 </span><span class="lineCov">         73 :               pp_character (&amp;pp, 'n');</span>
+<span class="lineNum">     377 </span><span class="lineCov">         73 :               pp_unsigned_wide_integer (&amp;pp, (-(unsigned HOST_WIDE_INT)</span>
+<span class="lineNum">     378 </span>            :                                               arg.linear_step));
+<span class="lineNum">     379 </span>            :             }
+<span class="lineNum">     380 </span>            :           break;
+<span class="lineNum">     381 </span><span class="lineCov">        112 :         case SIMD_CLONE_ARG_TYPE_LINEAR_VARIABLE_STEP:</span>
+<span class="lineNum">     382 </span><span class="lineCov">        112 :           pp_string (&amp;pp, &quot;ls&quot;);</span>
+<span class="lineNum">     383 </span><span class="lineCov">        112 :           pp_unsigned_wide_integer (&amp;pp, arg.linear_step);</span>
+<span class="lineNum">     384 </span><span class="lineCov">        112 :           break;</span>
+<span class="lineNum">     385 </span><span class="lineCov">         28 :         case SIMD_CLONE_ARG_TYPE_LINEAR_REF_VARIABLE_STEP:</span>
+<span class="lineNum">     386 </span><span class="lineCov">         28 :           pp_string (&amp;pp, &quot;Rs&quot;);</span>
+<span class="lineNum">     387 </span><span class="lineCov">         28 :           pp_unsigned_wide_integer (&amp;pp, arg.linear_step);</span>
+<span class="lineNum">     388 </span><span class="lineCov">         28 :           break;</span>
+<span class="lineNum">     389 </span><span class="lineCov">         12 :         case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_VARIABLE_STEP:</span>
+<span class="lineNum">     390 </span><span class="lineCov">         12 :           pp_string (&amp;pp, &quot;Ls&quot;);</span>
+<span class="lineNum">     391 </span><span class="lineCov">         12 :           pp_unsigned_wide_integer (&amp;pp, arg.linear_step);</span>
+<span class="lineNum">     392 </span><span class="lineCov">         12 :           break;</span>
+<span class="lineNum">     393 </span><span class="lineCov">         12 :         case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_VARIABLE_STEP:</span>
+<span class="lineNum">     394 </span><span class="lineCov">         12 :           pp_string (&amp;pp, &quot;Us&quot;);</span>
+<span class="lineNum">     395 </span><span class="lineCov">         12 :           pp_unsigned_wide_integer (&amp;pp, arg.linear_step);</span>
+<span class="lineNum">     396 </span><span class="lineCov">         12 :           break;</span>
+<span class="lineNum">     397 </span><span class="lineCov">       4139 :         default:</span>
+<span class="lineNum">     398 </span><span class="lineCov">       4139 :           pp_character (&amp;pp, 'v');</span>
+<span class="lineNum">     399 </span>            :         }
+<span class="lineNum">     400 </span><span class="lineCov">       8121 :       if (arg.alignment)</span>
+<span class="lineNum">     401 </span>            :         {
+<span class="lineNum">     402 </span><span class="lineCov">        496 :           pp_character (&amp;pp, 'a');</span>
+<span class="lineNum">     403 </span><span class="lineCov">        496 :           pp_decimal_int (&amp;pp, arg.alignment);</span>
+<span class="lineNum">     404 </span>            :         }
+<span class="lineNum">     405 </span>            :     }
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span><span class="lineCov">       3230 :   pp_underscore (&amp;pp);</span>
+<span class="lineNum">     408 </span><span class="lineCov">       3230 :   const char *str = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node-&gt;decl));</span>
+<span class="lineNum">     409 </span><span class="lineCov">       3230 :   if (*str == '*')</span>
+<span class="lineNum">     410 </span><span class="lineCov">         32 :     ++str;</span>
+<span class="lineNum">     411 </span><span class="lineCov">       3230 :   pp_string (&amp;pp, str);</span>
+<span class="lineNum">     412 </span><span class="lineCov">       3230 :   str = pp_formatted_text (&amp;pp);</span>
+<span class="lineNum">     413 </span>            : 
+<span class="lineNum">     414 </span>            :   /* If there already is a SIMD clone with the same mangled name, don't
+<span class="lineNum">     415 </span>            :      add another one.  This can happen e.g. for
+<span class="lineNum">     416 </span>            :      #pragma omp declare simd
+<span class="lineNum">     417 </span>            :      #pragma omp declare simd simdlen(8)
+<span class="lineNum">     418 </span>            :      int foo (int, int);
+<span class="lineNum">     419 </span>            :      if the simdlen is assumed to be 8 for the first one, etc.  */
+<span class="lineNum">     420 </span><span class="lineCov">      15456 :   for (struct cgraph_node *clone = node-&gt;simd_clones; clone;</span>
+<span class="lineNum">     421 </span><span class="lineCov">      12226 :        clone = clone-&gt;simdclone-&gt;next_clone)</span>
+<span class="lineNum">     422 </span><span class="lineCov">      12548 :     if (id_equal (DECL_ASSEMBLER_NAME (clone-&gt;decl), str))</span>
+<span class="lineNum">     423 </span>            :       return NULL_TREE;
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">       2908 :   return get_identifier (str);</span>
+<span class="lineNum">     426 </span>            : }
+<span class="lineNum">     427 </span>            : 
+<span class="lineNum">     428 </span>            : /* Create a simd clone of OLD_NODE and return it.  */
+<a name="429"><span class="lineNum">     429 </span>            : </a>
+<span class="lineNum">     430 </span>            : static struct cgraph_node *
+<span class="lineNum">     431 </span><span class="lineCov">       2908 : simd_clone_create (struct cgraph_node *old_node)</span>
+<span class="lineNum">     432 </span>            : {
+<span class="lineNum">     433 </span><span class="lineCov">       2908 :   struct cgraph_node *new_node;</span>
+<span class="lineNum">     434 </span><span class="lineCov">       2908 :   if (old_node-&gt;definition)</span>
+<span class="lineNum">     435 </span>            :     {
+<span class="lineNum">     436 </span><span class="lineCov">       2372 :       if (!old_node-&gt;has_gimple_body_p ())</span>
+<span class="lineNum">     437 </span>            :         return NULL;
+<span class="lineNum">     438 </span><span class="lineCov">       2372 :       old_node-&gt;get_body ();</span>
+<span class="lineNum">     439 </span><span class="lineCov">       2372 :       new_node = old_node-&gt;create_version_clone_with_body (vNULL, NULL, NULL,</span>
+<span class="lineNum">     440 </span>            :                                                            false, NULL, NULL,
+<span class="lineNum">     441 </span>            :                                                            &quot;simdclone&quot;);
+<span class="lineNum">     442 </span>            :     }
+<span class="lineNum">     443 </span>            :   else
+<span class="lineNum">     444 </span>            :     {
+<span class="lineNum">     445 </span><span class="lineCov">        536 :       tree old_decl = old_node-&gt;decl;</span>
+<span class="lineNum">     446 </span><span class="lineCov">        536 :       tree new_decl = copy_node (old_node-&gt;decl);</span>
+<span class="lineNum">     447 </span><span class="lineCov">        536 :       DECL_NAME (new_decl) = clone_function_name (old_decl, &quot;simdclone&quot;);</span>
+<span class="lineNum">     448 </span><span class="lineCov">        536 :       SET_DECL_ASSEMBLER_NAME (new_decl, DECL_NAME (new_decl));</span>
+<span class="lineNum">     449 </span><span class="lineCov">        536 :       SET_DECL_RTL (new_decl, NULL);</span>
+<span class="lineNum">     450 </span><span class="lineCov">        536 :       DECL_STATIC_CONSTRUCTOR (new_decl) = 0;</span>
+<span class="lineNum">     451 </span><span class="lineCov">        536 :       DECL_STATIC_DESTRUCTOR (new_decl) = 0;</span>
+<span class="lineNum">     452 </span><span class="lineCov">        536 :       new_node = old_node-&gt;create_version_clone (new_decl, vNULL, NULL);</span>
+<span class="lineNum">     453 </span><span class="lineCov">        536 :       if (old_node-&gt;in_other_partition)</span>
+<span class="lineNum">     454 </span><span class="lineCov">         16 :         new_node-&gt;in_other_partition = 1;</span>
+<span class="lineNum">     455 </span>            :     }
+<span class="lineNum">     456 </span><span class="lineCov">       2908 :   if (new_node == NULL)</span>
+<span class="lineNum">     457 </span>            :     return new_node;
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span><span class="lineCov">       2908 :   DECL_BUILT_IN_CLASS (new_node-&gt;decl) = NOT_BUILT_IN;</span>
+<span class="lineNum">     460 </span><span class="lineCov">       2908 :   DECL_FUNCTION_CODE (new_node-&gt;decl) = (enum built_in_function) 0;</span>
+<span class="lineNum">     461 </span><span class="lineCov">       2908 :   TREE_PUBLIC (new_node-&gt;decl) = TREE_PUBLIC (old_node-&gt;decl);</span>
+<span class="lineNum">     462 </span><span class="lineCov">       2908 :   DECL_COMDAT (new_node-&gt;decl) = DECL_COMDAT (old_node-&gt;decl);</span>
+<span class="lineNum">     463 </span><span class="lineCov">       2908 :   DECL_WEAK (new_node-&gt;decl) = DECL_WEAK (old_node-&gt;decl);</span>
+<span class="lineNum">     464 </span><span class="lineCov">       2908 :   DECL_EXTERNAL (new_node-&gt;decl) = DECL_EXTERNAL (old_node-&gt;decl);</span>
+<span class="lineNum">     465 </span><span class="lineCov">       8724 :   DECL_VISIBILITY_SPECIFIED (new_node-&gt;decl)</span>
+<span class="lineNum">     466 </span><span class="lineCov">       2908 :     = DECL_VISIBILITY_SPECIFIED (old_node-&gt;decl);</span>
+<span class="lineNum">     467 </span><span class="lineCov">       2908 :   DECL_VISIBILITY (new_node-&gt;decl) = DECL_VISIBILITY (old_node-&gt;decl);</span>
+<span class="lineNum">     468 </span><span class="lineCov">       2908 :   DECL_DLLIMPORT_P (new_node-&gt;decl) = DECL_DLLIMPORT_P (old_node-&gt;decl);</span>
+<span class="lineNum">     469 </span><span class="lineCov">       2908 :   if (DECL_ONE_ONLY (old_node-&gt;decl))</span>
+<span class="lineNum">     470 </span><span class="lineCov">        204 :     make_decl_one_only (new_node-&gt;decl, DECL_ASSEMBLER_NAME (new_node-&gt;decl));</span>
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            :   /* The method cgraph_version_clone_with_body () will force the new
+<span class="lineNum">     473 </span>            :      symbol local.  Undo this, and inherit external visibility from
+<span class="lineNum">     474 </span>            :      the old node.  */
+<span class="lineNum">     475 </span><span class="lineCov">       2908 :   new_node-&gt;local.local = old_node-&gt;local.local;</span>
+<span class="lineNum">     476 </span><span class="lineCov">       2908 :   new_node-&gt;externally_visible = old_node-&gt;externally_visible;</span>
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span><span class="lineCov">       2908 :   return new_node;</span>
+<span class="lineNum">     479 </span>            : }
+<span class="lineNum">     480 </span>            : 
+<span class="lineNum">     481 </span>            : /* Adjust the return type of the given function to its appropriate
+<span class="lineNum">     482 </span>            :    vector counterpart.  Returns a simd array to be used throughout the
+<span class="lineNum">     483 </span>            :    function as a return value.  */
+<a name="484"><span class="lineNum">     484 </span>            : </a>
+<span class="lineNum">     485 </span>            : static tree
+<span class="lineNum">     486 </span><span class="lineCov">       2908 : simd_clone_adjust_return_type (struct cgraph_node *node)</span>
+<span class="lineNum">     487 </span>            : {
+<span class="lineNum">     488 </span><span class="lineCov">       2908 :   tree fndecl = node-&gt;decl;</span>
+<span class="lineNum">     489 </span><span class="lineCov">       2908 :   tree orig_rettype = TREE_TYPE (TREE_TYPE (fndecl));</span>
+<span class="lineNum">     490 </span><span class="lineCov">       2908 :   unsigned int veclen;</span>
+<span class="lineNum">     491 </span><span class="lineCov">       2908 :   tree t;</span>
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span>            :   /* Adjust the function return type.  */
+<span class="lineNum">     494 </span><span class="lineCov">       2908 :   if (orig_rettype == void_type_node)</span>
+<span class="lineNum">     495 </span>            :     return NULL_TREE;
+<span class="lineNum">     496 </span><span class="lineCov">       8268 :   TREE_TYPE (fndecl) = build_distinct_type_copy (TREE_TYPE (fndecl));</span>
+<span class="lineNum">     497 </span><span class="lineCov">       2756 :   t = TREE_TYPE (TREE_TYPE (fndecl));</span>
+<span class="lineNum">     498 </span><span class="lineCov">       2756 :   if (INTEGRAL_TYPE_P (t) || POINTER_TYPE_P (t))</span>
+<span class="lineNum">     499 </span><span class="lineCov">       1599 :     veclen = node-&gt;simdclone-&gt;vecsize_int;</span>
+<span class="lineNum">     500 </span>            :   else
+<span class="lineNum">     501 </span><span class="lineCov">       1157 :     veclen = node-&gt;simdclone-&gt;vecsize_float;</span>
+<span class="lineNum">     502 </span><span class="lineCov">       2756 :   veclen /= GET_MODE_BITSIZE (SCALAR_TYPE_MODE (t));</span>
+<span class="lineNum">     503 </span><span class="lineCov">       2756 :   if (veclen &gt; node-&gt;simdclone-&gt;simdlen)</span>
+<span class="lineNum">     504 </span><span class="lineCov">        365 :     veclen = node-&gt;simdclone-&gt;simdlen;</span>
+<span class="lineNum">     505 </span><span class="lineCov">       2756 :   if (POINTER_TYPE_P (t))</span>
+<span class="lineNum">     506 </span><span class="lineCov">         18 :     t = pointer_sized_int_node;</span>
+<span class="lineNum">     507 </span><span class="lineCov">       2756 :   if (veclen == node-&gt;simdclone-&gt;simdlen)</span>
+<span class="lineNum">     508 </span><span class="lineCov">       5262 :     t = build_vector_type (t, node-&gt;simdclone-&gt;simdlen);</span>
+<span class="lineNum">     509 </span>            :   else
+<span class="lineNum">     510 </span>            :     {
+<span class="lineNum">     511 </span><span class="lineCov">        250 :       t = build_vector_type (t, veclen);</span>
+<span class="lineNum">     512 </span><span class="lineCov">        250 :       t = build_array_type_nelts (t, node-&gt;simdclone-&gt;simdlen / veclen);</span>
+<span class="lineNum">     513 </span>            :     }
+<span class="lineNum">     514 </span><span class="lineCov">       2756 :   TREE_TYPE (TREE_TYPE (fndecl)) = t;</span>
+<span class="lineNum">     515 </span><span class="lineCov">       2756 :   if (!node-&gt;definition)</span>
+<span class="lineNum">     516 </span>            :     return NULL_TREE;
+<span class="lineNum">     517 </span>            : 
+<span class="lineNum">     518 </span><span class="lineCov">       2228 :   t = DECL_RESULT (fndecl);</span>
+<span class="lineNum">     519 </span>            :   /* Adjust the DECL_RESULT.  */
+<span class="lineNum">     520 </span><span class="lineCov">       2228 :   gcc_assert (TREE_TYPE (t) != void_type_node);</span>
+<span class="lineNum">     521 </span><span class="lineCov">       2228 :   TREE_TYPE (t) = TREE_TYPE (TREE_TYPE (fndecl));</span>
+<span class="lineNum">     522 </span><span class="lineCov">       2228 :   relayout_decl (t);</span>
+<span class="lineNum">     523 </span>            : 
+<span class="lineNum">     524 </span><span class="lineCov">       2228 :   tree atype = build_array_type_nelts (orig_rettype,</span>
+<span class="lineNum">     525 </span><span class="lineCov">       2228 :                                        node-&gt;simdclone-&gt;simdlen);</span>
+<span class="lineNum">     526 </span><span class="lineCov">       2228 :   if (veclen != node-&gt;simdclone-&gt;simdlen)</span>
+<span class="lineNum">     527 </span><span class="lineCov">        107 :     return build1 (VIEW_CONVERT_EXPR, atype, t);</span>
+<span class="lineNum">     528 </span>            : 
+<span class="lineNum">     529 </span>            :   /* Set up a SIMD array to use as the return value.  */
+<span class="lineNum">     530 </span><span class="lineCov">       2121 :   tree retval = create_tmp_var_raw (atype, &quot;retval&quot;);</span>
+<span class="lineNum">     531 </span><span class="lineCov">       2121 :   gimple_add_tmp_var (retval);</span>
+<span class="lineNum">     532 </span><span class="lineCov">       2121 :   return retval;</span>
+<span class="lineNum">     533 </span>            : }
+<span class="lineNum">     534 </span>            : 
+<span class="lineNum">     535 </span>            : /* Each vector argument has a corresponding array to be used locally
+<span class="lineNum">     536 </span>            :    as part of the eventual loop.  Create such temporary array and
+<span class="lineNum">     537 </span>            :    return it.
+<span class="lineNum">     538 </span>            : 
+<span class="lineNum">     539 </span>            :    PREFIX is the prefix to be used for the temporary.
+<span class="lineNum">     540 </span>            : 
+<span class="lineNum">     541 </span>            :    TYPE is the inner element type.
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            :    SIMDLEN is the number of elements.  */
+<a name="544"><span class="lineNum">     544 </span>            : </a>
+<span class="lineNum">     545 </span>            : static tree
+<span class="lineNum">     546 </span><span class="lineCov">       4045 : create_tmp_simd_array (const char *prefix, tree type, int simdlen)</span>
+<span class="lineNum">     547 </span>            : {
+<span class="lineNum">     548 </span><span class="lineCov">       8090 :   tree atype = build_array_type_nelts (type, simdlen);</span>
+<span class="lineNum">     549 </span><span class="lineCov">       4045 :   tree avar = create_tmp_var_raw (atype, prefix);</span>
+<span class="lineNum">     550 </span><span class="lineCov">       4045 :   gimple_add_tmp_var (avar);</span>
+<span class="lineNum">     551 </span><span class="lineCov">       4045 :   return avar;</span>
+<span class="lineNum">     552 </span>            : }
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span>            : /* Modify the function argument types to their corresponding vector
+<span class="lineNum">     555 </span>            :    counterparts if appropriate.  Also, create one array for each simd
+<span class="lineNum">     556 </span>            :    argument to be used locally when using the function arguments as
+<span class="lineNum">     557 </span>            :    part of the loop.
+<span class="lineNum">     558 </span>            : 
+<span class="lineNum">     559 </span>            :    NODE is the function whose arguments are to be adjusted.
+<span class="lineNum">     560 </span>            : 
+<span class="lineNum">     561 </span>            :    Returns an adjustment vector that will be filled describing how the
+<span class="lineNum">     562 </span>            :    argument types will be adjusted.  */
+<span class="lineNum">     563 </span>            : 
+<span class="lineNum">     564 </span>            : static ipa_parm_adjustment_vec
+<span class="lineNum">     565 </span><span class="lineCov">       2908 : simd_clone_adjust_argument_types (struct cgraph_node *node)</span>
+<span class="lineNum">     566 </span>            : {
+<span class="lineNum">     567 </span><span class="lineCov">       2908 :   vec&lt;tree&gt; args;</span>
+<span class="lineNum">     568 </span><span class="lineCov">       2908 :   ipa_parm_adjustment_vec adjustments;</span>
+<span class="lineNum">     569 </span>            : 
+<span class="lineNum">     570 </span><span class="lineCov">       2908 :   if (node-&gt;definition)</span>
+<span class="lineNum">     571 </span><span class="lineCov">       2372 :     args = ipa_get_vector_of_formal_parms (node-&gt;decl);</span>
+<span class="lineNum">     572 </span>            :   else
+<span class="lineNum">     573 </span><span class="lineCov">        536 :     args = simd_clone_vector_of_formal_parm_types (node-&gt;decl);</span>
+<span class="lineNum">     574 </span><span class="lineCov">       2908 :   adjustments.create (args.length ());</span>
+<span class="lineNum">     575 </span><span class="lineCov">       2908 :   unsigned i, j, veclen;</span>
+<span class="lineNum">     576 </span><span class="lineCov">       2908 :   struct ipa_parm_adjustment adj;</span>
+<span class="lineNum">     577 </span><span class="lineCov">       2908 :   struct cgraph_simd_clone *sc = node-&gt;simdclone;</span>
+<span class="lineNum">     578 </span>            : 
+<span class="lineNum">     579 </span><span class="lineCov">      10407 :   for (i = 0; i &lt; sc-&gt;nargs; ++i)</span>
+<span class="lineNum">     580 </span>            :     {
+<span class="lineNum">     581 </span><span class="lineCov">       7499 :       memset (&amp;adj, 0, sizeof (adj));</span>
+<span class="lineNum">     582 </span><span class="lineCov">       7499 :       tree parm = args[i];</span>
+<span class="lineNum">     583 </span><span class="lineCov">       7499 :       tree parm_type = node-&gt;definition ? TREE_TYPE (parm) : parm;</span>
+<span class="lineNum">     584 </span><span class="lineCov">       7499 :       adj.base_index = i;</span>
+<span class="lineNum">     585 </span><span class="lineCov">       7499 :       adj.base = parm;</span>
+<span class="lineNum">     586 </span>            : 
+<span class="lineNum">     587 </span><span class="lineCov">       7499 :       sc-&gt;args[i].orig_arg = node-&gt;definition ? parm : NULL_TREE;</span>
+<span class="lineNum">     588 </span><span class="lineCov">       7499 :       sc-&gt;args[i].orig_type = parm_type;</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span><span class="lineCov">       7499 :       switch (sc-&gt;args[i].arg_type)</span>
+<span class="lineNum">     591 </span>            :         {
+<span class="lineNum">     592 </span><span class="lineCov">       3326 :         default:</span>
+<span class="lineNum">     593 </span>            :           /* No adjustment necessary for scalar arguments.  */
+<span class="lineNum">     594 </span><span class="lineCov">       3326 :           adj.op = IPA_PARM_OP_COPY;</span>
+<span class="lineNum">     595 </span><span class="lineCov">       3326 :           break;</span>
+<span class="lineNum">     596 </span><span class="lineCov">        172 :         case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_CONSTANT_STEP:</span>
+<span class="lineNum">     597 </span><span class="lineCov">        172 :         case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_VARIABLE_STEP:</span>
+<span class="lineNum">     598 </span><span class="lineCov">        172 :           if (node-&gt;definition)</span>
+<span class="lineNum">     599 </span><span class="lineCov">        172 :             sc-&gt;args[i].simd_array</span>
+<span class="lineNum">     600 </span><span class="lineCov">        172 :               = create_tmp_simd_array (IDENTIFIER_POINTER (DECL_NAME (parm)),</span>
+<span class="lineNum">     601 </span><span class="lineCov">        172 :                                        TREE_TYPE (parm_type),</span>
+<span class="lineNum">     602 </span><span class="lineCov">        172 :                                        sc-&gt;simdlen);</span>
+<span class="lineNum">     603 </span><span class="lineCov">        172 :           adj.op = IPA_PARM_OP_COPY;</span>
+<span class="lineNum">     604 </span><span class="lineCov">        172 :           break;</span>
+<span class="lineNum">     605 </span><span class="lineCov">       4001 :         case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_CONSTANT_STEP:</span>
+<span class="lineNum">     606 </span><span class="lineCov">       4001 :         case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_VARIABLE_STEP:</span>
+<span class="lineNum">     607 </span><span class="lineCov">       4001 :         case SIMD_CLONE_ARG_TYPE_VECTOR:</span>
+<span class="lineNum">     608 </span><span class="lineCov">       4001 :           if (INTEGRAL_TYPE_P (parm_type) || POINTER_TYPE_P (parm_type))</span>
+<span class="lineNum">     609 </span><span class="lineCov">       2391 :             veclen = sc-&gt;vecsize_int;</span>
+<span class="lineNum">     610 </span>            :           else
+<span class="lineNum">     611 </span><span class="lineCov">       1610 :             veclen = sc-&gt;vecsize_float;</span>
+<span class="lineNum">     612 </span><span class="lineCov">       4001 :           veclen /= GET_MODE_BITSIZE (SCALAR_TYPE_MODE (parm_type));</span>
+<span class="lineNum">     613 </span><span class="lineCov">       4001 :           if (veclen &gt; sc-&gt;simdlen)</span>
+<span class="lineNum">     614 </span><span class="lineCov">        473 :             veclen = sc-&gt;simdlen;</span>
+<span class="lineNum">     615 </span><span class="lineCov">       4001 :           adj.arg_prefix = &quot;simd&quot;;</span>
+<span class="lineNum">     616 </span><span class="lineCov">       4001 :           if (POINTER_TYPE_P (parm_type))</span>
+<span class="lineNum">     617 </span><span class="lineCov">       1412 :             adj.type = build_vector_type (pointer_sized_int_node, veclen);</span>
+<span class="lineNum">     618 </span>            :           else
+<span class="lineNum">     619 </span><span class="lineCov">       6590 :             adj.type = build_vector_type (parm_type, veclen);</span>
+<span class="lineNum">     620 </span><span class="lineCov">       4001 :           sc-&gt;args[i].vector_type = adj.type;</span>
+<span class="lineNum">     621 </span><span class="lineCov">       5753 :           for (j = veclen; j &lt; sc-&gt;simdlen; j += veclen)</span>
+<span class="lineNum">     622 </span>            :             {
+<span class="lineNum">     623 </span><span class="lineCov">       1752 :               adjustments.safe_push (adj);</span>
+<span class="lineNum">     624 </span><span class="lineCov">       1752 :               if (j == veclen)</span>
+<span class="lineNum">     625 </span>            :                 {
+<span class="lineNum">     626 </span><span class="lineCov">       1364 :                   memset (&amp;adj, 0, sizeof (adj));</span>
+<span class="lineNum">     627 </span><span class="lineCov">       1364 :                   adj.op = IPA_PARM_OP_NEW;</span>
+<span class="lineNum">     628 </span><span class="lineCov">       1364 :                   adj.arg_prefix = &quot;simd&quot;;</span>
+<span class="lineNum">     629 </span><span class="lineCov">       1364 :                   adj.base_index = i;</span>
+<span class="lineNum">     630 </span><span class="lineCov">       1364 :                   adj.type = sc-&gt;args[i].vector_type;</span>
+<span class="lineNum">     631 </span>            :                 }
+<span class="lineNum">     632 </span>            :             }
+<span class="lineNum">     633 </span>            : 
+<span class="lineNum">     634 </span><span class="lineCov">       4001 :           if (node-&gt;definition)</span>
+<span class="lineNum">     635 </span><span class="lineCov">       3197 :             sc-&gt;args[i].simd_array</span>
+<span class="lineNum">     636 </span><span class="lineCov">       6382 :               = create_tmp_simd_array (DECL_NAME (parm)</span>
+<span class="lineNum">     637 </span><span class="lineCov">       6370 :                                        ? IDENTIFIER_POINTER (DECL_NAME (parm))</span>
+<span class="lineNum">     638 </span>            :                                        : NULL, parm_type, sc-&gt;simdlen);
+<span class="lineNum">     639 </span>            :         }
+<span class="lineNum">     640 </span><span class="lineCov">       7499 :       adjustments.safe_push (adj);</span>
+<span class="lineNum">     641 </span>            :     }
+<span class="lineNum">     642 </span>            : 
+<span class="lineNum">     643 </span><span class="lineCov">       2908 :   if (sc-&gt;inbranch)</span>
+<span class="lineNum">     644 </span>            :     {
+<span class="lineNum">     645 </span><span class="lineCov">       1082 :       tree base_type = simd_clone_compute_base_data_type (sc-&gt;origin, sc);</span>
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span><span class="lineCov">       1082 :       memset (&amp;adj, 0, sizeof (adj));</span>
+<span class="lineNum">     648 </span><span class="lineCov">       1082 :       adj.op = IPA_PARM_OP_NEW;</span>
+<span class="lineNum">     649 </span><span class="lineCov">       1082 :       adj.arg_prefix = &quot;mask&quot;;</span>
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span><span class="lineCov">       1082 :       adj.base_index = i;</span>
+<span class="lineNum">     652 </span><span class="lineCov">       1082 :       if (INTEGRAL_TYPE_P (base_type) || POINTER_TYPE_P (base_type))</span>
+<span class="lineNum">     653 </span><span class="lineCov">        548 :         veclen = sc-&gt;vecsize_int;</span>
+<span class="lineNum">     654 </span>            :       else
+<span class="lineNum">     655 </span><span class="lineCov">        534 :         veclen = sc-&gt;vecsize_float;</span>
+<span class="lineNum">     656 </span><span class="lineCov">       1082 :       veclen /= GET_MODE_BITSIZE (SCALAR_TYPE_MODE (base_type));</span>
+<span class="lineNum">     657 </span><span class="lineCov">       1082 :       if (veclen &gt; sc-&gt;simdlen)</span>
+<span class="lineNum">     658 </span><span class="lineCov">        134 :         veclen = sc-&gt;simdlen;</span>
+<span class="lineNum">     659 </span><span class="lineCov">       1082 :       if (sc-&gt;mask_mode != VOIDmode)</span>
+<span class="lineNum">     660 </span><span class="lineCov">        262 :         adj.type</span>
+<span class="lineNum">     661 </span><span class="lineCov">        262 :           = lang_hooks.types.type_for_mode (sc-&gt;mask_mode, 1);</span>
+<span class="lineNum">     662 </span><span class="lineCov">        820 :       else if (POINTER_TYPE_P (base_type))</span>
+<span class="lineNum">     663 </span><span class="lineCov">         14 :         adj.type = build_vector_type (pointer_sized_int_node, veclen);</span>
+<span class="lineNum">     664 </span>            :       else
+<span class="lineNum">     665 </span><span class="lineCov">       1626 :         adj.type = build_vector_type (base_type, veclen);</span>
+<span class="lineNum">     666 </span><span class="lineCov">       1082 :       adjustments.safe_push (adj);</span>
+<span class="lineNum">     667 </span>            : 
+<span class="lineNum">     668 </span><span class="lineCov">       1151 :       for (j = veclen; j &lt; sc-&gt;simdlen; j += veclen)</span>
+<span class="lineNum">     669 </span><span class="lineCov">         69 :         adjustments.safe_push (adj);</span>
+<span class="lineNum">     670 </span>            : 
+<span class="lineNum">     671 </span>            :       /* We have previously allocated one extra entry for the mask.  Use
+<span class="lineNum">     672 </span>            :          it and fill it.  */
+<span class="lineNum">     673 </span><span class="lineCov">       1082 :       sc-&gt;nargs++;</span>
+<span class="lineNum">     674 </span><span class="lineCov">       1082 :       if (sc-&gt;mask_mode != VOIDmode)</span>
+<span class="lineNum">     675 </span><span class="lineCov">        262 :         base_type = boolean_type_node;</span>
+<span class="lineNum">     676 </span><span class="lineCov">       1082 :       if (node-&gt;definition)</span>
+<span class="lineNum">     677 </span>            :         {
+<span class="lineNum">     678 </span><span class="lineCov">        890 :           sc-&gt;args[i].orig_arg</span>
+<span class="lineNum">     679 </span><span class="lineCov">        890 :             = build_decl (UNKNOWN_LOCATION, PARM_DECL, NULL, base_type);</span>
+<span class="lineNum">     680 </span><span class="lineCov">        890 :           if (sc-&gt;mask_mode == VOIDmode)</span>
+<span class="lineNum">     681 </span><span class="lineCov">        676 :             sc-&gt;args[i].simd_array</span>
+<span class="lineNum">     682 </span><span class="lineCov">        676 :               = create_tmp_simd_array (&quot;mask&quot;, base_type, sc-&gt;simdlen);</span>
+<span class="lineNum">     683 </span><span class="lineCov">        214 :           else if (veclen &lt; sc-&gt;simdlen)</span>
+<span class="lineNum">     684 </span><span class="lineNoCov">          0 :             sc-&gt;args[i].simd_array</span>
+<span class="lineNum">     685 </span><span class="lineNoCov">          0 :               = create_tmp_simd_array (&quot;mask&quot;, adj.type, sc-&gt;simdlen / veclen);</span>
+<span class="lineNum">     686 </span>            :           else
+<span class="lineNum">     687 </span><span class="lineCov">        214 :             sc-&gt;args[i].simd_array = NULL_TREE;</span>
+<span class="lineNum">     688 </span>            :         }
+<span class="lineNum">     689 </span><span class="lineCov">       1082 :       sc-&gt;args[i].orig_type = base_type;</span>
+<span class="lineNum">     690 </span><span class="lineCov">       1082 :       sc-&gt;args[i].arg_type = SIMD_CLONE_ARG_TYPE_MASK;</span>
+<span class="lineNum">     691 </span>            :     }
+<span class="lineNum">     692 </span>            : 
+<span class="lineNum">     693 </span><span class="lineCov">       2908 :   if (node-&gt;definition)</span>
+<span class="lineNum">     694 </span><span class="lineCov">       2372 :     ipa_modify_formal_parameters (node-&gt;decl, adjustments);</span>
+<span class="lineNum">     695 </span>            :   else
+<span class="lineNum">     696 </span>            :     {
+<span class="lineNum">     697 </span><span class="lineCov">        536 :       tree new_arg_types = NULL_TREE, new_reversed;</span>
+<span class="lineNum">     698 </span><span class="lineCov">        536 :       bool last_parm_void = false;</span>
+<span class="lineNum">     699 </span><span class="lineCov">        536 :       if (args.length () &gt; 0 &amp;&amp; args.last () == void_type_node)</span>
+<span class="lineNum">     700 </span>            :         last_parm_void = true;
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span><span class="lineCov">        680 :       gcc_assert (TYPE_ARG_TYPES (TREE_TYPE (node-&gt;decl)));</span>
+<span class="lineNum">     703 </span><span class="lineCov">        536 :       j = adjustments.length ();</span>
+<span class="lineNum">     704 </span><span class="lineCov">       2221 :       for (i = 0; i &lt; j; i++)</span>
+<span class="lineNum">     705 </span>            :         {
+<span class="lineNum">     706 </span><span class="lineCov">       1685 :           struct ipa_parm_adjustment *adj = &amp;adjustments[i];</span>
+<span class="lineNum">     707 </span><span class="lineCov">       1685 :           tree ptype;</span>
+<span class="lineNum">     708 </span><span class="lineCov">       1685 :           if (adj-&gt;op == IPA_PARM_OP_COPY)</span>
+<span class="lineNum">     709 </span><span class="lineCov">        400 :             ptype = args[adj-&gt;base_index];</span>
+<span class="lineNum">     710 </span>            :           else
+<span class="lineNum">     711 </span><span class="lineCov">       1285 :             ptype = adj-&gt;type;</span>
+<span class="lineNum">     712 </span><span class="lineCov">       1685 :           new_arg_types = tree_cons (NULL_TREE, ptype, new_arg_types);</span>
+<span class="lineNum">     713 </span>            :         }
+<span class="lineNum">     714 </span><span class="lineCov">        536 :       new_reversed = nreverse (new_arg_types);</span>
+<span class="lineNum">     715 </span><span class="lineCov">        536 :       if (last_parm_void)</span>
+<span class="lineNum">     716 </span>            :         {
+<span class="lineNum">     717 </span><span class="lineCov">        536 :           if (new_reversed)</span>
+<span class="lineNum">     718 </span><span class="lineCov">        536 :             TREE_CHAIN (new_arg_types) = void_list_node;</span>
+<span class="lineNum">     719 </span>            :           else
+<span class="lineNum">     720 </span><span class="lineNoCov">          0 :             new_reversed = void_list_node;</span>
+<span class="lineNum">     721 </span>            :         }
+<span class="lineNum">     722 </span>            : 
+<span class="lineNum">     723 </span><span class="lineCov">        536 :       tree new_type = build_distinct_type_copy (TREE_TYPE (node-&gt;decl));</span>
+<span class="lineNum">     724 </span><span class="lineCov">        536 :       TYPE_ARG_TYPES (new_type) = new_reversed;</span>
+<span class="lineNum">     725 </span><span class="lineCov">        536 :       TREE_TYPE (node-&gt;decl) = new_type;</span>
+<span class="lineNum">     726 </span>            : 
+<span class="lineNum">     727 </span><span class="lineCov">        536 :       adjustments.release ();</span>
+<span class="lineNum">     728 </span>            :     }
+<span class="lineNum">     729 </span><span class="lineCov">       2908 :   args.release ();</span>
+<span class="lineNum">     730 </span><span class="lineCov">       2908 :   return adjustments;</span>
+<span class="lineNum">     731 </span>            : }
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span>            : /* Initialize and copy the function arguments in NODE to their
+<span class="lineNum">     734 </span>            :    corresponding local simd arrays.  Returns a fresh gimple_seq with
+<span class="lineNum">     735 </span>            :    the instruction sequence generated.  */
+<span class="lineNum">     736 </span>            : 
+<span class="lineNum">     737 </span>            : static gimple_seq
+<span class="lineNum">     738 </span><span class="lineCov">       2372 : simd_clone_init_simd_arrays (struct cgraph_node *node,</span>
+<span class="lineNum">     739 </span>            :                              ipa_parm_adjustment_vec adjustments)
+<span class="lineNum">     740 </span>            : {
+<span class="lineNum">     741 </span><span class="lineCov">       2372 :   gimple_seq seq = NULL;</span>
+<span class="lineNum">     742 </span><span class="lineCov">       2372 :   unsigned i = 0, j = 0, k;</span>
+<span class="lineNum">     743 </span>            : 
+<span class="lineNum">     744 </span><span class="lineCov">       2372 :   for (tree arg = DECL_ARGUMENTS (node-&gt;decl);</span>
+<span class="lineNum">     745 </span><span class="lineCov">       9557 :        arg;</span>
+<span class="lineNum">     746 </span><span class="lineCov">       7185 :        arg = DECL_CHAIN (arg), i++, j++)</span>
+<span class="lineNum">     747 </span>            :     {
+<span class="lineNum">     748 </span><span class="lineCov">       7185 :       if (adjustments[j].op == IPA_PARM_OP_COPY</span>
+<span class="lineNum">     749 </span><span class="lineCov">       7185 :           || POINTER_TYPE_P (TREE_TYPE (arg)))</span>
+<span class="lineNum">     750 </span>            :         continue;
+<span class="lineNum">     751 </span>            : 
+<span class="lineNum">     752 </span><span class="lineCov">       4087 :       node-&gt;simdclone-&gt;args[i].vector_arg = arg;</span>
+<span class="lineNum">     753 </span>            : 
+<span class="lineNum">     754 </span><span class="lineCov">       4087 :       tree array = node-&gt;simdclone-&gt;args[i].simd_array;</span>
+<span class="lineNum">     755 </span><span class="lineCov">       4087 :       if (node-&gt;simdclone-&gt;mask_mode != VOIDmode</span>
+<span class="lineNum">     756 </span><span class="lineCov">        980 :           &amp;&amp; node-&gt;simdclone-&gt;args[i].arg_type == SIMD_CLONE_ARG_TYPE_MASK)</span>
+<span class="lineNum">     757 </span>            :         {
+<span class="lineNum">     758 </span><span class="lineCov">        214 :           if (array == NULL_TREE)</span>
+<span class="lineNum">     759 </span>            :             continue;
+<span class="lineNum">     760 </span><span class="lineNoCov">          0 :           unsigned int l</span>
+<span class="lineNum">     761 </span><span class="lineNoCov">          0 :             = tree_to_uhwi (TYPE_MAX_VALUE (TYPE_DOMAIN (TREE_TYPE (array))));</span>
+<span class="lineNum">     762 </span><span class="lineNoCov">          0 :           for (k = 0; k &lt;= l; k++)</span>
+<span class="lineNum">     763 </span>            :             {
+<span class="lineNum">     764 </span><span class="lineNoCov">          0 :               if (k)</span>
+<span class="lineNum">     765 </span>            :                 {
+<span class="lineNum">     766 </span><span class="lineNoCov">          0 :                   arg = DECL_CHAIN (arg);</span>
+<span class="lineNum">     767 </span><span class="lineNoCov">          0 :                   j++;</span>
+<span class="lineNum">     768 </span>            :                 }
+<span class="lineNum">     769 </span><span class="lineNoCov">          0 :               tree t = build4 (ARRAY_REF, TREE_TYPE (TREE_TYPE (array)),</span>
+<span class="lineNum">     770 </span><span class="lineNoCov">          0 :                                array, size_int (k), NULL, NULL);</span>
+<span class="lineNum">     771 </span><span class="lineNoCov">          0 :               t = build2 (MODIFY_EXPR, TREE_TYPE (t), t, arg);</span>
+<span class="lineNum">     772 </span><span class="lineNoCov">          0 :               gimplify_and_add (t, &amp;seq);</span>
+<span class="lineNum">     773 </span>            :             }
+<span class="lineNum">     774 </span><span class="lineNoCov">          0 :           continue;</span>
+<span class="lineNum">     775 </span>            :         }
+<span class="lineNum">     776 </span><span class="lineCov">       3873 :       if (simd_clone_subparts (TREE_TYPE (arg)) == node-&gt;simdclone-&gt;simdlen)</span>
+<span class="lineNum">     777 </span>            :         {
+<span class="lineNum">     778 </span><span class="lineCov">       2661 :           tree ptype = build_pointer_type (TREE_TYPE (TREE_TYPE (array)));</span>
+<span class="lineNum">     779 </span><span class="lineCov">       2661 :           tree ptr = build_fold_addr_expr (array);</span>
+<span class="lineNum">     780 </span><span class="lineCov">       2661 :           tree t = build2 (MEM_REF, TREE_TYPE (arg), ptr,</span>
+<span class="lineNum">     781 </span><span class="lineCov">       2661 :                            build_int_cst (ptype, 0));</span>
+<span class="lineNum">     782 </span><span class="lineCov">       2661 :           t = build2 (MODIFY_EXPR, TREE_TYPE (t), t, arg);</span>
+<span class="lineNum">     783 </span><span class="lineCov">       2661 :           gimplify_and_add (t, &amp;seq);</span>
+<span class="lineNum">     784 </span>            :         }
+<span class="lineNum">     785 </span>            :       else
+<span class="lineNum">     786 </span>            :         {
+<span class="lineNum">     787 </span><span class="lineCov">       1212 :           unsigned int simdlen = simd_clone_subparts (TREE_TYPE (arg));</span>
+<span class="lineNum">     788 </span><span class="lineCov">       1212 :           tree ptype = build_pointer_type (TREE_TYPE (TREE_TYPE (array)));</span>
+<span class="lineNum">     789 </span><span class="lineCov">       3956 :           for (k = 0; k &lt; node-&gt;simdclone-&gt;simdlen; k += simdlen)</span>
+<span class="lineNum">     790 </span>            :             {
+<span class="lineNum">     791 </span><span class="lineCov">       2744 :               tree ptr = build_fold_addr_expr (array);</span>
+<span class="lineNum">     792 </span><span class="lineCov">       2744 :               int elemsize;</span>
+<span class="lineNum">     793 </span><span class="lineCov">       2744 :               if (k)</span>
+<span class="lineNum">     794 </span>            :                 {
+<span class="lineNum">     795 </span><span class="lineCov">       1532 :                   arg = DECL_CHAIN (arg);</span>
+<span class="lineNum">     796 </span><span class="lineCov">       1532 :                   j++;</span>
+<span class="lineNum">     797 </span>            :                 }
+<span class="lineNum">     798 </span><span class="lineCov">       2744 :               tree elemtype = TREE_TYPE (TREE_TYPE (arg));</span>
+<span class="lineNum">     799 </span><span class="lineCov">       2744 :               elemsize = GET_MODE_SIZE (SCALAR_TYPE_MODE (elemtype));</span>
+<span class="lineNum">     800 </span><span class="lineCov">       2744 :               tree t = build2 (MEM_REF, TREE_TYPE (arg), ptr,</span>
+<span class="lineNum">     801 </span><span class="lineCov">       2744 :                                build_int_cst (ptype, k * elemsize));</span>
+<span class="lineNum">     802 </span><span class="lineCov">       2744 :               t = build2 (MODIFY_EXPR, TREE_TYPE (t), t, arg);</span>
+<span class="lineNum">     803 </span><span class="lineCov">       2744 :               gimplify_and_add (t, &amp;seq);</span>
+<span class="lineNum">     804 </span>            :             }
+<span class="lineNum">     805 </span>            :         }
+<span class="lineNum">     806 </span>            :     }
+<span class="lineNum">     807 </span><span class="lineCov">       2372 :   return seq;</span>
+<span class="lineNum">     808 </span>            : }
+<span class="lineNum">     809 </span>            : 
+<span class="lineNum">     810 </span>            : /* Callback info for ipa_simd_modify_stmt_ops below.  */
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span>            : struct modify_stmt_info {
+<span class="lineNum">     813 </span>            :   ipa_parm_adjustment_vec adjustments;
+<span class="lineNum">     814 </span>            :   gimple *stmt;
+<span class="lineNum">     815 </span>            :   /* True if the parent statement was modified by
+<span class="lineNum">     816 </span>            :      ipa_simd_modify_stmt_ops.  */
+<span class="lineNum">     817 </span>            :   bool modified;
+<span class="lineNum">     818 </span>            : };
+<span class="lineNum">     819 </span>            : 
+<span class="lineNum">     820 </span>            : /* Callback for walk_gimple_op.
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span>            :    Adjust operands from a given statement as specified in the
+<span class="lineNum">     823 </span>            :    adjustments vector in the callback data.  */
+<a name="824"><span class="lineNum">     824 </span>            : </a>
+<span class="lineNum">     825 </span>            : static tree
+<span class="lineNum">     826 </span><span class="lineCov">      57841 : ipa_simd_modify_stmt_ops (tree *tp, int *walk_subtrees, void *data)</span>
+<span class="lineNum">     827 </span>            : {
+<span class="lineNum">     828 </span><span class="lineCov">      57841 :   struct walk_stmt_info *wi = (struct walk_stmt_info *) data;</span>
+<span class="lineNum">     829 </span><span class="lineCov">      57841 :   struct modify_stmt_info *info = (struct modify_stmt_info *) wi-&gt;info;</span>
+<span class="lineNum">     830 </span><span class="lineCov">      57841 :   tree *orig_tp = tp;</span>
+<span class="lineNum">     831 </span><span class="lineCov">      57841 :   if (TREE_CODE (*tp) == ADDR_EXPR)</span>
+<span class="lineNum">     832 </span><span class="lineCov">       1612 :     tp = &amp;TREE_OPERAND (*tp, 0);</span>
+<span class="lineNum">     833 </span><span class="lineCov">      57841 :   struct ipa_parm_adjustment *cand = NULL;</span>
+<span class="lineNum">     834 </span><span class="lineCov">      57841 :   if (TREE_CODE (*tp) == PARM_DECL)</span>
+<span class="lineNum">     835 </span><span class="lineCov">       1836 :     cand = ipa_get_adjustment_candidate (&amp;tp, NULL, info-&gt;adjustments, true);</span>
+<span class="lineNum">     836 </span>            :   else
+<span class="lineNum">     837 </span>            :     {
+<span class="lineNum">     838 </span><span class="lineCov">      56005 :       if (TYPE_P (*tp))</span>
+<span class="lineNum">     839 </span><span class="lineNoCov">          0 :         *walk_subtrees = 0;</span>
+<span class="lineNum">     840 </span>            :     }
+<span class="lineNum">     841 </span>            : 
+<span class="lineNum">     842 </span><span class="lineCov">       1836 :   tree repl = NULL_TREE;</span>
+<span class="lineNum">     843 </span><span class="lineCov">       1836 :   if (cand)</span>
+<span class="lineNum">     844 </span><span class="lineCov">       1168 :     repl = unshare_expr (cand-&gt;new_decl);</span>
+<span class="lineNum">     845 </span>            :   else
+<span class="lineNum">     846 </span>            :     {
+<span class="lineNum">     847 </span><span class="lineCov">      56673 :       if (tp != orig_tp)</span>
+<span class="lineNum">     848 </span>            :         {
+<span class="lineNum">     849 </span><span class="lineCov">        936 :           *walk_subtrees = 0;</span>
+<span class="lineNum">     850 </span><span class="lineCov">        936 :           bool modified = info-&gt;modified;</span>
+<span class="lineNum">     851 </span><span class="lineCov">        936 :           info-&gt;modified = false;</span>
+<span class="lineNum">     852 </span><span class="lineCov">        936 :           walk_tree (tp, ipa_simd_modify_stmt_ops, wi, wi-&gt;pset);</span>
+<span class="lineNum">     853 </span><span class="lineCov">        936 :           if (!info-&gt;modified)</span>
+<span class="lineNum">     854 </span>            :             {
+<span class="lineNum">     855 </span><span class="lineCov">        760 :               info-&gt;modified = modified;</span>
+<span class="lineNum">     856 </span><span class="lineCov">        760 :               return NULL_TREE;</span>
+<span class="lineNum">     857 </span>            :             }
+<span class="lineNum">     858 </span><span class="lineCov">        176 :           info-&gt;modified = modified;</span>
+<span class="lineNum">     859 </span><span class="lineCov">        176 :           repl = *tp;</span>
+<span class="lineNum">     860 </span>            :         }
+<span class="lineNum">     861 </span>            :       else
+<span class="lineNum">     862 </span>            :         return NULL_TREE;
+<span class="lineNum">     863 </span>            :     }
+<span class="lineNum">     864 </span>            : 
+<span class="lineNum">     865 </span><span class="lineCov">       1344 :   if (tp != orig_tp)</span>
+<span class="lineNum">     866 </span>            :     {
+<span class="lineNum">     867 </span><span class="lineCov">        852 :       repl = build_fold_addr_expr (repl);</span>
+<span class="lineNum">     868 </span><span class="lineCov">        852 :       gimple *stmt;</span>
+<span class="lineNum">     869 </span><span class="lineCov">       1704 :       if (is_gimple_debug (info-&gt;stmt))</span>
+<span class="lineNum">     870 </span>            :         {
+<span class="lineNum">     871 </span><span class="lineCov">         80 :           tree vexpr = make_node (DEBUG_EXPR_DECL);</span>
+<span class="lineNum">     872 </span><span class="lineCov">         80 :           stmt = gimple_build_debug_source_bind (vexpr, repl, NULL);</span>
+<span class="lineNum">     873 </span><span class="lineCov">         80 :           DECL_ARTIFICIAL (vexpr) = 1;</span>
+<span class="lineNum">     874 </span><span class="lineCov">         80 :           TREE_TYPE (vexpr) = TREE_TYPE (repl);</span>
+<span class="lineNum">     875 </span><span class="lineCov">         80 :           SET_DECL_MODE (vexpr, TYPE_MODE (TREE_TYPE (repl)));</span>
+<span class="lineNum">     876 </span><span class="lineCov">         80 :           repl = vexpr;</span>
+<span class="lineNum">     877 </span>            :         }
+<span class="lineNum">     878 </span>            :       else
+<span class="lineNum">     879 </span>            :         {
+<span class="lineNum">     880 </span><span class="lineCov">        772 :           stmt = gimple_build_assign (make_ssa_name (TREE_TYPE (repl)), repl);</span>
+<span class="lineNum">     881 </span><span class="lineCov">        772 :           repl = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     882 </span>            :         }
+<span class="lineNum">     883 </span><span class="lineCov">        852 :       gimple_stmt_iterator gsi = gsi_for_stmt (info-&gt;stmt);</span>
+<span class="lineNum">     884 </span><span class="lineCov">        852 :       gsi_insert_before (&amp;gsi, stmt, GSI_SAME_STMT);</span>
+<span class="lineNum">     885 </span><span class="lineCov">        852 :       *orig_tp = repl;</span>
+<span class="lineNum">     886 </span>            :     }
+<span class="lineNum">     887 </span><span class="lineCov">        492 :   else if (!useless_type_conversion_p (TREE_TYPE (*tp), TREE_TYPE (repl)))</span>
+<span class="lineNum">     888 </span>            :     {
+<span class="lineNum">     889 </span><span class="lineNoCov">          0 :       tree vce = build1 (VIEW_CONVERT_EXPR, TREE_TYPE (*tp), repl);</span>
+<span class="lineNum">     890 </span><span class="lineNoCov">          0 :       *tp = vce;</span>
+<span class="lineNum">     891 </span>            :     }
+<span class="lineNum">     892 </span>            :   else
+<span class="lineNum">     893 </span><span class="lineCov">        492 :     *tp = repl;</span>
+<span class="lineNum">     894 </span>            : 
+<span class="lineNum">     895 </span><span class="lineCov">       1344 :   info-&gt;modified = true;</span>
+<span class="lineNum">     896 </span><span class="lineCov">       1344 :   return NULL_TREE;</span>
+<span class="lineNum">     897 </span>            : }
+<span class="lineNum">     898 </span>            : 
+<span class="lineNum">     899 </span>            : /* Traverse the function body and perform all modifications as
+<span class="lineNum">     900 </span>            :    described in ADJUSTMENTS.  At function return, ADJUSTMENTS will be
+<span class="lineNum">     901 </span>            :    modified such that the replacement/reduction value will now be an
+<span class="lineNum">     902 </span>            :    offset into the corresponding simd_array.
+<span class="lineNum">     903 </span>            : 
+<span class="lineNum">     904 </span>            :    This function will replace all function argument uses with their
+<span class="lineNum">     905 </span>            :    corresponding simd array elements, and ajust the return values
+<span class="lineNum">     906 </span>            :    accordingly.  */
+<span class="lineNum">     907 </span>            : 
+<span class="lineNum">     908 </span>            : static void
+<span class="lineNum">     909 </span><span class="lineCov">       2372 : ipa_simd_modify_function_body (struct cgraph_node *node,</span>
+<span class="lineNum">     910 </span>            :                                ipa_parm_adjustment_vec adjustments,
+<span class="lineNum">     911 </span>            :                                tree retval_array, tree iter)
+<span class="lineNum">     912 </span>            : {
+<span class="lineNum">     913 </span><span class="lineCov">       2372 :   basic_block bb;</span>
+<span class="lineNum">     914 </span><span class="lineCov">       2372 :   unsigned int i, j, l;</span>
+<span class="lineNum">     915 </span>            : 
+<span class="lineNum">     916 </span>            :   /* Re-use the adjustments array, but this time use it to replace
+<span class="lineNum">     917 </span>            :      every function argument use to an offset into the corresponding
+<span class="lineNum">     918 </span>            :      simd_array.  */
+<span class="lineNum">     919 </span><span class="lineCov">       9557 :   for (i = 0, j = 0; i &lt; node-&gt;simdclone-&gt;nargs; ++i, ++j)</span>
+<span class="lineNum">     920 </span>            :     {
+<span class="lineNum">     921 </span><span class="lineCov">       7185 :       if (!node-&gt;simdclone-&gt;args[i].vector_arg)</span>
+<span class="lineNum">     922 </span>            :         continue;
+<span class="lineNum">     923 </span>            : 
+<span class="lineNum">     924 </span><span class="lineCov">       4087 :       tree basetype = TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg);</span>
+<span class="lineNum">     925 </span><span class="lineCov">       4087 :       tree vectype = TREE_TYPE (node-&gt;simdclone-&gt;args[i].vector_arg);</span>
+<span class="lineNum">     926 </span><span class="lineCov">      12261 :       adjustments[j].new_decl</span>
+<span class="lineNum">     927 </span><span class="lineCov">       4087 :         = build4 (ARRAY_REF,</span>
+<span class="lineNum">     928 </span>            :                   basetype,
+<span class="lineNum">     929 </span>            :                   node-&gt;simdclone-&gt;args[i].simd_array,
+<span class="lineNum">     930 </span>            :                   iter,
+<span class="lineNum">     931 </span>            :                   NULL_TREE, NULL_TREE);
+<span class="lineNum">     932 </span><span class="lineCov">       4087 :       if (adjustments[j].op == IPA_PARM_OP_NONE</span>
+<span class="lineNum">     933 </span><span class="lineCov">       4087 :           &amp;&amp; simd_clone_subparts (vectype) &lt; node-&gt;simdclone-&gt;simdlen)</span>
+<span class="lineNum">     934 </span><span class="lineCov">       1180 :         j += node-&gt;simdclone-&gt;simdlen / simd_clone_subparts (vectype) - 1;</span>
+<span class="lineNum">     935 </span>            :     }
+<span class="lineNum">     936 </span>            : 
+<span class="lineNum">     937 </span><span class="lineCov">       2372 :   l = adjustments.length ();</span>
+<span class="lineNum">     938 </span><span class="lineCov">       2372 :   tree name;</span>
+<span class="lineNum">     939 </span>            : 
+<span class="lineNum">     940 </span><span class="lineCov">      25778 :   FOR_EACH_SSA_NAME (i, name, cfun)</span>
+<span class="lineNum">     941 </span>            :     {
+<span class="lineNum">     942 </span><span class="lineCov">      37225 :       if (SSA_NAME_VAR (name)</span>
+<span class="lineNum">     943 </span><span class="lineCov">      49140 :           &amp;&amp; TREE_CODE (SSA_NAME_VAR (name)) == PARM_DECL)</span>
+<span class="lineNum">     944 </span>            :         {
+<span class="lineNum">     945 </span><span class="lineCov">      34029 :           for (j = 0; j &lt; l; j++)</span>
+<span class="lineNum">     946 </span><span class="lineCov">      28102 :             if (SSA_NAME_VAR (name) == adjustments[j].base</span>
+<span class="lineNum">     947 </span><span class="lineCov">      28102 :                 &amp;&amp; adjustments[j].new_decl)</span>
+<span class="lineNum">     948 </span>            :               {
+<span class="lineNum">     949 </span><span class="lineCov">       3097 :                 tree base_var;</span>
+<span class="lineNum">     950 </span><span class="lineCov">       6194 :                 if (adjustments[j].new_ssa_base == NULL_TREE)</span>
+<span class="lineNum">     951 </span>            :                   {
+<span class="lineNum">     952 </span><span class="lineCov">       2929 :                     base_var</span>
+<span class="lineNum">     953 </span><span class="lineCov">       2929 :                       = copy_var_decl (adjustments[j].base,</span>
+<span class="lineNum">     954 </span><span class="lineCov">       2929 :                                        DECL_NAME (adjustments[j].base),</span>
+<span class="lineNum">     955 </span><span class="lineCov">       5858 :                                        TREE_TYPE (adjustments[j].base));</span>
+<span class="lineNum">     956 </span><span class="lineCov">       2929 :                     adjustments[j].new_ssa_base = base_var;</span>
+<span class="lineNum">     957 </span>            :                   }
+<span class="lineNum">     958 </span>            :                 else
+<span class="lineNum">     959 </span>            :                   base_var = adjustments[j].new_ssa_base;
+<span class="lineNum">     960 </span><span class="lineCov">       3097 :                 if (SSA_NAME_IS_DEFAULT_DEF (name))</span>
+<span class="lineNum">     961 </span>            :                   {
+<span class="lineNum">     962 </span><span class="lineCov">       2929 :                     bb = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     963 </span><span class="lineCov">       2929 :                     gimple_stmt_iterator gsi = gsi_after_labels (bb);</span>
+<span class="lineNum">     964 </span><span class="lineCov">       2929 :                     tree new_decl = unshare_expr (adjustments[j].new_decl);</span>
+<span class="lineNum">     965 </span><span class="lineCov">       2929 :                     set_ssa_default_def (cfun, adjustments[j].base, NULL_TREE);</span>
+<span class="lineNum">     966 </span><span class="lineCov">       5858 :                     SET_SSA_NAME_VAR_OR_IDENTIFIER (name, base_var);</span>
+<span class="lineNum">     967 </span><span class="lineCov">       2929 :                     SSA_NAME_IS_DEFAULT_DEF (name) = 0;</span>
+<span class="lineNum">     968 </span><span class="lineCov">       2929 :                     gimple *stmt = gimple_build_assign (name, new_decl);</span>
+<span class="lineNum">     969 </span><span class="lineCov">       2929 :                     gsi_insert_before (&amp;gsi, stmt, GSI_SAME_STMT);</span>
+<span class="lineNum">     970 </span>            :                   }
+<span class="lineNum">     971 </span>            :                 else
+<span class="lineNum">     972 </span><span class="lineCov">        672 :                   SET_SSA_NAME_VAR_OR_IDENTIFIER (name, base_var);</span>
+<span class="lineNum">     973 </span>            :               }
+<span class="lineNum">     974 </span>            :         }
+<span class="lineNum">     975 </span>            :     }
+<span class="lineNum">     976 </span>            : 
+<span class="lineNum">     977 </span><span class="lineCov">       2372 :   struct modify_stmt_info info;</span>
+<span class="lineNum">     978 </span><span class="lineCov">       2372 :   info.adjustments = adjustments;</span>
+<span class="lineNum">     979 </span>            : 
+<span class="lineNum">     980 </span><span class="lineCov">       8466 :   FOR_EACH_BB_FN (bb, DECL_STRUCT_FUNCTION (node-&gt;decl))</span>
+<span class="lineNum">     981 </span>            :     {
+<span class="lineNum">     982 </span><span class="lineCov">       6094 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span><span class="lineCov">      12188 :       gsi = gsi_start_bb (bb);</span>
+<span class="lineNum">     985 </span><span class="lineCov">      51364 :       while (!gsi_end_p (gsi))</span>
+<span class="lineNum">     986 </span>            :         {
+<span class="lineNum">     987 </span><span class="lineCov">      19588 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     988 </span><span class="lineCov">      19588 :           info.stmt = stmt;</span>
+<span class="lineNum">     989 </span><span class="lineCov">      19588 :           struct walk_stmt_info wi;</span>
+<span class="lineNum">     990 </span>            : 
+<span class="lineNum">     991 </span><span class="lineCov">      19588 :           memset (&amp;wi, 0, sizeof (wi));</span>
+<span class="lineNum">     992 </span><span class="lineCov">      19588 :           info.modified = false;</span>
+<span class="lineNum">     993 </span><span class="lineCov">      19588 :           wi.info = &amp;info;</span>
+<span class="lineNum">     994 </span><span class="lineCov">      19588 :           walk_gimple_op (stmt, ipa_simd_modify_stmt_ops, &amp;wi);</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span><span class="lineCov">      19588 :           if (greturn *return_stmt = dyn_cast &lt;greturn *&gt; (stmt))</span>
+<span class="lineNum">     997 </span>            :             {
+<span class="lineNum">     998 </span><span class="lineCov">       2348 :               tree retval = gimple_return_retval (return_stmt);</span>
+<span class="lineNum">     999 </span><span class="lineCov">       2348 :               if (!retval)</span>
+<span class="lineNum">    1000 </span>            :                 {
+<span class="lineNum">    1001 </span><span class="lineCov">        152 :                   gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">    1002 </span><span class="lineCov">        152 :                   continue;</span>
+<span class="lineNum">    1003 </span>            :                 }
+<span class="lineNum">    1004 </span>            : 
+<span class="lineNum">    1005 </span>            :               /* Replace `return foo' with `retval_array[iter] = foo'.  */
+<span class="lineNum">    1006 </span><span class="lineCov">       2196 :               tree ref = build4 (ARRAY_REF, TREE_TYPE (retval),</span>
+<span class="lineNum">    1007 </span>            :                                  retval_array, iter, NULL, NULL);
+<span class="lineNum">    1008 </span><span class="lineCov">       2196 :               stmt = gimple_build_assign (ref, retval);</span>
+<span class="lineNum">    1009 </span><span class="lineCov">       2196 :               gsi_replace (&amp;gsi, stmt, true);</span>
+<span class="lineNum">    1010 </span><span class="lineCov">       2196 :               info.modified = true;</span>
+<span class="lineNum">    1011 </span>            :             }
+<span class="lineNum">    1012 </span>            : 
+<span class="lineNum">    1013 </span><span class="lineCov">      19436 :           if (info.modified)</span>
+<span class="lineNum">    1014 </span>            :             {
+<span class="lineNum">    1015 </span><span class="lineCov">       3220 :               update_stmt (stmt);</span>
+<span class="lineNum">    1016 </span><span class="lineCov">       3220 :               if (maybe_clean_eh_stmt (stmt))</span>
+<span class="lineNum">    1017 </span><span class="lineNoCov">          0 :                 gimple_purge_dead_eh_edges (gimple_bb (stmt));</span>
+<span class="lineNum">    1018 </span>            :             }
+<span class="lineNum">    1019 </span><span class="lineCov">      19436 :           gsi_next (&amp;gsi);</span>
+<span class="lineNum">    1020 </span>            :         }
+<span class="lineNum">    1021 </span>            :     }
+<span class="lineNum">    1022 </span><span class="lineCov">       2372 : }</span>
+<span class="lineNum">    1023 </span>            : 
+<span class="lineNum">    1024 </span>            : /* Helper function of simd_clone_adjust, return linear step addend
+<span class="lineNum">    1025 </span>            :    of Ith argument.  */
+<a name="1026"><span class="lineNum">    1026 </span>            : </a>
+<span class="lineNum">    1027 </span>            : static tree
+<span class="lineNum">    1028 </span><span class="lineCov">       1691 : simd_clone_linear_addend (struct cgraph_node *node, unsigned int i,</span>
+<span class="lineNum">    1029 </span>            :                           tree addtype, basic_block entry_bb)
+<span class="lineNum">    1030 </span>            : {
+<span class="lineNum">    1031 </span><span class="lineCov">       1691 :   tree ptype = NULL_TREE;</span>
+<span class="lineNum">    1032 </span><span class="lineCov">       1691 :   switch (node-&gt;simdclone-&gt;args[i].arg_type)</span>
+<span class="lineNum">    1033 </span>            :     {
+<span class="lineNum">    1034 </span><span class="lineCov">       1539 :     case SIMD_CLONE_ARG_TYPE_LINEAR_CONSTANT_STEP:</span>
+<span class="lineNum">    1035 </span><span class="lineCov">       1539 :     case SIMD_CLONE_ARG_TYPE_LINEAR_REF_CONSTANT_STEP:</span>
+<span class="lineNum">    1036 </span><span class="lineCov">       1539 :     case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_CONSTANT_STEP:</span>
+<span class="lineNum">    1037 </span><span class="lineCov">       1539 :     case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_CONSTANT_STEP:</span>
+<span class="lineNum">    1038 </span><span class="lineCov">       3078 :       return build_int_cst (addtype, node-&gt;simdclone-&gt;args[i].linear_step);</span>
+<span class="lineNum">    1039 </span><span class="lineCov">        140 :     case SIMD_CLONE_ARG_TYPE_LINEAR_VARIABLE_STEP:</span>
+<span class="lineNum">    1040 </span><span class="lineCov">        140 :     case SIMD_CLONE_ARG_TYPE_LINEAR_REF_VARIABLE_STEP:</span>
+<span class="lineNum">    1041 </span><span class="lineCov">        140 :       ptype = TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg);</span>
+<span class="lineNum">    1042 </span><span class="lineCov">        140 :       break;</span>
+<span class="lineNum">    1043 </span><span class="lineCov">         12 :     case SIMD_CLONE_ARG_TYPE_LINEAR_VAL_VARIABLE_STEP:</span>
+<span class="lineNum">    1044 </span><span class="lineCov">         12 :     case SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_VARIABLE_STEP:</span>
+<span class="lineNum">    1045 </span><span class="lineCov">         12 :       ptype = TREE_TYPE (TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg));</span>
+<span class="lineNum">    1046 </span><span class="lineCov">         12 :       break;</span>
+<span class="lineNum">    1047 </span><span class="lineNoCov">          0 :     default:</span>
+<span class="lineNum">    1048 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">    1049 </span>            :     }
+<span class="lineNum">    1050 </span>            : 
+<span class="lineNum">    1051 </span><span class="lineCov">        152 :   unsigned int idx = node-&gt;simdclone-&gt;args[i].linear_step;</span>
+<span class="lineNum">    1052 </span><span class="lineCov">        152 :   tree arg = node-&gt;simdclone-&gt;args[idx].orig_arg;</span>
+<span class="lineNum">    1053 </span><span class="lineCov">        152 :   gcc_assert (is_gimple_reg_type (TREE_TYPE (arg)));</span>
+<span class="lineNum">    1054 </span><span class="lineCov">        152 :   gimple_stmt_iterator gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1055 </span><span class="lineCov">        152 :   gimple *g;</span>
+<span class="lineNum">    1056 </span><span class="lineCov">        152 :   tree ret;</span>
+<span class="lineNum">    1057 </span><span class="lineCov">        152 :   if (is_gimple_reg (arg))</span>
+<span class="lineNum">    1058 </span><span class="lineCov">        152 :     ret = get_or_create_ssa_default_def (cfun, arg);</span>
+<span class="lineNum">    1059 </span>            :   else
+<span class="lineNum">    1060 </span>            :     {
+<span class="lineNum">    1061 </span><span class="lineNoCov">          0 :       g = gimple_build_assign (make_ssa_name (TREE_TYPE (arg)), arg);</span>
+<span class="lineNum">    1062 </span><span class="lineNoCov">          0 :       gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1063 </span><span class="lineNoCov">          0 :       ret = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1064 </span>            :     }
+<span class="lineNum">    1065 </span><span class="lineCov">        152 :   if (TREE_CODE (TREE_TYPE (arg)) == REFERENCE_TYPE)</span>
+<span class="lineNum">    1066 </span>            :     {
+<span class="lineNum">    1067 </span><span class="lineCov">         28 :       g = gimple_build_assign (make_ssa_name (TREE_TYPE (TREE_TYPE (arg))),</span>
+<span class="lineNum">    1068 </span>            :                                build_simple_mem_ref (ret));
+<span class="lineNum">    1069 </span><span class="lineCov">         28 :       gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1070 </span><span class="lineCov">         28 :       ret = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1071 </span>            :     }
+<span class="lineNum">    1072 </span><span class="lineCov">        152 :   if (!useless_type_conversion_p (addtype, TREE_TYPE (ret)))</span>
+<span class="lineNum">    1073 </span>            :     {
+<span class="lineNum">    1074 </span><span class="lineCov">         60 :       g = gimple_build_assign (make_ssa_name (addtype), NOP_EXPR, ret);</span>
+<span class="lineNum">    1075 </span><span class="lineCov">         60 :       gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1076 </span><span class="lineCov">         60 :       ret = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1077 </span>            :     }
+<span class="lineNum">    1078 </span><span class="lineCov">        152 :   if (POINTER_TYPE_P (ptype))</span>
+<span class="lineNum">    1079 </span>            :     {
+<span class="lineNum">    1080 </span><span class="lineCov">         60 :       tree size = TYPE_SIZE_UNIT (TREE_TYPE (ptype));</span>
+<span class="lineNum">    1081 </span><span class="lineCov">         60 :       if (size &amp;&amp; TREE_CODE (size) == INTEGER_CST)</span>
+<span class="lineNum">    1082 </span>            :         {
+<span class="lineNum">    1083 </span><span class="lineCov">         60 :           g = gimple_build_assign (make_ssa_name (addtype), MULT_EXPR,</span>
+<span class="lineNum">    1084 </span>            :                                    ret, fold_convert (addtype, size));
+<span class="lineNum">    1085 </span><span class="lineCov">         60 :           gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1086 </span><span class="lineCov">         60 :           ret = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1087 </span>            :         }
+<span class="lineNum">    1088 </span>            :     }
+<span class="lineNum">    1089 </span>            :   return ret;
+<span class="lineNum">    1090 </span>            : }
+<span class="lineNum">    1091 </span>            : 
+<span class="lineNum">    1092 </span>            : /* Adjust the argument types in NODE to their appropriate vector
+<span class="lineNum">    1093 </span>            :    counterparts.  */
+<span class="lineNum">    1094 </span>            : 
+<span class="lineNum">    1095 </span>            : static void
+<span class="lineNum">    1096 </span><span class="lineCov">       2372 : simd_clone_adjust (struct cgraph_node *node)</span>
+<span class="lineNum">    1097 </span>            : {
+<span class="lineNum">    1098 </span><span class="lineCov">       2372 :   push_cfun (DECL_STRUCT_FUNCTION (node-&gt;decl));</span>
+<span class="lineNum">    1099 </span>            : 
+<span class="lineNum">    1100 </span><span class="lineCov">       2372 :   targetm.simd_clone.adjust (node);</span>
+<span class="lineNum">    1101 </span>            : 
+<span class="lineNum">    1102 </span><span class="lineCov">       2372 :   tree retval = simd_clone_adjust_return_type (node);</span>
+<span class="lineNum">    1103 </span><span class="lineCov">       2372 :   ipa_parm_adjustment_vec adjustments</span>
+<span class="lineNum">    1104 </span><span class="lineCov">       2372 :     = simd_clone_adjust_argument_types (node);</span>
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span><span class="lineCov">       2372 :   push_gimplify_context ();</span>
+<span class="lineNum">    1107 </span>            : 
+<span class="lineNum">    1108 </span><span class="lineCov">       2372 :   gimple_seq seq = simd_clone_init_simd_arrays (node, adjustments);</span>
+<span class="lineNum">    1109 </span>            : 
+<span class="lineNum">    1110 </span>            :   /* Adjust all uses of vector arguments accordingly.  Adjust all
+<span class="lineNum">    1111 </span>            :      return values accordingly.  */
+<span class="lineNum">    1112 </span><span class="lineCov">       2372 :   tree iter = create_tmp_var (unsigned_type_node, &quot;iter&quot;);</span>
+<span class="lineNum">    1113 </span><span class="lineCov">       2372 :   tree iter1 = make_ssa_name (iter);</span>
+<span class="lineNum">    1114 </span><span class="lineCov">       2372 :   tree iter2 = NULL_TREE;</span>
+<span class="lineNum">    1115 </span><span class="lineCov">       2372 :   ipa_simd_modify_function_body (node, adjustments, retval, iter1);</span>
+<span class="lineNum">    1116 </span><span class="lineCov">       2372 :   adjustments.release ();</span>
+<span class="lineNum">    1117 </span>            : 
+<span class="lineNum">    1118 </span>            :   /* Initialize the iteration variable.  */
+<span class="lineNum">    1119 </span><span class="lineCov">       2372 :   basic_block entry_bb = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1120 </span><span class="lineCov">       2372 :   basic_block body_bb = split_block_after_labels (entry_bb)-&gt;dest;</span>
+<span class="lineNum">    1121 </span><span class="lineCov">       2372 :   gimple_stmt_iterator gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1122 </span>            :   /* Insert the SIMD array and iv initialization at function
+<span class="lineNum">    1123 </span>            :      entry.  */
+<span class="lineNum">    1124 </span><span class="lineCov">       2372 :   gsi_insert_seq_before (&amp;gsi, seq, GSI_NEW_STMT);</span>
+<span class="lineNum">    1125 </span>            : 
+<span class="lineNum">    1126 </span><span class="lineCov">       2372 :   pop_gimplify_context (NULL);</span>
+<span class="lineNum">    1127 </span>            : 
+<span class="lineNum">    1128 </span><span class="lineCov">       2372 :   gimple *g;</span>
+<span class="lineNum">    1129 </span><span class="lineCov">       2372 :   basic_block incr_bb = NULL;</span>
+<span class="lineNum">    1130 </span><span class="lineCov">       2372 :   struct loop *loop = NULL;</span>
+<span class="lineNum">    1131 </span>            : 
+<span class="lineNum">    1132 </span>            :   /* Create a new BB right before the original exit BB, to hold the
+<span class="lineNum">    1133 </span>            :      iteration increment and the condition/branch.  */
+<span class="lineNum">    1134 </span><span class="lineCov">       2372 :   if (EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds))</span>
+<span class="lineNum">    1135 </span>            :     {
+<span class="lineNum">    1136 </span><span class="lineCov">       2348 :       basic_block orig_exit = EDGE_PRED (EXIT_BLOCK_PTR_FOR_FN (cfun), 0)-&gt;src;</span>
+<span class="lineNum">    1137 </span><span class="lineCov">       2348 :       incr_bb = create_empty_bb (orig_exit);</span>
+<span class="lineNum">    1138 </span><span class="lineCov">       2348 :       incr_bb-&gt;count = profile_count::zero ();</span>
+<span class="lineNum">    1139 </span><span class="lineCov">       2348 :       add_bb_to_loop (incr_bb, body_bb-&gt;loop_father);</span>
+<span class="lineNum">    1140 </span>            :       /* The succ of orig_exit was EXIT_BLOCK_PTR_FOR_FN (cfun), with an empty
+<span class="lineNum">    1141 </span>            :          flag.  Set it now to be a FALLTHRU_EDGE.  */
+<span class="lineNum">    1142 </span><span class="lineCov">       2348 :       gcc_assert (EDGE_COUNT (orig_exit-&gt;succs) == 1);</span>
+<span class="lineNum">    1143 </span><span class="lineCov">       2348 :       EDGE_SUCC (orig_exit, 0)-&gt;flags |= EDGE_FALLTHRU;</span>
+<span class="lineNum">    1144 </span><span class="lineCov">       2348 :       for (unsigned i = 0;</span>
+<span class="lineNum">    1145 </span><span class="lineCov">       9392 :            i &lt; EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds); ++i)</span>
+<span class="lineNum">    1146 </span>            :         {
+<span class="lineNum">    1147 </span><span class="lineCov">       2348 :           edge e = EDGE_PRED (EXIT_BLOCK_PTR_FOR_FN (cfun), i);</span>
+<span class="lineNum">    1148 </span><span class="lineCov">       2348 :           redirect_edge_succ (e, incr_bb);</span>
+<span class="lineNum">    1149 </span><span class="lineCov">       2348 :           incr_bb-&gt;count += e-&gt;count ();</span>
+<span class="lineNum">    1150 </span>            :         }
+<span class="lineNum">    1151 </span>            :     }
+<span class="lineNum">    1152 </span><span class="lineCov">         24 :   else if (node-&gt;simdclone-&gt;inbranch)</span>
+<span class="lineNum">    1153 </span>            :     {
+<span class="lineNum">    1154 </span><span class="lineCov">         12 :       incr_bb = create_empty_bb (entry_bb);</span>
+<span class="lineNum">    1155 </span><span class="lineCov">         12 :       incr_bb-&gt;count = profile_count::zero ();</span>
+<span class="lineNum">    1156 </span><span class="lineCov">         12 :       add_bb_to_loop (incr_bb, body_bb-&gt;loop_father);</span>
+<span class="lineNum">    1157 </span>            :     }
+<span class="lineNum">    1158 </span>            : 
+<span class="lineNum">    1159 </span><span class="lineCov">       2360 :   if (incr_bb)</span>
+<span class="lineNum">    1160 </span>            :     {
+<span class="lineNum">    1161 </span><span class="lineCov">       2360 :       make_single_succ_edge (incr_bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);</span>
+<span class="lineNum">    1162 </span><span class="lineCov">       2360 :       gsi = gsi_last_bb (incr_bb);</span>
+<span class="lineNum">    1163 </span><span class="lineCov">       2360 :       iter2 = make_ssa_name (iter);</span>
+<span class="lineNum">    1164 </span><span class="lineCov">       2360 :       g = gimple_build_assign (iter2, PLUS_EXPR, iter1,</span>
+<span class="lineNum">    1165 </span><span class="lineCov">       2360 :                                build_int_cst (unsigned_type_node, 1));</span>
+<span class="lineNum">    1166 </span><span class="lineCov">       2360 :       gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            :       /* Mostly annotate the loop for the vectorizer (the rest is done
+<span class="lineNum">    1169 </span>            :          below).  */
+<span class="lineNum">    1170 </span><span class="lineCov">       2360 :       loop = alloc_loop ();</span>
+<span class="lineNum">    1171 </span><span class="lineCov">       2360 :       cfun-&gt;has_force_vectorize_loops = true;</span>
+<span class="lineNum">    1172 </span><span class="lineCov">       2360 :       loop-&gt;safelen = node-&gt;simdclone-&gt;simdlen;</span>
+<span class="lineNum">    1173 </span><span class="lineCov">       2360 :       loop-&gt;force_vectorize = true;</span>
+<span class="lineNum">    1174 </span><span class="lineCov">       2360 :       loop-&gt;header = body_bb;</span>
+<span class="lineNum">    1175 </span>            :     }
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span>            :   /* Branch around the body if the mask applies.  */
+<span class="lineNum">    1178 </span><span class="lineCov">       2372 :   if (node-&gt;simdclone-&gt;inbranch)</span>
+<span class="lineNum">    1179 </span>            :     {
+<span class="lineNum">    1180 </span><span class="lineCov">        890 :       gsi = gsi_last_bb (loop-&gt;header);</span>
+<span class="lineNum">    1181 </span><span class="lineCov">       1780 :       tree mask_array</span>
+<span class="lineNum">    1182 </span><span class="lineCov">        890 :         = node-&gt;simdclone-&gt;args[node-&gt;simdclone-&gt;nargs - 1].simd_array;</span>
+<span class="lineNum">    1183 </span><span class="lineCov">        890 :       tree mask;</span>
+<span class="lineNum">    1184 </span><span class="lineCov">        890 :       if (node-&gt;simdclone-&gt;mask_mode != VOIDmode)</span>
+<span class="lineNum">    1185 </span>            :         {
+<span class="lineNum">    1186 </span><span class="lineCov">        214 :           tree shift_cnt;</span>
+<span class="lineNum">    1187 </span><span class="lineCov">        214 :           if (mask_array == NULL_TREE)</span>
+<span class="lineNum">    1188 </span>            :             {
+<span class="lineNum">    1189 </span><span class="lineCov">        214 :               tree arg = node-&gt;simdclone-&gt;args[node-&gt;simdclone-&gt;nargs</span>
+<span class="lineNum">    1190 </span>            :                                                - 1].vector_arg;
+<span class="lineNum">    1191 </span><span class="lineCov">        214 :               mask = get_or_create_ssa_default_def (cfun, arg);</span>
+<span class="lineNum">    1192 </span><span class="lineCov">        214 :               shift_cnt = iter1;</span>
+<span class="lineNum">    1193 </span>            :             }
+<span class="lineNum">    1194 </span>            :           else
+<span class="lineNum">    1195 </span>            :             {
+<span class="lineNum">    1196 </span><span class="lineNoCov">          0 :               tree maskt = TREE_TYPE (mask_array);</span>
+<span class="lineNum">    1197 </span><span class="lineNoCov">          0 :               int c = tree_to_uhwi (TYPE_MAX_VALUE (TYPE_DOMAIN (maskt)));</span>
+<span class="lineNum">    1198 </span><span class="lineNoCov">          0 :               c = node-&gt;simdclone-&gt;simdlen / (c + 1);</span>
+<span class="lineNum">    1199 </span><span class="lineNoCov">          0 :               int s = exact_log2 (c);</span>
+<span class="lineNum">    1200 </span><span class="lineNoCov">          0 :               gcc_assert (s &gt; 0);</span>
+<span class="lineNum">    1201 </span><span class="lineNoCov">          0 :               c--;</span>
+<span class="lineNum">    1202 </span><span class="lineNoCov">          0 :               tree idx = make_ssa_name (TREE_TYPE (iter1));</span>
+<span class="lineNum">    1203 </span><span class="lineNoCov">          0 :               g = gimple_build_assign (idx, RSHIFT_EXPR, iter1,</span>
+<span class="lineNum">    1204 </span>            :                                        build_int_cst (NULL_TREE, s));
+<span class="lineNum">    1205 </span><span class="lineNoCov">          0 :               gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1206 </span><span class="lineNoCov">          0 :               mask = make_ssa_name (TREE_TYPE (TREE_TYPE (mask_array)));</span>
+<span class="lineNum">    1207 </span><span class="lineNoCov">          0 :               tree aref = build4 (ARRAY_REF,</span>
+<span class="lineNum">    1208 </span><span class="lineNoCov">          0 :                                   TREE_TYPE (TREE_TYPE (mask_array)),</span>
+<span class="lineNum">    1209 </span>            :                                   mask_array, idx, NULL, NULL);
+<span class="lineNum">    1210 </span><span class="lineNoCov">          0 :               g = gimple_build_assign (mask, aref);</span>
+<span class="lineNum">    1211 </span><span class="lineNoCov">          0 :               gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1212 </span><span class="lineNoCov">          0 :               shift_cnt = make_ssa_name (TREE_TYPE (iter1));</span>
+<span class="lineNum">    1213 </span><span class="lineNoCov">          0 :               g = gimple_build_assign (shift_cnt, BIT_AND_EXPR, iter1,</span>
+<span class="lineNum">    1214 </span><span class="lineNoCov">          0 :                                        build_int_cst (TREE_TYPE (iter1), c));</span>
+<span class="lineNum">    1215 </span><span class="lineNoCov">          0 :               gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1216 </span>            :             }
+<span class="lineNum">    1217 </span><span class="lineCov">        214 :           g = gimple_build_assign (make_ssa_name (TREE_TYPE (mask)),</span>
+<span class="lineNum">    1218 </span>            :                                    RSHIFT_EXPR, mask, shift_cnt);
+<span class="lineNum">    1219 </span><span class="lineCov">        214 :           gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1220 </span><span class="lineCov">        214 :           mask = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1221 </span><span class="lineCov">        214 :           g = gimple_build_assign (make_ssa_name (TREE_TYPE (mask)),</span>
+<span class="lineNum">    1222 </span>            :                                    BIT_AND_EXPR, mask,
+<span class="lineNum">    1223 </span><span class="lineCov">        428 :                                    build_int_cst (TREE_TYPE (mask), 1));</span>
+<span class="lineNum">    1224 </span><span class="lineCov">        214 :           gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1225 </span><span class="lineCov">        214 :           mask = gimple_assign_lhs (g);</span>
+<span class="lineNum">    1226 </span>            :         }
+<span class="lineNum">    1227 </span>            :       else
+<span class="lineNum">    1228 </span>            :         {
+<span class="lineNum">    1229 </span><span class="lineCov">        676 :           mask = make_ssa_name (TREE_TYPE (TREE_TYPE (mask_array)));</span>
+<span class="lineNum">    1230 </span><span class="lineCov">       1352 :           tree aref = build4 (ARRAY_REF,</span>
+<span class="lineNum">    1231 </span><span class="lineCov">        676 :                               TREE_TYPE (TREE_TYPE (mask_array)),</span>
+<span class="lineNum">    1232 </span><span class="lineCov">        676 :                               mask_array, iter1, NULL, NULL);</span>
+<span class="lineNum">    1233 </span><span class="lineCov">        676 :           g = gimple_build_assign (mask, aref);</span>
+<span class="lineNum">    1234 </span><span class="lineCov">        676 :           gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1235 </span><span class="lineCov">        676 :           int bitsize = GET_MODE_BITSIZE (SCALAR_TYPE_MODE (TREE_TYPE (aref)));</span>
+<span class="lineNum">    1236 </span><span class="lineCov">       1352 :           if (!INTEGRAL_TYPE_P (TREE_TYPE (aref)))</span>
+<span class="lineNum">    1237 </span>            :             {
+<span class="lineNum">    1238 </span><span class="lineCov">        304 :               aref = build1 (VIEW_CONVERT_EXPR,</span>
+<span class="lineNum">    1239 </span>            :                              build_nonstandard_integer_type (bitsize, 0),
+<span class="lineNum">    1240 </span>            :                                                              mask);
+<span class="lineNum">    1241 </span><span class="lineCov">        304 :               mask = make_ssa_name (TREE_TYPE (aref));</span>
+<span class="lineNum">    1242 </span><span class="lineCov">        304 :               g = gimple_build_assign (mask, aref);</span>
+<span class="lineNum">    1243 </span><span class="lineCov">        304 :               gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1244 </span>            :             }
+<span class="lineNum">    1245 </span>            :         }
+<span class="lineNum">    1246 </span>            : 
+<span class="lineNum">    1247 </span><span class="lineCov">        890 :       g = gimple_build_cond (EQ_EXPR, mask, build_zero_cst (TREE_TYPE (mask)),</span>
+<span class="lineNum">    1248 </span>            :                              NULL, NULL);
+<span class="lineNum">    1249 </span><span class="lineCov">        890 :       gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1250 </span><span class="lineCov">        890 :       edge e = make_edge (loop-&gt;header, incr_bb, EDGE_TRUE_VALUE);</span>
+<span class="lineNum">    1251 </span><span class="lineCov">        890 :       e-&gt;probability = profile_probability::unlikely ().guessed ();</span>
+<span class="lineNum">    1252 </span><span class="lineCov">        890 :       incr_bb-&gt;count += e-&gt;count ();</span>
+<span class="lineNum">    1253 </span><span class="lineCov">        890 :       edge fallthru = FALLTHRU_EDGE (loop-&gt;header);</span>
+<span class="lineNum">    1254 </span><span class="lineCov">        890 :       fallthru-&gt;flags = EDGE_FALSE_VALUE;</span>
+<span class="lineNum">    1255 </span><span class="lineCov">        890 :       fallthru-&gt;probability = profile_probability::likely ().guessed ();</span>
+<span class="lineNum">    1256 </span>            :     }
+<span class="lineNum">    1257 </span>            : 
+<span class="lineNum">    1258 </span><span class="lineCov">       2372 :   basic_block latch_bb = NULL;</span>
+<span class="lineNum">    1259 </span><span class="lineCov">       2372 :   basic_block new_exit_bb = NULL;</span>
+<span class="lineNum">    1260 </span>            : 
+<span class="lineNum">    1261 </span>            :   /* Generate the condition.  */
+<span class="lineNum">    1262 </span><span class="lineCov">       2372 :   if (incr_bb)</span>
+<span class="lineNum">    1263 </span>            :     {
+<span class="lineNum">    1264 </span><span class="lineCov">       2360 :       gsi = gsi_last_bb (incr_bb);</span>
+<span class="lineNum">    1265 </span><span class="lineCov">       2360 :       g = gimple_build_cond (LT_EXPR, iter2,</span>
+<span class="lineNum">    1266 </span>            :                              build_int_cst (unsigned_type_node,
+<span class="lineNum">    1267 </span><span class="lineCov">       2360 :                                             node-&gt;simdclone-&gt;simdlen),</span>
+<span class="lineNum">    1268 </span>            :                              NULL, NULL);
+<span class="lineNum">    1269 </span><span class="lineCov">       2360 :       gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1270 </span><span class="lineCov">       4720 :       edge e = split_block (incr_bb, gsi_stmt (gsi));</span>
+<span class="lineNum">    1271 </span><span class="lineCov">       2360 :       latch_bb = e-&gt;dest;</span>
+<span class="lineNum">    1272 </span><span class="lineCov">       2360 :       new_exit_bb = split_block_after_labels (latch_bb)-&gt;dest;</span>
+<span class="lineNum">    1273 </span><span class="lineCov">       2360 :       loop-&gt;latch = latch_bb;</span>
+<span class="lineNum">    1274 </span>            : 
+<span class="lineNum">    1275 </span><span class="lineCov">       2360 :       redirect_edge_succ (FALLTHRU_EDGE (latch_bb), body_bb);</span>
+<span class="lineNum">    1276 </span>            : 
+<span class="lineNum">    1277 </span><span class="lineCov">       2360 :       edge new_e = make_edge (incr_bb, new_exit_bb, EDGE_FALSE_VALUE);</span>
+<span class="lineNum">    1278 </span>            : 
+<span class="lineNum">    1279 </span>            :       /* FIXME: Do we need to distribute probabilities for the conditional? */
+<span class="lineNum">    1280 </span><span class="lineCov">       2360 :       new_e-&gt;probability = profile_probability::guessed_never ();</span>
+<span class="lineNum">    1281 </span>            :       /* The successor of incr_bb is already pointing to latch_bb; just
+<span class="lineNum">    1282 </span>            :          change the flags.
+<span class="lineNum">    1283 </span>            :          make_edge (incr_bb, latch_bb, EDGE_TRUE_VALUE);  */
+<span class="lineNum">    1284 </span><span class="lineCov">       2360 :       FALLTHRU_EDGE (incr_bb)-&gt;flags = EDGE_TRUE_VALUE;</span>
+<span class="lineNum">    1285 </span>            :     }
+<span class="lineNum">    1286 </span>            : 
+<span class="lineNum">    1287 </span><span class="lineCov">       2372 :   gphi *phi = create_phi_node (iter1, body_bb);</span>
+<span class="lineNum">    1288 </span><span class="lineCov">       2372 :   edge preheader_edge = find_edge (entry_bb, body_bb);</span>
+<span class="lineNum">    1289 </span><span class="lineCov">       2372 :   edge latch_edge = NULL;</span>
+<span class="lineNum">    1290 </span><span class="lineCov">       2372 :   add_phi_arg (phi, build_zero_cst (unsigned_type_node), preheader_edge,</span>
+<span class="lineNum">    1291 </span>            :                UNKNOWN_LOCATION);
+<span class="lineNum">    1292 </span><span class="lineCov">       2372 :   if (incr_bb)</span>
+<span class="lineNum">    1293 </span>            :     {
+<span class="lineNum">    1294 </span><span class="lineCov">       2360 :       latch_edge = single_succ_edge (latch_bb);</span>
+<span class="lineNum">    1295 </span><span class="lineCov">       2360 :       add_phi_arg (phi, iter2, latch_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1296 </span>            : 
+<span class="lineNum">    1297 </span>            :       /* Generate the new return.  */
+<span class="lineNum">    1298 </span><span class="lineCov">       2360 :       gsi = gsi_last_bb (new_exit_bb);</span>
+<span class="lineNum">    1299 </span><span class="lineCov">       2360 :       if (retval</span>
+<span class="lineNum">    1300 </span><span class="lineCov">       2216 :           &amp;&amp; TREE_CODE (retval) == VIEW_CONVERT_EXPR</span>
+<span class="lineNum">    1301 </span><span class="lineCov">       2467 :           &amp;&amp; TREE_CODE (TREE_OPERAND (retval, 0)) == RESULT_DECL)</span>
+<span class="lineNum">    1302 </span><span class="lineCov">        107 :         retval = TREE_OPERAND (retval, 0);</span>
+<span class="lineNum">    1303 </span><span class="lineCov">       2253 :       else if (retval)</span>
+<span class="lineNum">    1304 </span>            :         {
+<span class="lineNum">    1305 </span><span class="lineCov">       6327 :           retval = build1 (VIEW_CONVERT_EXPR,</span>
+<span class="lineNum">    1306 </span><span class="lineCov">       2109 :                            TREE_TYPE (TREE_TYPE (node-&gt;decl)),</span>
+<span class="lineNum">    1307 </span>            :                            retval);
+<span class="lineNum">    1308 </span><span class="lineCov">       2109 :           retval = force_gimple_operand_gsi (&amp;gsi, retval, true, NULL,</span>
+<span class="lineNum">    1309 </span>            :                                              false, GSI_CONTINUE_LINKING);
+<span class="lineNum">    1310 </span>            :         }
+<span class="lineNum">    1311 </span><span class="lineCov">       2360 :       g = gimple_build_return (retval);</span>
+<span class="lineNum">    1312 </span><span class="lineCov">       2360 :       gsi_insert_after (&amp;gsi, g, GSI_CONTINUE_LINKING);</span>
+<span class="lineNum">    1313 </span>            :     }
+<span class="lineNum">    1314 </span>            : 
+<span class="lineNum">    1315 </span>            :   /* Handle aligned clauses by replacing default defs of the aligned
+<span class="lineNum">    1316 </span>            :      uniform args with __builtin_assume_aligned (arg_N(D), alignment)
+<span class="lineNum">    1317 </span>            :      lhs.  Handle linear by adding PHIs.  */
+<span class="lineNum">    1318 </span><span class="lineCov">       9557 :   for (unsigned i = 0; i &lt; node-&gt;simdclone-&gt;nargs; i++)</span>
+<span class="lineNum">    1319 </span><span class="lineCov">       7185 :     if (node-&gt;simdclone-&gt;args[i].arg_type == SIMD_CLONE_ARG_TYPE_UNIFORM</span>
+<span class="lineNum">    1320 </span><span class="lineCov">       7185 :         &amp;&amp; (TREE_ADDRESSABLE (node-&gt;simdclone-&gt;args[i].orig_arg)</span>
+<span class="lineNum">    1321 </span><span class="lineCov">       1207 :             || !is_gimple_reg_type</span>
+<span class="lineNum">    1322 </span><span class="lineCov">       1319 :                         (TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg))))</span>
+<span class="lineNum">    1323 </span>            :       {
+<span class="lineNum">    1324 </span><span class="lineCov">        116 :         tree orig_arg = node-&gt;simdclone-&gt;args[i].orig_arg;</span>
+<span class="lineNum">    1325 </span><span class="lineCov">        116 :         if (is_gimple_reg_type (TREE_TYPE (orig_arg)))</span>
+<span class="lineNum">    1326 </span><span class="lineCov">        336 :           iter1 = make_ssa_name (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1327 </span>            :         else
+<span class="lineNum">    1328 </span>            :           {
+<span class="lineNum">    1329 </span><span class="lineCov">          8 :             iter1 = create_tmp_var_raw (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1330 </span><span class="lineCov">          4 :             gimple_add_tmp_var (iter1);</span>
+<span class="lineNum">    1331 </span>            :           }
+<span class="lineNum">    1332 </span><span class="lineCov">        116 :         gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1333 </span><span class="lineCov">        116 :         g = gimple_build_assign (iter1, orig_arg);</span>
+<span class="lineNum">    1334 </span><span class="lineCov">        116 :         gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1335 </span><span class="lineCov">        116 :         gsi = gsi_after_labels (body_bb);</span>
+<span class="lineNum">    1336 </span><span class="lineCov">        116 :         g = gimple_build_assign (orig_arg, iter1);</span>
+<span class="lineNum">    1337 </span><span class="lineCov">        116 :         gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1338 </span>            :       }
+<span class="lineNum">    1339 </span><span class="lineCov">       7069 :     else if (node-&gt;simdclone-&gt;args[i].arg_type == SIMD_CLONE_ARG_TYPE_UNIFORM</span>
+<span class="lineNum">    1340 </span><span class="lineCov">       2406 :              &amp;&amp; DECL_BY_REFERENCE (node-&gt;simdclone-&gt;args[i].orig_arg)</span>
+<span class="lineNum">    1341 </span><span class="lineCov">        260 :              &amp;&amp; TREE_CODE (TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg))</span>
+<span class="lineNum">    1342 </span>            :                 == REFERENCE_TYPE
+<span class="lineNum">    1343 </span><span class="lineCov">       7589 :              &amp;&amp; TREE_ADDRESSABLE</span>
+<span class="lineNum">    1344 </span>            :                   (TREE_TYPE (TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg))))
+<span class="lineNum">    1345 </span>            :       {
+<span class="lineNum">    1346 </span><span class="lineCov">         52 :         tree orig_arg = node-&gt;simdclone-&gt;args[i].orig_arg;</span>
+<span class="lineNum">    1347 </span><span class="lineCov">         52 :         tree def = ssa_default_def (cfun, orig_arg);</span>
+<span class="lineNum">    1348 </span><span class="lineCov">         52 :         if (def &amp;&amp; !has_zero_uses (def))</span>
+<span class="lineNum">    1349 </span>            :           {
+<span class="lineNum">    1350 </span><span class="lineCov">         52 :             iter1 = create_tmp_var_raw (TREE_TYPE (TREE_TYPE (orig_arg)));</span>
+<span class="lineNum">    1351 </span><span class="lineCov">         52 :             gimple_add_tmp_var (iter1);</span>
+<span class="lineNum">    1352 </span><span class="lineCov">         52 :             gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1353 </span><span class="lineCov">         52 :             g = gimple_build_assign (iter1, build_simple_mem_ref (def));</span>
+<span class="lineNum">    1354 </span><span class="lineCov">         52 :             gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1355 </span><span class="lineCov">         52 :             gsi = gsi_after_labels (body_bb);</span>
+<span class="lineNum">    1356 </span><span class="lineCov">         52 :             g = gimple_build_assign (build_simple_mem_ref (def), iter1);</span>
+<span class="lineNum">    1357 </span><span class="lineCov">         52 :             gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1358 </span>            :           }
+<span class="lineNum">    1359 </span>            :       }
+<span class="lineNum">    1360 </span><span class="lineCov">       7017 :     else if (node-&gt;simdclone-&gt;args[i].alignment</span>
+<span class="lineNum">    1361 </span><span class="lineCov">        340 :              &amp;&amp; node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1362 </span>            :                 == SIMD_CLONE_ARG_TYPE_UNIFORM
+<span class="lineNum">    1363 </span><span class="lineCov">        192 :              &amp;&amp; (node-&gt;simdclone-&gt;args[i].alignment</span>
+<span class="lineNum">    1364 </span><span class="lineCov">        192 :                  &amp; (node-&gt;simdclone-&gt;args[i].alignment - 1)) == 0</span>
+<span class="lineNum">    1365 </span><span class="lineCov">       7209 :              &amp;&amp; TREE_CODE (TREE_TYPE (node-&gt;simdclone-&gt;args[i].orig_arg))</span>
+<span class="lineNum">    1366 </span>            :                 == POINTER_TYPE)
+<span class="lineNum">    1367 </span>            :       {
+<span class="lineNum">    1368 </span><span class="lineCov">        192 :         unsigned int alignment = node-&gt;simdclone-&gt;args[i].alignment;</span>
+<span class="lineNum">    1369 </span><span class="lineCov">        192 :         tree orig_arg = node-&gt;simdclone-&gt;args[i].orig_arg;</span>
+<span class="lineNum">    1370 </span><span class="lineCov">        192 :         tree def = ssa_default_def (cfun, orig_arg);</span>
+<span class="lineNum">    1371 </span><span class="lineCov">        192 :         if (def &amp;&amp; !has_zero_uses (def))</span>
+<span class="lineNum">    1372 </span>            :           {
+<span class="lineNum">    1373 </span><span class="lineCov">        184 :             tree fn = builtin_decl_explicit (BUILT_IN_ASSUME_ALIGNED);</span>
+<span class="lineNum">    1374 </span><span class="lineCov">        184 :             gimple_seq seq = NULL;</span>
+<span class="lineNum">    1375 </span><span class="lineCov">        184 :             bool need_cvt = false;</span>
+<span class="lineNum">    1376 </span><span class="lineCov">        184 :             gcall *call</span>
+<span class="lineNum">    1377 </span><span class="lineCov">        368 :               = gimple_build_call (fn, 2, def, size_int (alignment));</span>
+<span class="lineNum">    1378 </span><span class="lineCov">        184 :             g = call;</span>
+<span class="lineNum">    1379 </span><span class="lineCov">        184 :             if (!useless_type_conversion_p (TREE_TYPE (orig_arg),</span>
+<span class="lineNum">    1380 </span>            :                                             ptr_type_node))
+<span class="lineNum">    1381 </span><span class="lineNoCov">          0 :               need_cvt = true;</span>
+<span class="lineNum">    1382 </span><span class="lineCov">        184 :             tree t = make_ssa_name (need_cvt ? ptr_type_node : orig_arg);</span>
+<span class="lineNum">    1383 </span><span class="lineCov">        184 :             gimple_call_set_lhs (g, t);</span>
+<span class="lineNum">    1384 </span><span class="lineCov">        184 :             gimple_seq_add_stmt_without_update (&amp;seq, g);</span>
+<span class="lineNum">    1385 </span><span class="lineCov">        184 :             if (need_cvt)</span>
+<span class="lineNum">    1386 </span>            :               {
+<span class="lineNum">    1387 </span><span class="lineNoCov">          0 :                 t = make_ssa_name (orig_arg);</span>
+<span class="lineNum">    1388 </span><span class="lineNoCov">          0 :                 g = gimple_build_assign (t, NOP_EXPR, gimple_call_lhs (g));</span>
+<span class="lineNum">    1389 </span><span class="lineNoCov">          0 :                 gimple_seq_add_stmt_without_update (&amp;seq, g);</span>
+<span class="lineNum">    1390 </span>            :               }
+<span class="lineNum">    1391 </span><span class="lineCov">        184 :             gsi_insert_seq_on_edge_immediate</span>
+<span class="lineNum">    1392 </span><span class="lineCov">        184 :               (single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun)), seq);</span>
+<span class="lineNum">    1393 </span>            : 
+<span class="lineNum">    1394 </span><span class="lineCov">        184 :             entry_bb = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1395 </span><span class="lineCov">        184 :             node-&gt;create_edge (cgraph_node::get_create (fn),</span>
+<span class="lineNum">    1396 </span>            :                                call, entry_bb-&gt;count);
+<span class="lineNum">    1397 </span>            : 
+<span class="lineNum">    1398 </span><span class="lineCov">        184 :             imm_use_iterator iter;</span>
+<span class="lineNum">    1399 </span><span class="lineCov">        184 :             use_operand_p use_p;</span>
+<span class="lineNum">    1400 </span><span class="lineCov">        184 :             gimple *use_stmt;</span>
+<span class="lineNum">    1401 </span><span class="lineCov">        184 :             tree repl = gimple_get_lhs (g);</span>
+<span class="lineNum">    1402 </span><span class="lineCov">        552 :             FOR_EACH_IMM_USE_STMT (use_stmt, iter, def)</span>
+<span class="lineNum">    1403 </span><span class="lineCov">        736 :               if (is_gimple_debug (use_stmt) || use_stmt == call)</span>
+<span class="lineNum">    1404 </span>            :                 continue;
+<span class="lineNum">    1405 </span>            :               else
+<span class="lineNum">    1406 </span><span class="lineCov">       1104 :                 FOR_EACH_IMM_USE_ON_STMT (use_p, iter)</span>
+<span class="lineNum">    1407 </span><span class="lineCov">        184 :                   SET_USE (use_p, repl);</span>
+<span class="lineNum">    1408 </span>            :           }
+<span class="lineNum">    1409 </span>            :       }
+<span class="lineNum">    1410 </span><span class="lineCov">       6825 :     else if ((node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1411 </span>            :               == SIMD_CLONE_ARG_TYPE_LINEAR_CONSTANT_STEP)
+<span class="lineNum">    1412 </span><span class="lineCov">       5602 :              || (node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1413 </span>            :                  == SIMD_CLONE_ARG_TYPE_LINEAR_REF_CONSTANT_STEP)
+<span class="lineNum">    1414 </span><span class="lineCov">       5358 :              || (node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1415 </span>            :                  == SIMD_CLONE_ARG_TYPE_LINEAR_VARIABLE_STEP)
+<span class="lineNum">    1416 </span><span class="lineCov">       5246 :              || (node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1417 </span>            :                  == SIMD_CLONE_ARG_TYPE_LINEAR_REF_VARIABLE_STEP))
+<span class="lineNum">    1418 </span>            :       {
+<span class="lineNum">    1419 </span><span class="lineCov">       1607 :         tree orig_arg = node-&gt;simdclone-&gt;args[i].orig_arg;</span>
+<span class="lineNum">    1420 </span><span class="lineCov">       1607 :         gcc_assert (INTEGRAL_TYPE_P (TREE_TYPE (orig_arg))</span>
+<span class="lineNum">    1421 </span>            :                     || POINTER_TYPE_P (TREE_TYPE (orig_arg)));
+<span class="lineNum">    1422 </span><span class="lineCov">       1607 :         tree def = NULL_TREE;</span>
+<span class="lineNum">    1423 </span><span class="lineCov">       1607 :         if (TREE_ADDRESSABLE (orig_arg))</span>
+<span class="lineNum">    1424 </span>            :           {
+<span class="lineNum">    1425 </span><span class="lineCov">        200 :             def = make_ssa_name (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1426 </span><span class="lineCov">        100 :             iter1 = make_ssa_name (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1427 </span><span class="lineCov">        100 :             if (incr_bb)</span>
+<span class="lineNum">    1428 </span><span class="lineCov">         88 :               iter2 = make_ssa_name (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1429 </span><span class="lineCov">        100 :             gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1430 </span><span class="lineCov">        100 :             g = gimple_build_assign (def, orig_arg);</span>
+<span class="lineNum">    1431 </span><span class="lineCov">        100 :             gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1432 </span>            :           }
+<span class="lineNum">    1433 </span>            :         else
+<span class="lineNum">    1434 </span>            :           {
+<span class="lineNum">    1435 </span><span class="lineCov">       1507 :             def = ssa_default_def (cfun, orig_arg);</span>
+<span class="lineNum">    1436 </span><span class="lineCov">       1507 :             if (!def || has_zero_uses (def))</span>
+<span class="lineNum">    1437 </span>            :               def = NULL_TREE;
+<span class="lineNum">    1438 </span>            :             else
+<span class="lineNum">    1439 </span>            :               {
+<span class="lineNum">    1440 </span><span class="lineCov">       1467 :                 iter1 = make_ssa_name (orig_arg);</span>
+<span class="lineNum">    1441 </span><span class="lineCov">       1467 :                 if (incr_bb)</span>
+<span class="lineNum">    1442 </span><span class="lineCov">       2886 :                   iter2 = make_ssa_name (orig_arg);</span>
+<span class="lineNum">    1443 </span>            :               }
+<span class="lineNum">    1444 </span>            :           }
+<span class="lineNum">    1445 </span><span class="lineCov">       1607 :         if (def)</span>
+<span class="lineNum">    1446 </span>            :           {
+<span class="lineNum">    1447 </span><span class="lineCov">       1567 :             phi = create_phi_node (iter1, body_bb);</span>
+<span class="lineNum">    1448 </span><span class="lineCov">       1567 :             add_phi_arg (phi, def, preheader_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1449 </span><span class="lineCov">       1567 :             if (incr_bb)</span>
+<span class="lineNum">    1450 </span>            :               {
+<span class="lineNum">    1451 </span><span class="lineCov">       1531 :                 add_phi_arg (phi, iter2, latch_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1452 </span><span class="lineCov">       4593 :                 enum tree_code code = INTEGRAL_TYPE_P (TREE_TYPE (orig_arg))</span>
+<span class="lineNum">    1453 </span><span class="lineCov">       1531 :                                       ? PLUS_EXPR : POINTER_PLUS_EXPR;</span>
+<span class="lineNum">    1454 </span><span class="lineCov">       1531 :                 tree addtype = INTEGRAL_TYPE_P (TREE_TYPE (orig_arg))</span>
+<span class="lineNum">    1455 </span><span class="lineCov">       2087 :                                ? TREE_TYPE (orig_arg) : sizetype;</span>
+<span class="lineNum">    1456 </span><span class="lineCov">       1531 :                 tree addcst = simd_clone_linear_addend (node, i, addtype,</span>
+<span class="lineNum">    1457 </span>            :                                                         entry_bb);
+<span class="lineNum">    1458 </span><span class="lineCov">       1531 :                 gsi = gsi_last_bb (incr_bb);</span>
+<span class="lineNum">    1459 </span><span class="lineCov">       1531 :                 g = gimple_build_assign (iter2, code, iter1, addcst);</span>
+<span class="lineNum">    1460 </span><span class="lineCov">       1531 :                 gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1461 </span>            :               }
+<span class="lineNum">    1462 </span>            : 
+<span class="lineNum">    1463 </span><span class="lineCov">       1567 :             imm_use_iterator iter;</span>
+<span class="lineNum">    1464 </span><span class="lineCov">       1567 :             use_operand_p use_p;</span>
+<span class="lineNum">    1465 </span><span class="lineCov">       1567 :             gimple *use_stmt;</span>
+<span class="lineNum">    1466 </span><span class="lineCov">       1567 :             if (TREE_ADDRESSABLE (orig_arg))</span>
+<span class="lineNum">    1467 </span>            :               {
+<span class="lineNum">    1468 </span><span class="lineCov">        100 :                 gsi = gsi_after_labels (body_bb);</span>
+<span class="lineNum">    1469 </span><span class="lineCov">        100 :                 g = gimple_build_assign (orig_arg, iter1);</span>
+<span class="lineNum">    1470 </span><span class="lineCov">        100 :                 gsi_insert_before (&amp;gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">    1471 </span>            :               }
+<span class="lineNum">    1472 </span>            :             else
+<span class="lineNum">    1473 </span><span class="lineCov">       4597 :               FOR_EACH_IMM_USE_STMT (use_stmt, iter, def)</span>
+<span class="lineNum">    1474 </span><span class="lineCov">       3130 :                 if (use_stmt == phi)</span>
+<span class="lineNum">    1475 </span>            :                   continue;
+<span class="lineNum">    1476 </span>            :                 else
+<span class="lineNum">    1477 </span><span class="lineCov">       9978 :                   FOR_EACH_IMM_USE_ON_STMT (use_p, iter)</span>
+<span class="lineNum">    1478 </span><span class="lineCov">       1663 :                     SET_USE (use_p, iter1);</span>
+<span class="lineNum">    1479 </span>            :           }
+<span class="lineNum">    1480 </span>            :       }
+<span class="lineNum">    1481 </span><span class="lineCov">      10436 :     else if (node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1482 </span>            :              == SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_CONSTANT_STEP
+<span class="lineNum">    1483 </span><span class="lineCov">       5218 :              || (node-&gt;simdclone-&gt;args[i].arg_type</span>
+<span class="lineNum">    1484 </span>            :                  == SIMD_CLONE_ARG_TYPE_LINEAR_UVAL_VARIABLE_STEP))
+<span class="lineNum">    1485 </span>            :       {
+<span class="lineNum">    1486 </span><span class="lineCov">        172 :         tree orig_arg = node-&gt;simdclone-&gt;args[i].orig_arg;</span>
+<span class="lineNum">    1487 </span><span class="lineCov">        172 :         tree def = ssa_default_def (cfun, orig_arg);</span>
+<span class="lineNum">    1488 </span><span class="lineCov">        172 :         gcc_assert (!TREE_ADDRESSABLE (orig_arg)</span>
+<span class="lineNum">    1489 </span>            :                     &amp;&amp; TREE_CODE (TREE_TYPE (orig_arg)) == REFERENCE_TYPE);
+<span class="lineNum">    1490 </span><span class="lineCov">        172 :         if (def &amp;&amp; !has_zero_uses (def))</span>
+<span class="lineNum">    1491 </span>            :           {
+<span class="lineNum">    1492 </span><span class="lineCov">        344 :             tree rtype = TREE_TYPE (TREE_TYPE (orig_arg));</span>
+<span class="lineNum">    1493 </span><span class="lineCov">        172 :             iter1 = make_ssa_name (orig_arg);</span>
+<span class="lineNum">    1494 </span><span class="lineCov">        172 :             if (incr_bb)</span>
+<span class="lineNum">    1495 </span><span class="lineCov">        320 :               iter2 = make_ssa_name (orig_arg);</span>
+<span class="lineNum">    1496 </span><span class="lineCov">        172 :             tree iter3 = make_ssa_name (rtype);</span>
+<span class="lineNum">    1497 </span><span class="lineCov">        172 :             tree iter4 = make_ssa_name (rtype);</span>
+<span class="lineNum">    1498 </span><span class="lineCov">        172 :             tree iter5 = incr_bb ? make_ssa_name (rtype) : NULL_TREE;</span>
+<span class="lineNum">    1499 </span><span class="lineCov">        172 :             gsi = gsi_after_labels (entry_bb);</span>
+<span class="lineNum">    1500 </span><span class="lineCov">        172 :             gimple *load</span>
+<span class="lineNum">    1501 </span><span class="lineCov">        172 :               = gimple_build_assign (iter3, build_simple_mem_ref (def));</span>
+<span class="lineNum">    1502 </span><span class="lineCov">        172 :             gsi_insert_before (&amp;gsi, load, GSI_NEW_STMT);</span>
+<span class="lineNum">    1503 </span>            : 
+<span class="lineNum">    1504 </span><span class="lineCov">        172 :             tree array = node-&gt;simdclone-&gt;args[i].simd_array;</span>
+<span class="lineNum">    1505 </span><span class="lineCov">        172 :             TREE_ADDRESSABLE (array) = 1;</span>
+<span class="lineNum">    1506 </span><span class="lineCov">        172 :             tree ptr = build_fold_addr_expr (array);</span>
+<span class="lineNum">    1507 </span><span class="lineCov">        172 :             phi = create_phi_node (iter1, body_bb);</span>
+<span class="lineNum">    1508 </span><span class="lineCov">        172 :             add_phi_arg (phi, ptr, preheader_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1509 </span><span class="lineCov">        172 :             if (incr_bb)</span>
+<span class="lineNum">    1510 </span>            :               {
+<span class="lineNum">    1511 </span><span class="lineCov">        160 :                 add_phi_arg (phi, iter2, latch_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1512 </span><span class="lineCov">        480 :                 g = gimple_build_assign (iter2, POINTER_PLUS_EXPR, iter1,</span>
+<span class="lineNum">    1513 </span><span class="lineCov">        160 :                                          TYPE_SIZE_UNIT (TREE_TYPE (iter3)));</span>
+<span class="lineNum">    1514 </span><span class="lineCov">        160 :                 gsi = gsi_last_bb (incr_bb);</span>
+<span class="lineNum">    1515 </span><span class="lineCov">        160 :                 gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1516 </span>            :               }
+<span class="lineNum">    1517 </span>            : 
+<span class="lineNum">    1518 </span><span class="lineCov">        172 :             phi = create_phi_node (iter4, body_bb);</span>
+<span class="lineNum">    1519 </span><span class="lineCov">        172 :             add_phi_arg (phi, iter3, preheader_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1520 </span><span class="lineCov">        172 :             if (incr_bb)</span>
+<span class="lineNum">    1521 </span>            :               {
+<span class="lineNum">    1522 </span><span class="lineCov">        160 :                 add_phi_arg (phi, iter5, latch_edge, UNKNOWN_LOCATION);</span>
+<span class="lineNum">    1523 </span><span class="lineCov">        480 :                 enum tree_code code = INTEGRAL_TYPE_P (TREE_TYPE (iter3))</span>
+<span class="lineNum">    1524 </span><span class="lineCov">        160 :                                       ? PLUS_EXPR : POINTER_PLUS_EXPR;</span>
+<span class="lineNum">    1525 </span><span class="lineCov">        160 :                 tree addtype = INTEGRAL_TYPE_P (TREE_TYPE (iter3))</span>
+<span class="lineNum">    1526 </span><span class="lineCov">        160 :                                ? TREE_TYPE (iter3) : sizetype;</span>
+<span class="lineNum">    1527 </span><span class="lineCov">        160 :                 tree addcst = simd_clone_linear_addend (node, i, addtype,</span>
+<span class="lineNum">    1528 </span>            :                                                         entry_bb);
+<span class="lineNum">    1529 </span><span class="lineCov">        160 :                 g = gimple_build_assign (iter5, code, iter4, addcst);</span>
+<span class="lineNum">    1530 </span><span class="lineCov">        160 :                 gsi = gsi_last_bb (incr_bb);</span>
+<span class="lineNum">    1531 </span><span class="lineCov">        160 :                 gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1532 </span>            :               }
+<span class="lineNum">    1533 </span>            : 
+<span class="lineNum">    1534 </span><span class="lineCov">        172 :             g = gimple_build_assign (build_simple_mem_ref (iter1), iter4);</span>
+<span class="lineNum">    1535 </span><span class="lineCov">        172 :             gsi = gsi_after_labels (body_bb);</span>
+<span class="lineNum">    1536 </span><span class="lineCov">        172 :             gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1537 </span>            : 
+<span class="lineNum">    1538 </span><span class="lineCov">        172 :             imm_use_iterator iter;</span>
+<span class="lineNum">    1539 </span><span class="lineCov">        172 :             use_operand_p use_p;</span>
+<span class="lineNum">    1540 </span><span class="lineCov">        172 :             gimple *use_stmt;</span>
+<span class="lineNum">    1541 </span><span class="lineCov">        676 :             FOR_EACH_IMM_USE_STMT (use_stmt, iter, def)</span>
+<span class="lineNum">    1542 </span><span class="lineCov">        504 :               if (use_stmt == load)</span>
+<span class="lineNum">    1543 </span>            :                 continue;
+<span class="lineNum">    1544 </span>            :               else
+<span class="lineNum">    1545 </span><span class="lineCov">       1992 :                 FOR_EACH_IMM_USE_ON_STMT (use_p, iter)</span>
+<span class="lineNum">    1546 </span><span class="lineCov">        332 :                   SET_USE (use_p, iter1);</span>
+<span class="lineNum">    1547 </span>            : 
+<span class="lineNum">    1548 </span><span class="lineCov">        172 :             if (!TYPE_READONLY (rtype) &amp;&amp; incr_bb)</span>
+<span class="lineNum">    1549 </span>            :               {
+<span class="lineNum">    1550 </span><span class="lineCov">        112 :                 tree v = make_ssa_name (rtype);</span>
+<span class="lineNum">    1551 </span><span class="lineCov">        112 :                 tree aref = build4 (ARRAY_REF, rtype, array,</span>
+<span class="lineNum">    1552 </span>            :                                     size_zero_node, NULL_TREE,
+<span class="lineNum">    1553 </span>            :                                     NULL_TREE);
+<span class="lineNum">    1554 </span><span class="lineCov">        112 :                 gsi = gsi_after_labels (new_exit_bb);</span>
+<span class="lineNum">    1555 </span><span class="lineCov">        112 :                 g = gimple_build_assign (v, aref);</span>
+<span class="lineNum">    1556 </span><span class="lineCov">        112 :                 gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1557 </span><span class="lineCov">        112 :                 g = gimple_build_assign (build_simple_mem_ref (def), v);</span>
+<span class="lineNum">    1558 </span><span class="lineCov">        112 :                 gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">    1559 </span>            :               }
+<span class="lineNum">    1560 </span>            :           }
+<span class="lineNum">    1561 </span>            :       }
+<span class="lineNum">    1562 </span>            : 
+<span class="lineNum">    1563 </span><span class="lineCov">       2372 :   calculate_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">    1564 </span><span class="lineCov">       2372 :   if (loop)</span>
+<span class="lineNum">    1565 </span><span class="lineCov">       2360 :     add_loop (loop, loop-&gt;header-&gt;loop_father);</span>
+<span class="lineNum">    1566 </span><span class="lineCov">       2372 :   update_ssa (TODO_update_ssa);</span>
+<span class="lineNum">    1567 </span>            : 
+<span class="lineNum">    1568 </span><span class="lineCov">       2372 :   pop_cfun ();</span>
+<span class="lineNum">    1569 </span><span class="lineCov">       2372 : }</span>
+<span class="lineNum">    1570 </span>            : 
+<span class="lineNum">    1571 </span>            : /* If the function in NODE is tagged as an elemental SIMD function,
+<span class="lineNum">    1572 </span>            :    create the appropriate SIMD clones.  */
+<a name="1573"><span class="lineNum">    1573 </span>            : </a>
+<span class="lineNum">    1574 </span>            : void
+<span class="lineNum">    1575 </span><span class="lineCov">    2440176 : expand_simd_clones (struct cgraph_node *node)</span>
+<span class="lineNum">    1576 </span>            : {
+<span class="lineNum">    1577 </span><span class="lineCov">    4880352 :   tree attr = lookup_attribute (&quot;omp declare simd&quot;,</span>
+<span class="lineNum">    1578 </span><span class="lineCov">    2440176 :                                 DECL_ATTRIBUTES (node-&gt;decl));</span>
+<span class="lineNum">    1579 </span><span class="lineCov">    2440176 :   if (attr == NULL_TREE</span>
+<span class="lineNum">    1580 </span><span class="lineCov">        712 :       || node-&gt;global.inlined_to</span>
+<span class="lineNum">    1581 </span><span class="lineCov">    2440624 :       || lookup_attribute (&quot;noclone&quot;, DECL_ATTRIBUTES (node-&gt;decl)))</span>
+<span class="lineNum">    1582 </span><span class="lineCov">    2439728 :     return;</span>
+<span class="lineNum">    1583 </span>            : 
+<span class="lineNum">    1584 </span>            :   /* Ignore
+<span class="lineNum">    1585 </span>            :      #pragma omp declare simd
+<span class="lineNum">    1586 </span>            :      extern int foo ();
+<span class="lineNum">    1587 </span>            :      in C, there we don't know the argument types at all.  */
+<span class="lineNum">    1588 </span><span class="lineCov">        448 :   if (!node-&gt;definition</span>
+<span class="lineNum">    1589 </span><span class="lineCov">        475 :       &amp;&amp; TYPE_ARG_TYPES (TREE_TYPE (node-&gt;decl)) == NULL_TREE)</span>
+<span class="lineNum">    1590 </span>            :     return;
+<span class="lineNum">    1591 </span>            : 
+<span class="lineNum">    1592 </span>            :   /* Call this before creating clone_info, as it might ggc_collect.  */
+<span class="lineNum">    1593 </span><span class="lineCov">        448 :   if (node-&gt;definition &amp;&amp; node-&gt;has_gimple_body_p ())</span>
+<span class="lineNum">    1594 </span><span class="lineCov">        374 :     node-&gt;get_body ();</span>
+<span class="lineNum">    1595 </span>            : 
+<span class="lineNum">    1596 </span><span class="lineCov">        595 :   do</span>
+<span class="lineNum">    1597 </span>            :     {
+<span class="lineNum">    1598 </span>            :       /* Start with parsing the &quot;omp declare simd&quot; attribute(s).  */
+<span class="lineNum">    1599 </span><span class="lineCov">        595 :       bool inbranch_clause_specified;</span>
+<span class="lineNum">    1600 </span><span class="lineCov">        595 :       struct cgraph_simd_clone *clone_info</span>
+<span class="lineNum">    1601 </span><span class="lineCov">        595 :         = simd_clone_clauses_extract (node, TREE_VALUE (attr),</span>
+<span class="lineNum">    1602 </span>            :                                       &amp;inbranch_clause_specified);
+<span class="lineNum">    1603 </span><span class="lineCov">        595 :       if (clone_info == NULL)</span>
+<span class="lineNum">    1604 </span><span class="lineCov">          5 :         continue;</span>
+<span class="lineNum">    1605 </span>            : 
+<span class="lineNum">    1606 </span><span class="lineCov">        594 :       int orig_simdlen = clone_info-&gt;simdlen;</span>
+<span class="lineNum">    1607 </span><span class="lineCov">        594 :       tree base_type = simd_clone_compute_base_data_type (node, clone_info);</span>
+<span class="lineNum">    1608 </span>            :       /* The target can return 0 (no simd clones should be created),
+<span class="lineNum">    1609 </span>            :          1 (just one ISA of simd clones should be created) or higher
+<span class="lineNum">    1610 </span>            :          count of ISA variants.  In that case, clone_info is initialized
+<span class="lineNum">    1611 </span>            :          for the first ISA variant.  */
+<span class="lineNum">    1612 </span><span class="lineCov">        594 :       int count</span>
+<span class="lineNum">    1613 </span><span class="lineCov">        594 :         = targetm.simd_clone.compute_vecsize_and_simdlen (node, clone_info,</span>
+<span class="lineNum">    1614 </span>            :                                                           base_type, 0);
+<span class="lineNum">    1615 </span><span class="lineCov">        594 :       if (count == 0)</span>
+<span class="lineNum">    1616 </span>            :         continue;
+<span class="lineNum">    1617 </span>            : 
+<span class="lineNum">    1618 </span>            :       /* Loop over all COUNT ISA variants, and if !INBRANCH_CLAUSE_SPECIFIED,
+<span class="lineNum">    1619 </span>            :          also create one inbranch and one !inbranch clone of it.  */
+<span class="lineNum">    1620 </span><span class="lineCov">       4950 :       for (int i = 0; i &lt; count * 2; i++)</span>
+<span class="lineNum">    1621 </span>            :         {
+<span class="lineNum">    1622 </span><span class="lineCov">       4360 :           struct cgraph_simd_clone *clone = clone_info;</span>
+<span class="lineNum">    1623 </span><span class="lineCov">       4360 :           if (inbranch_clause_specified &amp;&amp; (i &amp; 1) != 0)</span>
+<span class="lineNum">    1624 </span>            :             continue;
+<span class="lineNum">    1625 </span>            : 
+<span class="lineNum">    1626 </span><span class="lineCov">       3230 :           if (i != 0)</span>
+<span class="lineNum">    1627 </span>            :             {
+<span class="lineNum">    1628 </span><span class="lineCov">       7920 :               clone = simd_clone_struct_alloc (clone_info-&gt;nargs</span>
+<span class="lineNum">    1629 </span><span class="lineCov">       2640 :                                                + ((i &amp; 1) != 0));</span>
+<span class="lineNum">    1630 </span><span class="lineCov">       5280 :               simd_clone_struct_copy (clone, clone_info);</span>
+<span class="lineNum">    1631 </span>            :               /* Undo changes targetm.simd_clone.compute_vecsize_and_simdlen
+<span class="lineNum">    1632 </span>            :                  and simd_clone_adjust_argument_types did to the first
+<span class="lineNum">    1633 </span>            :                  clone's info.  */
+<span class="lineNum">    1634 </span><span class="lineCov">       2640 :               clone-&gt;nargs -= clone_info-&gt;inbranch;</span>
+<span class="lineNum">    1635 </span><span class="lineCov">       2640 :               clone-&gt;simdlen = orig_simdlen;</span>
+<span class="lineNum">    1636 </span>            :               /* And call the target hook again to get the right ISA.  */
+<span class="lineNum">    1637 </span><span class="lineCov">       2640 :               targetm.simd_clone.compute_vecsize_and_simdlen (node, clone,</span>
+<span class="lineNum">    1638 </span>            :                                                               base_type,
+<span class="lineNum">    1639 </span>            :                                                               i / 2);
+<span class="lineNum">    1640 </span><span class="lineCov">       2640 :               if ((i &amp; 1) != 0)</span>
+<span class="lineNum">    1641 </span><span class="lineCov">       1050 :                 clone-&gt;inbranch = 1;</span>
+<span class="lineNum">    1642 </span>            :             }
+<span class="lineNum">    1643 </span>            : 
+<span class="lineNum">    1644 </span>            :           /* simd_clone_mangle might fail if such a clone has been created
+<span class="lineNum">    1645 </span>            :              already.  */
+<span class="lineNum">    1646 </span><span class="lineCov">       3230 :           tree id = simd_clone_mangle (node, clone);</span>
+<span class="lineNum">    1647 </span><span class="lineCov">       3230 :           if (id == NULL_TREE)</span>
+<span class="lineNum">    1648 </span>            :             continue;
+<span class="lineNum">    1649 </span>            : 
+<span class="lineNum">    1650 </span>            :           /* Only when we are sure we want to create the clone actually
+<span class="lineNum">    1651 </span>            :              clone the function (or definitions) or create another
+<span class="lineNum">    1652 </span>            :              extern FUNCTION_DECL (for prototypes without definitions).  */
+<span class="lineNum">    1653 </span><span class="lineCov">       2908 :           struct cgraph_node *n = simd_clone_create (node);</span>
+<span class="lineNum">    1654 </span><span class="lineCov">       2908 :           if (n == NULL)</span>
+<span class="lineNum">    1655 </span>            :             continue;
+<span class="lineNum">    1656 </span>            : 
+<span class="lineNum">    1657 </span><span class="lineCov">       2908 :           n-&gt;simdclone = clone;</span>
+<span class="lineNum">    1658 </span><span class="lineCov">       2908 :           clone-&gt;origin = node;</span>
+<span class="lineNum">    1659 </span><span class="lineCov">       2908 :           clone-&gt;next_clone = NULL;</span>
+<span class="lineNum">    1660 </span><span class="lineCov">       2908 :           if (node-&gt;simd_clones == NULL)</span>
+<span class="lineNum">    1661 </span>            :             {
+<span class="lineNum">    1662 </span><span class="lineCov">        443 :               clone-&gt;prev_clone = n;</span>
+<span class="lineNum">    1663 </span><span class="lineCov">        443 :               node-&gt;simd_clones = n;</span>
+<span class="lineNum">    1664 </span>            :             }
+<span class="lineNum">    1665 </span>            :           else
+<span class="lineNum">    1666 </span>            :             {
+<span class="lineNum">    1667 </span><span class="lineCov">       2465 :               clone-&gt;prev_clone = node-&gt;simd_clones-&gt;simdclone-&gt;prev_clone;</span>
+<span class="lineNum">    1668 </span><span class="lineCov">       2465 :               clone-&gt;prev_clone-&gt;simdclone-&gt;next_clone = n;</span>
+<span class="lineNum">    1669 </span><span class="lineCov">       2465 :               node-&gt;simd_clones-&gt;simdclone-&gt;prev_clone = n;</span>
+<span class="lineNum">    1670 </span>            :             }
+<span class="lineNum">    1671 </span><span class="lineCov">       2908 :           symtab-&gt;change_decl_assembler_name (n-&gt;decl, id);</span>
+<span class="lineNum">    1672 </span>            :           /* And finally adjust the return type, parameters and for
+<span class="lineNum">    1673 </span>            :              definitions also function body.  */
+<span class="lineNum">    1674 </span><span class="lineCov">       2908 :           if (node-&gt;definition)</span>
+<span class="lineNum">    1675 </span><span class="lineCov">       2372 :             simd_clone_adjust (n);</span>
+<span class="lineNum">    1676 </span>            :           else
+<span class="lineNum">    1677 </span>            :             {
+<span class="lineNum">    1678 </span><span class="lineCov">        536 :               simd_clone_adjust_return_type (n);</span>
+<span class="lineNum">    1679 </span><span class="lineCov">        536 :               simd_clone_adjust_argument_types (n);</span>
+<span class="lineNum">    1680 </span>            :             }
+<span class="lineNum">    1681 </span>            :         }
+<span class="lineNum">    1682 </span>            :     }
+<span class="lineNum">    1683 </span><span class="lineCov">        595 :   while ((attr = lookup_attribute (&quot;omp declare simd&quot;, TREE_CHAIN (attr))));</span>
+<span class="lineNum">    1684 </span>            : }
+<span class="lineNum">    1685 </span>            : 
+<span class="lineNum">    1686 </span>            : /* Entry point for IPA simd clone creation pass.  */
+<a name="1687"><span class="lineNum">    1687 </span>            : </a>
+<span class="lineNum">    1688 </span>            : static unsigned int
+<span class="lineNum">    1689 </span><span class="lineCov">     139909 : ipa_omp_simd_clone (void)</span>
+<span class="lineNum">    1690 </span>            : {
+<span class="lineNum">    1691 </span><span class="lineCov">     139909 :   struct cgraph_node *node;</span>
+<span class="lineNum">    1692 </span><span class="lineCov">    5160166 :   FOR_EACH_FUNCTION (node)</span>
+<span class="lineNum">    1693 </span><span class="lineCov">    2440174 :     expand_simd_clones (node);</span>
+<span class="lineNum">    1694 </span><span class="lineCov">     139909 :   return 0;</span>
+<span class="lineNum">    1695 </span>            : }
+<span class="lineNum">    1696 </span>            : 
+<span class="lineNum">    1697 </span>            : namespace {
+<span class="lineNum">    1698 </span>            : 
+<span class="lineNum">    1699 </span>            : const pass_data pass_data_omp_simd_clone =
+<span class="lineNum">    1700 </span>            : {
+<span class="lineNum">    1701 </span>            :   SIMPLE_IPA_PASS,              /* type */
+<span class="lineNum">    1702 </span>            :   &quot;simdclone&quot;,                        /* name */
+<span class="lineNum">    1703 </span>            :   OPTGROUP_OMP,                 /* optinfo_flags */
+<span class="lineNum">    1704 </span>            :   TV_NONE,                      /* tv_id */
+<span class="lineNum">    1705 </span>            :   ( PROP_ssa | PROP_cfg ),      /* properties_required */
+<span class="lineNum">    1706 </span>            :   0,                            /* properties_provided */
+<span class="lineNum">    1707 </span>            :   0,                            /* properties_destroyed */
+<span class="lineNum">    1708 </span>            :   0,                            /* todo_flags_start */
+<span class="lineNum">    1709 </span>            :   0,                            /* todo_flags_finish */
+<span class="lineNum">    1710 </span>            : };
+<span class="lineNum">    1711 </span>            : 
+<span class="lineNum">    1712 </span>            : class pass_omp_simd_clone : public simple_ipa_opt_pass
+<span class="lineNum">    1713 </span>            : {
+<span class="lineNum">    1714 </span>            : public:
+<span class="lineNum">    1715 </span>            :   pass_omp_simd_clone(gcc::context *ctxt)
+<span class="lineNum">    1716 </span><span class="lineCov">     340624 :     : simple_ipa_opt_pass(pass_data_omp_simd_clone, ctxt)</span>
+<span class="lineNum">    1717 </span>            :   {}
+<span class="lineNum">    1718 </span>            : 
+<a name="1719"><span class="lineNum">    1719 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">    1720 </span>            :   virtual bool gate (function *);
+<span class="lineNum">    1721 </span><span class="lineCov">     139909 :   virtual unsigned int execute (function *) { return ipa_omp_simd_clone (); }</span>
+<span class="lineNum">    1722 </span>            : };
+<a name="1723"><span class="lineNum">    1723 </span>            : </a>
+<span class="lineNum">    1724 </span>            : bool
+<span class="lineNum">    1725 </span><span class="lineCov">     139910 : pass_omp_simd_clone::gate (function *)</span>
+<span class="lineNum">    1726 </span>            : {
+<span class="lineNum">    1727 </span><span class="lineCov">     139910 :   return targetm.simd_clone.compute_vecsize_and_simdlen != NULL;</span>
+<span class="lineNum">    1728 </span>            : }
+<span class="lineNum">    1729 </span>            : 
+<span class="lineNum">    1730 </span>            : } // anon namespace
+<a name="1731"><span class="lineNum">    1731 </span>            : </a>
+<span class="lineNum">    1732 </span>            : simple_ipa_opt_pass *
+<span class="lineNum">    1733 </span><span class="lineCov">     170312 : make_pass_omp_simd_clone (gcc::context *ctxt)</span>
+<span class="lineNum">    1734 </span>            : {
+<span class="lineNum">    1735 </span><span class="lineCov">     170312 :   return new pass_omp_simd_clone (ctxt);</span>
+<span class="lineNum">    1736 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

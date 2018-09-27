@@ -1,0 +1,1050 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/gimple-ssa-backprop.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - gimple-ssa-backprop.c<span style="font-size: 80%;"> (source / <a href="gimple-ssa-backprop.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">335</td>
+            <td class="headerCovTableEntry">351</td>
+            <td class="headerCovTableEntryHi">95.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">29</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntryMed">78.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Back-propagation of usage information to definitions.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2015-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* This pass propagates information that is common to all uses of an SSA
+<span class="lineNum">      21 </span>            :    name back up through the sequence of statements that generate it,
+<span class="lineNum">      22 </span>            :    simplifying the statements where possible.  Sometimes this can expose
+<span class="lineNum">      23 </span>            :    fully or partially dead code, but the main focus is simplifying
+<span class="lineNum">      24 </span>            :    computations.
+<span class="lineNum">      25 </span>            : 
+<span class="lineNum">      26 </span>            :    At the moment the pass only handles one piece of information: whether the
+<span class="lineNum">      27 </span>            :    sign of a value matters, and therefore whether sign-changing operations
+<span class="lineNum">      28 </span>            :    can be skipped.  The pass could be extended to more interesting
+<span class="lineNum">      29 </span>            :    information in future, such as which bits of an integer are significant.
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            :    For example, take the function:
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            :      double
+<span class="lineNum">      34 </span>            :      f (double *a, int n, double start)
+<span class="lineNum">      35 </span>            :      {
+<span class="lineNum">      36 </span>            :        double x = fabs (start);
+<span class="lineNum">      37 </span>            :        for (int i = 0; i &lt; n; ++i)
+<span class="lineNum">      38 </span>            :          x *= a[i];
+<span class="lineNum">      39 </span>            :        return __builtin_cos (x);
+<span class="lineNum">      40 </span>            :      }
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            :    cos(x) == cos(-x), so the sign of the final x doesn't matter.
+<span class="lineNum">      43 </span>            :    That x is the result of a series of multiplications, and if
+<span class="lineNum">      44 </span>            :    the sign of the result of a multiplication doesn't matter,
+<span class="lineNum">      45 </span>            :    the signs of the inputs don't matter either.
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :    The pass would replace the incoming value of x (i.e. fabs(start))
+<span class="lineNum">      48 </span>            :    with start.  Since there are no other uses of the fabs result,
+<span class="lineNum">      49 </span>            :    the call would get deleted as dead.
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            :    The algorithm is:
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span>            :    (1) Do a post-order traversal of the blocks in the function, walking
+<span class="lineNum">      54 </span>            :        each block backwards.  For each potentially-simplifiable statement
+<span class="lineNum">      55 </span>            :        that defines an SSA name X, examine all uses of X to see what
+<span class="lineNum">      56 </span>            :        information is actually significant.  Record this as INFO_MAP[X].
+<span class="lineNum">      57 </span>            :        Optimistically ignore for now any back-edge references to
+<span class="lineNum">      58 </span>            :        unprocessed phis.
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            :        (An alternative would be to record each use when we visit its
+<span class="lineNum">      61 </span>            :        statement and take the intersection as we go along.  However,
+<span class="lineNum">      62 </span>            :        this would lead to more SSA names being entered into INFO_MAP
+<span class="lineNum">      63 </span>            :        unnecessarily, only to be taken out again later.  At the moment
+<span class="lineNum">      64 </span>            :        very few SSA names end up with useful information.)
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :    (2) Iteratively reduce the optimistic result of (1) until we reach
+<span class="lineNum">      67 </span>            :        a maximal fixed point (which at the moment would mean revisiting
+<span class="lineNum">      68 </span>            :        statements at most once).  First push all SSA names that used an
+<span class="lineNum">      69 </span>            :        optimistic assumption about a backedge phi onto a worklist.
+<span class="lineNum">      70 </span>            :        While the worklist is nonempty, pick off an SSA name X and recompute
+<span class="lineNum">      71 </span>            :        INFO_MAP[X].  If the value changes, push all SSA names used in the
+<span class="lineNum">      72 </span>            :        definition of X onto the worklist.
+<span class="lineNum">      73 </span>            : 
+<span class="lineNum">      74 </span>            :    (3) Iterate over each SSA name X with info in INFO_MAP, in the
+<span class="lineNum">      75 </span>            :        opposite order to (1), i.e. a forward reverse-post-order walk.
+<span class="lineNum">      76 </span>            :        Try to optimize the definition of X using INFO_MAP[X] and fold
+<span class="lineNum">      77 </span>            :        the result.  (This ensures that we fold definitions before uses.)
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            :    (4) Iterate over each SSA name X with info in INFO_MAP, in the same
+<span class="lineNum">      80 </span>            :        order as (1), and delete any statements that are now dead.
+<span class="lineNum">      81 </span>            :        (This ensures that if a sequence of statements is dead,
+<span class="lineNum">      82 </span>            :        we delete the last statement first.)
+<span class="lineNum">      83 </span>            : 
+<span class="lineNum">      84 </span>            :    Note that this pass does not deal with direct redundancies,
+<span class="lineNum">      85 </span>            :    such as cos(-x)-&gt;cos(x).  match.pd handles those cases instead.  */
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      88 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      89 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      90 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      91 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      92 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      93 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      94 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      95 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      96 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      97 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      98 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      99 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">     100 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">     101 </span>            : #include &quot;tree-ssa-propagate.h&quot;
+<span class="lineNum">     102 </span>            : #include &quot;gimple-fold.h&quot;
+<span class="lineNum">     103 </span>            : #include &quot;alloc-pool.h&quot;
+<span class="lineNum">     104 </span>            : #include &quot;tree-hash-traits.h&quot;
+<span class="lineNum">     105 </span>            : #include &quot;case-cfn-macros.h&quot;
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            : namespace {
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span>            : /* Information about a group of uses of an SSA name.  */
+<span class="lineNum">     110 </span>            : struct usage_info
+<span class="lineNum">     111 </span>            : {
+<span class="lineNum">     112 </span><span class="lineCov">     491601 :   usage_info () : flag_word (0) {}</span>
+<span class="lineNum">     113 </span>            :   usage_info &amp;operator &amp;= (const usage_info &amp;);
+<span class="lineNum">     114 </span>            :   usage_info operator &amp; (const usage_info &amp;) const;
+<span class="lineNum">     115 </span>            :   bool operator == (const usage_info &amp;) const;
+<span class="lineNum">     116 </span>            :   bool operator != (const usage_info &amp;) const;
+<span class="lineNum">     117 </span>            :   bool is_useful () const;
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            :   static usage_info intersection_identity ();
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span>            :   union
+<span class="lineNum">     122 </span>            :   {
+<span class="lineNum">     123 </span>            :     struct
+<span class="lineNum">     124 </span>            :     {
+<span class="lineNum">     125 </span>            :       /* True if the uses treat x and -x in the same way.  */
+<span class="lineNum">     126 </span>            :       unsigned int ignore_sign : 1;
+<span class="lineNum">     127 </span>            :     } flags;
+<span class="lineNum">     128 </span>            :     /* All the flag bits as a single int.  */
+<span class="lineNum">     129 </span>            :     unsigned int flag_word;
+<span class="lineNum">     130 </span>            :   };
+<span class="lineNum">     131 </span>            : };
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span>            : /* Return an X such that X &amp; Y == Y for all Y.  This is the most
+<span class="lineNum">     134 </span>            :    optimistic assumption possible.  */
+<a name="135"><span class="lineNum">     135 </span>            : </a>
+<span class="lineNum">     136 </span>            : usage_info
+<span class="lineNum">     137 </span><span class="lineNoCov">          0 : usage_info::intersection_identity ()</span>
+<span class="lineNum">     138 </span>            : {
+<span class="lineNum">     139 </span><span class="lineCov">   23743734 :   usage_info ret;</span>
+<span class="lineNum">     140 </span><span class="lineCov">   11871867 :   ret.flag_word = -1;</span>
+<span class="lineNum">     141 </span><span class="lineCov">   11871867 :   return ret;</span>
+<span class="lineNum">     142 </span>            : }
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            : /* Intersect *THIS with OTHER, so that *THIS describes all uses covered
+<span class="lineNum">     145 </span>            :    by the original *THIS and OTHER.  */
+<a name="146"><span class="lineNum">     146 </span>            : </a>
+<span class="lineNum">     147 </span>            : usage_info &amp;
+<span class="lineNum">     148 </span><span class="lineNoCov">          0 : usage_info::operator &amp;= (const usage_info &amp;other)</span>
+<span class="lineNum">     149 </span>            : {
+<span class="lineNum">     150 </span><span class="lineCov">   11514962 :   flag_word &amp;= other.flag_word;</span>
+<span class="lineNum">     151 </span><span class="lineCov">   11514962 :   return *this;</span>
+<span class="lineNum">     152 </span>            : }
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span>            : /* Return the intersection of *THIS and OTHER, i.e. a structure that
+<span class="lineNum">     155 </span>            :    describes all uses covered by *THIS and OTHER.  */
+<a name="156"><span class="lineNum">     156 </span>            : </a>
+<span class="lineNum">     157 </span>            : usage_info
+<span class="lineNum">     158 </span><span class="lineNoCov">          0 : usage_info::operator &amp; (const usage_info &amp;other) const</span>
+<span class="lineNum">     159 </span>            : {
+<span class="lineNum">     160 </span><span class="lineCov">         20 :   usage_info info (*this);</span>
+<span class="lineNum">     161 </span><span class="lineCov">         40 :   info &amp;= other;</span>
+<span class="lineNum">     162 </span><span class="lineCov">         20 :   return info;</span>
+<span class="lineNum">     163 </span>            : }
+<a name="164"><span class="lineNum">     164 </span>            : </a>
+<span class="lineNum">     165 </span>            : bool
+<span class="lineNum">     166 </span><span class="lineNoCov">          0 : usage_info::operator == (const usage_info &amp;other) const</span>
+<span class="lineNum">     167 </span>            : {
+<span class="lineNum">     168 </span><span class="lineCov">        171 :   return flag_word == other.flag_word;</span>
+<span class="lineNum">     169 </span>            : }
+<a name="170"><span class="lineNum">     170 </span>            : </a>
+<span class="lineNum">     171 </span>            : bool
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 : usage_info::operator != (const usage_info &amp;other) const</span>
+<span class="lineNum">     173 </span>            : {
+<span class="lineNum">     174 </span><span class="lineCov">        302 :   return !operator == (other);</span>
+<span class="lineNum">     175 </span>            : }
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span>            : /* Return true if *THIS is not simply the default, safe assumption.  */
+<a name="178"><span class="lineNum">     178 </span>            : </a>
+<span class="lineNum">     179 </span>            : bool
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 : usage_info::is_useful () const</span>
+<span class="lineNum">     181 </span>            : {
+<span class="lineNum">     182 </span><span class="lineCov">   23878410 :   return flag_word != 0;</span>
+<span class="lineNum">     183 </span>            : }
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span>            : /* Start a dump line about SSA name VAR.  */
+<a name="186"><span class="lineNum">     186 </span>            : </a>
+<span class="lineNum">     187 </span>            : static void
+<span class="lineNum">     188 </span><span class="lineCov">        174 : dump_usage_prefix (FILE *file, tree var)</span>
+<span class="lineNum">     189 </span>            : {
+<span class="lineNum">     190 </span><span class="lineCov">        174 :   fprintf (file, &quot;  &quot;);</span>
+<span class="lineNum">     191 </span><span class="lineCov">        174 :   print_generic_expr (file, var);</span>
+<span class="lineNum">     192 </span><span class="lineCov">        174 :   fprintf (file, &quot;: &quot;);</span>
+<span class="lineNum">     193 </span><span class="lineCov">        174 : }</span>
+<span class="lineNum">     194 </span>            : 
+<span class="lineNum">     195 </span>            : /* Print INFO to FILE.  */
+<a name="196"><span class="lineNum">     196 </span>            : </a>
+<span class="lineNum">     197 </span>            : static void
+<span class="lineNum">     198 </span><span class="lineCov">        294 : dump_usage_info (FILE *file, tree var, usage_info *info)</span>
+<span class="lineNum">     199 </span>            : {
+<span class="lineNum">     200 </span><span class="lineCov">        294 :   if (info-&gt;flags.ignore_sign)</span>
+<span class="lineNum">     201 </span>            :     {
+<span class="lineNum">     202 </span><span class="lineCov">        174 :       dump_usage_prefix (file, var);</span>
+<span class="lineNum">     203 </span><span class="lineCov">        174 :       fprintf (file, &quot;sign bit not important\n&quot;);</span>
+<span class="lineNum">     204 </span>            :     }
+<span class="lineNum">     205 </span><span class="lineCov">        294 : }</span>
+<span class="lineNum">     206 </span>            : 
+<span class="lineNum">     207 </span>            : /* Represents one execution of the pass.  */
+<span class="lineNum">     208 </span>            : class backprop
+<span class="lineNum">     209 </span>            : {
+<span class="lineNum">     210 </span>            : public:
+<span class="lineNum">     211 </span>            :   backprop (function *);
+<span class="lineNum">     212 </span>            :   ~backprop ();
+<span class="lineNum">     213 </span>            : 
+<span class="lineNum">     214 </span>            :   void execute ();
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            : private:
+<span class="lineNum">     217 </span>            :   const usage_info *lookup_operand (tree);
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   void push_to_worklist (tree);
+<span class="lineNum">     220 </span>            :   tree pop_from_worklist ();
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span>            :   void process_builtin_call_use (gcall *, tree, usage_info *);
+<span class="lineNum">     223 </span>            :   void process_assign_use (gassign *, tree, usage_info *);
+<span class="lineNum">     224 </span>            :   void process_phi_use (gphi *, usage_info *);
+<span class="lineNum">     225 </span>            :   void process_use (gimple *, tree, usage_info *);
+<span class="lineNum">     226 </span>            :   bool intersect_uses (tree, usage_info *);
+<span class="lineNum">     227 </span>            :   void reprocess_inputs (gimple *);
+<span class="lineNum">     228 </span>            :   void process_var (tree);
+<span class="lineNum">     229 </span>            :   void process_block (basic_block);
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            :   void prepare_change (tree);
+<span class="lineNum">     232 </span>            :   void complete_change (gimple *);
+<span class="lineNum">     233 </span>            :   void optimize_builtin_call (gcall *, tree, const usage_info *);
+<span class="lineNum">     234 </span>            :   void replace_assign_rhs (gassign *, tree, tree, tree, tree);
+<span class="lineNum">     235 </span>            :   void optimize_assign (gassign *, tree, const usage_info *);
+<span class="lineNum">     236 </span>            :   void optimize_phi (gphi *, tree, const usage_info *);
+<span class="lineNum">     237 </span>            : 
+<span class="lineNum">     238 </span>            :   typedef hash_map &lt;tree_ssa_name_hash, usage_info *&gt; info_map_type;
+<span class="lineNum">     239 </span>            :   typedef std::pair &lt;tree, usage_info *&gt; var_info_pair;
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            :   /* The function we're optimizing.  */
+<span class="lineNum">     242 </span>            :   function *m_fn;
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span>            :   /* Pool for allocating usage_info structures.  */
+<span class="lineNum">     245 </span>            :   object_allocator &lt;usage_info&gt; m_info_pool;
+<span class="lineNum">     246 </span>            : 
+<span class="lineNum">     247 </span>            :   /* Maps an SSA name to a description of all uses of that SSA name.
+<span class="lineNum">     248 </span>            :      All the usage_infos satisfy is_useful.
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span>            :      We use a hash_map because the map is expected to be sparse
+<span class="lineNum">     251 </span>            :      (i.e. most SSA names won't have useful information attached to them).
+<span class="lineNum">     252 </span>            :      We could move to a directly-indexed array if that situation changes.  */
+<span class="lineNum">     253 </span>            :   info_map_type m_info_map;
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span>            :   /* Post-ordered list of all potentially-interesting SSA names,
+<span class="lineNum">     256 </span>            :      along with information that describes all uses.  */
+<span class="lineNum">     257 </span>            :   auto_vec &lt;var_info_pair, 128&gt; m_vars;
+<span class="lineNum">     258 </span>            : 
+<span class="lineNum">     259 </span>            :   /* A bitmap of blocks that we have finished processing in the initial
+<span class="lineNum">     260 </span>            :      post-order walk.  */
+<span class="lineNum">     261 </span>            :   auto_sbitmap m_visited_blocks;
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span>            :   /* A bitmap of phis that we have finished processing in the initial
+<span class="lineNum">     264 </span>            :      post-order walk, excluding those from blocks mentioned in
+<span class="lineNum">     265 </span>            :      M_VISITED_BLOCKS.  */
+<span class="lineNum">     266 </span>            :   auto_bitmap m_visited_phis;
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span>            :   /* A worklist of SSA names whose definitions need to be reconsidered.  */
+<span class="lineNum">     269 </span>            :   auto_vec &lt;tree, 64&gt; m_worklist;
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span>            :   /* The SSA names in M_WORKLIST, identified by their SSA_NAME_VERSION.
+<span class="lineNum">     272 </span>            :      We use a bitmap rather than an sbitmap because most SSA names are
+<span class="lineNum">     273 </span>            :      never added to the worklist.  */
+<span class="lineNum">     274 </span>            :   bitmap m_worklist_names;
+<a name="275"><span class="lineNum">     275 </span>            : };</a>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">     620934 : backprop::backprop (function *fn)</span>
+<span class="lineNum">     278 </span>            :   : m_fn (fn),
+<span class="lineNum">     279 </span>            :     m_info_pool (&quot;usage_info&quot;),
+<span class="lineNum">     280 </span><span class="lineCov">     620934 :     m_visited_blocks (last_basic_block_for_fn (m_fn)),</span>
+<span class="lineNum">     281 </span><span class="lineCov">    1241868 :     m_worklist_names (BITMAP_ALLOC (NULL))</span>
+<span class="lineNum">     282 </span>            : {
+<span class="lineNum">     283 </span><span class="lineCov">    1241868 :   bitmap_clear (m_visited_blocks);</span>
+<a name="284"><span class="lineNum">     284 </span><span class="lineCov">     620934 : }</span></a>
+<span class="lineNum">     285 </span>            : 
+<span class="lineNum">     286 </span><span class="lineCov">    1241868 : backprop::~backprop ()</span>
+<span class="lineNum">     287 </span>            : {
+<span class="lineNum">     288 </span><span class="lineCov">     620934 :   BITMAP_FREE (m_worklist_names);</span>
+<span class="lineNum">     289 </span><span class="lineCov">     722405 :   m_info_pool.release ();</span>
+<span class="lineNum">     290 </span><span class="lineCov">     620934 : }</span>
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span>            : /* Return usage information for general operand OP, or null if none.  */
+<a name="293"><span class="lineNum">     293 </span>            : </a>
+<span class="lineNum">     294 </span>            : const usage_info *
+<span class="lineNum">     295 </span><span class="lineCov">    4705583 : backprop::lookup_operand (tree op)</span>
+<span class="lineNum">     296 </span>            : {
+<span class="lineNum">     297 </span><span class="lineCov">    4705583 :   if (op &amp;&amp; TREE_CODE (op) == SSA_NAME)</span>
+<span class="lineNum">     298 </span>            :     {
+<span class="lineNum">     299 </span><span class="lineCov">    3874005 :       usage_info **slot = m_info_map.get (op);</span>
+<span class="lineNum">     300 </span><span class="lineCov">    3874005 :       if (slot)</span>
+<span class="lineNum">     301 </span><span class="lineCov">     583711 :         return *slot;</span>
+<span class="lineNum">     302 </span>            :     }
+<span class="lineNum">     303 </span>            :   return NULL;
+<span class="lineNum">     304 </span>            : }
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span>            : /* Add SSA name VAR to the worklist, if it isn't on the worklist already.  */
+<a name="307"><span class="lineNum">     307 </span>            : </a>
+<span class="lineNum">     308 </span>            : void
+<span class="lineNum">     309 </span><span class="lineCov">     457294 : backprop::push_to_worklist (tree var)</span>
+<span class="lineNum">     310 </span>            : {
+<span class="lineNum">     311 </span><span class="lineCov">     457294 :   if (!bitmap_set_bit (m_worklist_names, SSA_NAME_VERSION (var)))</span>
+<span class="lineNum">     312 </span>            :     return;
+<span class="lineNum">     313 </span><span class="lineCov">     449392 :   m_worklist.safe_push (var);</span>
+<span class="lineNum">     314 </span><span class="lineCov">     449392 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     315 </span>            :     {
+<span class="lineNum">     316 </span><span class="lineCov">         36 :       fprintf (dump_file, &quot;[WORKLIST] Pushing &quot;);</span>
+<span class="lineNum">     317 </span><span class="lineCov">         36 :       print_generic_expr (dump_file, var);</span>
+<span class="lineNum">     318 </span><span class="lineCov">         36 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     319 </span>            :     }
+<span class="lineNum">     320 </span>            : }
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span>            : /* Remove and return the next SSA name from the worklist.  The worklist
+<span class="lineNum">     323 </span>            :    is known to be nonempty.  */
+<a name="324"><span class="lineNum">     324 </span>            : </a>
+<span class="lineNum">     325 </span>            : tree
+<span class="lineNum">     326 </span><span class="lineCov">     449392 : backprop::pop_from_worklist ()</span>
+<span class="lineNum">     327 </span>            : {
+<span class="lineNum">     328 </span><span class="lineCov">     449392 :   tree var = m_worklist.pop ();</span>
+<span class="lineNum">     329 </span><span class="lineCov">     449392 :   bitmap_clear_bit (m_worklist_names, SSA_NAME_VERSION (var));</span>
+<span class="lineNum">     330 </span><span class="lineCov">     449392 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     331 </span>            :     {
+<span class="lineNum">     332 </span><span class="lineCov">         36 :       fprintf (dump_file, &quot;[WORKLIST] Popping &quot;);</span>
+<span class="lineNum">     333 </span><span class="lineCov">         36 :       print_generic_expr (dump_file, var);</span>
+<span class="lineNum">     334 </span><span class="lineCov">         36 :       fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     335 </span>            :     }
+<span class="lineNum">     336 </span><span class="lineCov">     449392 :   return var;</span>
+<span class="lineNum">     337 </span>            : }
+<span class="lineNum">     338 </span>            : 
+<span class="lineNum">     339 </span>            : /* Make INFO describe all uses of RHS in CALL, which is a call to a
+<span class="lineNum">     340 </span>            :    built-in function.  */
+<a name="341"><span class="lineNum">     341 </span>            : </a>
+<span class="lineNum">     342 </span>            : void
+<span class="lineNum">     343 </span><span class="lineCov">    1494598 : backprop::process_builtin_call_use (gcall *call, tree rhs, usage_info *info)</span>
+<span class="lineNum">     344 </span>            : {
+<span class="lineNum">     345 </span><span class="lineCov">    1494598 :   combined_fn fn = gimple_call_combined_fn (call);</span>
+<span class="lineNum">     346 </span><span class="lineCov">    1494598 :   tree lhs = gimple_call_lhs (call);</span>
+<span class="lineNum">     347 </span><span class="lineCov">    1494598 :   switch (fn)</span>
+<span class="lineNum">     348 </span>            :     {
+<span class="lineNum">     349 </span>            :     case CFN_LAST:
+<span class="lineNum">     350 </span>            :       break;
+<span class="lineNum">     351 </span>            : 
+<span class="lineNum">     352 </span><span class="lineCov">        569 :     CASE_CFN_COS:</span>
+<span class="lineNum">     353 </span><span class="lineCov">        569 :     CASE_CFN_COSH:</span>
+<span class="lineNum">     354 </span><span class="lineCov">        569 :     CASE_CFN_CCOS:</span>
+<span class="lineNum">     355 </span><span class="lineCov">        569 :     CASE_CFN_CCOSH:</span>
+<span class="lineNum">     356 </span><span class="lineCov">        569 :     CASE_CFN_HYPOT:</span>
+<span class="lineNum">     357 </span>            :       /* The signs of all inputs are ignored.  */
+<span class="lineNum">     358 </span><span class="lineCov">        569 :       info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     359 </span><span class="lineCov">        569 :       break;</span>
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineCov">      27778 :     CASE_CFN_COPYSIGN:</span>
+<span class="lineNum">     362 </span><span class="lineCov">      27778 :     CASE_CFN_COPYSIGN_FN:</span>
+<span class="lineNum">     363 </span>            :       /* The sign of the first input is ignored.  */
+<span class="lineNum">     364 </span><span class="lineCov">      27778 :       if (rhs != gimple_call_arg (call, 1))</span>
+<span class="lineNum">     365 </span><span class="lineCov">        437 :         info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     366 </span>            :       break;
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineCov">        600 :     CASE_CFN_POW:</span>
+<span class="lineNum">     369 </span><span class="lineCov">        600 :       {</span>
+<span class="lineNum">     370 </span>            :         /* The sign of the first input is ignored as long as the second
+<span class="lineNum">     371 </span>            :            input is an even real.  */
+<span class="lineNum">     372 </span><span class="lineCov">        600 :         tree power = gimple_call_arg (call, 1);</span>
+<span class="lineNum">     373 </span><span class="lineCov">        600 :         HOST_WIDE_INT n;</span>
+<span class="lineNum">     374 </span><span class="lineCov">        600 :         if (TREE_CODE (power) == REAL_CST</span>
+<span class="lineNum">     375 </span><span class="lineCov">         92 :             &amp;&amp; real_isinteger (&amp;TREE_REAL_CST (power), &amp;n)</span>
+<span class="lineNum">     376 </span><span class="lineCov">        621 :             &amp;&amp; (n &amp; 1) == 0)</span>
+<span class="lineNum">     377 </span><span class="lineCov">         19 :           info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     378 </span><span class="lineCov">        600 :         break;</span>
+<span class="lineNum">     379 </span>            :       }
+<span class="lineNum">     380 </span>            : 
+<span class="lineNum">     381 </span><span class="lineCov">        141 :     CASE_CFN_FMA:</span>
+<span class="lineNum">     382 </span><span class="lineCov">        141 :     CASE_CFN_FMA_FN:</span>
+<span class="lineNum">     383 </span><span class="lineCov">        141 :     case CFN_FMS:</span>
+<span class="lineNum">     384 </span><span class="lineCov">        141 :     case CFN_FNMA:</span>
+<span class="lineNum">     385 </span><span class="lineCov">        141 :     case CFN_FNMS:</span>
+<span class="lineNum">     386 </span>            :       /* In X * X + Y, where Y is distinct from X, the sign of X doesn't
+<span class="lineNum">     387 </span>            :          matter.  */
+<span class="lineNum">     388 </span><span class="lineCov">        141 :       if (gimple_call_arg (call, 0) == rhs</span>
+<span class="lineNum">     389 </span><span class="lineCov">         43 :           &amp;&amp; gimple_call_arg (call, 1) == rhs</span>
+<span class="lineNum">     390 </span><span class="lineCov">        144 :           &amp;&amp; gimple_call_arg (call, 2) != rhs)</span>
+<span class="lineNum">     391 </span><span class="lineCov">          3 :         info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     392 </span>            :       break;
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span><span class="lineCov">     274895 :     default:</span>
+<span class="lineNum">     395 </span><span class="lineCov">     274895 :       if (negate_mathfn_p (fn))</span>
+<span class="lineNum">     396 </span>            :         {
+<span class="lineNum">     397 </span>            :           /* The sign of the (single) input doesn't matter provided
+<span class="lineNum">     398 </span>            :              that the sign of the output doesn't matter.  */
+<span class="lineNum">     399 </span><span class="lineCov">       1590 :           const usage_info *lhs_info = lookup_operand (lhs);</span>
+<span class="lineNum">     400 </span><span class="lineCov">       1590 :           if (lhs_info)</span>
+<span class="lineNum">     401 </span><span class="lineCov">         40 :             info-&gt;flags.ignore_sign = lhs_info-&gt;flags.ignore_sign;</span>
+<span class="lineNum">     402 </span>            :         }
+<span class="lineNum">     403 </span>            :       break;
+<span class="lineNum">     404 </span>            :     }
+<span class="lineNum">     405 </span><span class="lineCov">    1494598 : }</span>
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span>            : /* Make INFO describe all uses of RHS in ASSIGN.  */
+<a name="408"><span class="lineNum">     408 </span>            : </a>
+<span class="lineNum">     409 </span>            : void
+<span class="lineNum">     410 </span><span class="lineCov">    6319678 : backprop::process_assign_use (gassign *assign, tree rhs, usage_info *info)</span>
+<span class="lineNum">     411 </span>            : {
+<span class="lineNum">     412 </span><span class="lineCov">    6319678 :   tree lhs = gimple_assign_lhs (assign);</span>
+<span class="lineNum">     413 </span><span class="lineCov">    9114291 :   switch (gimple_assign_rhs_code (assign))</span>
+<span class="lineNum">     414 </span>            :     {
+<span class="lineNum">     415 </span><span class="lineCov">       5496 :     case ABS_EXPR:</span>
+<span class="lineNum">     416 </span><span class="lineCov">       5496 :     case ABSU_EXPR:</span>
+<span class="lineNum">     417 </span>            :       /* The sign of the input doesn't matter.  */
+<span class="lineNum">     418 </span><span class="lineCov">       5496 :       info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     419 </span><span class="lineCov">       5496 :       break;</span>
+<span class="lineNum">     420 </span>            : 
+<span class="lineNum">     421 </span><span class="lineCov">       4085 :     case COND_EXPR:</span>
+<span class="lineNum">     422 </span>            :       /* For A = B ? C : D, propagate information about all uses of A
+<span class="lineNum">     423 </span>            :          to C and D.  */
+<span class="lineNum">     424 </span><span class="lineCov">       8170 :       if (rhs != gimple_assign_rhs1 (assign))</span>
+<span class="lineNum">     425 </span>            :         {
+<span class="lineNum">     426 </span><span class="lineCov">       4032 :           const usage_info *lhs_info = lookup_operand (lhs);</span>
+<span class="lineNum">     427 </span><span class="lineCov">       4032 :           if (lhs_info)</span>
+<span class="lineNum">     428 </span><span class="lineCov">       1810 :             *info = *lhs_info;</span>
+<span class="lineNum">     429 </span>            :         }
+<span class="lineNum">     430 </span>            :       break;
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">     424206 :     case MULT_EXPR:</span>
+<span class="lineNum">     433 </span>            :       /* In X * X, the sign of X doesn't matter.  */
+<span class="lineNum">     434 </span><span class="lineCov">     424206 :       if (gimple_assign_rhs1 (assign) == rhs</span>
+<span class="lineNum">     435 </span><span class="lineCov">     758854 :           &amp;&amp; gimple_assign_rhs2 (assign) == rhs)</span>
+<span class="lineNum">     436 </span><span class="lineCov">       1981 :         info-&gt;flags.ignore_sign = true;</span>
+<span class="lineNum">     437 </span>            :       /* Fall through.  */
+<span class="lineNum">     438 </span>            : 
+<span class="lineNum">     439 </span><span class="lineCov">     455962 :     case NEGATE_EXPR:</span>
+<span class="lineNum">     440 </span><span class="lineCov">     455962 :     case RDIV_EXPR:</span>
+<span class="lineNum">     441 </span>            :       /* If the sign of the result doesn't matter, the sign of the inputs
+<span class="lineNum">     442 </span>            :          doesn't matter either.  */
+<span class="lineNum">     443 </span><span class="lineCov">     455962 :       if (FLOAT_TYPE_P (TREE_TYPE (rhs)))</span>
+<span class="lineNum">     444 </span>            :         {
+<span class="lineNum">     445 </span><span class="lineCov">     112803 :           const usage_info *lhs_info = lookup_operand (lhs);</span>
+<span class="lineNum">     446 </span><span class="lineCov">     112803 :           if (lhs_info)</span>
+<span class="lineNum">     447 </span><span class="lineCov">       2501 :             info-&gt;flags.ignore_sign = lhs_info-&gt;flags.ignore_sign;</span>
+<span class="lineNum">     448 </span>            :         }
+<span class="lineNum">     449 </span>            :       break;
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            :     default:
+<span class="lineNum">     452 </span>            :       break;
+<span class="lineNum">     453 </span>            :     }
+<span class="lineNum">     454 </span><span class="lineCov">    6319678 : }</span>
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span>            : /* Make INFO describe the uses of PHI's result.  */
+<a name="457"><span class="lineNum">     457 </span>            : </a>
+<span class="lineNum">     458 </span>            : void
+<span class="lineNum">     459 </span><span class="lineNoCov">          0 : backprop::process_phi_use (gphi *phi, usage_info *info)</span>
+<span class="lineNum">     460 </span>            : {
+<span class="lineNum">     461 </span><span class="lineNoCov">          0 :   tree result = gimple_phi_result (phi);</span>
+<span class="lineNum">     462 </span><span class="lineCov">    1494975 :   if (const usage_info *result_info = lookup_operand (result))</span>
+<span class="lineNum">     463 </span><span class="lineCov">     122066 :     *info = *result_info;</span>
+<span class="lineNum">     464 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            : /* Make INFO describe all uses of RHS in STMT.  */
+<a name="467"><span class="lineNum">     467 </span>            : </a>
+<span class="lineNum">     468 </span>            : void
+<span class="lineNum">     469 </span><span class="lineCov">   11514942 : backprop::process_use (gimple *stmt, tree rhs, usage_info *info)</span>
+<span class="lineNum">     470 </span>            : {
+<span class="lineNum">     471 </span><span class="lineCov">   11514942 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     472 </span>            :     {
+<span class="lineNum">     473 </span><span class="lineCov">        216 :       fprintf (dump_file, &quot;[USE] &quot;);</span>
+<span class="lineNum">     474 </span><span class="lineCov">        216 :       print_generic_expr (dump_file, rhs);</span>
+<span class="lineNum">     475 </span><span class="lineCov">        216 :       fprintf (dump_file, &quot; in &quot;);</span>
+<span class="lineNum">     476 </span><span class="lineCov">        216 :       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">     477 </span>            :     }
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span><span class="lineCov">   11514942 :   if (gcall *call = dyn_cast &lt;gcall *&gt; (stmt))</span>
+<span class="lineNum">     480 </span><span class="lineCov">    1494598 :     process_builtin_call_use (call, rhs, info);</span>
+<span class="lineNum">     481 </span><span class="lineCov">   10020344 :   else if (gassign *assign = dyn_cast &lt;gassign *&gt; (stmt))</span>
+<span class="lineNum">     482 </span><span class="lineCov">    6319678 :     process_assign_use (assign, rhs, info);</span>
+<span class="lineNum">     483 </span><span class="lineCov">    3700666 :   else if (gphi *phi = dyn_cast &lt;gphi *&gt; (stmt))</span>
+<span class="lineNum">     484 </span><span class="lineCov">    1494975 :     process_phi_use (phi, info);</span>
+<span class="lineNum">     485 </span>            : 
+<span class="lineNum">     486 </span><span class="lineCov">   11514942 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     487 </span><span class="lineCov">        216 :     dump_usage_info (dump_file, rhs, info);</span>
+<span class="lineNum">     488 </span><span class="lineCov">   11514942 : }</span>
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : /* Make INFO describe all uses of VAR, returning true if the result
+<span class="lineNum">     491 </span>            :    is useful.  If the uses include phis that haven't been processed yet,
+<span class="lineNum">     492 </span>            :    make the most optimistic assumption possible, so that we aim for
+<span class="lineNum">     493 </span>            :    a maximum rather than a minimum fixed point.  */
+<a name="494"><span class="lineNum">     494 </span>            : </a>
+<span class="lineNum">     495 </span>            : bool
+<span class="lineNum">     496 </span><span class="lineCov">   11871867 : backprop::intersect_uses (tree var, usage_info *info)</span>
+<span class="lineNum">     497 </span>            : {
+<span class="lineNum">     498 </span><span class="lineCov">   11871867 :   imm_use_iterator iter;</span>
+<span class="lineNum">     499 </span><span class="lineCov">   11871867 :   gimple *stmt;</span>
+<span class="lineNum">     500 </span><span class="lineCov">   23743734 :   *info = usage_info::intersection_identity ();</span>
+<span class="lineNum">     501 </span><span class="lineCov">   14155801 :   FOR_EACH_IMM_USE_STMT (stmt, iter, var)</span>
+<span class="lineNum">     502 </span>            :     {
+<span class="lineNum">     503 </span><span class="lineCov">   27328098 :       if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     504 </span>            :         continue;
+<span class="lineNum">     505 </span><span class="lineCov">   12029608 :       gphi *phi = dyn_cast &lt;gphi *&gt; (stmt);</span>
+<span class="lineNum">     506 </span><span class="lineCov">    2009641 :       if (phi</span>
+<span class="lineNum">     507 </span><span class="lineCov">    6028923 :           &amp;&amp; !bitmap_bit_p (m_visited_blocks, gimple_bb (phi)-&gt;index)</span>
+<span class="lineNum">     508 </span><span class="lineCov">     516341 :           &amp;&amp; !bitmap_bit_p (m_visited_phis,</span>
+<span class="lineNum">     509 </span><span class="lineCov">    1032682 :                             SSA_NAME_VERSION (gimple_phi_result (phi))))</span>
+<span class="lineNum">     510 </span>            :         {
+<span class="lineNum">     511 </span>            :           /* Skip unprocessed phis.  */
+<span class="lineNum">     512 </span><span class="lineCov">     514666 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     513 </span>            :             {
+<span class="lineNum">     514 </span><span class="lineCov">         18 :               fprintf (dump_file, &quot;[BACKEDGE] &quot;);</span>
+<span class="lineNum">     515 </span><span class="lineCov">         18 :               print_generic_expr (dump_file, var);</span>
+<span class="lineNum">     516 </span><span class="lineCov">         18 :               fprintf (dump_file, &quot; in &quot;);</span>
+<span class="lineNum">     517 </span><span class="lineCov">         18 :               print_gimple_stmt (dump_file, phi, 0, TDF_SLIM);</span>
+<span class="lineNum">     518 </span>            :             }
+<span class="lineNum">     519 </span>            :         }
+<span class="lineNum">     520 </span>            :       else
+<span class="lineNum">     521 </span>            :         {
+<span class="lineNum">     522 </span><span class="lineCov">   23029884 :           usage_info subinfo;</span>
+<span class="lineNum">     523 </span><span class="lineCov">   11514942 :           process_use (stmt, var, &amp;subinfo);</span>
+<span class="lineNum">     524 </span><span class="lineCov">   23029884 :           *info &amp;= subinfo;</span>
+<span class="lineNum">     525 </span><span class="lineCov">   11514942 :           if (!info-&gt;is_useful ())</span>
+<span class="lineNum">     526 </span>            :             {
+<span class="lineNum">     527 </span><span class="lineCov">   22760230 :               BREAK_FROM_IMM_USE_STMT (iter);</span>
+<span class="lineNum">     528 </span>            :               return false;
+<span class="lineNum">     529 </span>            :             }
+<span class="lineNum">     530 </span>            :         }
+<span class="lineNum">     531 </span>            :     }
+<span class="lineNum">     532 </span><span class="lineCov">   11871867 :   return true;</span>
+<span class="lineNum">     533 </span>            : }
+<span class="lineNum">     534 </span>            : 
+<span class="lineNum">     535 </span>            : /* Queue for reconsideration any input of STMT that has information
+<span class="lineNum">     536 </span>            :    associated with it.  This is used if that information might be
+<span class="lineNum">     537 </span>            :    too optimistic.  */
+<a name="538"><span class="lineNum">     538 </span>            : </a>
+<span class="lineNum">     539 </span>            : void
+<span class="lineNum">     540 </span><span class="lineCov">    2523828 : backprop::reprocess_inputs (gimple *stmt)</span>
+<span class="lineNum">     541 </span>            : {
+<span class="lineNum">     542 </span><span class="lineCov">    2523828 :   use_operand_p use_p;</span>
+<span class="lineNum">     543 </span><span class="lineCov">    2523828 :   ssa_op_iter oi;</span>
+<span class="lineNum">     544 </span><span class="lineCov">   13187495 :   FOR_EACH_PHI_OR_STMT_USE (use_p, stmt, oi, SSA_OP_USE)</span>
+<span class="lineNum">     545 </span>            :     {
+<span class="lineNum">     546 </span><span class="lineCov">    3092183 :       tree var = get_use_from_ptr (use_p);</span>
+<span class="lineNum">     547 </span><span class="lineCov">    3092183 :       if (lookup_operand (var))</span>
+<span class="lineNum">     548 </span><span class="lineCov">     457294 :         push_to_worklist (var);</span>
+<span class="lineNum">     549 </span>            :     }
+<span class="lineNum">     550 </span><span class="lineCov">    2523828 : }</span>
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span>            : /* Say that we're recording INFO for SSA name VAR, or that we're deleting
+<span class="lineNum">     553 </span>            :    existing information if INFO is null.  INTRO describes the change.  */
+<a name="554"><span class="lineNum">     554 </span>            : </a>
+<span class="lineNum">     555 </span>            : static void
+<span class="lineNum">     556 </span><span class="lineCov">         96 : dump_var_info (tree var, usage_info *info, const char *intro)</span>
+<span class="lineNum">     557 </span>            : {
+<span class="lineNum">     558 </span><span class="lineCov">         96 :   fprintf (dump_file, &quot;[DEF] %s for &quot;, intro);</span>
+<span class="lineNum">     559 </span><span class="lineCov">         96 :   print_gimple_stmt (dump_file, SSA_NAME_DEF_STMT (var), 0, TDF_SLIM);</span>
+<span class="lineNum">     560 </span><span class="lineCov">         96 :   if (info)</span>
+<span class="lineNum">     561 </span><span class="lineCov">         78 :     dump_usage_info (dump_file, var, info);</span>
+<span class="lineNum">     562 </span><span class="lineCov">         96 : }</span>
+<span class="lineNum">     563 </span>            : 
+<span class="lineNum">     564 </span>            : /* Process all uses of VAR and record or update the result in
+<span class="lineNum">     565 </span>            :    M_INFO_MAP and M_VARS.  */
+<a name="566"><span class="lineNum">     566 </span>            : </a>
+<span class="lineNum">     567 </span>            : void
+<span class="lineNum">     568 </span><span class="lineCov">   11970696 : backprop::process_var (tree var)</span>
+<span class="lineNum">     569 </span>            : {
+<span class="lineNum">     570 </span><span class="lineCov">   11970696 :   if (has_zero_uses (var))</span>
+<span class="lineNum">     571 </span><span class="lineCov">      98829 :     return;</span>
+<span class="lineNum">     572 </span>            : 
+<span class="lineNum">     573 </span><span class="lineCov">   23743734 :   usage_info info;</span>
+<span class="lineNum">     574 </span><span class="lineCov">   11871867 :   intersect_uses (var, &amp;info);</span>
+<span class="lineNum">     575 </span>            : 
+<span class="lineNum">     576 </span><span class="lineCov">   11871867 :   gimple *stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">     577 </span><span class="lineCov">   11871867 :   if (info.is_useful ())</span>
+<span class="lineNum">     578 </span>            :     {
+<span class="lineNum">     579 </span><span class="lineCov">     491752 :       bool existed;</span>
+<span class="lineNum">     580 </span><span class="lineCov">     491752 :       usage_info *&amp;map_info = m_info_map.get_or_insert (var, &amp;existed);</span>
+<span class="lineNum">     581 </span><span class="lineCov">     491752 :       if (!existed)</span>
+<span class="lineNum">     582 </span>            :         {
+<span class="lineNum">     583 </span>            :           /* Recording information about VAR for the first time.  */
+<span class="lineNum">     584 </span><span class="lineCov">     491601 :           map_info = m_info_pool.allocate ();</span>
+<span class="lineNum">     585 </span><span class="lineCov">     491601 :           *map_info = info;</span>
+<span class="lineNum">     586 </span><span class="lineCov">     983202 :           m_vars.safe_push (var_info_pair (var, map_info));</span>
+<span class="lineNum">     587 </span><span class="lineCov">     491601 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     588 </span><span class="lineCov">         72 :             dump_var_info (var, map_info, &quot;Recording new information&quot;);</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            :           /* If STMT is a phi, reprocess any backedge uses.  This is a
+<span class="lineNum">     591 </span>            :              no-op for other uses, which won't have any information
+<span class="lineNum">     592 </span>            :              associated with them.  */
+<span class="lineNum">     593 </span><span class="lineCov">     983202 :           if (is_a &lt;gphi *&gt; (stmt))</span>
+<span class="lineNum">     594 </span><span class="lineCov">     115182 :             reprocess_inputs (stmt);</span>
+<span class="lineNum">     595 </span>            :         }
+<span class="lineNum">     596 </span><span class="lineCov">        151 :       else if (info != *map_info)</span>
+<span class="lineNum">     597 </span>            :         {
+<span class="lineNum">     598 </span>            :           /* Recording information that is less optimistic than before.  */
+<span class="lineNum">     599 </span><span class="lineCov">         20 :           gcc_checking_assert ((info &amp; *map_info) == info);</span>
+<span class="lineNum">     600 </span><span class="lineCov">         20 :           *map_info = info;</span>
+<span class="lineNum">     601 </span><span class="lineCov">         20 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     602 </span><span class="lineCov">          6 :             dump_var_info (var, map_info, &quot;Updating information&quot;);</span>
+<span class="lineNum">     603 </span><span class="lineCov">         20 :           reprocess_inputs (stmt);</span>
+<span class="lineNum">     604 </span>            :         }
+<span class="lineNum">     605 </span>            :     }
+<span class="lineNum">     606 </span>            :   else
+<span class="lineNum">     607 </span>            :     {
+<span class="lineNum">     608 </span><span class="lineCov">   11380115 :       if (usage_info **slot = m_info_map.get (var))</span>
+<span class="lineNum">     609 </span>            :         {
+<span class="lineNum">     610 </span>            :           /* Removing previously-recorded information.  */
+<span class="lineNum">     611 </span><span class="lineCov">     449241 :           **slot = info;</span>
+<span class="lineNum">     612 </span><span class="lineCov">     449241 :           m_info_map.remove (var);</span>
+<span class="lineNum">     613 </span><span class="lineCov">     449241 :           if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     614 </span><span class="lineCov">         18 :             dump_var_info (var, NULL, &quot;Deleting information&quot;);</span>
+<span class="lineNum">     615 </span><span class="lineCov">     449241 :           reprocess_inputs (stmt);</span>
+<span class="lineNum">     616 </span>            :         }
+<span class="lineNum">     617 </span>            :       else
+<span class="lineNum">     618 </span>            :         {
+<span class="lineNum">     619 </span>            :           /* If STMT is a phi, remove any information recorded for
+<span class="lineNum">     620 </span>            :              its arguments.  */
+<span class="lineNum">     621 </span><span class="lineCov">   21861748 :           if (is_a &lt;gphi *&gt; (stmt))</span>
+<span class="lineNum">     622 </span><span class="lineCov">    1959385 :             reprocess_inputs (stmt);</span>
+<span class="lineNum">     623 </span>            :         }
+<span class="lineNum">     624 </span>            :     }
+<span class="lineNum">     625 </span>            : }
+<span class="lineNum">     626 </span>            : 
+<span class="lineNum">     627 </span>            : /* Process all statements and phis in BB, during the first post-order walk.  */
+<a name="628"><span class="lineNum">     628 </span>            : </a>
+<span class="lineNum">     629 </span>            : void
+<span class="lineNum">     630 </span><span class="lineCov">    6089999 : backprop::process_block (basic_block bb)</span>
+<span class="lineNum">     631 </span>            : {
+<span class="lineNum">     632 </span><span class="lineCov">  116863303 :   for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);</span>
+<span class="lineNum">     633 </span><span class="lineCov">   49296653 :        gsi_prev (&amp;gsi))</span>
+<span class="lineNum">     634 </span>            :     {
+<span class="lineNum">     635 </span><span class="lineCov">   98593306 :       tree lhs = gimple_get_lhs (gsi_stmt (gsi));</span>
+<span class="lineNum">     636 </span><span class="lineCov">   49296653 :       if (lhs &amp;&amp; TREE_CODE (lhs) == SSA_NAME)</span>
+<span class="lineNum">     637 </span><span class="lineCov">    9426770 :         process_var (lhs);</span>
+<span class="lineNum">     638 </span>            :     }
+<span class="lineNum">     639 </span><span class="lineCov">   10279067 :   for (gphi_iterator gpi = gsi_start_phis (bb); !gsi_end_p (gpi);</span>
+<span class="lineNum">     640 </span><span class="lineCov">    2094534 :        gsi_next (&amp;gpi))</span>
+<span class="lineNum">     641 </span>            :     {
+<span class="lineNum">     642 </span><span class="lineCov">    2094534 :       tree result = gimple_phi_result (gpi.phi ());</span>
+<span class="lineNum">     643 </span><span class="lineCov">    2094534 :       process_var (result);</span>
+<span class="lineNum">     644 </span><span class="lineCov">    2094534 :       bitmap_set_bit (m_visited_phis, SSA_NAME_VERSION (result));</span>
+<span class="lineNum">     645 </span>            :     }
+<span class="lineNum">     646 </span><span class="lineCov">   12179998 :   bitmap_clear (m_visited_phis);</span>
+<span class="lineNum">     647 </span><span class="lineCov">    6089999 : }</span>
+<span class="lineNum">     648 </span>            : 
+<span class="lineNum">     649 </span>            : /* Delete the definition of VAR, which has no uses.  */
+<a name="650"><span class="lineNum">     650 </span>            : </a>
+<span class="lineNum">     651 </span>            : static void
+<span class="lineNum">     652 </span><span class="lineCov">         70 : remove_unused_var (tree var)</span>
+<span class="lineNum">     653 </span>            : {
+<span class="lineNum">     654 </span><span class="lineCov">         70 :   gimple *stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">     655 </span><span class="lineCov">         70 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     656 </span>            :     {
+<span class="lineNum">     657 </span><span class="lineCov">         24 :       fprintf (dump_file, &quot;Deleting &quot;);</span>
+<span class="lineNum">     658 </span><span class="lineCov">         24 :       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">     659 </span>            :     }
+<span class="lineNum">     660 </span><span class="lineCov">         70 :   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     661 </span><span class="lineCov">         70 :   gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     662 </span><span class="lineCov">         70 :   release_defs (stmt);</span>
+<span class="lineNum">     663 </span><span class="lineCov">         70 : }</span>
+<span class="lineNum">     664 </span>            : 
+<span class="lineNum">     665 </span>            : /* Note that we're replacing OLD_RHS with NEW_RHS in STMT.  */
+<a name="666"><span class="lineNum">     666 </span>            : </a>
+<span class="lineNum">     667 </span>            : static void
+<span class="lineNum">     668 </span><span class="lineCov">         15 : note_replacement (gimple *stmt, tree old_rhs, tree new_rhs)</span>
+<span class="lineNum">     669 </span>            : {
+<span class="lineNum">     670 </span><span class="lineCov">         15 :   fprintf (dump_file, &quot;Replacing use of &quot;);</span>
+<span class="lineNum">     671 </span><span class="lineCov">         15 :   print_generic_expr (dump_file, old_rhs);</span>
+<span class="lineNum">     672 </span><span class="lineCov">         15 :   fprintf (dump_file, &quot; with &quot;);</span>
+<span class="lineNum">     673 </span><span class="lineCov">         15 :   print_generic_expr (dump_file, new_rhs);</span>
+<span class="lineNum">     674 </span><span class="lineCov">         15 :   fprintf (dump_file, &quot; in &quot;);</span>
+<span class="lineNum">     675 </span><span class="lineCov">         15 :   print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">     676 </span><span class="lineCov">         15 : }</span>
+<span class="lineNum">     677 </span>            : 
+<span class="lineNum">     678 </span>            : /* If RHS is an SSA name whose definition just changes the sign of a value,
+<span class="lineNum">     679 </span>            :    return that other value, otherwise return null.  */
+<a name="680"><span class="lineNum">     680 </span>            : </a>
+<span class="lineNum">     681 </span>            : static tree
+<span class="lineNum">     682 </span><span class="lineCov">       2417 : strip_sign_op_1 (tree rhs)</span>
+<span class="lineNum">     683 </span>            : {
+<span class="lineNum">     684 </span><span class="lineCov">       2417 :   if (TREE_CODE (rhs) != SSA_NAME)</span>
+<span class="lineNum">     685 </span>            :     return NULL_TREE;
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span><span class="lineCov">       1949 :   gimple *def_stmt = SSA_NAME_DEF_STMT (rhs);</span>
+<span class="lineNum">     688 </span><span class="lineCov">       1949 :   if (gassign *assign = dyn_cast &lt;gassign *&gt; (def_stmt))</span>
+<span class="lineNum">     689 </span><span class="lineCov">       1668 :     switch (gimple_assign_rhs_code (assign))</span>
+<span class="lineNum">     690 </span>            :       {
+<span class="lineNum">     691 </span><span class="lineCov">        238 :       case ABS_EXPR:</span>
+<span class="lineNum">     692 </span><span class="lineCov">        238 :       case ABSU_EXPR:</span>
+<span class="lineNum">     693 </span><span class="lineCov">        238 :       case NEGATE_EXPR:</span>
+<span class="lineNum">     694 </span><span class="lineCov">        476 :         return gimple_assign_rhs1 (assign);</span>
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span>            :       default:
+<span class="lineNum">     697 </span>            :         break;
+<span class="lineNum">     698 </span>            :       }
+<span class="lineNum">     699 </span><span class="lineCov">        614 :   else if (gcall *call = dyn_cast &lt;gcall *&gt; (def_stmt))</span>
+<span class="lineNum">     700 </span><span class="lineCov">        113 :     switch (gimple_call_combined_fn (call))</span>
+<span class="lineNum">     701 </span>            :       {
+<span class="lineNum">     702 </span><span class="lineCov">          3 :       CASE_CFN_COPYSIGN:</span>
+<span class="lineNum">     703 </span><span class="lineCov">          3 :       CASE_CFN_COPYSIGN_FN:</span>
+<span class="lineNum">     704 </span><span class="lineCov">          3 :         return gimple_call_arg (call, 0);</span>
+<span class="lineNum">     705 </span>            : 
+<span class="lineNum">     706 </span>            :       default:
+<span class="lineNum">     707 </span>            :         break;
+<span class="lineNum">     708 </span>            :       }
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span>            :   return NULL_TREE;
+<span class="lineNum">     711 </span>            : }
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span>            : /* If RHS is an SSA name whose definition just changes the sign of a value,
+<span class="lineNum">     714 </span>            :    strip all such operations and return the ultimate input to them.
+<span class="lineNum">     715 </span>            :    Return null otherwise.
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span>            :    Although this could in principle lead to quadratic searching,
+<span class="lineNum">     718 </span>            :    in practice a long sequence of sign manipulations should already
+<span class="lineNum">     719 </span>            :    have been folded down.  E.g. --x -&gt; x, abs(-x) -&gt; abs(x).  We search
+<span class="lineNum">     720 </span>            :    for more than one operation in order to catch cases like -abs(x).  */
+<a name="721"><span class="lineNum">     721 </span>            : </a>
+<span class="lineNum">     722 </span>            : static tree
+<span class="lineNum">     723 </span><span class="lineCov">       2176 : strip_sign_op (tree rhs)</span>
+<span class="lineNum">     724 </span>            : {
+<span class="lineNum">     725 </span><span class="lineCov">       2176 :   tree new_rhs = strip_sign_op_1 (rhs);</span>
+<span class="lineNum">     726 </span><span class="lineCov">       2176 :   if (!new_rhs)</span>
+<span class="lineNum">     727 </span>            :     return NULL_TREE;
+<span class="lineNum">     728 </span><span class="lineCov">        241 :   while (tree next = strip_sign_op_1 (new_rhs))</span>
+<span class="lineNum">     729 </span>            :     new_rhs = next;
+<span class="lineNum">     730 </span>            :   return new_rhs;
+<span class="lineNum">     731 </span>            : }
+<span class="lineNum">     732 </span>            : 
+<span class="lineNum">     733 </span>            : /* Start a change in the value of VAR that is suitable for all non-debug
+<span class="lineNum">     734 </span>            :    uses of VAR.  We need to make sure that debug statements continue to
+<span class="lineNum">     735 </span>            :    use the original definition of VAR where possible, or are nullified
+<span class="lineNum">     736 </span>            :    otherwise.  */
+<a name="737"><span class="lineNum">     737 </span>            : </a>
+<span class="lineNum">     738 </span>            : void
+<span class="lineNum">     739 </span><span class="lineCov">        220 : backprop::prepare_change (tree var)</span>
+<span class="lineNum">     740 </span>            : {
+<span class="lineNum">     741 </span><span class="lineCov">        220 :   if (MAY_HAVE_DEBUG_BIND_STMTS)</span>
+<span class="lineNum">     742 </span><span class="lineCov">         54 :     insert_debug_temp_for_var_def (NULL, var);</span>
+<span class="lineNum">     743 </span><span class="lineCov">        220 :   reset_flow_sensitive_info (var);</span>
+<span class="lineNum">     744 </span><span class="lineCov">        220 : }</span>
+<span class="lineNum">     745 </span>            : 
+<span class="lineNum">     746 </span>            : /* STMT has been changed.  Give the fold machinery a chance to simplify
+<span class="lineNum">     747 </span>            :    and canonicalize it (e.g. by ensuring that commutative operands have
+<span class="lineNum">     748 </span>            :    the right order), then record the updates.  */
+<a name="749"><span class="lineNum">     749 </span>            : </a>
+<span class="lineNum">     750 </span>            : void
+<span class="lineNum">     751 </span><span class="lineCov">        181 : backprop::complete_change (gimple *stmt)</span>
+<span class="lineNum">     752 </span>            : {
+<span class="lineNum">     753 </span><span class="lineCov">        181 :   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     754 </span><span class="lineCov">        181 :   if (fold_stmt (&amp;gsi))</span>
+<span class="lineNum">     755 </span>            :     {
+<span class="lineNum">     756 </span><span class="lineCov">          6 :       if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     757 </span>            :         {
+<span class="lineNum">     758 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot;  which folds to: &quot;);</span>
+<span class="lineNum">     759 </span><span class="lineNoCov">          0 :           print_gimple_stmt (dump_file, gsi_stmt (gsi), 0, TDF_SLIM);</span>
+<span class="lineNum">     760 </span>            :         }
+<span class="lineNum">     761 </span>            :     }
+<span class="lineNum">     762 </span><span class="lineCov">        362 :   update_stmt (gsi_stmt (gsi));</span>
+<span class="lineNum">     763 </span><span class="lineCov">        181 : }</span>
+<span class="lineNum">     764 </span>            : 
+<span class="lineNum">     765 </span>            : /* Optimize CALL, a call to a built-in function with lhs LHS, on the
+<span class="lineNum">     766 </span>            :    basis that INFO describes all uses of LHS.  */
+<a name="767"><span class="lineNum">     767 </span>            : </a>
+<span class="lineNum">     768 </span>            : void
+<span class="lineNum">     769 </span><span class="lineCov">        305 : backprop::optimize_builtin_call (gcall *call, tree lhs, const usage_info *info)</span>
+<span class="lineNum">     770 </span>            : {
+<span class="lineNum">     771 </span>            :   /* If we have an f such that -f(x) = f(-x), and if the sign of the result
+<span class="lineNum">     772 </span>            :      doesn't matter, strip any sign operations from the input.  */
+<span class="lineNum">     773 </span><span class="lineCov">        305 :   if (info-&gt;flags.ignore_sign</span>
+<span class="lineNum">     774 </span><span class="lineCov">        305 :       &amp;&amp; negate_mathfn_p (gimple_call_combined_fn (call)))</span>
+<span class="lineNum">     775 </span>            :     {
+<span class="lineNum">     776 </span><span class="lineCov">         52 :       tree new_arg = strip_sign_op (gimple_call_arg (call, 0));</span>
+<span class="lineNum">     777 </span><span class="lineCov">         52 :       if (new_arg)</span>
+<span class="lineNum">     778 </span>            :         {
+<span class="lineNum">     779 </span><span class="lineCov">         12 :           prepare_change (lhs);</span>
+<span class="lineNum">     780 </span><span class="lineCov">         12 :           gimple_call_set_arg (call, 0, new_arg);</span>
+<span class="lineNum">     781 </span><span class="lineCov">         12 :           complete_change (call);</span>
+<span class="lineNum">     782 </span>            :         }
+<span class="lineNum">     783 </span>            :     }
+<span class="lineNum">     784 </span><span class="lineCov">        305 : }</span>
+<span class="lineNum">     785 </span>            : 
+<span class="lineNum">     786 </span>            : /* Optimize ASSIGN, an assignment to LHS, by replacing rhs operand N
+<span class="lineNum">     787 </span>            :    with RHS&lt;N&gt;, if RHS&lt;N&gt; is nonnull.  This may change the value of LHS.  */
+<a name="788"><span class="lineNum">     788 </span>            : </a>
+<span class="lineNum">     789 </span>            : void
+<span class="lineNum">     790 </span><span class="lineCov">        761 : backprop::replace_assign_rhs (gassign *assign, tree lhs, tree rhs1,</span>
+<span class="lineNum">     791 </span>            :                               tree rhs2, tree rhs3)
+<span class="lineNum">     792 </span>            : {
+<span class="lineNum">     793 </span><span class="lineCov">        761 :   if (!rhs1 &amp;&amp; !rhs2 &amp;&amp; !rhs3)</span>
+<span class="lineNum">     794 </span>            :     return;
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span><span class="lineCov">        169 :   prepare_change (lhs);</span>
+<span class="lineNum">     797 </span><span class="lineCov">        169 :   if (rhs1)</span>
+<span class="lineNum">     798 </span><span class="lineCov">        115 :     gimple_assign_set_rhs1 (assign, rhs1);</span>
+<span class="lineNum">     799 </span><span class="lineCov">        169 :   if (rhs2)</span>
+<span class="lineNum">     800 </span><span class="lineCov">         54 :     gimple_assign_set_rhs2 (assign, rhs2);</span>
+<span class="lineNum">     801 </span><span class="lineCov">        169 :   if (rhs3)</span>
+<span class="lineNum">     802 </span><span class="lineNoCov">          0 :     gimple_assign_set_rhs3 (assign, rhs3);</span>
+<span class="lineNum">     803 </span><span class="lineCov">        169 :   complete_change (assign);</span>
+<span class="lineNum">     804 </span>            : }
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span>            : /* Optimize ASSIGN, an assignment to LHS, on the basis that INFO
+<span class="lineNum">     807 </span>            :    describes all uses of LHS.  */
+<a name="808"><span class="lineNum">     808 </span>            : </a>
+<span class="lineNum">     809 </span>            : void
+<span class="lineNum">     810 </span><span class="lineCov">       6569 : backprop::optimize_assign (gassign *assign, tree lhs, const usage_info *info)</span>
+<span class="lineNum">     811 </span>            : {
+<span class="lineNum">     812 </span><span class="lineCov">       8956 :   switch (gimple_assign_rhs_code (assign))</span>
+<span class="lineNum">     813 </span>            :     {
+<span class="lineNum">     814 </span><span class="lineCov">        761 :     case MULT_EXPR:</span>
+<span class="lineNum">     815 </span><span class="lineCov">        761 :     case RDIV_EXPR:</span>
+<span class="lineNum">     816 </span>            :       /* If the sign of the result doesn't matter, strip sign operations
+<span class="lineNum">     817 </span>            :          from both inputs.  */
+<span class="lineNum">     818 </span><span class="lineCov">        761 :       if (info-&gt;flags.ignore_sign)</span>
+<span class="lineNum">     819 </span><span class="lineCov">       1522 :         replace_assign_rhs (assign, lhs,</span>
+<span class="lineNum">     820 </span>            :                             strip_sign_op (gimple_assign_rhs1 (assign)),
+<span class="lineNum">     821 </span>            :                             strip_sign_op (gimple_assign_rhs2 (assign)),
+<span class="lineNum">     822 </span>            :                             NULL_TREE);
+<span class="lineNum">     823 </span>            :       break;
+<span class="lineNum">     824 </span>            : 
+<span class="lineNum">     825 </span><span class="lineNoCov">          0 :     case COND_EXPR:</span>
+<span class="lineNum">     826 </span>            :       /* If the sign of A ? B : C doesn't matter, strip sign operations
+<span class="lineNum">     827 </span>            :          from both B and C.  */
+<span class="lineNum">     828 </span><span class="lineNoCov">          0 :       if (info-&gt;flags.ignore_sign)</span>
+<span class="lineNum">     829 </span><span class="lineNoCov">          0 :         replace_assign_rhs (assign, lhs,</span>
+<span class="lineNum">     830 </span>            :                             NULL_TREE,
+<span class="lineNum">     831 </span>            :                             strip_sign_op (gimple_assign_rhs2 (assign)),
+<span class="lineNum">     832 </span>            :                             strip_sign_op (gimple_assign_rhs3 (assign)));
+<span class="lineNum">     833 </span>            :       break;
+<span class="lineNum">     834 </span>            : 
+<span class="lineNum">     835 </span>            :     default:
+<span class="lineNum">     836 </span>            :       break;
+<span class="lineNum">     837 </span>            :     }
+<span class="lineNum">     838 </span><span class="lineCov">       6569 : }</span>
+<span class="lineNum">     839 </span>            : 
+<span class="lineNum">     840 </span>            : /* Optimize PHI, which defines VAR, on the basis that INFO describes all
+<span class="lineNum">     841 </span>            :    uses of the result.  */
+<a name="842"><span class="lineNum">     842 </span>            : </a>
+<span class="lineNum">     843 </span>            : void
+<span class="lineNum">     844 </span><span class="lineCov">      35486 : backprop::optimize_phi (gphi *phi, tree var, const usage_info *info)</span>
+<span class="lineNum">     845 </span>            : {
+<span class="lineNum">     846 </span>            :   /* If the sign of the result doesn't matter, try to strip sign operations
+<span class="lineNum">     847 </span>            :      from arguments.  */
+<span class="lineNum">     848 </span><span class="lineCov">      35486 :   if (info-&gt;flags.ignore_sign)</span>
+<span class="lineNum">     849 </span>            :     {
+<span class="lineNum">     850 </span><span class="lineCov">      35486 :       basic_block bb = gimple_bb (phi);</span>
+<span class="lineNum">     851 </span><span class="lineCov">      35486 :       use_operand_p use;</span>
+<span class="lineNum">     852 </span><span class="lineCov">      35486 :       ssa_op_iter oi;</span>
+<span class="lineNum">     853 </span><span class="lineCov">      35486 :       bool replaced = false;</span>
+<span class="lineNum">     854 </span><span class="lineCov">      36128 :       FOR_EACH_PHI_ARG (use, phi, oi, SSA_OP_USE)</span>
+<span class="lineNum">     855 </span>            :         {
+<span class="lineNum">     856 </span>            :           /* Propagating along abnormal edges is delicate, punt for now.  */
+<span class="lineNum">     857 </span><span class="lineCov">        642 :           const int index = PHI_ARG_INDEX_FROM_USE (use);</span>
+<span class="lineNum">     858 </span><span class="lineCov">        642 :           if (EDGE_PRED (bb, index)-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">     859 </span>            :             continue;
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span><span class="lineCov">       1204 :           tree new_arg = strip_sign_op (USE_FROM_PTR (use));</span>
+<span class="lineNum">     862 </span><span class="lineCov">        602 :           if (new_arg)</span>
+<span class="lineNum">     863 </span>            :             {
+<span class="lineNum">     864 </span><span class="lineCov">         45 :               if (!replaced)</span>
+<span class="lineNum">     865 </span><span class="lineCov">         39 :                 prepare_change (var);</span>
+<span class="lineNum">     866 </span><span class="lineCov">         45 :               if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     867 </span><span class="lineCov">         30 :                 note_replacement (phi, USE_FROM_PTR (use), new_arg);</span>
+<span class="lineNum">     868 </span><span class="lineCov">         45 :               replace_exp (use, new_arg);</span>
+<span class="lineNum">     869 </span><span class="lineCov">         45 :               replaced = true;</span>
+<span class="lineNum">     870 </span>            :             }
+<span class="lineNum">     871 </span>            :         }
+<span class="lineNum">     872 </span>            :     }
+<span class="lineNum">     873 </span><span class="lineCov">      35486 : }</span>
+<a name="874"><span class="lineNum">     874 </span>            : </a>
+<span class="lineNum">     875 </span>            : void
+<span class="lineNum">     876 </span><span class="lineCov">     620934 : backprop::execute ()</span>
+<span class="lineNum">     877 </span>            : {
+<span class="lineNum">     878 </span>            :   /* Phase 1: Traverse the function, making optimistic assumptions
+<span class="lineNum">     879 </span>            :      about any phi whose definition we haven't seen.  */
+<span class="lineNum">     880 </span><span class="lineCov">     620934 :   int *postorder = XNEWVEC (int, n_basic_blocks_for_fn (m_fn));</span>
+<span class="lineNum">     881 </span><span class="lineCov">     620934 :   unsigned int postorder_num = post_order_compute (postorder, false, false);</span>
+<span class="lineNum">     882 </span><span class="lineCov">    6710933 :   for (unsigned int i = 0; i &lt; postorder_num; ++i)</span>
+<span class="lineNum">     883 </span>            :     {
+<span class="lineNum">     884 </span><span class="lineCov">    6089999 :       process_block (BASIC_BLOCK_FOR_FN (m_fn, postorder[i]));</span>
+<span class="lineNum">     885 </span><span class="lineCov">   12179998 :       bitmap_set_bit (m_visited_blocks, postorder[i]);</span>
+<span class="lineNum">     886 </span>            :     }
+<span class="lineNum">     887 </span><span class="lineCov">     620934 :   XDELETEVEC (postorder);</span>
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span>            :   /* Phase 2: Use the initial (perhaps overly optimistic) information
+<span class="lineNum">     890 </span>            :      to create a maximal fixed point solution.  */
+<span class="lineNum">     891 </span><span class="lineCov">    1070326 :   while (!m_worklist.is_empty ())</span>
+<span class="lineNum">     892 </span><span class="lineCov">     449392 :     process_var (pop_from_worklist ());</span>
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span><span class="lineCov">     620934 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     895 </span><span class="lineCov">         18 :     fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     896 </span>            : 
+<span class="lineNum">     897 </span>            :   /* Phase 3: Do a reverse post-order walk, using information about
+<span class="lineNum">     898 </span>            :      the uses of SSA names to optimize their definitions.  */
+<span class="lineNum">     899 </span><span class="lineCov">    1733469 :   for (unsigned int i = m_vars.length (); i-- &gt; 0;)</span>
+<span class="lineNum">     900 </span>            :     {
+<span class="lineNum">     901 </span><span class="lineCov">     491601 :       usage_info *info = m_vars[i].second;</span>
+<span class="lineNum">     902 </span><span class="lineCov">     491601 :       if (info-&gt;is_useful ())</span>
+<span class="lineNum">     903 </span>            :         {
+<span class="lineNum">     904 </span><span class="lineCov">      42360 :           tree var = m_vars[i].first;</span>
+<span class="lineNum">     905 </span><span class="lineCov">      42360 :           gimple *stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">     906 </span><span class="lineCov">      42360 :           if (gcall *call = dyn_cast &lt;gcall *&gt; (stmt))</span>
+<span class="lineNum">     907 </span><span class="lineCov">        305 :             optimize_builtin_call (call, var, info);</span>
+<span class="lineNum">     908 </span><span class="lineCov">      42055 :           else if (gassign *assign = dyn_cast &lt;gassign *&gt; (stmt))</span>
+<span class="lineNum">     909 </span><span class="lineCov">       6569 :             optimize_assign (assign, var, info);</span>
+<span class="lineNum">     910 </span><span class="lineCov">      35486 :           else if (gphi *phi = dyn_cast &lt;gphi *&gt; (stmt))</span>
+<span class="lineNum">     911 </span><span class="lineCov">      35486 :             optimize_phi (phi, var, info);</span>
+<span class="lineNum">     912 </span>            :         }
+<span class="lineNum">     913 </span>            :     }
+<span class="lineNum">     914 </span>            : 
+<span class="lineNum">     915 </span>            :   /* Phase 4: Do a post-order walk, deleting statements that are no
+<span class="lineNum">     916 </span>            :      longer needed.  */
+<span class="lineNum">     917 </span><span class="lineCov">    2225070 :   for (unsigned int i = 0; i &lt; m_vars.length (); ++i)</span>
+<span class="lineNum">     918 </span>            :     {
+<span class="lineNum">     919 </span><span class="lineCov">     491601 :       tree var = m_vars[i].first;</span>
+<span class="lineNum">     920 </span><span class="lineCov">     491601 :       if (has_zero_uses (var))</span>
+<span class="lineNum">     921 </span><span class="lineCov">         70 :         remove_unused_var (var);</span>
+<span class="lineNum">     922 </span>            :     }
+<span class="lineNum">     923 </span>            : 
+<span class="lineNum">     924 </span><span class="lineCov">     620934 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     925 </span><span class="lineCov">         18 :     fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     926 </span><span class="lineCov">     620934 : }</span>
+<span class="lineNum">     927 </span>            : 
+<span class="lineNum">     928 </span>            : const pass_data pass_data_backprop =
+<span class="lineNum">     929 </span>            : {
+<span class="lineNum">     930 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     931 </span>            :   &quot;backprop&quot;, /* name */
+<span class="lineNum">     932 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     933 </span>            :   TV_TREE_BACKPROP, /* tv_id */
+<span class="lineNum">     934 </span>            :   ( PROP_cfg | PROP_ssa ), /* properties_required */
+<span class="lineNum">     935 </span>            :   0, /* properties_provided */
+<span class="lineNum">     936 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     937 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     938 </span>            :   0, /* todo_flags_finish */
+<span class="lineNum">     939 </span>            : };
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span>            : class pass_backprop : public gimple_opt_pass
+<span class="lineNum">     942 </span>            : {
+<span class="lineNum">     943 </span>            : public:
+<span class="lineNum">     944 </span>            :   pass_backprop (gcc::context *ctxt)
+<span class="lineNum">     945 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_backprop, ctxt)</span>
+<span class="lineNum">     946 </span>            :   {}
+<a name="947"><span class="lineNum">     947 </span>            : </a>
+<a name="948"><span class="lineNum">     948 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     949 </span><span class="lineNoCov">          0 :   opt_pass * clone () { return new pass_backprop (m_ctxt); }</span>
+<span class="lineNum">     950 </span><span class="lineCov">     620946 :   virtual bool gate (function *) { return flag_ssa_backprop; }</span>
+<span class="lineNum">     951 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span>            : }; // class pass_backprop
+<a name="954"><span class="lineNum">     954 </span>            : </a>
+<span class="lineNum">     955 </span>            : unsigned int
+<span class="lineNum">     956 </span><span class="lineCov">     620934 : pass_backprop::execute (function *fn)</span>
+<span class="lineNum">     957 </span>            : {
+<span class="lineNum">     958 </span><span class="lineCov">     620934 :   backprop (fn).execute ();</span>
+<span class="lineNum">     959 </span><span class="lineCov">     620934 :   return 0;</span>
+<span class="lineNum">     960 </span>            : }
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span>            : } // anon namespace
+<a name="963"><span class="lineNum">     963 </span>            : </a>
+<span class="lineNum">     964 </span>            : gimple_opt_pass *
+<span class="lineNum">     965 </span><span class="lineCov">     170312 : make_pass_backprop (gcc::context *ctxt)</span>
+<span class="lineNum">     966 </span>            : {
+<span class="lineNum">     967 </span><span class="lineCov">     170312 :   return new pass_backprop (ctxt);</span>
+<span class="lineNum">     968 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

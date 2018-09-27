@@ -1,0 +1,1075 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ipa-visibility.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ipa-visibility.c<span style="font-size: 80%;"> (source / <a href="ipa-visibility.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">345</td>
+            <td class="headerCovTableEntry">377</td>
+            <td class="headerCovTableEntryHi">91.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntryHi">94.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* IPA visibility pass</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* This file implements two related passes: 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            :      - pass_data_ipa_function_and_variable_visibility run just after
+<span class="lineNum">      23 </span>            :        symbol table, references and callgraph are built
+<span class="lineNum">      24 </span>            : 
+<span class="lineNum">      25 </span>            :      - pass_data_ipa_function_and_variable_visibility run as first
+<span class="lineNum">      26 </span>            :        proper IPA pass (that is after early optimization, or, (with LTO)
+<span class="lineNum">      27 </span>            :        as a first pass done at link-time.
+<span class="lineNum">      28 </span>            : 
+<span class="lineNum">      29 </span>            :    Purpose of both passes is to set correctly visibility properties
+<span class="lineNum">      30 </span>            :    of all symbols.  This includes:
+<span class="lineNum">      31 </span>            : 
+<span class="lineNum">      32 </span>            :     - Symbol privatization:
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            :       Some symbols that are declared public by frontend may be
+<span class="lineNum">      35 </span>            :       turned local (either by -fwhole-program flag, by linker plugin feedback
+<span class="lineNum">      36 </span>            :       or by other reasons)
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            :     - Discovery of local functions:
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            :       A local function is one whose calls can occur only in the current
+<span class="lineNum">      41 </span>            :       compilation unit and all its calls are explicit, so we can change
+<span class="lineNum">      42 </span>            :       its calling convention.  We simply mark all static functions whose
+<span class="lineNum">      43 </span>            :       address is not taken as local.
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :       externally_visible flag is set for symbols that can not be privatized.
+<span class="lineNum">      46 </span>            :       For privatized symbols we clear TREE_PUBLIC flag and dismantle comdat
+<span class="lineNum">      47 </span>            :       group.
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :     - Dismantling of comdat groups:
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            :       Comdat group represent a section that may be replaced by linker by
+<span class="lineNum">      52 </span>            :       a different copy of the same section from other unit.
+<span class="lineNum">      53 </span>            :       If we have resolution information (from linker plugin) and we know that
+<span class="lineNum">      54 </span>            :       a given comdat gorup is prevailing, we can dismantle it and turn symbols
+<span class="lineNum">      55 </span>            :       into normal symbols.  If the resolution information says that the
+<span class="lineNum">      56 </span>            :       section was previaled by copy from non-LTO code, we can also dismantle
+<span class="lineNum">      57 </span>            :       it and turn all symbols into external.
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :     - Local aliases:
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            :       Some symbols can be interposed by dynamic linker. Refering to these
+<span class="lineNum">      62 </span>            :       symbols is expensive, since it needs to be overwritable by the dynamic
+<span class="lineNum">      63 </span>            :       linker.  In some cases we know that the interposition does not change
+<span class="lineNum">      64 </span>            :       semantic and we can always refer to a local copy (as in the case of
+<span class="lineNum">      65 </span>            :       inline function).  In this case we produce a local alias and redirect
+<span class="lineNum">      66 </span>            :       calls to it.
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            :       TODO: This should be done for references, too.
+<span class="lineNum">      69 </span>            : 
+<span class="lineNum">      70 </span>            :     - Removal of static ocnstructors and destructors that have no side effects.
+<span class="lineNum">      71 </span>            : 
+<span class="lineNum">      72 </span>            :     - Regularization of several oddities introduced by frontends that may
+<span class="lineNum">      73 </span>            :       be impractical later in the optimization queue.  */
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      76 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      77 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      78 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">      79 </span>            : #include &quot;function.h&quot;
+<span class="lineNum">      80 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      81 </span>            : #include &quot;gimple-expr.h&quot;
+<span class="lineNum">      82 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      83 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      84 </span>            : #include &quot;calls.h&quot;
+<span class="lineNum">      85 </span>            : #include &quot;varasm.h&quot;
+<span class="lineNum">      86 </span>            : #include &quot;ipa-utils.h&quot;
+<span class="lineNum">      87 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      88 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            : /* Return true when NODE can not be local. Worker for cgraph_local_node_p.  */
+<a name="91"><span class="lineNum">      91 </span>            : </a>
+<span class="lineNum">      92 </span>            : static bool
+<span class="lineNum">      93 </span><span class="lineCov">    2811935 : non_local_p (struct cgraph_node *node, void *data ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">      94 </span>            : {
+<span class="lineNum">      95 </span><span class="lineCov">    2811935 :   return !(node-&gt;only_called_directly_or_aliased_p ()</span>
+<span class="lineNum">      96 </span>            :            /* i386 would need update to output thunk with local calling
+<span class="lineNum">      97 </span>            :               conventions.  */
+<span class="lineNum">      98 </span><span class="lineCov">     287327 :            &amp;&amp; !node-&gt;thunk.thunk_p</span>
+<span class="lineNum">      99 </span><span class="lineCov">     287327 :            &amp;&amp; node-&gt;definition</span>
+<span class="lineNum">     100 </span><span class="lineCov">     286949 :            &amp;&amp; !DECL_EXTERNAL (node-&gt;decl)</span>
+<span class="lineNum">     101 </span><span class="lineCov">     344628 :            &amp;&amp; !lookup_attribute (&quot;noipa&quot;, DECL_ATTRIBUTES (node-&gt;decl))</span>
+<span class="lineNum">     102 </span>            :            &amp;&amp; !node-&gt;externally_visible
+<span class="lineNum">     103 </span>            :            &amp;&amp; !node-&gt;used_from_other_partition
+<span class="lineNum">     104 </span><span class="lineCov">     172229 :            &amp;&amp; !node-&gt;in_other_partition</span>
+<span class="lineNum">     105 </span><span class="lineCov">     172229 :            &amp;&amp; node-&gt;get_availability () &gt;= AVAIL_AVAILABLE);</span>
+<span class="lineNum">     106 </span>            : }
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            : /* Return true when function can be marked local.  */
+<a name="109"><span class="lineNum">     109 </span>            : </a>
+<span class="lineNum">     110 </span>            : bool
+<span class="lineNum">     111 </span><span class="lineCov">    2781879 : cgraph_node::local_p (void)</span>
+<span class="lineNum">     112 </span>            : {
+<span class="lineNum">     113 </span><span class="lineCov">    2787085 :    cgraph_node *n = ultimate_alias_target ();</span>
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span><span class="lineCov">    2787085 :    if (n-&gt;thunk.thunk_p)</span>
+<span class="lineNum">     116 </span><span class="lineCov">       5206 :      return n-&gt;callees-&gt;callee-&gt;local_p ();</span>
+<span class="lineNum">     117 </span><span class="lineCov">    2781879 :    return !n-&gt;call_for_symbol_thunks_and_aliases (non_local_p,</span>
+<span class="lineNum">     118 </span><span class="lineCov">    2781879 :                                                   NULL, true);</span>
+<span class="lineNum">     119 </span>            :                                         
+<span class="lineNum">     120 </span>            : }
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span>            : /* A helper for comdat_can_be_unshared_p.  */
+<a name="123"><span class="lineNum">     123 </span>            : </a>
+<span class="lineNum">     124 </span>            : static bool
+<span class="lineNum">     125 </span><span class="lineCov">       1260 : comdat_can_be_unshared_p_1 (symtab_node *node)</span>
+<span class="lineNum">     126 </span>            : {
+<span class="lineNum">     127 </span><span class="lineCov">       1260 :   if (!node-&gt;externally_visible)</span>
+<span class="lineNum">     128 </span>            :     return true;
+<span class="lineNum">     129 </span><span class="lineCov">       1130 :   if (node-&gt;address_can_be_compared_p ())</span>
+<span class="lineNum">     130 </span>            :     {
+<span class="lineNum">     131 </span>            :       struct ipa_ref *ref;
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">       1379 :       for (unsigned int i = 0; node-&gt;iterate_referring (i, ref); i++)</span>
+<span class="lineNum">     134 </span><span class="lineCov">        607 :         if (ref-&gt;address_matters_p ())</span>
+<span class="lineNum">     135 </span>            :           return false;
+<span class="lineNum">     136 </span>            :     }
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span>            :   /* If the symbol is used in some weird way, better to not touch it.  */
+<span class="lineNum">     139 </span><span class="lineCov">        687 :   if (node-&gt;force_output)</span>
+<span class="lineNum">     140 </span>            :     return false;
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            :   /* Explicit instantiations needs to be output when possibly
+<span class="lineNum">     143 </span>            :      used externally.  */
+<span class="lineNum">     144 </span><span class="lineCov">       1374 :   if (node-&gt;forced_by_abi</span>
+<span class="lineNum">     145 </span><span class="lineCov">        687 :       &amp;&amp; TREE_PUBLIC (node-&gt;decl)</span>
+<span class="lineNum">     146 </span><span class="lineCov">         49 :       &amp;&amp; (node-&gt;resolution != LDPR_PREVAILING_DEF_IRONLY</span>
+<span class="lineNum">     147 </span><span class="lineCov">         49 :           &amp;&amp; !flag_whole_program))</span>
+<span class="lineNum">     148 </span>            :     return false;
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span>            :   /* Non-readonly and volatile variables can not be duplicated.  */
+<span class="lineNum">     151 </span><span class="lineCov">        642 :   if (is_a &lt;varpool_node *&gt; (node)</span>
+<span class="lineNum">     152 </span><span class="lineCov">        196 :       &amp;&amp; (!TREE_READONLY (node-&gt;decl)</span>
+<span class="lineNum">     153 </span><span class="lineCov">        193 :           || TREE_THIS_VOLATILE (node-&gt;decl)))</span>
+<span class="lineNum">     154 </span><span class="lineCov">          3 :     return false;</span>
+<span class="lineNum">     155 </span>            :   return true;
+<span class="lineNum">     156 </span>            : }
+<span class="lineNum">     157 </span>            : 
+<span class="lineNum">     158 </span>            : /* COMDAT functions must be shared only if they have address taken,
+<span class="lineNum">     159 </span>            :    otherwise we can produce our own private implementation with
+<span class="lineNum">     160 </span>            :    -fwhole-program.  
+<span class="lineNum">     161 </span>            :    Return true when turning COMDAT function static can not lead to wrong
+<span class="lineNum">     162 </span>            :    code when the resulting object links with a library defining same COMDAT.
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            :    Virtual functions do have their addresses taken from the vtables,
+<span class="lineNum">     165 </span>            :    but in C++ there is no way to compare their addresses for equality.  */
+<a name="166"><span class="lineNum">     166 </span>            : </a>
+<span class="lineNum">     167 </span>            : static bool
+<span class="lineNum">     168 </span><span class="lineCov">        969 : comdat_can_be_unshared_p (symtab_node *node)</span>
+<span class="lineNum">     169 </span>            : {
+<span class="lineNum">     170 </span><span class="lineCov">        969 :   if (!comdat_can_be_unshared_p_1 (node))</span>
+<span class="lineNum">     171 </span>            :     return false;
+<span class="lineNum">     172 </span><span class="lineCov">        478 :   if (node-&gt;same_comdat_group)</span>
+<span class="lineNum">     173 </span>            :     {
+<span class="lineNum">     174 </span>            :       symtab_node *next;
+<span class="lineNum">     175 </span>            : 
+<span class="lineNum">     176 </span>            :       /* If more than one function is in the same COMDAT group, it must
+<span class="lineNum">     177 </span>            :          be shared even if just one function in the comdat group has
+<span class="lineNum">     178 </span>            :          address taken.  */
+<span class="lineNum">     179 </span><span class="lineCov">        291 :       for (next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     180 </span><span class="lineCov">        442 :            next != node; next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     181 </span><span class="lineCov">        291 :         if (!comdat_can_be_unshared_p_1 (next))</span>
+<span class="lineNum">     182 </span>            :           return false;
+<span class="lineNum">     183 </span>            :     }
+<span class="lineNum">     184 </span>            :   return true;
+<span class="lineNum">     185 </span>            : }
+<span class="lineNum">     186 </span>            : 
+<span class="lineNum">     187 </span>            : /* Return true when function NODE should be considered externally visible.  */
+<a name="188"><span class="lineNum">     188 </span>            : </a>
+<span class="lineNum">     189 </span>            : static bool
+<span class="lineNum">     190 </span><span class="lineCov">    5529741 : cgraph_externally_visible_p (struct cgraph_node *node,</span>
+<span class="lineNum">     191 </span>            :                              bool whole_program)
+<span class="lineNum">     192 </span>            : {
+<span class="lineNum">     193 </span><span class="lineCov">    5529818 :   while (node-&gt;transparent_alias &amp;&amp; node-&gt;definition)</span>
+<span class="lineNum">     194 </span><span class="lineCov">         77 :     node = node-&gt;get_alias_target ();</span>
+<span class="lineNum">     195 </span><span class="lineCov">    5529741 :   if (!node-&gt;definition)</span>
+<span class="lineNum">     196 </span>            :     return false;
+<span class="lineNum">     197 </span><span class="lineCov">    2856637 :   if (!TREE_PUBLIC (node-&gt;decl)</span>
+<span class="lineNum">     198 </span><span class="lineCov">    2856637 :       || DECL_EXTERNAL (node-&gt;decl))</span>
+<span class="lineNum">     199 </span>            :     return false;
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span>            :   /* Do not try to localize built-in functions yet.  One of problems is that we
+<span class="lineNum">     202 </span>            :      end up mangling their asm for WHOPR that makes it impossible to call them
+<span class="lineNum">     203 </span>            :      using the implicit built-in declarations anymore.  Similarly this enables
+<span class="lineNum">     204 </span>            :      us to remove them as unreachable before actual calls may appear during
+<span class="lineNum">     205 </span>            :      expansion or folding.  */
+<span class="lineNum">     206 </span><span class="lineCov">    2302531 :   if (fndecl_built_in_p (node-&gt;decl))</span>
+<span class="lineNum">     207 </span>            :     return true;
+<span class="lineNum">     208 </span>            : 
+<span class="lineNum">     209 </span>            :   /* If linker counts on us, we must preserve the function.  */
+<span class="lineNum">     210 </span><span class="lineCov">    2293339 :   if (node-&gt;used_from_object_file_p ())</span>
+<span class="lineNum">     211 </span>            :     return true;
+<span class="lineNum">     212 </span><span class="lineCov">    4577796 :   if (DECL_PRESERVE_P (node-&gt;decl))</span>
+<span class="lineNum">     213 </span>            :     return true;
+<span class="lineNum">     214 </span><span class="lineCov">    2283620 :   if (lookup_attribute (&quot;externally_visible&quot;,</span>
+<span class="lineNum">     215 </span><span class="lineCov">    4567240 :                         DECL_ATTRIBUTES (node-&gt;decl)))</span>
+<span class="lineNum">     216 </span>            :     return true;
+<span class="lineNum">     217 </span><span class="lineCov">    2244365 :   if (lookup_attribute (&quot;noipa&quot;, DECL_ATTRIBUTES (node-&gt;decl)))</span>
+<span class="lineNum">     218 </span>            :     return true;
+<span class="lineNum">     219 </span><span class="lineCov">    2242369 :   if (TARGET_DLLIMPORT_DECL_ATTRIBUTES</span>
+<span class="lineNum">     220 </span>            :       &amp;&amp; lookup_attribute (&quot;dllexport&quot;,
+<span class="lineNum">     221 </span>            :                            DECL_ATTRIBUTES (node-&gt;decl)))
+<span class="lineNum">     222 </span>            :     return true;
+<span class="lineNum">     223 </span><span class="lineCov">    2242369 :   if (node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY)</span>
+<span class="lineNum">     224 </span>            :     return false;
+<span class="lineNum">     225 </span>            :   /* When doing LTO or whole program, we can bring COMDAT functoins static.
+<span class="lineNum">     226 </span>            :      This improves code quality and we know we will duplicate them at most twice
+<span class="lineNum">     227 </span>            :      (in the case that we are not using plugin and link with object file
+<span class="lineNum">     228 </span>            :       implementing same COMDAT)  */
+<span class="lineNum">     229 </span><span class="lineCov">    2211604 :   if (((in_lto_p || whole_program) &amp;&amp; !flag_incremental_link)</span>
+<span class="lineNum">     230 </span><span class="lineCov">      28823 :       &amp;&amp; DECL_COMDAT (node-&gt;decl)</span>
+<span class="lineNum">     231 </span><span class="lineCov">    2211989 :       &amp;&amp; comdat_can_be_unshared_p (node))</span>
+<span class="lineNum">     232 </span>            :     return false;
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            :   /* When doing link time optimizations, hidden symbols become local.  */
+<span class="lineNum">     235 </span><span class="lineCov">      28412 :   if ((in_lto_p &amp;&amp; !flag_incremental_link)</span>
+<span class="lineNum">     236 </span><span class="lineCov">      28197 :       &amp;&amp; (DECL_VISIBILITY (node-&gt;decl) == VISIBILITY_HIDDEN</span>
+<span class="lineNum">     237 </span><span class="lineCov">      56390 :           || DECL_VISIBILITY (node-&gt;decl) == VISIBILITY_INTERNAL)</span>
+<span class="lineNum">     238 </span>            :       /* Be sure that node is defined in IR file, not in other object
+<span class="lineNum">     239 </span>            :          file.  In that case we don't set used_from_other_object_file.  */
+<span class="lineNum">     240 </span><span class="lineCov">    2211225 :       &amp;&amp; node-&gt;definition)</span>
+<span class="lineNum">     241 </span>            :     ;
+<span class="lineNum">     242 </span><span class="lineCov">    2211221 :   else if (!whole_program)</span>
+<span class="lineNum">     243 </span>            :     return true;
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">        271 :   if (MAIN_NAME_P (DECL_NAME (node-&gt;decl)))</span>
+<span class="lineNum">     246 </span><span class="lineCov">        162 :     return true;</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            :   return false;
+<span class="lineNum">     249 </span>            : }
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            : /* Return true when variable should be considered externally visible.  */
+<a name="252"><span class="lineNum">     252 </span>            : </a>
+<span class="lineNum">     253 </span>            : bool
+<span class="lineNum">     254 </span><span class="lineCov">    4247748 : varpool_node::externally_visible_p (void)</span>
+<span class="lineNum">     255 </span>            : {
+<span class="lineNum">     256 </span><span class="lineCov">    4247760 :   while (transparent_alias &amp;&amp; definition)</span>
+<span class="lineNum">     257 </span><span class="lineCov">         24 :     return get_alias_target ()-&gt;externally_visible_p ();</span>
+<span class="lineNum">     258 </span><span class="lineCov">    4247748 :   if (DECL_EXTERNAL (decl))</span>
+<span class="lineNum">     259 </span>            :     return true;
+<span class="lineNum">     260 </span>            : 
+<span class="lineNum">     261 </span><span class="lineCov">    4224554 :   if (!TREE_PUBLIC (decl))</span>
+<span class="lineNum">     262 </span>            :     return false;
+<span class="lineNum">     263 </span>            : 
+<span class="lineNum">     264 </span>            :   /* If linker counts on us, we must preserve the function.  */
+<span class="lineNum">     265 </span><span class="lineCov">    2235482 :   if (used_from_object_file_p ())</span>
+<span class="lineNum">     266 </span>            :     return true;
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span>            :   /* Bringing TLS variables local may cause dynamic linker failures
+<span class="lineNum">     269 </span>            :      on limits of static TLS vars.  */
+<span class="lineNum">     270 </span><span class="lineCov">    2235460 :   if (DECL_THREAD_LOCAL_P (decl)</span>
+<span class="lineNum">     271 </span><span class="lineCov">    2239194 :       &amp;&amp; (DECL_TLS_MODEL (decl) != TLS_MODEL_EMULATED</span>
+<span class="lineNum">     272 </span><span class="lineCov">       3734 :           &amp;&amp; DECL_TLS_MODEL (decl) != TLS_MODEL_INITIAL_EXEC))</span>
+<span class="lineNum">     273 </span>            :     return true;
+<span class="lineNum">     274 </span>            : 
+<span class="lineNum">     275 </span><span class="lineCov">    2231849 :   if (DECL_HARD_REGISTER (decl))</span>
+<span class="lineNum">     276 </span>            :     return true;
+<span class="lineNum">     277 </span><span class="lineCov">    2231756 :   if (DECL_PRESERVE_P (decl))</span>
+<span class="lineNum">     278 </span>            :     return true;
+<span class="lineNum">     279 </span><span class="lineCov">    2231126 :   if (lookup_attribute (&quot;externally_visible&quot;,</span>
+<span class="lineNum">     280 </span><span class="lineCov">    4462252 :                         DECL_ATTRIBUTES (decl)))</span>
+<span class="lineNum">     281 </span>            :     return true;
+<span class="lineNum">     282 </span><span class="lineCov">    2231049 :   if (TARGET_DLLIMPORT_DECL_ATTRIBUTES</span>
+<span class="lineNum">     283 </span>            :       &amp;&amp; lookup_attribute (&quot;dllexport&quot;,
+<span class="lineNum">     284 </span>            :                            DECL_ATTRIBUTES (decl)))
+<span class="lineNum">     285 </span>            :     return true;
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            :   /* See if we have linker information about symbol not being used or
+<span class="lineNum">     288 </span>            :      if we need to make guess based on the declaration.
+<span class="lineNum">     289 </span>            : 
+<span class="lineNum">     290 </span>            :      Even if the linker clams the symbol is unused, never bring internal
+<span class="lineNum">     291 </span>            :      symbols that are declared by user as used or externally visible.
+<span class="lineNum">     292 </span>            :      This is needed for i.e. references from asm statements.   */
+<span class="lineNum">     293 </span><span class="lineCov">    2231049 :   if (used_from_object_file_p ())</span>
+<span class="lineNum">     294 </span>            :     return true;
+<span class="lineNum">     295 </span><span class="lineCov">    2231049 :   if (resolution == LDPR_PREVAILING_DEF_IRONLY)</span>
+<span class="lineNum">     296 </span>            :     return false;
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span>            :   /* As a special case, the COMDAT virtual tables can be unshared.
+<span class="lineNum">     299 </span>            :      In LTO mode turn vtables into static variables.  The variable is readonly,
+<span class="lineNum">     300 </span>            :      so this does not enable more optimization, but referring static var
+<span class="lineNum">     301 </span>            :      is faster for dynamic linking.  Also this match logic hidding vtables
+<span class="lineNum">     302 </span>            :      from LTO symbol tables.  */
+<span class="lineNum">     303 </span><span class="lineCov">    2224518 :   if (((in_lto_p || flag_whole_program) &amp;&amp; !flag_incremental_link)</span>
+<span class="lineNum">     304 </span><span class="lineCov">       4764 :       &amp;&amp; DECL_COMDAT (decl)</span>
+<span class="lineNum">     305 </span><span class="lineCov">    2225102 :       &amp;&amp; comdat_can_be_unshared_p (this))</span>
+<span class="lineNum">     306 </span>            :     return false;
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            :   /* When doing link time optimizations, hidden symbols become local.  */
+<span class="lineNum">     309 </span><span class="lineCov">       4630 :   if (in_lto_p &amp;&amp; !flag_incremental_link</span>
+<span class="lineNum">     310 </span><span class="lineCov">       4477 :       &amp;&amp; (DECL_VISIBILITY (decl) == VISIBILITY_HIDDEN</span>
+<span class="lineNum">     311 </span><span class="lineCov">       8952 :           || DECL_VISIBILITY (decl) == VISIBILITY_INTERNAL)</span>
+<span class="lineNum">     312 </span>            :       /* Be sure that node is defined in IR file, not in other object
+<span class="lineNum">     313 </span>            :          file.  In that case we don't set used_from_other_object_file.  */
+<span class="lineNum">     314 </span><span class="lineCov">    2224422 :       &amp;&amp; definition)</span>
+<span class="lineNum">     315 </span>            :     ;
+<span class="lineNum">     316 </span><span class="lineCov">    2224420 :   else if (!flag_whole_program)</span>
+<span class="lineNum">     317 </span>            :     return true;
+<span class="lineNum">     318 </span>            : 
+<span class="lineNum">     319 </span>            :   /* Do not attempt to privatize COMDATS by default.
+<span class="lineNum">     320 </span>            :      This would break linking with C++ libraries sharing
+<span class="lineNum">     321 </span>            :      inline definitions.
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span>            :      FIXME: We can do so for readonly vars with no address taken and
+<span class="lineNum">     324 </span>            :      possibly also for vtables since no direct pointer comparsion is done.
+<span class="lineNum">     325 </span>            :      It might be interesting to do so to reduce linking overhead.  */
+<span class="lineNum">     326 </span><span class="lineCov">        223 :   if (DECL_COMDAT (decl) || DECL_WEAK (decl))</span>
+<span class="lineNum">     327 </span><span class="lineCov">          3 :     return true;</span>
+<span class="lineNum">     328 </span>            :   return false;
+<span class="lineNum">     329 </span>            : }
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span>            : /* Return true if reference to NODE can be replaced by a local alias.
+<span class="lineNum">     332 </span>            :    Local aliases save dynamic linking overhead and enable more optimizations.
+<span class="lineNum">     333 </span>            :  */
+<a name="334"><span class="lineNum">     334 </span>            : </a>
+<span class="lineNum">     335 </span>            : static bool
+<span class="lineNum">     336 </span><span class="lineCov">    1741368 : can_replace_by_local_alias (symtab_node *node)</span>
+<span class="lineNum">     337 </span>            : {
+<span class="lineNum">     338 </span>            :   /* If aliases aren't supported, we can't do replacement.  */
+<span class="lineNum">     339 </span><span class="lineCov">    1741368 :   if (!TARGET_SUPPORTS_ALIASES)</span>
+<span class="lineNum">     340 </span>            :     return false;
+<span class="lineNum">     341 </span>            : 
+<span class="lineNum">     342 </span>            :   /* Weakrefs have a reason to be non-local.  Be sure we do not replace
+<span class="lineNum">     343 </span>            :      them.  */
+<span class="lineNum">     344 </span><span class="lineCov">    1741378 :   while (node-&gt;transparent_alias &amp;&amp; node-&gt;definition &amp;&amp; !node-&gt;weakref)</span>
+<span class="lineNum">     345 </span><span class="lineCov">         10 :     node = node-&gt;get_alias_target ();</span>
+<span class="lineNum">     346 </span><span class="lineCov">    1741368 :   if (node-&gt;weakref)</span>
+<span class="lineNum">     347 </span>            :     return false;
+<span class="lineNum">     348 </span>            :   
+<span class="lineNum">     349 </span><span class="lineCov">    1741332 :   return (node-&gt;get_availability () &gt; AVAIL_INTERPOSABLE</span>
+<span class="lineNum">     350 </span><span class="lineCov">    1700344 :           &amp;&amp; !decl_binds_to_current_def_p (node-&gt;decl)</span>
+<span class="lineNum">     351 </span><span class="lineCov">    2802414 :           &amp;&amp; !node-&gt;can_be_discarded_p ());</span>
+<span class="lineNum">     352 </span>            : }
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            : /* Return true if we can replace reference to NODE by local alias
+<span class="lineNum">     355 </span>            :    within a virtual table.  Generally we can replace function pointers
+<span class="lineNum">     356 </span>            :    and virtual table pointers.  */
+<a name="357"><span class="lineNum">     357 </span>            : </a>
+<span class="lineNum">     358 </span>            : static bool
+<span class="lineNum">     359 </span><span class="lineCov">     221132 : can_replace_by_local_alias_in_vtable (symtab_node *node)</span>
+<span class="lineNum">     360 </span>            : {
+<span class="lineNum">     361 </span><span class="lineCov">     221132 :   if (is_a &lt;varpool_node *&gt; (node)</span>
+<span class="lineNum">     362 </span><span class="lineCov">     131906 :       &amp;&amp; !DECL_VIRTUAL_P (node-&gt;decl))</span>
+<span class="lineNum">     363 </span>            :     return false;
+<span class="lineNum">     364 </span><span class="lineCov">     145625 :   return can_replace_by_local_alias (node);</span>
+<span class="lineNum">     365 </span>            : }
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            : /* walk_tree callback that rewrites initializer references.   */
+<a name="368"><span class="lineNum">     368 </span>            : </a>
+<span class="lineNum">     369 </span>            : static tree
+<span class="lineNum">     370 </span><span class="lineNoCov">          0 : update_vtable_references (tree *tp, int *walk_subtrees,</span>
+<span class="lineNum">     371 </span>            :                           void *data ATTRIBUTE_UNUSED)
+<span class="lineNum">     372 </span>            : {
+<span class="lineNum">     373 </span><span class="lineNoCov">          0 :   if (VAR_OR_FUNCTION_DECL_P (*tp))</span>
+<span class="lineNum">     374 </span>            :     {
+<span class="lineNum">     375 </span><span class="lineNoCov">          0 :       if (can_replace_by_local_alias_in_vtable (symtab_node::get (*tp)))</span>
+<span class="lineNum">     376 </span><span class="lineNoCov">          0 :         *tp = symtab_node::get (*tp)-&gt;noninterposable_alias ()-&gt;decl;</span>
+<span class="lineNum">     377 </span><span class="lineNoCov">          0 :       *walk_subtrees = 0;</span>
+<span class="lineNum">     378 </span>            :     }
+<span class="lineNum">     379 </span><span class="lineNoCov">          0 :   else if (IS_TYPE_OR_DECL_P (*tp))</span>
+<span class="lineNum">     380 </span><span class="lineNoCov">          0 :     *walk_subtrees = 0;</span>
+<span class="lineNum">     381 </span><span class="lineNoCov">          0 :   return NULL;</span>
+<span class="lineNum">     382 </span>            : }
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : /* In LTO we can remove COMDAT groups and weak symbols.
+<span class="lineNum">     385 </span>            :    Either turn them into normal symbols or external symbol depending on 
+<span class="lineNum">     386 </span>            :    resolution info.  */
+<a name="387"><span class="lineNum">     387 </span>            : </a>
+<span class="lineNum">     388 </span>            : static void
+<span class="lineNum">     389 </span><span class="lineCov">    9773698 : update_visibility_by_resolution_info (symtab_node * node)</span>
+<span class="lineNum">     390 </span>            : {
+<span class="lineNum">     391 </span><span class="lineCov">    9773698 :   bool define;</span>
+<span class="lineNum">     392 </span>            : 
+<span class="lineNum">     393 </span><span class="lineCov">    9773698 :   if (!node-&gt;externally_visible</span>
+<span class="lineNum">     394 </span><span class="lineCov">    4519313 :       || (!DECL_WEAK (node-&gt;decl) &amp;&amp; !DECL_ONE_ONLY (node-&gt;decl))</span>
+<span class="lineNum">     395 </span><span class="lineCov">   11411454 :       || node-&gt;resolution == LDPR_UNKNOWN)</span>
+<span class="lineNum">     396 </span><span class="lineCov">    9773574 :     return;</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span><span class="lineCov">        248 :   define = (node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY</span>
+<span class="lineNum">     399 </span>            :             || node-&gt;resolution == LDPR_PREVAILING_DEF
+<span class="lineNum">     400 </span><span class="lineCov">        124 :             || node-&gt;resolution == LDPR_UNDEF</span>
+<span class="lineNum">     401 </span><span class="lineCov">        124 :             || node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY_EXP);</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span>            :   /* The linker decisions ought to agree in the whole group.  */
+<span class="lineNum">     404 </span><span class="lineCov">        124 :   if (node-&gt;same_comdat_group)</span>
+<span class="lineNum">     405 </span><span class="lineCov">         64 :     for (symtab_node *next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     406 </span><span class="lineCov">        103 :          next != node; next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     407 </span>            :       {
+<span class="lineNum">     408 </span><span class="lineCov">         64 :         if (!next-&gt;externally_visible || next-&gt;transparent_alias)</span>
+<span class="lineNum">     409 </span>            :           continue;
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span><span class="lineCov">         60 :         bool same_def</span>
+<span class="lineNum">     412 </span><span class="lineCov">         60 :           = define == (next-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY</span>
+<span class="lineNum">     413 </span>            :                        || next-&gt;resolution == LDPR_PREVAILING_DEF
+<span class="lineNum">     414 </span>            :                        || next-&gt;resolution == LDPR_UNDEF
+<span class="lineNum">     415 </span><span class="lineCov">         60 :                        || next-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY_EXP);</span>
+<span class="lineNum">     416 </span><span class="lineCov">         60 :         gcc_assert (in_lto_p || same_def);</span>
+<span class="lineNum">     417 </span><span class="lineCov">         60 :         if (!same_def)</span>
+<span class="lineNum">     418 </span>            :           return;
+<span class="lineNum">     419 </span>            :       }
+<span class="lineNum">     420 </span>            : 
+<span class="lineNum">     421 </span><span class="lineCov">        124 :   if (node-&gt;same_comdat_group)</span>
+<span class="lineNum">     422 </span><span class="lineCov">         64 :     for (symtab_node *next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     423 </span><span class="lineCov">        103 :          next != node; next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     424 </span>            :       {
+<span class="lineNum">     425 </span>            :         /* During incremental linking we need to keep symbol weak for future
+<span class="lineNum">     426 </span>            :            linking.  We can still drop definition if we know non-LTO world
+<span class="lineNum">     427 </span>            :            prevails.  */
+<span class="lineNum">     428 </span><span class="lineCov">         64 :         if (!flag_incremental_link)</span>
+<span class="lineNum">     429 </span>            :           {
+<span class="lineNum">     430 </span><span class="lineNoCov">          0 :             DECL_WEAK (next-&gt;decl) = false;</span>
+<span class="lineNum">     431 </span><span class="lineNoCov">          0 :             next-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     432 </span>            :           }
+<span class="lineNum">     433 </span><span class="lineCov">         64 :         if (!define)</span>
+<span class="lineNum">     434 </span>            :           {
+<span class="lineNum">     435 </span><span class="lineNoCov">          0 :             if (next-&gt;externally_visible)</span>
+<span class="lineNum">     436 </span><span class="lineNoCov">          0 :               DECL_EXTERNAL (next-&gt;decl) = true;</span>
+<span class="lineNum">     437 </span><span class="lineNoCov">          0 :             next-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     438 </span>            :           }
+<span class="lineNum">     439 </span>            :       }
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span>            :   /* During incremental linking we need to keep symbol weak for future
+<span class="lineNum">     442 </span>            :      linking.  We can still drop definition if we know non-LTO world prevails.  */
+<span class="lineNum">     443 </span><span class="lineCov">        124 :   if (!flag_incremental_link)</span>
+<span class="lineNum">     444 </span>            :     {
+<span class="lineNum">     445 </span><span class="lineCov">         31 :       DECL_WEAK (node-&gt;decl) = false;</span>
+<span class="lineNum">     446 </span><span class="lineCov">         31 :       node-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     447 </span><span class="lineCov">         31 :       node-&gt;dissolve_same_comdat_group_list ();</span>
+<span class="lineNum">     448 </span>            :     }
+<span class="lineNum">     449 </span><span class="lineCov">        124 :   if (!define)</span>
+<span class="lineNum">     450 </span>            :     {
+<span class="lineNum">     451 </span><span class="lineNoCov">          0 :       DECL_EXTERNAL (node-&gt;decl) = true;</span>
+<span class="lineNum">     452 </span><span class="lineNoCov">          0 :       node-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     453 </span><span class="lineNoCov">          0 :       node-&gt;dissolve_same_comdat_group_list ();</span>
+<span class="lineNum">     454 </span>            :     }
+<span class="lineNum">     455 </span>            : }
+<span class="lineNum">     456 </span>            : 
+<span class="lineNum">     457 </span>            : /* Try to get rid of weakref.  */
+<a name="458"><span class="lineNum">     458 </span>            : </a>
+<span class="lineNum">     459 </span>            : static void
+<span class="lineNum">     460 </span><span class="lineCov">       3525 : optimize_weakref (symtab_node *node)</span>
+<span class="lineNum">     461 </span>            : {
+<span class="lineNum">     462 </span><span class="lineCov">       3525 :   bool strip_weakref = false;</span>
+<span class="lineNum">     463 </span><span class="lineCov">       3525 :   bool static_alias = false;</span>
+<span class="lineNum">     464 </span>            : 
+<span class="lineNum">     465 </span><span class="lineCov">       3525 :   gcc_assert (node-&gt;weakref);</span>
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            :   /* Weakrefs with no target defined can not be optimized.  */
+<span class="lineNum">     468 </span><span class="lineCov">       3525 :   if (!node-&gt;analyzed)</span>
+<span class="lineNum">     469 </span>            :     return;
+<span class="lineNum">     470 </span><span class="lineCov">         79 :   symtab_node *target = node-&gt;get_alias_target ();</span>
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            :   /* Weakrefs to weakrefs can be optimized only if target can be.  */
+<span class="lineNum">     473 </span><span class="lineCov">         79 :   if (target-&gt;weakref)</span>
+<span class="lineNum">     474 </span><span class="lineCov">         16 :     optimize_weakref (target);</span>
+<span class="lineNum">     475 </span><span class="lineCov">         79 :   if (target-&gt;weakref)</span>
+<span class="lineNum">     476 </span>            :     return;
+<span class="lineNum">     477 </span>            : 
+<span class="lineNum">     478 </span>            :   /* If we have definition of weakref's target and we know it binds locally,
+<span class="lineNum">     479 </span>            :      we can turn weakref to static alias.  */
+<span class="lineNum">     480 </span><span class="lineCov">         63 :   if (TARGET_SUPPORTS_ALIASES</span>
+<span class="lineNum">     481 </span><span class="lineCov">         63 :       &amp;&amp; target-&gt;definition &amp;&amp; decl_binds_to_current_def_p (target-&gt;decl))</span>
+<span class="lineNum">     482 </span>            :     strip_weakref = static_alias = true;
+<span class="lineNum">     483 </span>            :   /* Otherwise we can turn weakref into transparent alias.  This transformation
+<span class="lineNum">     484 </span>            :      may break asm statements which directly refers to symbol name and expect
+<span class="lineNum">     485 </span>            :      GNU as to translate it via .weakref directive. So do not optimize when
+<span class="lineNum">     486 </span>            :      DECL_PRESERVED is set and .weakref is supported.  */
+<span class="lineNum">     487 </span><span class="lineCov">         41 :   else if ((!DECL_PRESERVE_P (target-&gt;decl)</span>
+<span class="lineNum">     488 </span><span class="lineNoCov">          0 :             || IDENTIFIER_TRANSPARENT_ALIAS (DECL_ASSEMBLER_NAME (node-&gt;decl)))</span>
+<span class="lineNum">     489 </span><span class="lineCov">         41 :            &amp;&amp; !DECL_WEAK (target-&gt;decl)</span>
+<span class="lineNum">     490 </span><span class="lineCov">         35 :            &amp;&amp; !DECL_EXTERNAL (target-&gt;decl)</span>
+<span class="lineNum">     491 </span><span class="lineCov">         42 :            &amp;&amp; ((target-&gt;definition &amp;&amp; !target-&gt;can_be_discarded_p ())</span>
+<span class="lineNum">     492 </span><span class="lineCov">          1 :                || target-&gt;resolution != LDPR_UNDEF))</span>
+<span class="lineNum">     493 </span>            :     strip_weakref = true;
+<span class="lineNum">     494 </span><span class="lineCov">         63 :   if (!strip_weakref)</span>
+<span class="lineNum">     495 </span>            :     return;
+<span class="lineNum">     496 </span><span class="lineCov">         23 :   node-&gt;weakref = false;</span>
+<span class="lineNum">     497 </span><span class="lineCov">         23 :   IDENTIFIER_TRANSPARENT_ALIAS (DECL_ASSEMBLER_NAME (node-&gt;decl)) = 0;</span>
+<span class="lineNum">     498 </span><span class="lineCov">         23 :   TREE_CHAIN (DECL_ASSEMBLER_NAME (node-&gt;decl)) = NULL_TREE;</span>
+<span class="lineNum">     499 </span><span class="lineCov">         23 :   DECL_ATTRIBUTES (node-&gt;decl) = remove_attribute (&quot;weakref&quot;,</span>
+<span class="lineNum">     500 </span><span class="lineCov">         23 :                                                    DECL_ATTRIBUTES</span>
+<span class="lineNum">     501 </span>            :                                                          (node-&gt;decl));
+<span class="lineNum">     502 </span>            : 
+<span class="lineNum">     503 </span><span class="lineCov">         23 :   if (dump_file)</span>
+<span class="lineNum">     504 </span><span class="lineNoCov">          0 :     fprintf (dump_file, &quot;Optimizing weakref %s %s\n&quot;,</span>
+<span class="lineNum">     505 </span>            :              node-&gt;name(),
+<span class="lineNum">     506 </span>            :              static_alias ? &quot;as static alias&quot; : &quot;as transparent alias&quot;);
+<span class="lineNum">     507 </span>            : 
+<span class="lineNum">     508 </span><span class="lineCov">         23 :   if (static_alias)</span>
+<span class="lineNum">     509 </span>            :     {
+<span class="lineNum">     510 </span>            :       /* make_decl_local will shortcircuit if it doesn't see TREE_PUBLIC.
+<span class="lineNum">     511 </span>            :          be sure it really clears the WEAK flag.  */
+<span class="lineNum">     512 </span><span class="lineCov">         22 :       TREE_PUBLIC (node-&gt;decl) = true;</span>
+<span class="lineNum">     513 </span><span class="lineCov">         22 :       node-&gt;make_decl_local ();</span>
+<span class="lineNum">     514 </span><span class="lineCov">         22 :       node-&gt;forced_by_abi = false;</span>
+<span class="lineNum">     515 </span><span class="lineCov">         22 :       node-&gt;resolution = LDPR_PREVAILING_DEF_IRONLY;</span>
+<span class="lineNum">     516 </span><span class="lineCov">         22 :       node-&gt;externally_visible = false;</span>
+<span class="lineNum">     517 </span><span class="lineCov">         22 :       gcc_assert (!DECL_WEAK (node-&gt;decl));</span>
+<span class="lineNum">     518 </span><span class="lineCov">         22 :       node-&gt;transparent_alias = false;</span>
+<span class="lineNum">     519 </span>            :     }
+<span class="lineNum">     520 </span>            :   else
+<span class="lineNum">     521 </span>            :     {
+<span class="lineNum">     522 </span><span class="lineCov">          1 :       symtab-&gt;change_decl_assembler_name</span>
+<span class="lineNum">     523 </span><span class="lineCov">          1 :         (node-&gt;decl, DECL_ASSEMBLER_NAME (node-&gt;get_alias_target ()-&gt;decl));</span>
+<span class="lineNum">     524 </span><span class="lineCov">          1 :       node-&gt;transparent_alias = true;</span>
+<span class="lineNum">     525 </span><span class="lineCov">          1 :       node-&gt;copy_visibility_from (target);</span>
+<span class="lineNum">     526 </span>            :     }
+<span class="lineNum">     527 </span><span class="lineCov">         23 :   gcc_assert (node-&gt;alias);</span>
+<span class="lineNum">     528 </span>            : }
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span>            : /* NODE is an externally visible definition, which we've discovered is
+<span class="lineNum">     531 </span>            :    not needed externally.  Make it local to this compilation.  */
+<a name="532"><span class="lineNum">     532 </span>            : </a>
+<span class="lineNum">     533 </span>            : static void
+<span class="lineNum">     534 </span><span class="lineCov">    2436294 : localize_node (bool whole_program, symtab_node *node)</span>
+<span class="lineNum">     535 </span>            : {
+<span class="lineNum">     536 </span><span class="lineCov">    2436294 :   gcc_assert (whole_program || in_lto_p || !TREE_PUBLIC (node-&gt;decl));</span>
+<span class="lineNum">     537 </span>            : 
+<span class="lineNum">     538 </span>            :   /* It is possible that one comdat group contains both hidden and non-hidden
+<span class="lineNum">     539 </span>            :      symbols.  In this case we can privatize all hidden symbol but we need
+<span class="lineNum">     540 </span>            :      to keep non-hidden exported.  */
+<span class="lineNum">     541 </span><span class="lineCov">    2436294 :   if (node-&gt;same_comdat_group</span>
+<span class="lineNum">     542 </span><span class="lineCov">       6679 :       &amp;&amp; node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY)</span>
+<span class="lineNum">     543 </span>            :     {
+<span class="lineNum">     544 </span>            :       symtab_node *next;
+<span class="lineNum">     545 </span><span class="lineCov">       1491 :       for (next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     546 </span><span class="lineCov">       2807 :            next != node; next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     547 </span><span class="lineCov">       1491 :         if (next-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY_EXP</span>
+<span class="lineNum">     548 </span><span class="lineCov">       1491 :             || next-&gt;resolution == LDPR_PREVAILING_DEF)</span>
+<span class="lineNum">     549 </span>            :           break;
+<span class="lineNum">     550 </span><span class="lineCov">       1316 :       if (node != next)</span>
+<span class="lineNum">     551 </span>            :         {
+<span class="lineNum">     552 </span><span class="lineNoCov">          0 :           if (!node-&gt;transparent_alias)</span>
+<span class="lineNum">     553 </span>            :             {
+<span class="lineNum">     554 </span><span class="lineNoCov">          0 :               node-&gt;resolution = LDPR_PREVAILING_DEF_IRONLY;</span>
+<span class="lineNum">     555 </span><span class="lineNoCov">          0 :               node-&gt;make_decl_local ();</span>
+<span class="lineNum">     556 </span><span class="lineNoCov">          0 :               if (!flag_incremental_link)</span>
+<span class="lineNum">     557 </span><span class="lineNoCov">          0 :                 node-&gt;unique_name |= true;</span>
+<span class="lineNum">     558 </span><span class="lineNoCov">          0 :               return;</span>
+<span class="lineNum">     559 </span>            :             }
+<span class="lineNum">     560 </span>            :         }
+<span class="lineNum">     561 </span>            :     }
+<span class="lineNum">     562 </span>            :   /* For similar reason do not privatize whole comdat when seeing comdat
+<span class="lineNum">     563 </span>            :      local.  Wait for non-comdat symbol to be privatized first.  */
+<span class="lineNum">     564 </span><span class="lineCov">    2436294 :   if (node-&gt;comdat_local_p ())</span>
+<span class="lineNum">     565 </span>            :     return;
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span><span class="lineCov">    2431082 :   if (node-&gt;same_comdat_group &amp;&amp; TREE_PUBLIC (node-&gt;decl))</span>
+<span class="lineNum">     568 </span>            :     {
+<span class="lineNum">     569 </span><span class="lineCov">       1782 :       for (symtab_node *next = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     570 </span><span class="lineCov">       3249 :            next != node; next = next-&gt;same_comdat_group)</span>
+<span class="lineNum">     571 </span>            :         {
+<span class="lineNum">     572 </span><span class="lineCov">       1782 :           next-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     573 </span><span class="lineCov">       1782 :           if (!next-&gt;alias)</span>
+<span class="lineNum">     574 </span><span class="lineCov">       1657 :             next-&gt;set_section (NULL);</span>
+<span class="lineNum">     575 </span><span class="lineCov">       1782 :           if (!next-&gt;transparent_alias)</span>
+<span class="lineNum">     576 </span><span class="lineCov">       1782 :             next-&gt;make_decl_local ();</span>
+<span class="lineNum">     577 </span><span class="lineCov">       1782 :           next-&gt;unique_name</span>
+<span class="lineNum">     578 </span><span class="lineCov">       1782 :             |= ((next-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY</span>
+<span class="lineNum">     579 </span><span class="lineCov">       1782 :                  || next-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY_EXP)</span>
+<span class="lineNum">     580 </span><span class="lineCov">       1483 :                 &amp;&amp; TREE_PUBLIC (next-&gt;decl)</span>
+<span class="lineNum">     581 </span><span class="lineCov">       1782 :                 &amp;&amp; !flag_incremental_link);</span>
+<span class="lineNum">     582 </span>            :         }
+<span class="lineNum">     583 </span>            : 
+<span class="lineNum">     584 </span>            :       /* Now everything's localized, the grouping has no meaning, and
+<span class="lineNum">     585 </span>            :          will cause crashes if we keep it around.  */
+<span class="lineNum">     586 </span><span class="lineCov">       1467 :       node-&gt;dissolve_same_comdat_group_list ();</span>
+<span class="lineNum">     587 </span>            :     }
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span><span class="lineCov">    2431082 :   node-&gt;unique_name</span>
+<span class="lineNum">     590 </span><span class="lineCov">    4862164 :     |= ((node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY</span>
+<span class="lineNum">     591 </span><span class="lineCov">    2431082 :          || node-&gt;resolution == LDPR_PREVAILING_DEF_IRONLY_EXP)</span>
+<span class="lineNum">     592 </span><span class="lineCov">    1191993 :         &amp;&amp; TREE_PUBLIC (node-&gt;decl)</span>
+<span class="lineNum">     593 </span><span class="lineCov">    2468471 :         &amp;&amp; !flag_incremental_link);</span>
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span><span class="lineCov">    2431082 :   if (TREE_PUBLIC (node-&gt;decl))</span>
+<span class="lineNum">     596 </span><span class="lineCov">      38090 :     node-&gt;set_comdat_group (NULL);</span>
+<span class="lineNum">     597 </span><span class="lineCov">    2431082 :   if (DECL_COMDAT (node-&gt;decl) &amp;&amp; !node-&gt;alias)</span>
+<span class="lineNum">     598 </span><span class="lineCov">       4609 :     node-&gt;set_section (NULL);</span>
+<span class="lineNum">     599 </span><span class="lineCov">    2431082 :   if (!node-&gt;transparent_alias)</span>
+<span class="lineNum">     600 </span>            :     {
+<span class="lineNum">     601 </span><span class="lineCov">    2431082 :       node-&gt;resolution = LDPR_PREVAILING_DEF_IRONLY;</span>
+<span class="lineNum">     602 </span><span class="lineCov">    2431082 :       node-&gt;make_decl_local ();</span>
+<span class="lineNum">     603 </span>            :     }
+<span class="lineNum">     604 </span>            : }
+<span class="lineNum">     605 </span>            : 
+<span class="lineNum">     606 </span>            : /* Decide on visibility of all symbols.  */
+<a name="607"><span class="lineNum">     607 </span>            : </a>
+<span class="lineNum">     608 </span>            : static unsigned int
+<span class="lineNum">     609 </span><span class="lineCov">     278899 : function_and_variable_visibility (bool whole_program)</span>
+<span class="lineNum">     610 </span>            : {
+<span class="lineNum">     611 </span><span class="lineCov">     278899 :   struct cgraph_node *node;</span>
+<span class="lineNum">     612 </span><span class="lineCov">     278899 :   varpool_node *vnode;</span>
+<span class="lineNum">     613 </span>            : 
+<span class="lineNum">     614 </span>            :   /* All aliases should be processed at this point.  */
+<span class="lineNum">     615 </span><span class="lineCov">     278899 :   gcc_checking_assert (!alias_pairs || !alias_pairs-&gt;length ());</span>
+<span class="lineNum">     616 </span>            : 
+<span class="lineNum">     617 </span>            : #ifdef ASM_OUTPUT_DEF
+<span class="lineNum">     618 </span><span class="lineCov">    6270702 :   FOR_EACH_DEFINED_FUNCTION (node)</span>
+<span class="lineNum">     619 </span>            :     {
+<span class="lineNum">     620 </span><span class="lineCov">    2856452 :       if (node-&gt;get_availability () != AVAIL_INTERPOSABLE</span>
+<span class="lineNum">     621 </span><span class="lineCov">      56195 :           || DECL_EXTERNAL (node-&gt;decl)</span>
+<span class="lineNum">     622 </span><span class="lineCov">      59601 :           || node-&gt;has_aliases_p ()</span>
+<span class="lineNum">     623 </span><span class="lineCov">    2962030 :           || lookup_attribute (&quot;noipa&quot;, DECL_ATTRIBUTES (node-&gt;decl)))</span>
+<span class="lineNum">     624 </span><span class="lineCov">    2805754 :         continue;</span>
+<span class="lineNum">     625 </span>            : 
+<span class="lineNum">     626 </span><span class="lineCov">      50698 :       cgraph_node *alias = 0;</span>
+<span class="lineNum">     627 </span><span class="lineCov">     252435 :       for (cgraph_edge *e = node-&gt;callees; e; e = e-&gt;next_callee)</span>
+<span class="lineNum">     628 </span>            :         {
+<span class="lineNum">     629 </span>            :           /* Recursive function calls usually can't be interposed.  */
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span><span class="lineCov">     201737 :           if (!e-&gt;recursive_p ())</span>
+<span class="lineNum">     632 </span>            :             continue;
+<span class="lineNum">     633 </span>            : 
+<span class="lineNum">     634 </span><span class="lineCov">        701 :           if (!alias)</span>
+<span class="lineNum">     635 </span>            :             {
+<span class="lineNum">     636 </span><span class="lineCov">        227 :               alias = dyn_cast&lt;cgraph_node *&gt; (node-&gt;noninterposable_alias ());</span>
+<span class="lineNum">     637 </span><span class="lineCov">        227 :               gcc_assert (alias &amp;&amp; alias != node);</span>
+<span class="lineNum">     638 </span>            :             }
+<span class="lineNum">     639 </span>            : 
+<span class="lineNum">     640 </span><span class="lineCov">        701 :           e-&gt;redirect_callee (alias);</span>
+<span class="lineNum">     641 </span><span class="lineCov">        701 :           if (gimple_has_body_p (e-&gt;caller-&gt;decl))</span>
+<span class="lineNum">     642 </span>            :             {
+<span class="lineNum">     643 </span><span class="lineCov">        701 :               push_cfun (DECL_STRUCT_FUNCTION (e-&gt;caller-&gt;decl));</span>
+<span class="lineNum">     644 </span><span class="lineCov">        701 :               e-&gt;redirect_call_stmt_to_callee ();</span>
+<span class="lineNum">     645 </span><span class="lineCov">        701 :               pop_cfun ();</span>
+<span class="lineNum">     646 </span>            :             }
+<span class="lineNum">     647 </span>            :         }
+<span class="lineNum">     648 </span>            :     }
+<span class="lineNum">     649 </span>            : #endif
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span><span class="lineCov">   11617280 :   FOR_EACH_FUNCTION (node)</span>
+<span class="lineNum">     652 </span>            :     {
+<span class="lineNum">     653 </span><span class="lineCov">    5529741 :       int flags = flags_from_decl_or_type (node-&gt;decl);</span>
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span>            :       /* Optimize away PURE and CONST constructors and destructors.  */
+<span class="lineNum">     656 </span><span class="lineCov">    5529741 :       if (node-&gt;analyzed</span>
+<span class="lineNum">     657 </span><span class="lineCov">    2856679 :           &amp;&amp; (DECL_STATIC_CONSTRUCTOR (node-&gt;decl)</span>
+<span class="lineNum">     658 </span><span class="lineCov">    2856679 :               || DECL_STATIC_DESTRUCTOR (node-&gt;decl))</span>
+<span class="lineNum">     659 </span><span class="lineCov">      18262 :           &amp;&amp; (flags &amp; (ECF_CONST | ECF_PURE))</span>
+<span class="lineNum">     660 </span><span class="lineCov">          9 :           &amp;&amp; !(flags &amp; ECF_LOOPING_CONST_OR_PURE)</span>
+<span class="lineNum">     661 </span><span class="lineCov">    5529741 :           &amp;&amp; opt_for_fn (node-&gt;decl, optimize))</span>
+<span class="lineNum">     662 </span>            :         {
+<span class="lineNum">     663 </span><span class="lineNoCov">          0 :           DECL_STATIC_CONSTRUCTOR (node-&gt;decl) = 0;</span>
+<span class="lineNum">     664 </span><span class="lineNoCov">          0 :           DECL_STATIC_DESTRUCTOR (node-&gt;decl) = 0;</span>
+<span class="lineNum">     665 </span>            :         }
+<span class="lineNum">     666 </span>            : 
+<span class="lineNum">     667 </span>            :       /* Frontends and alias code marks nodes as needed before parsing
+<span class="lineNum">     668 </span>            :          is finished.  We may end up marking as node external nodes
+<span class="lineNum">     669 </span>            :          where this flag is meaningless strip it.  */
+<span class="lineNum">     670 </span><span class="lineCov">    5529741 :       if (DECL_EXTERNAL (node-&gt;decl) || !node-&gt;definition)</span>
+<span class="lineNum">     671 </span>            :         {
+<span class="lineNum">     672 </span><span class="lineCov">    2818033 :           node-&gt;force_output = 0;</span>
+<span class="lineNum">     673 </span><span class="lineCov">    2818033 :           node-&gt;forced_by_abi = 0;</span>
+<span class="lineNum">     674 </span>            :         }
+<span class="lineNum">     675 </span>            : 
+<span class="lineNum">     676 </span>            :       /* C++ FE on lack of COMDAT support create local COMDAT functions
+<span class="lineNum">     677 </span>            :          (that ought to be shared but can not due to object format
+<span class="lineNum">     678 </span>            :          limitations).  It is necessary to keep the flag to make rest of C++ FE
+<span class="lineNum">     679 </span>            :          happy.  Clear the flag here to avoid confusion in middle-end.  */
+<span class="lineNum">     680 </span><span class="lineCov">    5529741 :       if (DECL_COMDAT (node-&gt;decl) &amp;&amp; !TREE_PUBLIC (node-&gt;decl))</span>
+<span class="lineNum">     681 </span><span class="lineCov">         22 :         DECL_COMDAT (node-&gt;decl) = 0;</span>
+<span class="lineNum">     682 </span>            : 
+<span class="lineNum">     683 </span>            :       /* For external decls stop tracking same_comdat_group. It doesn't matter
+<span class="lineNum">     684 </span>            :          what comdat group they are in when they won't be emitted in this TU.
+<span class="lineNum">     685 </span>            : 
+<span class="lineNum">     686 </span>            :          An exception is LTO where we may end up with both external
+<span class="lineNum">     687 </span>            :          and non-external declarations in the same comdat group in
+<span class="lineNum">     688 </span>            :          the case declarations was not merged.  */
+<span class="lineNum">     689 </span><span class="lineCov">    5529741 :       if (node-&gt;same_comdat_group &amp;&amp; DECL_EXTERNAL (node-&gt;decl) &amp;&amp; !in_lto_p)</span>
+<span class="lineNum">     690 </span>            :         {
+<span class="lineNum">     691 </span><span class="lineCov">         19 :           if (flag_checking)</span>
+<span class="lineNum">     692 </span>            :             {
+<span class="lineNum">     693 </span><span class="lineCov">         25 :               for (symtab_node *n = node-&gt;same_comdat_group;</span>
+<span class="lineNum">     694 </span><span class="lineCov">         44 :                    n != node;</span>
+<span class="lineNum">     695 </span><span class="lineCov">         25 :                    n = n-&gt;same_comdat_group)</span>
+<span class="lineNum">     696 </span>            :                 /* If at least one of same comdat group functions is external,
+<span class="lineNum">     697 </span>            :                    all of them have to be, otherwise it is a front-end bug.  */
+<span class="lineNum">     698 </span><span class="lineCov">         25 :                 gcc_assert (DECL_EXTERNAL (n-&gt;decl));</span>
+<span class="lineNum">     699 </span>            :             }
+<span class="lineNum">     700 </span><span class="lineCov">         19 :           node-&gt;dissolve_same_comdat_group_list ();</span>
+<span class="lineNum">     701 </span>            :         }
+<span class="lineNum">     702 </span><span class="lineCov">    5529741 :       gcc_assert ((!DECL_WEAK (node-&gt;decl)</span>
+<span class="lineNum">     703 </span>            :                   &amp;&amp; !DECL_COMDAT (node-&gt;decl))
+<span class="lineNum">     704 </span>            :                   || TREE_PUBLIC (node-&gt;decl)
+<span class="lineNum">     705 </span>            :                   || node-&gt;weakref
+<span class="lineNum">     706 </span>            :                   || DECL_EXTERNAL (node-&gt;decl));
+<span class="lineNum">     707 </span><span class="lineCov">    5529741 :       if (cgraph_externally_visible_p (node, whole_program))</span>
+<span class="lineNum">     708 </span>            :         {
+<span class="lineNum">     709 </span><span class="lineCov">    2271276 :           gcc_assert (!node-&gt;global.inlined_to);</span>
+<span class="lineNum">     710 </span><span class="lineCov">    2271276 :           node-&gt;externally_visible = true;</span>
+<span class="lineNum">     711 </span>            :         }
+<span class="lineNum">     712 </span>            :       else
+<span class="lineNum">     713 </span>            :         {
+<span class="lineNum">     714 </span><span class="lineCov">    3258465 :           node-&gt;externally_visible = false;</span>
+<span class="lineNum">     715 </span><span class="lineCov">    3258465 :           node-&gt;forced_by_abi = false;</span>
+<span class="lineNum">     716 </span>            :         }
+<span class="lineNum">     717 </span><span class="lineCov">    5529741 :       if (!node-&gt;externally_visible</span>
+<span class="lineNum">     718 </span><span class="lineCov">    5529741 :           &amp;&amp; node-&gt;definition &amp;&amp; !node-&gt;weakref</span>
+<span class="lineNum">     719 </span><span class="lineCov">    5529741 :           &amp;&amp; !DECL_EXTERNAL (node-&gt;decl))</span>
+<span class="lineNum">     720 </span><span class="lineCov">     440382 :         localize_node (whole_program, node);</span>
+<span class="lineNum">     721 </span>            : 
+<span class="lineNum">     722 </span><span class="lineCov">    5529741 :       if (node-&gt;thunk.thunk_p</span>
+<span class="lineNum">     723 </span><span class="lineCov">       5197 :           &amp;&amp; !node-&gt;thunk.add_pointer_bounds_args</span>
+<span class="lineNum">     724 </span><span class="lineCov">       5197 :           &amp;&amp; TREE_PUBLIC (node-&gt;decl))</span>
+<span class="lineNum">     725 </span>            :         {
+<span class="lineNum">     726 </span><span class="lineCov">       5084 :           struct cgraph_node *decl_node = node;</span>
+<span class="lineNum">     727 </span>            : 
+<span class="lineNum">     728 </span><span class="lineCov">       5084 :           decl_node = decl_node-&gt;callees-&gt;callee-&gt;function_symbol ();</span>
+<span class="lineNum">     729 </span>            : 
+<span class="lineNum">     730 </span>            :           /* Thunks have the same visibility as function they are attached to.
+<span class="lineNum">     731 </span>            :              Make sure the C++ front end set this up properly.  */
+<span class="lineNum">     732 </span><span class="lineCov">       5084 :           if (DECL_ONE_ONLY (decl_node-&gt;decl))</span>
+<span class="lineNum">     733 </span>            :             {
+<span class="lineNum">     734 </span><span class="lineCov">       4070 :               gcc_checking_assert (DECL_COMDAT (node-&gt;decl)</span>
+<span class="lineNum">     735 </span>            :                                    == DECL_COMDAT (decl_node-&gt;decl));
+<span class="lineNum">     736 </span><span class="lineCov">       8140 :               gcc_checking_assert (node-&gt;in_same_comdat_group_p (decl_node));</span>
+<span class="lineNum">     737 </span><span class="lineCov">       4070 :               gcc_checking_assert (node-&gt;same_comdat_group);</span>
+<span class="lineNum">     738 </span>            :             }
+<span class="lineNum">     739 </span><span class="lineCov">       5084 :           node-&gt;forced_by_abi = decl_node-&gt;forced_by_abi;</span>
+<span class="lineNum">     740 </span><span class="lineCov">       5084 :           if (DECL_EXTERNAL (decl_node-&gt;decl))</span>
+<span class="lineNum">     741 </span><span class="lineCov">          4 :             DECL_EXTERNAL (node-&gt;decl) = 1;</span>
+<span class="lineNum">     742 </span>            :         }
+<span class="lineNum">     743 </span>            : 
+<span class="lineNum">     744 </span><span class="lineCov">    5529741 :       update_visibility_by_resolution_info (node);</span>
+<span class="lineNum">     745 </span><span class="lineCov">    5529741 :       if (node-&gt;weakref)</span>
+<span class="lineNum">     746 </span><span class="lineCov">       3451 :         optimize_weakref (node);</span>
+<span class="lineNum">     747 </span>            :     }
+<span class="lineNum">     748 </span><span class="lineCov">    6271156 :   FOR_EACH_DEFINED_FUNCTION (node)</span>
+<span class="lineNum">     749 </span>            :     {
+<span class="lineNum">     750 </span><span class="lineCov">    2856679 :       if (!node-&gt;local.local)</span>
+<span class="lineNum">     751 </span><span class="lineCov">    2759632 :         node-&gt;local.local |= node-&gt;local_p ();</span>
+<span class="lineNum">     752 </span>            : 
+<span class="lineNum">     753 </span>            :       /* If we know that function can not be overwritten by a
+<span class="lineNum">     754 </span>            :          different semantics and moreover its section can not be
+<span class="lineNum">     755 </span>            :          discarded, replace all direct calls by calls to an
+<span class="lineNum">     756 </span>            :          noninterposable alias.  This make dynamic linking cheaper and
+<span class="lineNum">     757 </span>            :          enable more optimization.
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            :          TODO: We can also update virtual tables.  */
+<span class="lineNum">     760 </span><span class="lineCov">    2856679 :       if (node-&gt;callers </span>
+<span class="lineNum">     761 </span><span class="lineCov">    2856679 :           &amp;&amp; can_replace_by_local_alias (node))</span>
+<span class="lineNum">     762 </span>            :         {
+<span class="lineNum">     763 </span><span class="lineCov">         86 :           cgraph_node *alias = dyn_cast&lt;cgraph_node *&gt;</span>
+<span class="lineNum">     764 </span><span class="lineCov">         86 :             (node-&gt;noninterposable_alias ());</span>
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span><span class="lineCov">         86 :           if (alias &amp;&amp; alias != node)</span>
+<span class="lineNum">     767 </span>            :             {
+<span class="lineNum">     768 </span><span class="lineCov">        198 :               while (node-&gt;callers)</span>
+<span class="lineNum">     769 </span>            :                 {
+<span class="lineNum">     770 </span><span class="lineCov">        112 :                   struct cgraph_edge *e = node-&gt;callers;</span>
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span><span class="lineCov">        112 :                   e-&gt;redirect_callee (alias);</span>
+<span class="lineNum">     773 </span><span class="lineCov">        112 :                   if (gimple_has_body_p (e-&gt;caller-&gt;decl))</span>
+<span class="lineNum">     774 </span>            :                     {
+<span class="lineNum">     775 </span><span class="lineCov">        111 :                       push_cfun (DECL_STRUCT_FUNCTION (e-&gt;caller-&gt;decl));</span>
+<span class="lineNum">     776 </span><span class="lineCov">        111 :                       e-&gt;redirect_call_stmt_to_callee ();</span>
+<span class="lineNum">     777 </span><span class="lineCov">        111 :                       pop_cfun ();</span>
+<span class="lineNum">     778 </span>            :                     }
+<span class="lineNum">     779 </span>            :                 }
+<span class="lineNum">     780 </span>            :             }
+<span class="lineNum">     781 </span>            :         }
+<span class="lineNum">     782 </span>            :     }
+<span class="lineNum">     783 </span><span class="lineCov">    9972420 :   FOR_EACH_VARIABLE (vnode)</span>
+<span class="lineNum">     784 </span>            :     {
+<span class="lineNum">     785 </span>            :       /* weak flag makes no sense on local variables.  */
+<span class="lineNum">     786 </span><span class="lineCov">    4707311 :       gcc_assert (!DECL_WEAK (vnode-&gt;decl)</span>
+<span class="lineNum">     787 </span>            :                   || vnode-&gt;weakref
+<span class="lineNum">     788 </span>            :                   || TREE_PUBLIC (vnode-&gt;decl)
+<span class="lineNum">     789 </span>            :                   || DECL_EXTERNAL (vnode-&gt;decl));
+<span class="lineNum">     790 </span>            :       /* In several cases declarations can not be common:
+<span class="lineNum">     791 </span>            : 
+<span class="lineNum">     792 </span>            :          - when declaration has initializer
+<span class="lineNum">     793 </span>            :          - when it is in weak
+<span class="lineNum">     794 </span>            :          - when it has specific section
+<span class="lineNum">     795 </span>            :          - when it resides in non-generic address space.
+<span class="lineNum">     796 </span>            :          - if declaration is local, it will get into .local common section
+<span class="lineNum">     797 </span>            :            so common flag is not needed.  Frontends still produce these in
+<span class="lineNum">     798 </span>            :            certain cases, such as for:
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span>            :              static int a __attribute__ ((common))
+<span class="lineNum">     801 </span>            : 
+<span class="lineNum">     802 </span>            :          Canonicalize things here and clear the redundant flag.  */
+<span class="lineNum">     803 </span><span class="lineCov">    4707311 :       if (DECL_COMMON (vnode-&gt;decl)</span>
+<span class="lineNum">     804 </span><span class="lineCov">    6214360 :           &amp;&amp; (!(TREE_PUBLIC (vnode-&gt;decl)</span>
+<span class="lineNum">     805 </span><span class="lineCov">    1507032 :               || DECL_EXTERNAL (vnode-&gt;decl))</span>
+<span class="lineNum">     806 </span><span class="lineCov">    1507015 :               || (DECL_INITIAL (vnode-&gt;decl)</span>
+<span class="lineNum">     807 </span><span class="lineCov">      33374 :                   &amp;&amp; DECL_INITIAL (vnode-&gt;decl) != error_mark_node)</span>
+<span class="lineNum">     808 </span><span class="lineCov">    2980656 :               || DECL_WEAK (vnode-&gt;decl)</span>
+<span class="lineNum">     809 </span><span class="lineCov">    1490222 :               || DECL_SECTION_NAME (vnode-&gt;decl) != NULL</span>
+<span class="lineNum">     810 </span><span class="lineCov">    1490202 :               || ! (ADDR_SPACE_GENERIC_P</span>
+<span class="lineNum">     811 </span><span class="lineCov">    4707311 :                     (TYPE_ADDR_SPACE (TREE_TYPE (vnode-&gt;decl))))))</span>
+<span class="lineNum">     812 </span><span class="lineCov">      16832 :         DECL_COMMON (vnode-&gt;decl) = 0;</span>
+<span class="lineNum">     813 </span><span class="lineCov">    4707311 :       if (vnode-&gt;weakref)</span>
+<span class="lineNum">     814 </span><span class="lineCov">         58 :         optimize_weakref (vnode);</span>
+<span class="lineNum">     815 </span>            :     }
+<span class="lineNum">     816 </span><span class="lineCov">    9045712 :   FOR_EACH_DEFINED_VARIABLE (vnode)</span>
+<span class="lineNum">     817 </span>            :     {
+<span class="lineNum">     818 </span><span class="lineCov">    4243957 :       if (!vnode-&gt;definition)</span>
+<span class="lineNum">     819 </span>            :         continue;
+<span class="lineNum">     820 </span><span class="lineCov">    4243957 :       if (vnode-&gt;externally_visible_p ())</span>
+<span class="lineNum">     821 </span><span class="lineCov">    2248037 :         vnode-&gt;externally_visible = true;</span>
+<span class="lineNum">     822 </span>            :       else
+<span class="lineNum">     823 </span>            :         {
+<span class="lineNum">     824 </span><span class="lineCov">    1995920 :           vnode-&gt;externally_visible = false;</span>
+<span class="lineNum">     825 </span><span class="lineCov">    1995920 :           vnode-&gt;forced_by_abi = false;</span>
+<span class="lineNum">     826 </span>            :         }
+<span class="lineNum">     827 </span><span class="lineCov">    4243957 :       if (lookup_attribute (&quot;no_reorder&quot;,</span>
+<span class="lineNum">     828 </span><span class="lineCov">    4243957 :                             DECL_ATTRIBUTES (vnode-&gt;decl)))</span>
+<span class="lineNum">     829 </span><span class="lineCov">          4 :         vnode-&gt;no_reorder = 1;</span>
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span><span class="lineCov">    4243957 :       if (!vnode-&gt;externally_visible</span>
+<span class="lineNum">     832 </span><span class="lineCov">    4243957 :           &amp;&amp; !vnode-&gt;transparent_alias</span>
+<span class="lineNum">     833 </span><span class="lineCov">    4243957 :           &amp;&amp; !DECL_EXTERNAL (vnode-&gt;decl))</span>
+<span class="lineNum">     834 </span><span class="lineCov">    1995912 :         localize_node (whole_program, vnode);</span>
+<span class="lineNum">     835 </span>            : 
+<span class="lineNum">     836 </span><span class="lineCov">    4243957 :       update_visibility_by_resolution_info (vnode);</span>
+<span class="lineNum">     837 </span>            : 
+<span class="lineNum">     838 </span>            :       /* Update virtual tables to point to local aliases where possible.  */
+<span class="lineNum">     839 </span><span class="lineCov">    4243957 :       if (DECL_VIRTUAL_P (vnode-&gt;decl)</span>
+<span class="lineNum">     840 </span><span class="lineCov">    4243957 :           &amp;&amp; !DECL_EXTERNAL (vnode-&gt;decl))</span>
+<span class="lineNum">     841 </span>            :         {
+<span class="lineNum">     842 </span>            :           int i;
+<span class="lineNum">     843 </span>            :           struct ipa_ref *ref;
+<span class="lineNum">     844 </span>            :           bool found = false;
+<span class="lineNum">     845 </span>            : 
+<span class="lineNum">     846 </span>            :           /* See if there is something to update.  */
+<span class="lineNum">     847 </span><span class="lineCov">     257183 :           for (i = 0; vnode-&gt;iterate_reference (i, ref); i++)</span>
+<span class="lineNum">     848 </span><span class="lineCov">     221132 :             if (ref-&gt;use == IPA_REF_ADDR</span>
+<span class="lineNum">     849 </span><span class="lineCov">     221132 :                 &amp;&amp; can_replace_by_local_alias_in_vtable (ref-&gt;referred))</span>
+<span class="lineNum">     850 </span>            :               {
+<span class="lineNum">     851 </span>            :                 found = true;
+<span class="lineNum">     852 </span>            :                 break;
+<span class="lineNum">     853 </span>            :               }
+<span class="lineNum">     854 </span><span class="lineCov">      36051 :           if (found)</span>
+<span class="lineNum">     855 </span>            :             {
+<span class="lineNum">     856 </span><span class="lineNoCov">          0 :               hash_set&lt;tree&gt; visited_nodes;</span>
+<span class="lineNum">     857 </span>            : 
+<span class="lineNum">     858 </span><span class="lineNoCov">          0 :               vnode-&gt;get_constructor ();</span>
+<span class="lineNum">     859 </span><span class="lineNoCov">          0 :               walk_tree (&amp;DECL_INITIAL (vnode-&gt;decl),</span>
+<span class="lineNum">     860 </span>            :                          update_vtable_references, NULL, &amp;visited_nodes);
+<span class="lineNum">     861 </span><span class="lineNoCov">          0 :               vnode-&gt;remove_all_references ();</span>
+<span class="lineNum">     862 </span><span class="lineNoCov">          0 :               record_references_in_initializer (vnode-&gt;decl, false);</span>
+<span class="lineNum">     863 </span>            :             }
+<span class="lineNum">     864 </span>            :         }
+<span class="lineNum">     865 </span>            :     }
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span><span class="lineCov">     278899 :   if (dump_file)</span>
+<span class="lineNum">     868 </span>            :     {
+<span class="lineNum">     869 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\nMarking local functions:&quot;);</span>
+<span class="lineNum">     870 </span><span class="lineCov">        518 :       FOR_EACH_DEFINED_FUNCTION (node)</span>
+<span class="lineNum">     871 </span><span class="lineCov">        151 :         if (node-&gt;local.local)</span>
+<span class="lineNum">     872 </span><span class="lineNoCov">          0 :           fprintf (dump_file, &quot; %s&quot;, node-&gt;name ());</span>
+<span class="lineNum">     873 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\n\n&quot;);</span>
+<span class="lineNum">     874 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\nMarking externally visible functions:&quot;);</span>
+<span class="lineNum">     875 </span><span class="lineCov">        518 :       FOR_EACH_DEFINED_FUNCTION (node)</span>
+<span class="lineNum">     876 </span><span class="lineCov">        151 :         if (node-&gt;externally_visible)</span>
+<span class="lineNum">     877 </span><span class="lineCov">        148 :           fprintf (dump_file, &quot; %s&quot;, node-&gt;name ());</span>
+<span class="lineNum">     878 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\n\n&quot;);</span>
+<span class="lineNum">     879 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\nMarking externally visible variables:&quot;);</span>
+<span class="lineNum">     880 </span><span class="lineCov">        352 :       FOR_EACH_DEFINED_VARIABLE (vnode)</span>
+<span class="lineNum">     881 </span><span class="lineCov">         68 :         if (vnode-&gt;externally_visible)</span>
+<span class="lineNum">     882 </span><span class="lineCov">         37 :           fprintf (dump_file, &quot; %s&quot;, vnode-&gt;name ());</span>
+<span class="lineNum">     883 </span><span class="lineCov">        108 :       fprintf (dump_file, &quot;\n\n&quot;);</span>
+<span class="lineNum">     884 </span>            :     }
+<span class="lineNum">     885 </span><span class="lineCov">     278899 :   symtab-&gt;function_flags_ready = true;</span>
+<span class="lineNum">     886 </span><span class="lineCov">     278899 :   return 0;</span>
+<span class="lineNum">     887 </span>            : }
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span>            : /* Local function pass handling visibilities.  This happens before LTO streaming
+<span class="lineNum">     890 </span>            :    so in particular -fwhole-program should be ignored at this level.  */
+<span class="lineNum">     891 </span>            : 
+<span class="lineNum">     892 </span>            : namespace {
+<span class="lineNum">     893 </span>            : 
+<span class="lineNum">     894 </span>            : const pass_data pass_data_ipa_function_and_variable_visibility =
+<span class="lineNum">     895 </span>            : {
+<span class="lineNum">     896 </span>            :   SIMPLE_IPA_PASS, /* type */
+<span class="lineNum">     897 </span>            :   &quot;visibility&quot;, /* name */
+<span class="lineNum">     898 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     899 </span>            :   TV_CGRAPHOPT, /* tv_id */
+<span class="lineNum">     900 </span>            :   0, /* properties_required */
+<span class="lineNum">     901 </span>            :   0, /* properties_provided */
+<span class="lineNum">     902 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     903 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     904 </span>            :   ( TODO_remove_functions | TODO_dump_symtab ), /* todo_flags_finish */
+<span class="lineNum">     905 </span>            : };
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span>            : /* Bring functions local at LTO time with -fwhole-program.  */
+<a name="908"><span class="lineNum">     908 </span>            : </a>
+<span class="lineNum">     909 </span>            : static unsigned int
+<span class="lineNum">     910 </span><span class="lineCov">     139590 : whole_program_function_and_variable_visibility (void)</span>
+<span class="lineNum">     911 </span>            : {
+<span class="lineNum">     912 </span><span class="lineCov">     139590 :   function_and_variable_visibility (flag_whole_program);</span>
+<span class="lineNum">     913 </span><span class="lineCov">     139590 :   if (optimize || in_lto_p)</span>
+<span class="lineNum">     914 </span><span class="lineCov">     100082 :     ipa_discover_readonly_nonaddressable_vars ();</span>
+<span class="lineNum">     915 </span><span class="lineCov">     139590 :   return 0;</span>
+<span class="lineNum">     916 </span>            : }
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span>            : } // anon namespace
+<span class="lineNum">     919 </span>            : 
+<span class="lineNum">     920 </span>            : namespace {
+<span class="lineNum">     921 </span>            : 
+<span class="lineNum">     922 </span>            : const pass_data pass_data_ipa_whole_program_visibility =
+<span class="lineNum">     923 </span>            : {
+<span class="lineNum">     924 </span>            :   IPA_PASS, /* type */
+<span class="lineNum">     925 </span>            :   &quot;whole-program&quot;, /* name */
+<span class="lineNum">     926 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     927 </span>            :   TV_CGRAPHOPT, /* tv_id */
+<span class="lineNum">     928 </span>            :   0, /* properties_required */
+<span class="lineNum">     929 </span>            :   0, /* properties_provided */
+<span class="lineNum">     930 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     931 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     932 </span>            :   ( TODO_remove_functions | TODO_dump_symtab ), /* todo_flags_finish */
+<span class="lineNum">     933 </span>            : };
+<span class="lineNum">     934 </span>            : 
+<span class="lineNum">     935 </span>            : class pass_ipa_whole_program_visibility : public ipa_opt_pass_d
+<span class="lineNum">     936 </span>            : {
+<span class="lineNum">     937 </span>            : public:
+<span class="lineNum">     938 </span>            :   pass_ipa_whole_program_visibility (gcc::context *ctxt)
+<span class="lineNum">     939 </span>            :     : ipa_opt_pass_d (pass_data_ipa_whole_program_visibility, ctxt,
+<span class="lineNum">     940 </span>            :                       NULL, /* generate_summary */
+<span class="lineNum">     941 </span>            :                       NULL, /* write_summary */
+<span class="lineNum">     942 </span>            :                       NULL, /* read_summary */
+<span class="lineNum">     943 </span>            :                       NULL, /* write_optimization_summary */
+<span class="lineNum">     944 </span>            :                       NULL, /* read_optimization_summary */
+<span class="lineNum">     945 </span>            :                       NULL, /* stmt_fixup */
+<span class="lineNum">     946 </span>            :                       0, /* function_transform_todo_flags_start */
+<span class="lineNum">     947 </span>            :                       NULL, /* function_transform */
+<span class="lineNum">     948 </span><span class="lineCov">     340624 :                       NULL) /* variable_transform */</span>
+<span class="lineNum">     949 </span>            :   {}
+<span class="lineNum">     950 </span>            : 
+<a name="951"><span class="lineNum">     951 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span><span class="lineCov">     361641 :   virtual bool gate (function *)</span>
+<span class="lineNum">     954 </span>            :     {
+<span class="lineNum">     955 </span>            :       /* Do not re-run on ltrans stage.  */
+<a name="956"><span class="lineNum">     956 </span><span class="lineCov">     361641 :       return !flag_ltrans;</span></a>
+<span class="lineNum">     957 </span>            :     }
+<span class="lineNum">     958 </span><span class="lineCov">     139590 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">     959 </span>            :     {
+<span class="lineNum">     960 </span><span class="lineCov">     139590 :       return whole_program_function_and_variable_visibility ();</span>
+<span class="lineNum">     961 </span>            :     }
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span>            : }; // class pass_ipa_whole_program_visibility
+<span class="lineNum">     964 </span>            : 
+<span class="lineNum">     965 </span>            : } // anon namespace
+<a name="966"><span class="lineNum">     966 </span>            : </a>
+<span class="lineNum">     967 </span>            : ipa_opt_pass_d *
+<span class="lineNum">     968 </span><span class="lineCov">     170312 : make_pass_ipa_whole_program_visibility (gcc::context *ctxt)</span>
+<span class="lineNum">     969 </span>            : {
+<span class="lineNum">     970 </span><span class="lineCov">     170312 :   return new pass_ipa_whole_program_visibility (ctxt);</span>
+<span class="lineNum">     971 </span>            : }
+<span class="lineNum">     972 </span>            : 
+<span class="lineNum">     973 </span>            : class pass_ipa_function_and_variable_visibility : public simple_ipa_opt_pass
+<span class="lineNum">     974 </span>            : {
+<span class="lineNum">     975 </span>            : public:
+<span class="lineNum">     976 </span>            :   pass_ipa_function_and_variable_visibility (gcc::context *ctxt)
+<span class="lineNum">     977 </span>            :     : simple_ipa_opt_pass (pass_data_ipa_function_and_variable_visibility,
+<span class="lineNum">     978 </span><span class="lineCov">     340624 :                            ctxt)</span>
+<span class="lineNum">     979 </span>            :   {}
+<a name="980"><span class="lineNum">     980 </span>            : </a>
+<span class="lineNum">     981 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     982 </span><span class="lineCov">     139309 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">     983 </span>            :     {
+<span class="lineNum">     984 </span><span class="lineCov">     278529 :       return function_and_variable_visibility (flag_whole_program &amp;&amp; !flag_lto);</span>
+<span class="lineNum">     985 </span>            :     }
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span>            : }; // class pass_ipa_function_and_variable_visibility
+<a name="988"><span class="lineNum">     988 </span>            : </a>
+<span class="lineNum">     989 </span>            : simple_ipa_opt_pass *
+<span class="lineNum">     990 </span><span class="lineCov">     170312 : make_pass_ipa_function_and_variable_visibility (gcc::context *ctxt)</span>
+<span class="lineNum">     991 </span>            : {
+<span class="lineNum">     992 </span><span class="lineCov">     170312 :   return new pass_ipa_function_and_variable_visibility (ctxt);</span>
+<span class="lineNum">     993 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

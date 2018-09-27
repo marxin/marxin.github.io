@@ -1,0 +1,1113 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/ggc-common.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - ggc-common.c<span style="font-size: 80%;"> (source / <a href="ggc-common.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">200</td>
+            <td class="headerCovTableEntry">277</td>
+            <td class="headerCovTableEntryLo">72.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntryLo">50.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Simple garbage collection for the GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1999-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* Generic garbage collection (GC) functions and data, not specific to
+<span class="lineNum">      21 </span>            :    any particular GC implementation.  */
+<span class="lineNum">      22 </span>            : 
+<span class="lineNum">      23 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;ggc-internal.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;hosthooks.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;plugin.h&quot;
+<span class="lineNum">      32 </span>            : 
+<span class="lineNum">      33 </span>            : /* When set, ggc_collect will do collection.  */
+<span class="lineNum">      34 </span>            : bool ggc_force_collect;
+<span class="lineNum">      35 </span>            : 
+<span class="lineNum">      36 </span>            : /* When true, protect the contents of the identifier hash table.  */
+<span class="lineNum">      37 </span>            : bool ggc_protect_identifiers = true;
+<span class="lineNum">      38 </span>            : 
+<span class="lineNum">      39 </span>            : /* Statistics about the allocation.  */
+<span class="lineNum">      40 </span>            : static ggc_statistics *ggc_stats;
+<span class="lineNum">      41 </span>            : 
+<span class="lineNum">      42 </span>            : struct traversal_state;
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            : static int compare_ptr_data (const void *, const void *);
+<span class="lineNum">      45 </span>            : static void relocate_ptrs (void *, void *);
+<span class="lineNum">      46 </span>            : static void write_pch_globals (const struct ggc_root_tab * const *tab,
+<span class="lineNum">      47 </span>            :                                struct traversal_state *state);
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : /* Maintain global roots that are preserved during GC.  */
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : /* This extra vector of dynamically registered root_tab-s is used by
+<span class="lineNum">      52 </span>            :    ggc_mark_roots and gives the ability to dynamically add new GGC root
+<span class="lineNum">      53 </span>            :    tables, for instance from some plugins; this vector is on the heap
+<span class="lineNum">      54 </span>            :    since it is used by GGC internally.  */
+<span class="lineNum">      55 </span>            : typedef const struct ggc_root_tab *const_ggc_root_tab_t;
+<span class="lineNum">      56 </span>            : static vec&lt;const_ggc_root_tab_t&gt; extra_root_vec;
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            : /* Dynamically register a new GGC root table RT. This is useful for
+<span class="lineNum">      59 </span>            :    plugins. */
+<a name="60"><span class="lineNum">      60 </span>            : </a>
+<span class="lineNum">      61 </span>            : void
+<span class="lineNum">      62 </span><span class="lineCov">         64 : ggc_register_root_tab (const struct ggc_root_tab* rt)</span>
+<span class="lineNum">      63 </span>            : {
+<span class="lineNum">      64 </span><span class="lineCov">         64 :   if (rt)</span>
+<span class="lineNum">      65 </span><span class="lineCov">         64 :     extra_root_vec.safe_push (rt);</span>
+<span class="lineNum">      66 </span><span class="lineCov">         64 : }</span>
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : /* Mark all the roots in the table RT.  */
+<a name="69"><span class="lineNum">      69 </span>            : </a>
+<span class="lineNum">      70 </span>            : static void
+<span class="lineNum">      71 </span><span class="lineCov">   18934396 : ggc_mark_root_tab (const_ggc_root_tab_t rt)</span>
+<span class="lineNum">      72 </span>            : {
+<span class="lineNum">      73 </span><span class="lineCov">  135760436 :   size_t i;</span>
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span><span class="lineCov">  135760436 :   for ( ; rt-&gt;base != NULL; rt++)</span>
+<span class="lineNum">      76 </span><span class="lineCov"> 2944768945 :     for (i = 0; i &lt; rt-&gt;nelt; i++)</span>
+<span class="lineNum">      77 </span><span class="lineCov"> 2827942905 :       (*rt-&gt;cb) (*(void **) ((char *)rt-&gt;base + rt-&gt;stride * i));</span>
+<span class="lineNum">      78 </span><span class="lineCov">   18934396 : }</span>
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : /* Iterate through all registered roots and mark each element.  */
+<a name="81"><span class="lineNum">      81 </span>            : </a>
+<span class="lineNum">      82 </span>            : void
+<span class="lineNum">      83 </span><span class="lineCov">     387330 : ggc_mark_roots (void)</span>
+<span class="lineNum">      84 </span>            : {
+<span class="lineNum">      85 </span><span class="lineCov">     387330 :   const struct ggc_root_tab *const *rt;</span>
+<span class="lineNum">      86 </span><span class="lineCov">     387330 :   const_ggc_root_tab_t rtp, rti;</span>
+<span class="lineNum">      87 </span><span class="lineCov">     387330 :   size_t i;</span>
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span><span class="lineCov">    3298900 :   for (rt = gt_ggc_deletable_rtab; *rt; rt++)</span>
+<span class="lineNum">      90 </span><span class="lineCov">    7148536 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">      91 </span><span class="lineCov">    4236966 :       memset (rti-&gt;base, 0, rti-&gt;stride);</span>
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span><span class="lineCov">   19001993 :   for (rt = gt_ggc_rtab; *rt; rt++)</span>
+<span class="lineNum">      94 </span><span class="lineCov">   18614663 :     ggc_mark_root_tab (*rt);</span>
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span><span class="lineCov">     707063 :   FOR_EACH_VEC_ELT (extra_root_vec, i, rtp)</span>
+<span class="lineNum">      97 </span><span class="lineCov">     319733 :     ggc_mark_root_tab (rtp);</span>
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span><span class="lineCov">     387330 :   if (ggc_protect_identifiers)</span>
+<span class="lineNum">     100 </span><span class="lineCov">      43706 :     ggc_mark_stringpool ();</span>
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span><span class="lineCov">     387330 :   gt_clear_caches ();</span>
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span><span class="lineCov">     387330 :   if (! ggc_protect_identifiers)</span>
+<span class="lineNum">     105 </span><span class="lineCov">     343624 :     ggc_purge_stringpool ();</span>
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            :   /* Some plugins may call ggc_set_mark from here.  */
+<span class="lineNum">     108 </span><span class="lineCov">     387330 :   invoke_plugin_callbacks (PLUGIN_GGC_MARKING, NULL);</span>
+<span class="lineNum">     109 </span><span class="lineCov">     387330 : }</span>
+<span class="lineNum">     110 </span>            : 
+<a name="111"><span class="lineNum">     111 </span>            : /* Allocate a block of memory, then clear it.  */</a>
+<span class="lineNum">     112 </span>            : void *
+<span class="lineNum">     113 </span><span class="lineCov"> 4258500031 : ggc_internal_cleared_alloc (size_t size, void (*f)(void *), size_t s, size_t n</span>
+<span class="lineNum">     114 </span>            :                             MEM_STAT_DECL)
+<span class="lineNum">     115 </span>            : {
+<span class="lineNum">     116 </span><span class="lineCov"> 4258500031 :   void *buf = ggc_internal_alloc (size, f, s, n PASS_MEM_STAT);</span>
+<span class="lineNum">     117 </span><span class="lineCov"> 4258500031 :   memset (buf, 0, size);</span>
+<span class="lineNum">     118 </span><span class="lineCov"> 4258500031 :   return buf;</span>
+<span class="lineNum">     119 </span>            : }
+<span class="lineNum">     120 </span>            : 
+<a name="121"><span class="lineNum">     121 </span>            : /* Resize a block of memory, possibly re-allocating it.  */</a>
+<span class="lineNum">     122 </span>            : void *
+<span class="lineNum">     123 </span><span class="lineCov">  545454200 : ggc_realloc (void *x, size_t size MEM_STAT_DECL)</span>
+<span class="lineNum">     124 </span>            : {
+<span class="lineNum">     125 </span><span class="lineCov">  545454200 :   void *r;</span>
+<span class="lineNum">     126 </span><span class="lineCov">  545454200 :   size_t old_size;</span>
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span><span class="lineCov">  545454200 :   if (x == NULL)</span>
+<span class="lineNum">     129 </span><span class="lineCov">  941020228 :     return ggc_internal_alloc (size PASS_MEM_STAT);</span>
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span><span class="lineCov">   74944086 :   old_size = ggc_get_size (x);</span>
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span><span class="lineCov">   74944086 :   if (size &lt;= old_size)</span>
+<span class="lineNum">     134 </span>            :     {
+<span class="lineNum">     135 </span>            :       /* Mark the unwanted memory as unaccessible.  We also need to make
+<span class="lineNum">     136 </span>            :          the &quot;new&quot; size accessible, since ggc_get_size returns the size of
+<span class="lineNum">     137 </span>            :          the pool, not the size of the individually allocated object, the
+<span class="lineNum">     138 </span>            :          size which was previously made accessible.  Unfortunately, we
+<span class="lineNum">     139 </span>            :          don't know that previously allocated size.  Without that
+<span class="lineNum">     140 </span>            :          knowledge we have to lose some initialization-tracking for the
+<span class="lineNum">     141 </span>            :          old parts of the object.  An alternative is to mark the whole
+<span class="lineNum">     142 </span>            :          old_size as reachable, but that would lose tracking of writes
+<span class="lineNum">     143 </span>            :          after the end of the object (by small offsets).  Discard the
+<span class="lineNum">     144 </span>            :          handle to avoid handle leak.  */
+<span class="lineNum">     145 </span>            :       VALGRIND_DISCARD (VALGRIND_MAKE_MEM_NOACCESS ((char *) x + size,
+<span class="lineNum">     146 </span>            :                                                     old_size - size));
+<span class="lineNum">     147 </span>            :       VALGRIND_DISCARD (VALGRIND_MAKE_MEM_DEFINED (x, size));
+<span class="lineNum">     148 </span>            :       return x;
+<span class="lineNum">     149 </span>            :     }
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span><span class="lineCov">   74450685 :   r = ggc_internal_alloc (size PASS_MEM_STAT);</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            :   /* Since ggc_get_size returns the size of the pool, not the size of the
+<span class="lineNum">     154 </span>            :      individually allocated object, we'd access parts of the old object
+<span class="lineNum">     155 </span>            :      that were marked invalid with the memcpy below.  We lose a bit of the
+<span class="lineNum">     156 </span>            :      initialization-tracking since some of it may be uninitialized.  */
+<span class="lineNum">     157 </span><span class="lineCov">   74450685 :   VALGRIND_DISCARD (VALGRIND_MAKE_MEM_DEFINED (x, old_size));</span>
+<span class="lineNum">     158 </span>            : 
+<span class="lineNum">     159 </span><span class="lineCov">   74450685 :   memcpy (r, x, old_size);</span>
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span>            :   /* The old object is not supposed to be used anymore.  */
+<span class="lineNum">     162 </span><span class="lineCov">   74450685 :   ggc_free (x);</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">   74450685 :   return r;</span>
+<span class="lineNum">     165 </span>            : }
+<a name="166"><span class="lineNum">     166 </span>            : </a>
+<span class="lineNum">     167 </span>            : void *
+<span class="lineNum">     168 </span><span class="lineNoCov">          0 : ggc_cleared_alloc_htab_ignore_args (size_t c ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     169 </span>            :                                     size_t n ATTRIBUTE_UNUSED)
+<span class="lineNum">     170 </span>            : {
+<span class="lineNum">     171 </span><span class="lineNoCov">          0 :   gcc_assert (c * n == sizeof (struct htab));</span>
+<span class="lineNum">     172 </span><span class="lineNoCov">          0 :   return ggc_cleared_alloc&lt;htab&gt; ();</span>
+<span class="lineNum">     173 </span>            : }
+<span class="lineNum">     174 </span>            : 
+<span class="lineNum">     175 </span>            : /* TODO: once we actually use type information in GGC, create a new tag
+<a name="176"><span class="lineNum">     176 </span>            :    gt_gcc_ptr_array and use it for pointer arrays.  */</a>
+<span class="lineNum">     177 </span>            : void *
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 : ggc_cleared_alloc_ptr_array_two_args (size_t c, size_t n)</span>
+<span class="lineNum">     179 </span>            : {
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :   gcc_assert (sizeof (PTR *) == n);</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :   return ggc_cleared_vec_alloc&lt;PTR *&gt; (c);</span>
+<span class="lineNum">     182 </span>            : }
+<span class="lineNum">     183 </span>            : 
+<a name="184"><span class="lineNum">     184 </span>            : /* These are for splay_tree_new_ggc.  */</a>
+<span class="lineNum">     185 </span>            : void *
+<span class="lineNum">     186 </span><span class="lineNoCov">          0 : ggc_splay_alloc (int sz, void *nl)</span>
+<span class="lineNum">     187 </span>            : {
+<span class="lineNum">     188 </span><span class="lineNoCov">          0 :   gcc_assert (!nl);</span>
+<span class="lineNum">     189 </span><span class="lineNoCov">          0 :   return ggc_internal_alloc (sz);</span>
+<span class="lineNum">     190 </span>            : }
+<a name="191"><span class="lineNum">     191 </span>            : </a>
+<span class="lineNum">     192 </span>            : void
+<span class="lineNum">     193 </span><span class="lineNoCov">          0 : ggc_splay_dont_free (void * x ATTRIBUTE_UNUSED, void *nl)</span>
+<span class="lineNum">     194 </span>            : {
+<span class="lineNum">     195 </span><span class="lineNoCov">          0 :   gcc_assert (!nl);</span>
+<span class="lineNum">     196 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     197 </span>            : 
+<span class="lineNum">     198 </span>            : /* Print statistics that are independent of the collector in use.  */
+<span class="lineNum">     199 </span>            : #define SCALE(x) ((unsigned long) ((x) &lt; 1024*10 \
+<span class="lineNum">     200 </span>            :                   ? (x) \
+<span class="lineNum">     201 </span>            :                   : ((x) &lt; 1024*1024*10 \
+<span class="lineNum">     202 </span>            :                      ? (x) / 1024 \
+<span class="lineNum">     203 </span>            :                      : (x) / (1024*1024))))
+<span class="lineNum">     204 </span>            : #define LABEL(x) ((x) &lt; 1024*10 ? ' ' : ((x) &lt; 1024*1024*10 ? 'k' : 'M'))
+<a name="205"><span class="lineNum">     205 </span>            : </a>
+<span class="lineNum">     206 </span>            : void
+<span class="lineNum">     207 </span><span class="lineNoCov">          0 : ggc_print_common_statistics (FILE *stream ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     208 </span>            :                              ggc_statistics *stats)
+<span class="lineNum">     209 </span>            : {
+<span class="lineNum">     210 </span>            :   /* Set the pointer so that during collection we will actually gather
+<span class="lineNum">     211 </span>            :      the statistics.  */
+<span class="lineNum">     212 </span><span class="lineNoCov">          0 :   ggc_stats = stats;</span>
+<span class="lineNum">     213 </span>            : 
+<span class="lineNum">     214 </span>            :   /* Then do one collection to fill in the statistics.  */
+<span class="lineNum">     215 </span><span class="lineNoCov">          0 :   ggc_collect ();</span>
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span>            :   /* At present, we don't really gather any interesting statistics.  */
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   /* Don't gather statistics any more.  */
+<span class="lineNum">     220 </span><span class="lineNoCov">          0 :   ggc_stats = NULL;</span>
+<span class="lineNum">     221 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span>            : /* Functions for saving and restoring GCable memory to disk.  */
+<span class="lineNum">     224 </span>            : 
+<span class="lineNum">     225 </span>            : struct ptr_data
+<span class="lineNum">     226 </span>            : {
+<span class="lineNum">     227 </span>            :   void *obj;
+<span class="lineNum">     228 </span>            :   void *note_ptr_cookie;
+<span class="lineNum">     229 </span>            :   gt_note_pointers note_ptr_fn;
+<span class="lineNum">     230 </span>            :   gt_handle_reorder reorder_fn;
+<span class="lineNum">     231 </span>            :   size_t size;
+<span class="lineNum">     232 </span>            :   void *new_addr;
+<span class="lineNum">     233 </span>            : };
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span>            : #define POINTER_HASH(x) (hashval_t)((intptr_t)x &gt;&gt; 3)
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span>            : /* Helper for hashing saving_htab.  */
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span>            : struct saving_hasher : free_ptr_hash &lt;ptr_data&gt;
+<span class="lineNum">     240 </span>            : {
+<span class="lineNum">     241 </span>            :   typedef void *compare_type;
+<span class="lineNum">     242 </span>            :   static inline hashval_t hash (const ptr_data *);
+<span class="lineNum">     243 </span>            :   static inline bool equal (const ptr_data *, const void *);
+<span class="lineNum">     244 </span>            : };
+<a name="245"><span class="lineNum">     245 </span>            : </a>
+<span class="lineNum">     246 </span>            : inline hashval_t
+<span class="lineNum">     247 </span><span class="lineNoCov">          0 : saving_hasher::hash (const ptr_data *p)</span>
+<span class="lineNum">     248 </span>            : {
+<span class="lineNum">     249 </span><span class="lineCov">   14401291 :   return POINTER_HASH (p-&gt;obj);</span>
+<span class="lineNum">     250 </span>            : }
+<a name="251"><span class="lineNum">     251 </span>            : </a>
+<span class="lineNum">     252 </span>            : inline bool
+<span class="lineNum">     253 </span><span class="lineNoCov">          0 : saving_hasher::equal (const ptr_data *p1, const void *p2)</span>
+<span class="lineNum">     254 </span>            : {
+<span class="lineNum">     255 </span><span class="lineCov">  132460459 :   return p1-&gt;obj == p2;</span>
+<span class="lineNum">     256 </span>            : }
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span>            : static hash_table&lt;saving_hasher&gt; *saving_htab;
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : /* Register an object in the hash table.  */
+<a name="261"><span class="lineNum">     261 </span>            : </a>
+<span class="lineNum">     262 </span>            : int
+<span class="lineNum">     263 </span><span class="lineCov">   58121987 : gt_pch_note_object (void *obj, void *note_ptr_cookie,</span>
+<span class="lineNum">     264 </span>            :                     gt_note_pointers note_ptr_fn)
+<span class="lineNum">     265 </span>            : {
+<span class="lineNum">     266 </span><span class="lineCov">   58121987 :   struct ptr_data **slot;</span>
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span><span class="lineCov">   58121987 :   if (obj == NULL || obj == (void *) 1)</span>
+<span class="lineNum">     269 </span>            :     return 0;
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span><span class="lineCov">   50166956 :   slot = (struct ptr_data **)</span>
+<span class="lineNum">     272 </span><span class="lineCov">   50166956 :     saving_htab-&gt;find_slot_with_hash (obj, POINTER_HASH (obj), INSERT);</span>
+<span class="lineNum">     273 </span><span class="lineCov">   50166956 :   if (*slot != NULL)</span>
+<span class="lineNum">     274 </span>            :     {
+<span class="lineNum">     275 </span><span class="lineCov">   34289200 :       gcc_assert ((*slot)-&gt;note_ptr_fn == note_ptr_fn</span>
+<span class="lineNum">     276 </span>            :                   &amp;&amp; (*slot)-&gt;note_ptr_cookie == note_ptr_cookie);
+<span class="lineNum">     277 </span>            :       return 0;
+<span class="lineNum">     278 </span>            :     }
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span><span class="lineCov">   15877756 :   *slot = XCNEW (struct ptr_data);</span>
+<span class="lineNum">     281 </span><span class="lineCov">   15877756 :   (*slot)-&gt;obj = obj;</span>
+<span class="lineNum">     282 </span><span class="lineCov">   15877756 :   (*slot)-&gt;note_ptr_fn = note_ptr_fn;</span>
+<span class="lineNum">     283 </span><span class="lineCov">   15877756 :   (*slot)-&gt;note_ptr_cookie = note_ptr_cookie;</span>
+<span class="lineNum">     284 </span><span class="lineCov">   15877756 :   if (note_ptr_fn == gt_pch_p_S)</span>
+<span class="lineNum">     285 </span><span class="lineCov">    1180728 :     (*slot)-&gt;size = strlen ((const char *)obj) + 1;</span>
+<span class="lineNum">     286 </span>            :   else
+<span class="lineNum">     287 </span><span class="lineCov">   14697028 :     (*slot)-&gt;size = ggc_get_size (obj);</span>
+<span class="lineNum">     288 </span>            :   return 1;
+<span class="lineNum">     289 </span>            : }
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            : /* Register an object in the hash table.  */
+<a name="292"><span class="lineNum">     292 </span>            : </a>
+<span class="lineNum">     293 </span>            : void
+<span class="lineNum">     294 </span><span class="lineCov">      84900 : gt_pch_note_reorder (void *obj, void *note_ptr_cookie,</span>
+<span class="lineNum">     295 </span>            :                      gt_handle_reorder reorder_fn)
+<span class="lineNum">     296 </span>            : {
+<span class="lineNum">     297 </span><span class="lineCov">      84900 :   struct ptr_data *data;</span>
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span><span class="lineCov">      84900 :   if (obj == NULL || obj == (void *) 1)</span>
+<span class="lineNum">     300 </span>            :     return;
+<span class="lineNum">     301 </span>            : 
+<span class="lineNum">     302 </span><span class="lineCov">      26602 :   data = (struct ptr_data *)</span>
+<span class="lineNum">     303 </span><span class="lineCov">      13301 :     saving_htab-&gt;find_with_hash (obj, POINTER_HASH (obj));</span>
+<span class="lineNum">     304 </span><span class="lineCov">      13301 :   gcc_assert (data &amp;&amp; data-&gt;note_ptr_cookie == note_ptr_cookie);</span>
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span><span class="lineCov">      13301 :   data-&gt;reorder_fn = reorder_fn;</span>
+<span class="lineNum">     307 </span>            : }
+<span class="lineNum">     308 </span>            : 
+<span class="lineNum">     309 </span>            : /* Handy state for the traversal functions.  */
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span>            : struct traversal_state
+<span class="lineNum">     312 </span>            : {
+<span class="lineNum">     313 </span>            :   FILE *f;
+<span class="lineNum">     314 </span>            :   struct ggc_pch_data *d;
+<span class="lineNum">     315 </span>            :   size_t count;
+<span class="lineNum">     316 </span>            :   struct ptr_data **ptrs;
+<span class="lineNum">     317 </span>            :   size_t ptrs_i;
+<span class="lineNum">     318 </span>            : };
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span>            : /* Callbacks for htab_traverse.  */
+<a name="321"><span class="lineNum">     321 </span>            : </a>
+<span class="lineNum">     322 </span>            : int
+<span class="lineNum">     323 </span><span class="lineCov">   15877756 : ggc_call_count (ptr_data **slot, traversal_state *state)</span>
+<span class="lineNum">     324 </span>            : {
+<span class="lineNum">     325 </span><span class="lineCov">   15877756 :   struct ptr_data *d = *slot;</span>
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span><span class="lineCov">   31755512 :   ggc_pch_count_object (state-&gt;d, d-&gt;obj, d-&gt;size,</span>
+<span class="lineNum">     328 </span><span class="lineCov">   15877756 :                         d-&gt;note_ptr_fn == gt_pch_p_S);</span>
+<span class="lineNum">     329 </span><span class="lineCov">   15877756 :   state-&gt;count++;</span>
+<span class="lineNum">     330 </span><span class="lineCov">   15877756 :   return 1;</span>
+<span class="lineNum">     331 </span>            : }
+<a name="332"><span class="lineNum">     332 </span>            : </a>
+<span class="lineNum">     333 </span>            : int
+<span class="lineNum">     334 </span><span class="lineCov">   15877756 : ggc_call_alloc (ptr_data **slot, traversal_state *state)</span>
+<span class="lineNum">     335 </span>            : {
+<span class="lineNum">     336 </span><span class="lineCov">   15877756 :   struct ptr_data *d = *slot;</span>
+<span class="lineNum">     337 </span>            : 
+<span class="lineNum">     338 </span><span class="lineCov">   47633268 :   d-&gt;new_addr = ggc_pch_alloc_object (state-&gt;d, d-&gt;obj, d-&gt;size,</span>
+<span class="lineNum">     339 </span><span class="lineCov">   15877756 :                                       d-&gt;note_ptr_fn == gt_pch_p_S);</span>
+<span class="lineNum">     340 </span><span class="lineCov">   15877756 :   state-&gt;ptrs[state-&gt;ptrs_i++] = d;</span>
+<span class="lineNum">     341 </span><span class="lineCov">   15877756 :   return 1;</span>
+<span class="lineNum">     342 </span>            : }
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            : /* Callback for qsort.  */
+<a name="345"><span class="lineNum">     345 </span>            : </a>
+<span class="lineNum">     346 </span>            : static int
+<span class="lineNum">     347 </span><span class="lineCov"> 1162840353 : compare_ptr_data (const void *p1_p, const void *p2_p)</span>
+<span class="lineNum">     348 </span>            : {
+<span class="lineNum">     349 </span><span class="lineCov"> 1162840353 :   const struct ptr_data *const p1 = *(const struct ptr_data *const *)p1_p;</span>
+<span class="lineNum">     350 </span><span class="lineCov"> 1162840353 :   const struct ptr_data *const p2 = *(const struct ptr_data *const *)p2_p;</span>
+<span class="lineNum">     351 </span><span class="lineCov"> 1162840353 :   return (((size_t)p1-&gt;new_addr &gt; (size_t)p2-&gt;new_addr)</span>
+<span class="lineNum">     352 </span><span class="lineCov"> 1162840353 :           - ((size_t)p1-&gt;new_addr &lt; (size_t)p2-&gt;new_addr));</span>
+<span class="lineNum">     353 </span>            : }
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span>            : /* Callbacks for note_ptr_fn.  */
+<a name="356"><span class="lineNum">     356 </span>            : </a>
+<span class="lineNum">     357 </span>            : static void
+<span class="lineNum">     358 </span><span class="lineCov">  115877415 : relocate_ptrs (void *ptr_p, void *state_p)</span>
+<span class="lineNum">     359 </span>            : {
+<span class="lineNum">     360 </span><span class="lineCov">  115877415 :   void **ptr = (void **)ptr_p;</span>
+<span class="lineNum">     361 </span><span class="lineCov">  115877415 :   struct traversal_state *state ATTRIBUTE_UNUSED</span>
+<span class="lineNum">     362 </span>            :     = (struct traversal_state *)state_p;
+<span class="lineNum">     363 </span><span class="lineCov">  115877415 :   struct ptr_data *result;</span>
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span><span class="lineCov">  115877415 :   if (*ptr == NULL || *ptr == (void *)1)</span>
+<span class="lineNum">     366 </span>            :     return;
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span><span class="lineCov">  101282598 :   result = (struct ptr_data *)</span>
+<span class="lineNum">     369 </span><span class="lineCov">   50641299 :     saving_htab-&gt;find_with_hash (*ptr, POINTER_HASH (*ptr));</span>
+<span class="lineNum">     370 </span><span class="lineCov">   50641299 :   gcc_assert (result);</span>
+<span class="lineNum">     371 </span><span class="lineCov">   50641299 :   *ptr = result-&gt;new_addr;</span>
+<span class="lineNum">     372 </span>            : }
+<span class="lineNum">     373 </span>            : 
+<a name="374"><span class="lineNum">     374 </span>            : /* Write out, after relocation, the pointers in TAB.  */</a>
+<span class="lineNum">     375 </span>            : static void
+<span class="lineNum">     376 </span><span class="lineCov">        322 : write_pch_globals (const struct ggc_root_tab * const *tab,</span>
+<span class="lineNum">     377 </span>            :                    struct traversal_state *state)
+<span class="lineNum">     378 </span>            : {
+<span class="lineNum">     379 </span><span class="lineCov">        322 :   const struct ggc_root_tab *const *rt;</span>
+<span class="lineNum">     380 </span><span class="lineCov">        322 :   const struct ggc_root_tab *rti;</span>
+<span class="lineNum">     381 </span><span class="lineCov">        322 :   size_t i;</span>
+<span class="lineNum">     382 </span>            : 
+<span class="lineNum">     383 </span><span class="lineCov">      17986 :   for (rt = tab; *rt; rt++)</span>
+<span class="lineNum">     384 </span><span class="lineCov">     122820 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     385 </span><span class="lineCov">    2558520 :       for (i = 0; i &lt; rti-&gt;nelt; i++)</span>
+<span class="lineNum">     386 </span>            :         {
+<span class="lineNum">     387 </span><span class="lineCov">    2453364 :           void *ptr = *(void **)((char *)rti-&gt;base + rti-&gt;stride * i);</span>
+<span class="lineNum">     388 </span><span class="lineCov">    2453364 :           struct ptr_data *new_ptr;</span>
+<span class="lineNum">     389 </span><span class="lineCov">    2453364 :           if (ptr == NULL || ptr == (void *)1)</span>
+<span class="lineNum">     390 </span>            :             {
+<span class="lineNum">     391 </span><span class="lineCov">    1609773 :               if (fwrite (&amp;ptr, sizeof (void *), 1, state-&gt;f)</span>
+<span class="lineNum">     392 </span>            :                   != 1)
+<span class="lineNum">     393 </span><span class="lineNoCov">          0 :                 fatal_error (input_location, &quot;can%'t write PCH file: %m&quot;);</span>
+<span class="lineNum">     394 </span>            :             }
+<span class="lineNum">     395 </span>            :           else
+<span class="lineNum">     396 </span>            :             {
+<span class="lineNum">     397 </span><span class="lineCov">    1687182 :               new_ptr = (struct ptr_data *)</span>
+<span class="lineNum">     398 </span><span class="lineCov">     843591 :                 saving_htab-&gt;find_with_hash (ptr, POINTER_HASH (ptr));</span>
+<span class="lineNum">     399 </span><span class="lineCov">     843591 :               if (fwrite (&amp;new_ptr-&gt;new_addr, sizeof (void *), 1, state-&gt;f)</span>
+<span class="lineNum">     400 </span>            :                   != 1)
+<span class="lineNum">     401 </span><span class="lineNoCov">          0 :                 fatal_error (input_location, &quot;can%'t write PCH file: %m&quot;);</span>
+<span class="lineNum">     402 </span>            :             }
+<span class="lineNum">     403 </span>            :         }
+<span class="lineNum">     404 </span><span class="lineCov">        322 : }</span>
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            : /* Hold the information we need to mmap the file back in.  */
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span>            : struct mmap_info
+<span class="lineNum">     409 </span>            : {
+<span class="lineNum">     410 </span>            :   size_t offset;
+<span class="lineNum">     411 </span>            :   size_t size;
+<span class="lineNum">     412 </span>            :   void *preferred_base;
+<span class="lineNum">     413 </span>            : };
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span>            : /* Write out the state of the compiler to F.  */
+<a name="416"><span class="lineNum">     416 </span>            : </a>
+<span class="lineNum">     417 </span>            : void
+<span class="lineNum">     418 </span><span class="lineCov">        322 : gt_pch_save (FILE *f)</span>
+<span class="lineNum">     419 </span>            : {
+<span class="lineNum">     420 </span><span class="lineCov">        322 :   const struct ggc_root_tab *const *rt;</span>
+<span class="lineNum">     421 </span><span class="lineCov">        322 :   const struct ggc_root_tab *rti;</span>
+<span class="lineNum">     422 </span><span class="lineCov">        322 :   size_t i;</span>
+<span class="lineNum">     423 </span><span class="lineCov">        322 :   struct traversal_state state;</span>
+<span class="lineNum">     424 </span><span class="lineCov">        322 :   char *this_object = NULL;</span>
+<span class="lineNum">     425 </span><span class="lineCov">        322 :   size_t this_object_size = 0;</span>
+<span class="lineNum">     426 </span><span class="lineCov">        322 :   struct mmap_info mmi;</span>
+<span class="lineNum">     427 </span><span class="lineCov">        322 :   const size_t mmap_offset_alignment = host_hooks.gt_pch_alloc_granularity ();</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span><span class="lineCov">        322 :   gt_pch_save_stringpool ();</span>
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span><span class="lineCov">        322 :   timevar_push (TV_PCH_PTR_REALLOC);</span>
+<span class="lineNum">     432 </span><span class="lineCov">        322 :   saving_htab = new hash_table&lt;saving_hasher&gt; (50000);</span>
+<span class="lineNum">     433 </span>            : 
+<span class="lineNum">     434 </span><span class="lineCov">      17986 :   for (rt = gt_ggc_rtab; *rt; rt++)</span>
+<span class="lineNum">     435 </span><span class="lineCov">     122820 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     436 </span><span class="lineCov">    2558520 :       for (i = 0; i &lt; rti-&gt;nelt; i++)</span>
+<span class="lineNum">     437 </span><span class="lineCov">    2453364 :         (*rti-&gt;pchw)(*(void **)((char *)rti-&gt;base + rti-&gt;stride * i));</span>
+<span class="lineNum">     438 </span>            : 
+<span class="lineNum">     439 </span>            :   /* Prepare the objects for writing, determine addresses and such.  */
+<span class="lineNum">     440 </span><span class="lineCov">        322 :   state.f = f;</span>
+<span class="lineNum">     441 </span><span class="lineCov">        322 :   state.d = init_ggc_pch ();</span>
+<span class="lineNum">     442 </span><span class="lineCov">        322 :   state.count = 0;</span>
+<span class="lineNum">     443 </span><span class="lineCov">        322 :   saving_htab-&gt;traverse &lt;traversal_state *, ggc_call_count&gt; (&amp;state);</span>
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span><span class="lineCov">        322 :   mmi.size = ggc_pch_total_size (state.d);</span>
+<span class="lineNum">     446 </span>            : 
+<span class="lineNum">     447 </span>            :   /* Try to arrange things so that no relocation is necessary, but
+<span class="lineNum">     448 </span>            :      don't try very hard.  On most platforms, this will always work,
+<span class="lineNum">     449 </span>            :      and on the rest it's a lot of work to do better.
+<span class="lineNum">     450 </span>            :      (The extra work goes in HOST_HOOKS_GT_PCH_GET_ADDRESS and
+<span class="lineNum">     451 </span>            :      HOST_HOOKS_GT_PCH_USE_ADDRESS.)  */
+<span class="lineNum">     452 </span><span class="lineCov">        322 :   mmi.preferred_base = host_hooks.gt_pch_get_address (mmi.size, fileno (f));</span>
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span><span class="lineCov">        322 :   ggc_pch_this_base (state.d, mmi.preferred_base);</span>
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span><span class="lineCov">        322 :   state.ptrs = XNEWVEC (struct ptr_data *, state.count);</span>
+<span class="lineNum">     457 </span><span class="lineCov">        322 :   state.ptrs_i = 0;</span>
+<span class="lineNum">     458 </span>            : 
+<span class="lineNum">     459 </span><span class="lineCov">        322 :   saving_htab-&gt;traverse &lt;traversal_state *, ggc_call_alloc&gt; (&amp;state);</span>
+<span class="lineNum">     460 </span><span class="lineCov">        322 :   timevar_pop (TV_PCH_PTR_REALLOC);</span>
+<span class="lineNum">     461 </span>            : 
+<span class="lineNum">     462 </span><span class="lineCov">        322 :   timevar_push (TV_PCH_PTR_SORT);</span>
+<span class="lineNum">     463 </span><span class="lineCov">        322 :   qsort (state.ptrs, state.count, sizeof (*state.ptrs), compare_ptr_data);</span>
+<span class="lineNum">     464 </span><span class="lineCov">        322 :   timevar_pop (TV_PCH_PTR_SORT);</span>
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            :   /* Write out all the scalar variables.  */
+<span class="lineNum">     467 </span><span class="lineCov">       6394 :   for (rt = gt_pch_scalar_rtab; *rt; rt++)</span>
+<span class="lineNum">     468 </span><span class="lineCov">      21896 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     469 </span><span class="lineCov">      15824 :       if (fwrite (rti-&gt;base, rti-&gt;stride, 1, f) != 1)</span>
+<span class="lineNum">     470 </span><span class="lineNoCov">          0 :         fatal_error (input_location, &quot;can%'t write PCH file: %m&quot;);</span>
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            :   /* Write out all the global pointers, after translation.  */
+<span class="lineNum">     473 </span><span class="lineCov">        322 :   write_pch_globals (gt_ggc_rtab, &amp;state);</span>
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span>            :   /* Pad the PCH file so that the mmapped area starts on an allocation
+<span class="lineNum">     476 </span>            :      granularity (usually page) boundary.  */
+<span class="lineNum">     477 </span><span class="lineCov">        322 :   {</span>
+<span class="lineNum">     478 </span><span class="lineCov">        322 :     long o;</span>
+<span class="lineNum">     479 </span><span class="lineCov">        322 :     o = ftell (state.f) + sizeof (mmi);</span>
+<span class="lineNum">     480 </span><span class="lineCov">        322 :     if (o == -1)</span>
+<span class="lineNum">     481 </span><span class="lineNoCov">          0 :       fatal_error (input_location, &quot;can%'t get position in PCH file: %m&quot;);</span>
+<span class="lineNum">     482 </span><span class="lineCov">        322 :     mmi.offset = mmap_offset_alignment - o % mmap_offset_alignment;</span>
+<span class="lineNum">     483 </span><span class="lineCov">        322 :     if (mmi.offset == mmap_offset_alignment)</span>
+<span class="lineNum">     484 </span><span class="lineNoCov">          0 :       mmi.offset = 0;</span>
+<span class="lineNum">     485 </span><span class="lineCov">        322 :     mmi.offset += o;</span>
+<span class="lineNum">     486 </span>            :   }
+<span class="lineNum">     487 </span><span class="lineCov">        322 :   if (fwrite (&amp;mmi, sizeof (mmi), 1, state.f) != 1)</span>
+<span class="lineNum">     488 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;can%'t write PCH file: %m&quot;);</span>
+<span class="lineNum">     489 </span><span class="lineCov">        322 :   if (mmi.offset != 0</span>
+<span class="lineNum">     490 </span><span class="lineCov">        322 :       &amp;&amp; fseek (state.f, mmi.offset, SEEK_SET) != 0)</span>
+<span class="lineNum">     491 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;can%'t write padding to PCH file: %m&quot;);</span>
+<span class="lineNum">     492 </span>            : 
+<span class="lineNum">     493 </span><span class="lineCov">        322 :   ggc_pch_prepare_write (state.d, state.f);</span>
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span>            : #if defined ENABLE_VALGRIND_ANNOTATIONS &amp;&amp; defined VALGRIND_GET_VBITS
+<span class="lineNum">     496 </span>            :   vec&lt;char&gt; vbits = vNULL;
+<span class="lineNum">     497 </span>            : #endif
+<span class="lineNum">     498 </span>            : 
+<span class="lineNum">     499 </span>            :   /* Actually write out the objects.  */
+<span class="lineNum">     500 </span><span class="lineCov">   15878078 :   for (i = 0; i &lt; state.count; i++)</span>
+<span class="lineNum">     501 </span>            :     {
+<span class="lineNum">     502 </span><span class="lineCov">   15877756 :       if (this_object_size &lt; state.ptrs[i]-&gt;size)</span>
+<span class="lineNum">     503 </span>            :         {
+<span class="lineNum">     504 </span><span class="lineCov">       4997 :           this_object_size = state.ptrs[i]-&gt;size;</span>
+<span class="lineNum">     505 </span><span class="lineCov">       4997 :           this_object = XRESIZEVAR (char, this_object, this_object_size);</span>
+<span class="lineNum">     506 </span>            :         }
+<span class="lineNum">     507 </span>            : #if defined ENABLE_VALGRIND_ANNOTATIONS &amp;&amp; defined VALGRIND_GET_VBITS
+<span class="lineNum">     508 </span>            :       /* obj might contain uninitialized bytes, e.g. in the trailing
+<span class="lineNum">     509 </span>            :          padding of the object.  Avoid warnings by making the memory
+<span class="lineNum">     510 </span>            :          temporarily defined and then restoring previous state.  */
+<span class="lineNum">     511 </span>            :       int get_vbits = 0;
+<span class="lineNum">     512 </span>            :       size_t valid_size = state.ptrs[i]-&gt;size;
+<span class="lineNum">     513 </span>            :       if (__builtin_expect (RUNNING_ON_VALGRIND, 0))
+<span class="lineNum">     514 </span>            :         {
+<span class="lineNum">     515 </span>            :           if (vbits.length () &lt; valid_size)
+<span class="lineNum">     516 </span>            :             vbits.safe_grow (valid_size);
+<span class="lineNum">     517 </span>            :           get_vbits = VALGRIND_GET_VBITS (state.ptrs[i]-&gt;obj,
+<span class="lineNum">     518 </span>            :                                           vbits.address (), valid_size);
+<span class="lineNum">     519 </span>            :           if (get_vbits == 3)
+<span class="lineNum">     520 </span>            :             {
+<span class="lineNum">     521 </span>            :               /* We assume that first part of obj is addressable, and
+<span class="lineNum">     522 </span>            :                  the rest is unaddressable.  Find out where the boundary is
+<span class="lineNum">     523 </span>            :                  using binary search.  */
+<span class="lineNum">     524 </span>            :               size_t lo = 0, hi = valid_size;
+<span class="lineNum">     525 </span>            :               while (hi &gt; lo)
+<span class="lineNum">     526 </span>            :                 {
+<span class="lineNum">     527 </span>            :                   size_t mid = (lo + hi) / 2;
+<span class="lineNum">     528 </span>            :                   get_vbits = VALGRIND_GET_VBITS ((char *) state.ptrs[i]-&gt;obj
+<span class="lineNum">     529 </span>            :                                                   + mid, vbits.address (),
+<span class="lineNum">     530 </span>            :                                                   1);
+<span class="lineNum">     531 </span>            :                   if (get_vbits == 3)
+<span class="lineNum">     532 </span>            :                     hi = mid;
+<span class="lineNum">     533 </span>            :                   else if (get_vbits == 1)
+<span class="lineNum">     534 </span>            :                     lo = mid + 1;
+<span class="lineNum">     535 </span>            :                   else
+<span class="lineNum">     536 </span>            :                     break;
+<span class="lineNum">     537 </span>            :                 }
+<span class="lineNum">     538 </span>            :               if (get_vbits == 1 || get_vbits == 3)
+<span class="lineNum">     539 </span>            :                 {
+<span class="lineNum">     540 </span>            :                   valid_size = lo;
+<span class="lineNum">     541 </span>            :                   get_vbits = VALGRIND_GET_VBITS (state.ptrs[i]-&gt;obj,
+<span class="lineNum">     542 </span>            :                                                   vbits.address (),
+<span class="lineNum">     543 </span>            :                                                   valid_size);
+<span class="lineNum">     544 </span>            :                 }
+<span class="lineNum">     545 </span>            :             }
+<span class="lineNum">     546 </span>            :           if (get_vbits == 1)
+<span class="lineNum">     547 </span>            :             VALGRIND_DISCARD (VALGRIND_MAKE_MEM_DEFINED (state.ptrs[i]-&gt;obj,
+<span class="lineNum">     548 </span>            :                                                          state.ptrs[i]-&gt;size));
+<span class="lineNum">     549 </span>            :         }
+<span class="lineNum">     550 </span>            : #endif
+<span class="lineNum">     551 </span><span class="lineCov">   15877756 :       memcpy (this_object, state.ptrs[i]-&gt;obj, state.ptrs[i]-&gt;size);</span>
+<span class="lineNum">     552 </span><span class="lineCov">   15877756 :       if (state.ptrs[i]-&gt;reorder_fn != NULL)</span>
+<span class="lineNum">     553 </span><span class="lineCov">      13301 :         state.ptrs[i]-&gt;reorder_fn (state.ptrs[i]-&gt;obj,</span>
+<span class="lineNum">     554 </span>            :                                    state.ptrs[i]-&gt;note_ptr_cookie,
+<span class="lineNum">     555 </span>            :                                    relocate_ptrs, &amp;state);
+<span class="lineNum">     556 </span><span class="lineCov">   15877756 :       state.ptrs[i]-&gt;note_ptr_fn (state.ptrs[i]-&gt;obj,</span>
+<span class="lineNum">     557 </span>            :                                   state.ptrs[i]-&gt;note_ptr_cookie,
+<span class="lineNum">     558 </span>            :                                   relocate_ptrs, &amp;state);
+<span class="lineNum">     559 </span><span class="lineCov">   31755512 :       ggc_pch_write_object (state.d, state.f, state.ptrs[i]-&gt;obj,</span>
+<span class="lineNum">     560 </span>            :                             state.ptrs[i]-&gt;new_addr, state.ptrs[i]-&gt;size,
+<span class="lineNum">     561 </span><span class="lineCov">   15877756 :                             state.ptrs[i]-&gt;note_ptr_fn == gt_pch_p_S);</span>
+<span class="lineNum">     562 </span><span class="lineCov">   15877756 :       if (state.ptrs[i]-&gt;note_ptr_fn != gt_pch_p_S)</span>
+<span class="lineNum">     563 </span><span class="lineCov">   14697028 :         memcpy (state.ptrs[i]-&gt;obj, this_object, state.ptrs[i]-&gt;size);</span>
+<span class="lineNum">     564 </span>            : #if defined ENABLE_VALGRIND_ANNOTATIONS &amp;&amp; defined VALGRIND_GET_VBITS
+<span class="lineNum">     565 </span>            :       if (__builtin_expect (get_vbits == 1, 0))
+<span class="lineNum">     566 </span>            :         {
+<span class="lineNum">     567 </span>            :           (void) VALGRIND_SET_VBITS (state.ptrs[i]-&gt;obj, vbits.address (),
+<span class="lineNum">     568 </span>            :                                      valid_size);
+<span class="lineNum">     569 </span>            :           if (valid_size != state.ptrs[i]-&gt;size)
+<span class="lineNum">     570 </span>            :             VALGRIND_DISCARD (VALGRIND_MAKE_MEM_NOACCESS ((char *)
+<span class="lineNum">     571 </span>            :                                                           state.ptrs[i]-&gt;obj
+<span class="lineNum">     572 </span>            :                                                           + valid_size,
+<span class="lineNum">     573 </span>            :                                                           state.ptrs[i]-&gt;size
+<span class="lineNum">     574 </span>            :                                                           - valid_size));
+<span class="lineNum">     575 </span>            :         }
+<span class="lineNum">     576 </span>            : #endif
+<span class="lineNum">     577 </span>            :     }
+<span class="lineNum">     578 </span>            : #if defined ENABLE_VALGRIND_ANNOTATIONS &amp;&amp; defined VALGRIND_GET_VBITS
+<span class="lineNum">     579 </span>            :   vbits.release ();
+<span class="lineNum">     580 </span>            : #endif
+<span class="lineNum">     581 </span>            : 
+<span class="lineNum">     582 </span><span class="lineCov">        322 :   ggc_pch_finish (state.d, state.f);</span>
+<span class="lineNum">     583 </span><span class="lineCov">        322 :   gt_pch_fixup_stringpool ();</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span><span class="lineCov">        322 :   XDELETE (state.ptrs);</span>
+<span class="lineNum">     586 </span><span class="lineCov">        322 :   XDELETE (this_object);</span>
+<span class="lineNum">     587 </span><span class="lineCov">        322 :   delete saving_htab;</span>
+<span class="lineNum">     588 </span><span class="lineCov">        322 :   saving_htab = NULL;</span>
+<span class="lineNum">     589 </span><span class="lineCov">        322 : }</span>
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            : /* Read the state of the compiler back in from F.  */
+<a name="592"><span class="lineNum">     592 </span>            : </a>
+<span class="lineNum">     593 </span>            : void
+<span class="lineNum">     594 </span><span class="lineCov">       6253 : gt_pch_restore (FILE *f)</span>
+<span class="lineNum">     595 </span>            : {
+<span class="lineNum">     596 </span><span class="lineCov">       6253 :   const struct ggc_root_tab *const *rt;</span>
+<span class="lineNum">     597 </span><span class="lineCov">       6253 :   const struct ggc_root_tab *rti;</span>
+<span class="lineNum">     598 </span><span class="lineCov">       6253 :   size_t i;</span>
+<span class="lineNum">     599 </span><span class="lineCov">       6253 :   struct mmap_info mmi;</span>
+<span class="lineNum">     600 </span><span class="lineCov">       6253 :   int result;</span>
+<span class="lineNum">     601 </span>            : 
+<span class="lineNum">     602 </span>            :   /* Delete any deletable objects.  This makes ggc_pch_read much
+<span class="lineNum">     603 </span>            :      faster, as it can be sure that no GCable objects remain other
+<span class="lineNum">     604 </span>            :      than the ones just read in.  */
+<span class="lineNum">     605 </span><span class="lineCov">      86582 :   for (rt = gt_ggc_deletable_rtab; *rt; rt++)</span>
+<span class="lineNum">     606 </span><span class="lineCov">     215735 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     607 </span><span class="lineCov">     135406 :       memset (rti-&gt;base, 0, rti-&gt;stride);</span>
+<span class="lineNum">     608 </span>            : 
+<span class="lineNum">     609 </span>            :   /* Read in all the scalar variables.  */
+<span class="lineNum">     610 </span><span class="lineCov">     154885 :   for (rt = gt_pch_scalar_rtab; *rt; rt++)</span>
+<span class="lineNum">     611 </span><span class="lineCov">     496880 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     612 </span><span class="lineCov">     348248 :       if (fread (rti-&gt;base, rti-&gt;stride, 1, f) != 1)</span>
+<span class="lineNum">     613 </span><span class="lineNoCov">          0 :         fatal_error (input_location, &quot;can%'t read PCH file: %m&quot;);</span>
+<span class="lineNum">     614 </span>            : 
+<span class="lineNum">     615 </span>            :   /* Read in all the global pointers, in 6 easy loops.  */
+<span class="lineNum">     616 </span><span class="lineCov">     451669 :   for (rt = gt_ggc_rtab; *rt; rt++)</span>
+<span class="lineNum">     617 </span><span class="lineCov">    2794650 :     for (rti = *rt; rti-&gt;base != NULL; rti++)</span>
+<span class="lineNum">     618 </span><span class="lineCov">   52039620 :       for (i = 0; i &lt; rti-&gt;nelt; i++)</span>
+<span class="lineNum">     619 </span><span class="lineCov">   49690386 :         if (fread ((char *)rti-&gt;base + rti-&gt;stride * i,</span>
+<span class="lineNum">     620 </span>            :                    sizeof (void *), 1, f) != 1)
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :           fatal_error (input_location, &quot;can%'t read PCH file: %m&quot;);</span>
+<span class="lineNum">     622 </span>            : 
+<span class="lineNum">     623 </span><span class="lineCov">       6253 :   if (fread (&amp;mmi, sizeof (mmi), 1, f) != 1)</span>
+<span class="lineNum">     624 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;can%'t read PCH file: %m&quot;);</span>
+<span class="lineNum">     625 </span>            : 
+<span class="lineNum">     626 </span><span class="lineCov">       6253 :   result = host_hooks.gt_pch_use_address (mmi.preferred_base, mmi.size,</span>
+<span class="lineNum">     627 </span>            :                                           fileno (f), mmi.offset);
+<span class="lineNum">     628 </span><span class="lineCov">       6253 :   if (result &lt; 0)</span>
+<span class="lineNum">     629 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;had to relocate PCH&quot;);</span>
+<span class="lineNum">     630 </span><span class="lineCov">       6253 :   if (result == 0)</span>
+<span class="lineNum">     631 </span>            :     {
+<span class="lineNum">     632 </span><span class="lineNoCov">          0 :       if (fseek (f, mmi.offset, SEEK_SET) != 0</span>
+<span class="lineNum">     633 </span><span class="lineNoCov">          0 :           || fread (mmi.preferred_base, mmi.size, 1, f) != 1)</span>
+<span class="lineNum">     634 </span><span class="lineNoCov">          0 :         fatal_error (input_location, &quot;can%'t read PCH file: %m&quot;);</span>
+<span class="lineNum">     635 </span>            :     }
+<span class="lineNum">     636 </span><span class="lineCov">       6253 :   else if (fseek (f, mmi.offset + mmi.size, SEEK_SET) != 0)</span>
+<span class="lineNum">     637 </span><span class="lineNoCov">          0 :     fatal_error (input_location, &quot;can%'t read PCH file: %m&quot;);</span>
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span><span class="lineCov">       6253 :   ggc_pch_read (f, mmi.preferred_base);</span>
+<span class="lineNum">     640 </span>            : 
+<span class="lineNum">     641 </span><span class="lineCov">       6253 :   gt_pch_restore_stringpool ();</span>
+<span class="lineNum">     642 </span><span class="lineCov">       6253 : }</span>
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span>            : /* Default version of HOST_HOOKS_GT_PCH_GET_ADDRESS when mmap is not present.
+<span class="lineNum">     645 </span>            :    Select no address whatsoever, and let gt_pch_save choose what it will with
+<span class="lineNum">     646 </span>            :    malloc, presumably.  */
+<a name="647"><span class="lineNum">     647 </span>            : </a>
+<span class="lineNum">     648 </span>            : void *
+<span class="lineNum">     649 </span><span class="lineNoCov">          0 : default_gt_pch_get_address (size_t size ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     650 </span>            :                             int fd ATTRIBUTE_UNUSED)
+<span class="lineNum">     651 </span>            : {
+<span class="lineNum">     652 </span><span class="lineNoCov">          0 :   return NULL;</span>
+<span class="lineNum">     653 </span>            : }
+<span class="lineNum">     654 </span>            : 
+<span class="lineNum">     655 </span>            : /* Default version of HOST_HOOKS_GT_PCH_USE_ADDRESS when mmap is not present.
+<span class="lineNum">     656 </span>            :    Allocate SIZE bytes with malloc.  Return 0 if the address we got is the
+<span class="lineNum">     657 </span>            :    same as base, indicating that the memory has been allocated but needs to
+<span class="lineNum">     658 </span>            :    be read in from the file.  Return -1 if the address differs, to relocation
+<span class="lineNum">     659 </span>            :    of the PCH file would be required.  */
+<a name="660"><span class="lineNum">     660 </span>            : </a>
+<span class="lineNum">     661 </span>            : int
+<span class="lineNum">     662 </span><span class="lineNoCov">          0 : default_gt_pch_use_address (void *base, size_t size, int fd ATTRIBUTE_UNUSED,</span>
+<span class="lineNum">     663 </span>            :                             size_t offset ATTRIBUTE_UNUSED)
+<span class="lineNum">     664 </span>            : {
+<span class="lineNum">     665 </span><span class="lineNoCov">          0 :   void *addr = xmalloc (size);</span>
+<span class="lineNum">     666 </span><span class="lineNoCov">          0 :   return (addr == base) - 1;</span>
+<span class="lineNum">     667 </span>            : }
+<span class="lineNum">     668 </span>            : 
+<span class="lineNum">     669 </span>            : /* Default version of HOST_HOOKS_GT_PCH_GET_ADDRESS.   Return the
+<span class="lineNum">     670 </span>            :    alignment required for allocating virtual memory. Usually this is the
+<span class="lineNum">     671 </span>            :    same as pagesize.  */
+<a name="672"><span class="lineNum">     672 </span>            : </a>
+<span class="lineNum">     673 </span>            : size_t
+<span class="lineNum">     674 </span><span class="lineCov">        322 : default_gt_pch_alloc_granularity (void)</span>
+<span class="lineNum">     675 </span>            : {
+<span class="lineNum">     676 </span><span class="lineCov">        322 :   return getpagesize ();</span>
+<span class="lineNum">     677 </span>            : }
+<span class="lineNum">     678 </span>            : 
+<span class="lineNum">     679 </span>            : #if HAVE_MMAP_FILE
+<span class="lineNum">     680 </span>            : /* Default version of HOST_HOOKS_GT_PCH_GET_ADDRESS when mmap is present.
+<span class="lineNum">     681 </span>            :    We temporarily allocate SIZE bytes, and let the kernel place the data
+<span class="lineNum">     682 </span>            :    wherever it will.  If it worked, that's our spot, if not we're likely
+<span class="lineNum">     683 </span>            :    to be in trouble.  */
+<a name="684"><span class="lineNum">     684 </span>            : </a>
+<span class="lineNum">     685 </span>            : void *
+<span class="lineNum">     686 </span><span class="lineNoCov">          0 : mmap_gt_pch_get_address (size_t size, int fd)</span>
+<span class="lineNum">     687 </span>            : {
+<span class="lineNum">     688 </span><span class="lineNoCov">          0 :   void *ret;</span>
+<span class="lineNum">     689 </span>            : 
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :   ret = mmap (NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);</span>
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :   if (ret == (void *) MAP_FAILED)</span>
+<span class="lineNum">     692 </span>            :     ret = NULL;
+<span class="lineNum">     693 </span>            :   else
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 :     munmap ((caddr_t) ret, size);</span>
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span><span class="lineNoCov">          0 :   return ret;</span>
+<span class="lineNum">     697 </span>            : }
+<span class="lineNum">     698 </span>            : 
+<span class="lineNum">     699 </span>            : /* Default version of HOST_HOOKS_GT_PCH_USE_ADDRESS when mmap is present.
+<span class="lineNum">     700 </span>            :    Map SIZE bytes of FD+OFFSET at BASE.  Return 1 if we succeeded at
+<span class="lineNum">     701 </span>            :    mapping the data at BASE, -1 if we couldn't.
+<span class="lineNum">     702 </span>            : 
+<span class="lineNum">     703 </span>            :    This version assumes that the kernel honors the START operand of mmap
+<span class="lineNum">     704 </span>            :    even without MAP_FIXED if START through START+SIZE are not currently
+<span class="lineNum">     705 </span>            :    mapped with something.  */
+<a name="706"><span class="lineNum">     706 </span>            : </a>
+<span class="lineNum">     707 </span>            : int
+<span class="lineNum">     708 </span><span class="lineNoCov">          0 : mmap_gt_pch_use_address (void *base, size_t size, int fd, size_t offset)</span>
+<span class="lineNum">     709 </span>            : {
+<span class="lineNum">     710 </span><span class="lineNoCov">          0 :   void *addr;</span>
+<span class="lineNum">     711 </span>            : 
+<span class="lineNum">     712 </span>            :   /* We're called with size == 0 if we're not planning to load a PCH
+<span class="lineNum">     713 </span>            :      file at all.  This allows the hook to free any static space that
+<span class="lineNum">     714 </span>            :      we might have allocated at link time.  */
+<span class="lineNum">     715 </span><span class="lineNoCov">          0 :   if (size == 0)</span>
+<span class="lineNum">     716 </span>            :     return -1;
+<span class="lineNum">     717 </span>            : 
+<span class="lineNum">     718 </span><span class="lineNoCov">          0 :   addr = mmap ((caddr_t) base, size, PROT_READ | PROT_WRITE, MAP_PRIVATE,</span>
+<span class="lineNum">     719 </span>            :                fd, offset);
+<span class="lineNum">     720 </span>            : 
+<span class="lineNum">     721 </span><span class="lineNoCov">          0 :   return addr == base ? 1 : -1;</span>
+<span class="lineNum">     722 </span>            : }
+<span class="lineNum">     723 </span>            : #endif /* HAVE_MMAP_FILE */
+<span class="lineNum">     724 </span>            : 
+<span class="lineNum">     725 </span>            : #if !defined ENABLE_GC_CHECKING &amp;&amp; !defined ENABLE_GC_ALWAYS_COLLECT
+<span class="lineNum">     726 </span>            : 
+<span class="lineNum">     727 </span>            : /* Modify the bound based on rlimits.  */
+<span class="lineNum">     728 </span>            : static double
+<span class="lineNum">     729 </span>            : ggc_rlimit_bound (double limit)
+<span class="lineNum">     730 </span>            : {
+<span class="lineNum">     731 </span>            : #if defined(HAVE_GETRLIMIT)
+<span class="lineNum">     732 </span>            :   struct rlimit rlim;
+<span class="lineNum">     733 </span>            : # if defined (RLIMIT_AS)
+<span class="lineNum">     734 </span>            :   /* RLIMIT_AS is what POSIX says is the limit on mmap.  Presumably
+<span class="lineNum">     735 </span>            :      any OS which has RLIMIT_AS also has a working mmap that GCC will use.  */
+<span class="lineNum">     736 </span>            :   if (getrlimit (RLIMIT_AS, &amp;rlim) == 0
+<span class="lineNum">     737 </span>            :       &amp;&amp; rlim.rlim_cur != (rlim_t) RLIM_INFINITY
+<span class="lineNum">     738 </span>            :       &amp;&amp; rlim.rlim_cur &lt; limit)
+<span class="lineNum">     739 </span>            :     limit = rlim.rlim_cur;
+<span class="lineNum">     740 </span>            : # elif defined (RLIMIT_DATA)
+<span class="lineNum">     741 </span>            :   /* ... but some older OSs bound mmap based on RLIMIT_DATA, or we
+<span class="lineNum">     742 </span>            :      might be on an OS that has a broken mmap.  (Others don't bound
+<span class="lineNum">     743 </span>            :      mmap at all, apparently.)  */
+<span class="lineNum">     744 </span>            :   if (getrlimit (RLIMIT_DATA, &amp;rlim) == 0
+<span class="lineNum">     745 </span>            :       &amp;&amp; rlim.rlim_cur != (rlim_t) RLIM_INFINITY
+<span class="lineNum">     746 </span>            :       &amp;&amp; rlim.rlim_cur &lt; limit
+<span class="lineNum">     747 </span>            :       /* Darwin has this horribly bogus default setting of
+<span class="lineNum">     748 </span>            :          RLIMIT_DATA, to 6144Kb.  No-one notices because RLIMIT_DATA
+<span class="lineNum">     749 </span>            :          appears to be ignored.  Ignore such silliness.  If a limit
+<span class="lineNum">     750 </span>            :          this small was actually effective for mmap, GCC wouldn't even
+<span class="lineNum">     751 </span>            :          start up.  */
+<span class="lineNum">     752 </span>            :       &amp;&amp; rlim.rlim_cur &gt;= 8 * 1024 * 1024)
+<span class="lineNum">     753 </span>            :     limit = rlim.rlim_cur;
+<span class="lineNum">     754 </span>            : # endif /* RLIMIT_AS or RLIMIT_DATA */
+<span class="lineNum">     755 </span>            : #endif /* HAVE_GETRLIMIT */
+<span class="lineNum">     756 </span>            : 
+<span class="lineNum">     757 </span>            :   return limit;
+<span class="lineNum">     758 </span>            : }
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span>            : /* Heuristic to set a default for GGC_MIN_EXPAND.  */
+<span class="lineNum">     761 </span>            : static int
+<span class="lineNum">     762 </span>            : ggc_min_expand_heuristic (void)
+<span class="lineNum">     763 </span>            : {
+<span class="lineNum">     764 </span>            :   double min_expand = physmem_total ();
+<span class="lineNum">     765 </span>            : 
+<span class="lineNum">     766 </span>            :   /* Adjust for rlimits.  */
+<span class="lineNum">     767 </span>            :   min_expand = ggc_rlimit_bound (min_expand);
+<span class="lineNum">     768 </span>            : 
+<span class="lineNum">     769 </span>            :   /* The heuristic is a percentage equal to 30% + 70%*(RAM/1GB), yielding
+<span class="lineNum">     770 </span>            :      a lower bound of 30% and an upper bound of 100% (when RAM &gt;= 1GB).  */
+<span class="lineNum">     771 </span>            :   min_expand /= 1024*1024*1024;
+<span class="lineNum">     772 </span>            :   min_expand *= 70;
+<span class="lineNum">     773 </span>            :   min_expand = MIN (min_expand, 70);
+<span class="lineNum">     774 </span>            :   min_expand += 30;
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span>            :   return min_expand;
+<span class="lineNum">     777 </span>            : }
+<span class="lineNum">     778 </span>            : 
+<span class="lineNum">     779 </span>            : /* Heuristic to set a default for GGC_MIN_HEAPSIZE.  */
+<span class="lineNum">     780 </span>            : static int
+<span class="lineNum">     781 </span>            : ggc_min_heapsize_heuristic (void)
+<span class="lineNum">     782 </span>            : {
+<span class="lineNum">     783 </span>            :   double phys_kbytes = physmem_total ();
+<span class="lineNum">     784 </span>            :   double limit_kbytes = ggc_rlimit_bound (phys_kbytes * 2);
+<span class="lineNum">     785 </span>            : 
+<span class="lineNum">     786 </span>            :   phys_kbytes /= 1024; /* Convert to Kbytes.  */
+<span class="lineNum">     787 </span>            :   limit_kbytes /= 1024;
+<span class="lineNum">     788 </span>            : 
+<span class="lineNum">     789 </span>            :   /* The heuristic is RAM/8, with a lower bound of 4M and an upper
+<span class="lineNum">     790 </span>            :      bound of 128M (when RAM &gt;= 1GB).  */
+<span class="lineNum">     791 </span>            :   phys_kbytes /= 8;
+<span class="lineNum">     792 </span>            : 
+<span class="lineNum">     793 </span>            : #if defined(HAVE_GETRLIMIT) &amp;&amp; defined (RLIMIT_RSS)
+<span class="lineNum">     794 </span>            :   /* Try not to overrun the RSS limit while doing garbage collection.
+<span class="lineNum">     795 </span>            :      The RSS limit is only advisory, so no margin is subtracted.  */
+<span class="lineNum">     796 </span>            :  {
+<span class="lineNum">     797 </span>            :    struct rlimit rlim;
+<span class="lineNum">     798 </span>            :    if (getrlimit (RLIMIT_RSS, &amp;rlim) == 0
+<span class="lineNum">     799 </span>            :        &amp;&amp; rlim.rlim_cur != (rlim_t) RLIM_INFINITY)
+<span class="lineNum">     800 </span>            :      phys_kbytes = MIN (phys_kbytes, rlim.rlim_cur / 1024);
+<span class="lineNum">     801 </span>            :  }
+<span class="lineNum">     802 </span>            : # endif
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span>            :   /* Don't blindly run over our data limit; do GC at least when the
+<span class="lineNum">     805 </span>            :      *next* GC would be within 20Mb of the limit or within a quarter of
+<span class="lineNum">     806 </span>            :      the limit, whichever is larger.  If GCC does hit the data limit,
+<span class="lineNum">     807 </span>            :      compilation will fail, so this tries to be conservative.  */
+<span class="lineNum">     808 </span>            :   limit_kbytes = MAX (0, limit_kbytes - MAX (limit_kbytes / 4, 20 * 1024));
+<span class="lineNum">     809 </span>            :   limit_kbytes = (limit_kbytes * 100) / (110 + ggc_min_expand_heuristic ());
+<span class="lineNum">     810 </span>            :   phys_kbytes = MIN (phys_kbytes, limit_kbytes);
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span>            :   phys_kbytes = MAX (phys_kbytes, 4 * 1024);
+<span class="lineNum">     813 </span>            :   phys_kbytes = MIN (phys_kbytes, 128 * 1024);
+<span class="lineNum">     814 </span>            : 
+<span class="lineNum">     815 </span>            :   return phys_kbytes;
+<span class="lineNum">     816 </span>            : }
+<span class="lineNum">     817 </span>            : #endif
+<a name="818"><span class="lineNum">     818 </span>            : </a>
+<span class="lineNum">     819 </span>            : void
+<span class="lineNum">     820 </span><span class="lineCov">     170312 : init_ggc_heuristics (void)</span>
+<span class="lineNum">     821 </span>            : {
+<span class="lineNum">     822 </span>            : #if !defined ENABLE_GC_CHECKING &amp;&amp; !defined ENABLE_GC_ALWAYS_COLLECT
+<span class="lineNum">     823 </span>            :   set_default_param_value (GGC_MIN_EXPAND, ggc_min_expand_heuristic ());
+<span class="lineNum">     824 </span>            :   set_default_param_value (GGC_MIN_HEAPSIZE, ggc_min_heapsize_heuristic ());
+<span class="lineNum">     825 </span>            : #endif
+<span class="lineNum">     826 </span><span class="lineCov">     170312 : }</span>
+<span class="lineNum">     827 </span>            : 
+<span class="lineNum">     828 </span>            : /* GGC memory usage.  */
+<span class="lineNum">     829 </span>            : struct ggc_usage: public mem_usage
+<span class="lineNum">     830 </span>            : {
+<span class="lineNum">     831 </span>            :   /* Default constructor.  */
+<span class="lineNum">     832 </span><span class="lineNoCov">          0 :   ggc_usage (): m_freed (0), m_collected (0), m_overhead (0) {}</span>
+<span class="lineNum">     833 </span>            :   /* Constructor.  */
+<span class="lineNum">     834 </span>            :   ggc_usage (size_t allocated, size_t times, size_t peak,
+<span class="lineNum">     835 </span>            :              size_t freed, size_t collected, size_t overhead)
+<span class="lineNum">     836 </span>            :     : mem_usage (allocated, times, peak),
+<span class="lineNum">     837 </span>            :     m_freed (freed), m_collected (collected), m_overhead (overhead) {}
+<span class="lineNum">     838 </span>            : 
+<span class="lineNum">     839 </span>            :   /* Equality operator.  */
+<span class="lineNum">     840 </span>            :   inline bool
+<span class="lineNum">     841 </span>            :   operator== (const ggc_usage &amp;second) const
+<span class="lineNum">     842 </span>            :   {
+<span class="lineNum">     843 </span>            :     return (get_balance () == second.get_balance ()
+<span class="lineNum">     844 </span>            :             &amp;&amp; m_peak == second.m_peak
+<span class="lineNum">     845 </span>            :             &amp;&amp; m_times == second.m_times);
+<span class="lineNum">     846 </span>            :   }
+<span class="lineNum">     847 </span>            : 
+<span class="lineNum">     848 </span>            :   /* Comparison operator.  */
+<span class="lineNum">     849 </span>            :   inline bool
+<span class="lineNum">     850 </span>            :   operator&lt; (const ggc_usage &amp;second) const
+<span class="lineNum">     851 </span>            :   {
+<span class="lineNum">     852 </span>            :     if (*this == second)
+<span class="lineNum">     853 </span>            :       return false;
+<span class="lineNum">     854 </span>            : 
+<span class="lineNum">     855 </span>            :     return (get_balance () == second.get_balance () ?
+<span class="lineNum">     856 </span>            :             (m_peak == second.m_peak ? m_times &lt; second.m_times
+<span class="lineNum">     857 </span>            :              : m_peak &lt; second.m_peak)
+<span class="lineNum">     858 </span>            :               : get_balance () &lt; second.get_balance ());
+<span class="lineNum">     859 </span>            :   }
+<span class="lineNum">     860 </span>            : 
+<span class="lineNum">     861 </span>            :   /* Register overhead of ALLOCATED and OVERHEAD bytes.  */
+<span class="lineNum">     862 </span>            :   inline void
+<span class="lineNum">     863 </span>            :   register_overhead (size_t allocated, size_t overhead)
+<span class="lineNum">     864 </span>            :   {
+<span class="lineNum">     865 </span><span class="lineNoCov">          0 :     m_allocated += allocated;</span>
+<span class="lineNum">     866 </span><span class="lineNoCov">          0 :     m_overhead += overhead;</span>
+<span class="lineNum">     867 </span><span class="lineNoCov">          0 :     m_times++;</span>
+<span class="lineNum">     868 </span>            :   }
+<span class="lineNum">     869 </span>            : 
+<a name="870"><span class="lineNum">     870 </span>            :   /* Release overhead of SIZE bytes.  */</a>
+<span class="lineNum">     871 </span>            :   inline void
+<span class="lineNum">     872 </span><span class="lineNoCov">          0 :   release_overhead (size_t size)</span>
+<span class="lineNum">     873 </span>            :   {
+<span class="lineNum">     874 </span><span class="lineNoCov">          0 :     m_freed += size;</span>
+<span class="lineNum">     875 </span><span class="lineNoCov">          0 :   }</span>
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span>            :   /* Sum the usage with SECOND usage.  */
+<span class="lineNum">     878 </span>            :   ggc_usage
+<span class="lineNum">     879 </span>            :   operator+ (const ggc_usage &amp;second)
+<span class="lineNum">     880 </span>            :   {
+<span class="lineNum">     881 </span>            :     return ggc_usage (m_allocated + second.m_allocated,
+<span class="lineNum">     882 </span>            :                       m_times + second.m_times,
+<span class="lineNum">     883 </span>            :                       m_peak + second.m_peak,
+<span class="lineNum">     884 </span>            :                       m_freed + second.m_freed,
+<span class="lineNum">     885 </span>            :                       m_collected + second.m_collected,
+<span class="lineNum">     886 </span>            :                       m_overhead + second.m_overhead);
+<span class="lineNum">     887 </span>            :   }
+<span class="lineNum">     888 </span>            : 
+<span class="lineNum">     889 </span>            :   /* Dump usage with PREFIX, where TOTAL is sum of all rows.  */
+<span class="lineNum">     890 </span>            :   inline void
+<span class="lineNum">     891 </span>            :   dump (const char *prefix, ggc_usage &amp;total) const
+<span class="lineNum">     892 </span>            :   {
+<span class="lineNum">     893 </span>            :     long balance = get_balance ();
+<span class="lineNum">     894 </span>            :     fprintf (stderr,
+<span class="lineNum">     895 </span>            :              &quot;%-48s %10li:%5.1f%%%10li:%5.1f%%&quot;
+<span class="lineNum">     896 </span>            :              &quot;%10li:%5.1f%%%10li:%5.1f%%%10li\n&quot;,
+<span class="lineNum">     897 </span>            :              prefix, (long)m_collected,
+<span class="lineNum">     898 </span>            :              get_percent (m_collected, total.m_collected),
+<span class="lineNum">     899 </span>            :              (long)m_freed, get_percent (m_freed, total.m_freed),
+<span class="lineNum">     900 </span>            :              (long)balance, get_percent (balance, total.get_balance ()),
+<span class="lineNum">     901 </span>            :              (long)m_overhead, get_percent (m_overhead, total.m_overhead),
+<span class="lineNum">     902 </span>            :              (long)m_times);
+<span class="lineNum">     903 </span>            :   }
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span>            :   /* Dump usage coupled to LOC location, where TOTAL is sum of all rows.  */
+<span class="lineNum">     906 </span>            :   inline void
+<span class="lineNum">     907 </span>            :   dump (mem_location *loc, ggc_usage &amp;total) const
+<span class="lineNum">     908 </span>            :   {
+<span class="lineNum">     909 </span>            :     char *location_string = loc-&gt;to_string ();
+<span class="lineNum">     910 </span>            : 
+<span class="lineNum">     911 </span>            :     dump (location_string, total);
+<span class="lineNum">     912 </span>            : 
+<span class="lineNum">     913 </span>            :     free (location_string);
+<span class="lineNum">     914 </span>            :   }
+<span class="lineNum">     915 </span>            : 
+<span class="lineNum">     916 </span>            :   /* Dump footer.  */
+<span class="lineNum">     917 </span>            :   inline void
+<span class="lineNum">     918 </span>            :   dump_footer ()
+<span class="lineNum">     919 </span>            :   {
+<span class="lineNum">     920 </span>            :     print_dash_line ();
+<span class="lineNum">     921 </span>            :     dump (&quot;Total&quot;, *this);
+<span class="lineNum">     922 </span>            :     print_dash_line ();
+<span class="lineNum">     923 </span>            :   }
+<span class="lineNum">     924 </span>            : 
+<span class="lineNum">     925 </span>            :   /* Get balance which is GGC allocation leak.  */
+<span class="lineNum">     926 </span>            :   inline long
+<span class="lineNum">     927 </span>            :   get_balance () const
+<span class="lineNum">     928 </span>            :   {
+<span class="lineNum">     929 </span>            :     return m_allocated + m_overhead - m_collected - m_freed;
+<span class="lineNum">     930 </span>            :   }
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span>            :   typedef std::pair&lt;mem_location *, ggc_usage *&gt; mem_pair_t;
+<span class="lineNum">     933 </span>            : 
+<span class="lineNum">     934 </span>            :   /* Compare wrapper used by qsort method.  */
+<span class="lineNum">     935 </span>            :   static int
+<span class="lineNum">     936 </span>            :   compare (const void *first, const void *second)
+<span class="lineNum">     937 </span>            :   {
+<span class="lineNum">     938 </span>            :     const mem_pair_t f = *(const mem_pair_t *)first;
+<span class="lineNum">     939 </span>            :     const mem_pair_t s = *(const mem_pair_t *)second;
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span>            :     if (*f.second == *s.second)
+<span class="lineNum">     942 </span>            :       return 0;
+<span class="lineNum">     943 </span>            : 
+<span class="lineNum">     944 </span>            :     return *f.second &lt; *s.second ? 1 : -1;
+<span class="lineNum">     945 </span>            :   }
+<span class="lineNum">     946 </span>            : 
+<span class="lineNum">     947 </span>            :   /* Compare rows in final GGC summary dump.  */
+<span class="lineNum">     948 </span>            :   static int
+<span class="lineNum">     949 </span>            :   compare_final (const void *first, const void *second)
+<span class="lineNum">     950 </span>            :   {
+<span class="lineNum">     951 </span>            :     typedef std::pair&lt;mem_location *, ggc_usage *&gt; mem_pair_t;
+<span class="lineNum">     952 </span>            : 
+<span class="lineNum">     953 </span>            :     const ggc_usage *f = ((const mem_pair_t *)first)-&gt;second;
+<span class="lineNum">     954 </span>            :     const ggc_usage *s = ((const mem_pair_t *)second)-&gt;second;
+<span class="lineNum">     955 </span>            : 
+<span class="lineNum">     956 </span>            :     size_t a = f-&gt;m_allocated + f-&gt;m_overhead - f-&gt;m_freed;
+<span class="lineNum">     957 </span>            :     size_t b = s-&gt;m_allocated + s-&gt;m_overhead - s-&gt;m_freed;
+<span class="lineNum">     958 </span>            : 
+<span class="lineNum">     959 </span>            :     return a == b ? 0 : (a &lt; b ? 1 : -1);
+<span class="lineNum">     960 </span>            :   }
+<span class="lineNum">     961 </span>            : 
+<span class="lineNum">     962 </span>            :   /* Dump header with NAME.  */
+<span class="lineNum">     963 </span>            :   static inline void
+<span class="lineNum">     964 </span>            :   dump_header (const char *name)
+<span class="lineNum">     965 </span>            :   {
+<span class="lineNum">     966 </span>            :     fprintf (stderr, &quot;%-48s %11s%17s%17s%16s%17s\n&quot;, name, &quot;Garbage&quot;, &quot;Freed&quot;,
+<span class="lineNum">     967 </span>            :              &quot;Leak&quot;, &quot;Overhead&quot;, &quot;Times&quot;);
+<span class="lineNum">     968 </span>            :     print_dash_line ();
+<span class="lineNum">     969 </span>            :   }
+<span class="lineNum">     970 </span>            : 
+<span class="lineNum">     971 </span>            :   /* Freed memory in bytes.  */
+<span class="lineNum">     972 </span>            :   size_t m_freed;
+<span class="lineNum">     973 </span>            :   /* Collected memory in bytes.  */
+<span class="lineNum">     974 </span>            :   size_t m_collected;
+<span class="lineNum">     975 </span>            :   /* Overhead memory in bytes.  */
+<span class="lineNum">     976 </span>            :   size_t m_overhead;
+<span class="lineNum">     977 </span>            : };
+<span class="lineNum">     978 </span>            : 
+<span class="lineNum">     979 </span>            : /* GCC memory description.  */
+<span class="lineNum">     980 </span>            : static mem_alloc_description&lt;ggc_usage&gt; ggc_mem_desc;
+<span class="lineNum">     981 </span>            : 
+<span class="lineNum">     982 </span>            : /* Dump per-site memory statistics.  */
+<a name="983"><span class="lineNum">     983 </span>            : </a>
+<span class="lineNum">     984 </span>            : void
+<span class="lineNum">     985 </span><span class="lineNoCov">          0 : dump_ggc_loc_statistics (bool final)</span>
+<span class="lineNum">     986 </span>            : {
+<span class="lineNum">     987 </span><span class="lineNoCov">          0 :   if (! GATHER_STATISTICS)</span>
+<span class="lineNum">     988 </span><span class="lineNoCov">          0 :     return;</span>
+<span class="lineNum">     989 </span>            : 
+<span class="lineNum">     990 </span>            :   ggc_force_collect = true;
+<span class="lineNum">     991 </span>            :   ggc_collect ();
+<span class="lineNum">     992 </span>            : 
+<span class="lineNum">     993 </span>            :   ggc_mem_desc.dump (GGC_ORIGIN, final ? ggc_usage::compare_final : NULL);
+<span class="lineNum">     994 </span>            : 
+<span class="lineNum">     995 </span>            :   ggc_force_collect = false;
+<span class="lineNum">     996 </span>            : }
+<span class="lineNum">     997 </span>            : 
+<a name="998"><span class="lineNum">     998 </span>            : /* Record ALLOCATED and OVERHEAD bytes to descriptor NAME:LINE (FUNCTION).  */</a>
+<span class="lineNum">     999 </span>            : void
+<span class="lineNum">    1000 </span><span class="lineNoCov">          0 : ggc_record_overhead (size_t allocated, size_t overhead, void *ptr MEM_STAT_DECL)</span>
+<span class="lineNum">    1001 </span>            : {
+<span class="lineNum">    1002 </span><span class="lineNoCov">          0 :   ggc_usage *usage = ggc_mem_desc.register_descriptor (ptr, GGC_ORIGIN, false</span>
+<span class="lineNum">    1003 </span>            :                                                        FINAL_PASS_MEM_STAT);
+<span class="lineNum">    1004 </span>            : 
+<span class="lineNum">    1005 </span><span class="lineNoCov">          0 :   ggc_mem_desc.register_object_overhead (usage, allocated + overhead, ptr);</span>
+<span class="lineNum">    1006 </span><span class="lineNoCov">          0 :   usage-&gt;register_overhead (allocated, overhead);</span>
+<span class="lineNum">    1007 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1008 </span>            : 
+<a name="1009"><span class="lineNum">    1009 </span>            : /* Notice that the pointer has been freed.  */</a>
+<span class="lineNum">    1010 </span>            : void
+<span class="lineNum">    1011 </span><span class="lineNoCov">          0 : ggc_free_overhead (void *ptr)</span>
+<span class="lineNum">    1012 </span>            : {
+<span class="lineNum">    1013 </span><span class="lineNoCov">          0 :   ggc_mem_desc.release_object_overhead (ptr);</span>
+<span class="lineNum">    1014 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1015 </span>            : 
+<span class="lineNum">    1016 </span>            : /* After live values has been marked, walk all recorded pointers and see if
+<span class="lineNum">    1017 </span>            :    they are still live.  */
+<span class="lineNum">    1018 </span>            : void
+<span class="lineNum">    1019 </span><span class="lineNoCov">          0 : ggc_prune_overhead_list (void)</span>
+<span class="lineNum">    1020 </span>            : {
+<span class="lineNum">    1021 </span><span class="lineNoCov">          0 :   typedef hash_map&lt;const void *, std::pair&lt;ggc_usage *, size_t &gt; &gt; map_t;</span>
+<span class="lineNum">    1022 </span>            : 
+<span class="lineNum">    1023 </span><span class="lineNoCov">          0 :   map_t::iterator it = ggc_mem_desc.m_reverse_object_map-&gt;begin ();</span>
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span><span class="lineNoCov">          0 :   for (; it != ggc_mem_desc.m_reverse_object_map-&gt;end (); ++it)</span>
+<span class="lineNum">    1026 </span><span class="lineNoCov">          0 :     if (!ggc_marked_p ((*it).first))</span>
+<span class="lineNum">    1027 </span><span class="lineNoCov">          0 :       (*it).second.first-&gt;m_collected += (*it).second.second;</span>
+<span class="lineNum">    1028 </span>            : 
+<span class="lineNum">    1029 </span><span class="lineNoCov">          0 :   delete ggc_mem_desc.m_reverse_object_map;</span>
+<span class="lineNum">    1030 </span><span class="lineNoCov">          0 :   ggc_mem_desc.m_reverse_object_map = new map_t (13, false, false);</span>
+<span class="lineNum">    1031 </span><span class="lineNoCov">          0 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

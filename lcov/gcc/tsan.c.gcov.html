@@ -1,0 +1,1037 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tsan.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tsan.c<span style="font-size: 80%;"> (source / <a href="tsan.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">253</td>
+            <td class="headerCovTableEntry">360</td>
+            <td class="headerCovTableEntryLo">70.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* GCC instrumentation plugin for ThreadSanitizer.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2011-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Dmitry Vyukov &lt;dvyukov@google.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;fold-const.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;gimplify-me.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-iterator.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;tree-ssa-propagate.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;tree-ssa-loop-ivopts.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;tree-eh.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;tsan.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;asan.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;builtins.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;target.h&quot;
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            : /* Number of instrumented memory accesses in the current function.  */
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span>            : /* Builds the following decl
+<span class="lineNum">      52 </span>            :    void __tsan_read/writeX (void *addr);  */
+<a name="53"><span class="lineNum">      53 </span>            : </a>
+<span class="lineNum">      54 </span>            : static tree
+<span class="lineNum">      55 </span><span class="lineCov">        656 : get_memory_access_decl (bool is_write, unsigned size)</span>
+<span class="lineNum">      56 </span>            : {
+<span class="lineNum">      57 </span><span class="lineCov">        656 :   enum built_in_function fcode;</span>
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span><span class="lineCov">        656 :   if (size &lt;= 1)</span>
+<span class="lineNum">      60 </span><span class="lineCov">          4 :     fcode = is_write ? BUILT_IN_TSAN_WRITE1</span>
+<span class="lineNum">      61 </span>            :                      : BUILT_IN_TSAN_READ1;
+<span class="lineNum">      62 </span><span class="lineCov">        652 :   else if (size &lt;= 3)</span>
+<span class="lineNum">      63 </span><span class="lineCov">          4 :     fcode = is_write ? BUILT_IN_TSAN_WRITE2</span>
+<span class="lineNum">      64 </span>            :                      : BUILT_IN_TSAN_READ2;
+<span class="lineNum">      65 </span><span class="lineCov">        648 :   else if (size &lt;= 7)</span>
+<span class="lineNum">      66 </span><span class="lineCov">        230 :     fcode = is_write ? BUILT_IN_TSAN_WRITE4</span>
+<span class="lineNum">      67 </span>            :                      : BUILT_IN_TSAN_READ4;
+<span class="lineNum">      68 </span><span class="lineCov">        418 :   else if (size &lt;= 15)</span>
+<span class="lineNum">      69 </span><span class="lineCov">        418 :     fcode = is_write ? BUILT_IN_TSAN_WRITE8</span>
+<span class="lineNum">      70 </span>            :                      : BUILT_IN_TSAN_READ8;
+<span class="lineNum">      71 </span>            :   else
+<span class="lineNum">      72 </span><span class="lineNoCov">          0 :     fcode = is_write ? BUILT_IN_TSAN_WRITE16</span>
+<span class="lineNum">      73 </span>            :                      : BUILT_IN_TSAN_READ16;
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span><span class="lineCov">        656 :   return builtin_decl_implicit (fcode);</span>
+<span class="lineNum">      76 </span>            : }
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* Check as to whether EXPR refers to a store to vptr.  */
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span>            : static tree
+<span class="lineNum">      81 </span><span class="lineCov">        680 : is_vptr_store (gimple *stmt, tree expr, bool is_write)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineCov">        680 :   if (is_write == true</span>
+<span class="lineNum">      84 </span><span class="lineCov">        238 :       &amp;&amp; gimple_assign_single_p (stmt)</span>
+<span class="lineNum">      85 </span><span class="lineCov">        918 :       &amp;&amp; TREE_CODE (expr) == COMPONENT_REF)</span>
+<span class="lineNum">      86 </span>            :     {
+<span class="lineNum">      87 </span><span class="lineCov">         30 :       tree field = TREE_OPERAND (expr, 1);</span>
+<span class="lineNum">      88 </span><span class="lineCov">         30 :       if (TREE_CODE (field) == FIELD_DECL</span>
+<span class="lineNum">      89 </span><span class="lineCov">         30 :           &amp;&amp; DECL_VIRTUAL_P (field))</span>
+<span class="lineNum">      90 </span><span class="lineCov">         36 :         return gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">      91 </span>            :     }
+<span class="lineNum">      92 </span>            :   return NULL;
+<span class="lineNum">      93 </span>            : }
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            : /* Instruments EXPR if needed. If any instrumentation is inserted,
+<span class="lineNum">      96 </span>            :    return true.  */
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span>            : static bool
+<span class="lineNum">      99 </span><span class="lineCov">        714 : instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)</span>
+<span class="lineNum">     100 </span>            : {
+<span class="lineNum">     101 </span><span class="lineCov">        714 :   tree base, rhs, expr_ptr, builtin_decl;</span>
+<span class="lineNum">     102 </span><span class="lineCov">        714 :   basic_block bb;</span>
+<span class="lineNum">     103 </span><span class="lineCov">        714 :   HOST_WIDE_INT size;</span>
+<span class="lineNum">     104 </span><span class="lineCov">        714 :   gimple *stmt, *g;</span>
+<span class="lineNum">     105 </span><span class="lineCov">        714 :   gimple_seq seq;</span>
+<span class="lineNum">     106 </span><span class="lineCov">        714 :   location_t loc;</span>
+<span class="lineNum">     107 </span><span class="lineCov">        714 :   unsigned int align;</span>
+<span class="lineNum">     108 </span>            : 
+<span class="lineNum">     109 </span><span class="lineCov">        714 :   size = int_size_in_bytes (TREE_TYPE (expr));</span>
+<span class="lineNum">     110 </span><span class="lineCov">        714 :   if (size &lt;= 0)</span>
+<span class="lineNum">     111 </span>            :     return false;
+<span class="lineNum">     112 </span>            : 
+<span class="lineNum">     113 </span><span class="lineCov">       1426 :   poly_int64 unused_bitsize, unused_bitpos;</span>
+<span class="lineNum">     114 </span><span class="lineCov">        713 :   tree offset;</span>
+<span class="lineNum">     115 </span><span class="lineCov">        713 :   machine_mode mode;</span>
+<span class="lineNum">     116 </span><span class="lineCov">        713 :   int unsignedp, reversep, volatilep = 0;</span>
+<span class="lineNum">     117 </span><span class="lineCov">        713 :   base = get_inner_reference (expr, &amp;unused_bitsize, &amp;unused_bitpos, &amp;offset,</span>
+<span class="lineNum">     118 </span>            :                               &amp;mode, &amp;unsignedp, &amp;reversep, &amp;volatilep);
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span>            :   /* No need to instrument accesses to decls that don't escape,
+<span class="lineNum">     121 </span>            :      they can't escape to other threads then.  */
+<span class="lineNum">     122 </span><span class="lineCov">        713 :   if (DECL_P (base) &amp;&amp; !is_global_var (base))</span>
+<span class="lineNum">     123 </span>            :     {
+<span class="lineNum">     124 </span><span class="lineCov">        164 :       struct pt_solution pt;</span>
+<span class="lineNum">     125 </span><span class="lineCov">        164 :       memset (&amp;pt, 0, sizeof (pt));</span>
+<span class="lineNum">     126 </span><span class="lineCov">        164 :       pt.escaped = 1;</span>
+<span class="lineNum">     127 </span><span class="lineCov">        164 :       pt.ipa_escaped = flag_ipa_pta != 0;</span>
+<span class="lineNum">     128 </span><span class="lineCov">        164 :       if (!pt_solution_includes (&amp;pt, base))</span>
+<span class="lineNum">     129 </span><span class="lineCov">         32 :         return false;</span>
+<span class="lineNum">     130 </span><span class="lineCov">        148 :       if (!may_be_aliased (base))</span>
+<span class="lineNum">     131 </span>            :         return false;
+<span class="lineNum">     132 </span>            :     }
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span><span class="lineCov">        681 :   if (TREE_READONLY (base) || (VAR_P (base) &amp;&amp; DECL_HARD_REGISTER (base)))</span>
+<span class="lineNum">     135 </span>            :     return false;
+<span class="lineNum">     136 </span>            : 
+<span class="lineNum">     137 </span><span class="lineCov">        680 :   stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     138 </span><span class="lineCov">        680 :   loc = gimple_location (stmt);</span>
+<span class="lineNum">     139 </span><span class="lineCov">        680 :   rhs = is_vptr_store (stmt, expr, is_write);</span>
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span><span class="lineCov">        680 :   if ((TREE_CODE (expr) == COMPONENT_REF</span>
+<span class="lineNum">     142 </span><span class="lineCov">         46 :        &amp;&amp; DECL_BIT_FIELD_TYPE (TREE_OPERAND (expr, 1)))</span>
+<span class="lineNum">     143 </span><span class="lineCov">        714 :       || TREE_CODE (expr) == BIT_FIELD_REF)</span>
+<span class="lineNum">     144 </span>            :     {
+<span class="lineNum">     145 </span><span class="lineCov">         12 :       HOST_WIDE_INT bitpos, bitsize;</span>
+<span class="lineNum">     146 </span><span class="lineCov">         12 :       base = TREE_OPERAND (expr, 0);</span>
+<span class="lineNum">     147 </span><span class="lineCov">         12 :       if (TREE_CODE (expr) == COMPONENT_REF)</span>
+<span class="lineNum">     148 </span>            :         {
+<span class="lineNum">     149 </span><span class="lineCov">         12 :           expr = TREE_OPERAND (expr, 1);</span>
+<span class="lineNum">     150 </span><span class="lineCov">         12 :           if (is_write &amp;&amp; DECL_BIT_FIELD_REPRESENTATIVE (expr))</span>
+<span class="lineNum">     151 </span>            :             expr = DECL_BIT_FIELD_REPRESENTATIVE (expr);
+<span class="lineNum">     152 </span><span class="lineCov">         12 :           if (!tree_fits_uhwi_p (DECL_FIELD_OFFSET (expr))</span>
+<span class="lineNum">     153 </span><span class="lineCov">         24 :               || !tree_fits_uhwi_p (DECL_FIELD_BIT_OFFSET (expr))</span>
+<span class="lineNum">     154 </span><span class="lineCov">         24 :               || !tree_fits_uhwi_p (DECL_SIZE (expr)))</span>
+<span class="lineNum">     155 </span>            :             return false;
+<span class="lineNum">     156 </span><span class="lineCov">         24 :           bitpos = tree_to_uhwi (DECL_FIELD_OFFSET (expr)) * BITS_PER_UNIT</span>
+<span class="lineNum">     157 </span><span class="lineCov">         12 :                    + tree_to_uhwi (DECL_FIELD_BIT_OFFSET (expr));</span>
+<span class="lineNum">     158 </span><span class="lineCov">         12 :           bitsize = tree_to_uhwi (DECL_SIZE (expr));</span>
+<span class="lineNum">     159 </span>            :         }
+<span class="lineNum">     160 </span>            :       else
+<span class="lineNum">     161 </span>            :         {
+<span class="lineNum">     162 </span><span class="lineNoCov">          0 :           if (!tree_fits_uhwi_p (TREE_OPERAND (expr, 2))</span>
+<span class="lineNum">     163 </span><span class="lineNoCov">          0 :               || !tree_fits_uhwi_p (TREE_OPERAND (expr, 1)))</span>
+<span class="lineNum">     164 </span>            :             return false;
+<span class="lineNum">     165 </span><span class="lineNoCov">          0 :           bitpos = tree_to_uhwi (TREE_OPERAND (expr, 2));</span>
+<span class="lineNum">     166 </span><span class="lineNoCov">          0 :           bitsize = tree_to_uhwi (TREE_OPERAND (expr, 1));</span>
+<span class="lineNum">     167 </span>            :         }
+<span class="lineNum">     168 </span><span class="lineCov">         12 :       if (bitpos &lt; 0 || bitsize &lt;= 0)</span>
+<span class="lineNum">     169 </span>            :         return false;
+<span class="lineNum">     170 </span><span class="lineCov">         24 :       size = (bitpos % BITS_PER_UNIT + bitsize + BITS_PER_UNIT - 1)</span>
+<span class="lineNum">     171 </span><span class="lineCov">         12 :              / BITS_PER_UNIT;</span>
+<span class="lineNum">     172 </span><span class="lineCov">         12 :       if (may_be_nonaddressable_p (base))</span>
+<span class="lineNum">     173 </span>            :         return false;
+<span class="lineNum">     174 </span><span class="lineCov">         12 :       align = get_object_alignment (base);</span>
+<span class="lineNum">     175 </span><span class="lineCov">         12 :       if (align &lt; BITS_PER_UNIT)</span>
+<span class="lineNum">     176 </span>            :         return false;
+<span class="lineNum">     177 </span><span class="lineCov">         12 :       bitpos = bitpos &amp; ~(BITS_PER_UNIT - 1);</span>
+<span class="lineNum">     178 </span><span class="lineCov">         12 :       if ((align - 1) &amp; bitpos)</span>
+<span class="lineNum">     179 </span>            :         {
+<span class="lineNum">     180 </span><span class="lineNoCov">          0 :           align = (align - 1) &amp; bitpos;</span>
+<span class="lineNum">     181 </span><span class="lineNoCov">          0 :           align = least_bit_hwi (align);</span>
+<span class="lineNum">     182 </span>            :         }
+<span class="lineNum">     183 </span><span class="lineCov">         12 :       expr = build_fold_addr_expr (unshare_expr (base));</span>
+<span class="lineNum">     184 </span><span class="lineCov">         12 :       expr = build2 (MEM_REF, char_type_node, expr,</span>
+<span class="lineNum">     185 </span><span class="lineCov">         24 :                      build_int_cst (TREE_TYPE (expr), bitpos / BITS_PER_UNIT));</span>
+<span class="lineNum">     186 </span><span class="lineCov">         12 :       expr_ptr = build_fold_addr_expr (expr);</span>
+<span class="lineNum">     187 </span>            :     }
+<span class="lineNum">     188 </span>            :   else
+<span class="lineNum">     189 </span>            :     {
+<span class="lineNum">     190 </span><span class="lineCov">        668 :       if (may_be_nonaddressable_p (expr))</span>
+<span class="lineNum">     191 </span>            :         return false;
+<span class="lineNum">     192 </span><span class="lineCov">        668 :       align = get_object_alignment (expr);</span>
+<span class="lineNum">     193 </span><span class="lineCov">        668 :       if (align &lt; BITS_PER_UNIT)</span>
+<span class="lineNum">     194 </span>            :         return false;
+<span class="lineNum">     195 </span><span class="lineCov">        668 :       expr_ptr = build_fold_addr_expr (unshare_expr (expr));</span>
+<span class="lineNum">     196 </span>            :     }
+<span class="lineNum">     197 </span><span class="lineCov">        680 :   expr_ptr = force_gimple_operand (expr_ptr, &amp;seq, true, NULL_TREE);</span>
+<span class="lineNum">     198 </span><span class="lineCov">        680 :   if ((size &amp; (size - 1)) != 0 || size &gt; 16</span>
+<span class="lineNum">     199 </span><span class="lineCov">        678 :       || align &lt; MIN (size, 8) * BITS_PER_UNIT)</span>
+<span class="lineNum">     200 </span>            :     {
+<span class="lineNum">     201 </span><span class="lineCov">          8 :       builtin_decl = builtin_decl_implicit (is_write</span>
+<span class="lineNum">     202 </span>            :                                             ? BUILT_IN_TSAN_WRITE_RANGE
+<span class="lineNum">     203 </span>            :                                             : BUILT_IN_TSAN_READ_RANGE);
+<span class="lineNum">     204 </span><span class="lineCov">         12 :       g = gimple_build_call (builtin_decl, 2, expr_ptr, size_int (size));</span>
+<span class="lineNum">     205 </span>            :     }
+<span class="lineNum">     206 </span><span class="lineCov">        674 :   else if (rhs == NULL)</span>
+<span class="lineNum">     207 </span><span class="lineCov">        656 :     g = gimple_build_call (get_memory_access_decl (is_write, size),</span>
+<span class="lineNum">     208 </span>            :                            1, expr_ptr);
+<span class="lineNum">     209 </span>            :   else
+<span class="lineNum">     210 </span>            :     {
+<span class="lineNum">     211 </span><span class="lineCov">         18 :       builtin_decl = builtin_decl_implicit (BUILT_IN_TSAN_VPTR_UPDATE);</span>
+<span class="lineNum">     212 </span><span class="lineCov">         18 :       g = gimple_build_call (builtin_decl, 2, expr_ptr, unshare_expr (rhs));</span>
+<span class="lineNum">     213 </span>            :     }
+<span class="lineNum">     214 </span><span class="lineCov">        680 :   gimple_set_location (g, loc);</span>
+<span class="lineNum">     215 </span><span class="lineCov">        680 :   gimple_seq_add_stmt_without_update (&amp;seq, g);</span>
+<span class="lineNum">     216 </span>            :   /* Instrumentation for assignment of a function result
+<span class="lineNum">     217 </span>            :      must be inserted after the call.  Instrumentation for
+<span class="lineNum">     218 </span>            :      reads of function arguments must be inserted before the call.
+<span class="lineNum">     219 </span>            :      That's because the call can contain synchronization.  */
+<span class="lineNum">     220 </span><span class="lineCov">       1360 :   if (is_gimple_call (stmt) &amp;&amp; is_write)</span>
+<span class="lineNum">     221 </span>            :     {
+<span class="lineNum">     222 </span>            :       /* If the call can throw, it must be the last stmt in
+<span class="lineNum">     223 </span>            :          a basic block, so the instrumented stmts need to be
+<span class="lineNum">     224 </span>            :          inserted in successor bbs.  */
+<span class="lineNum">     225 </span><span class="lineNoCov">          0 :       if (is_ctrl_altering_stmt (stmt))</span>
+<span class="lineNum">     226 </span>            :         {
+<span class="lineNum">     227 </span><span class="lineNoCov">          0 :           edge e;</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineNoCov">          0 :           bb = gsi_bb (gsi);</span>
+<span class="lineNum">     230 </span><span class="lineNoCov">          0 :           e = find_fallthru_edge (bb-&gt;succs);</span>
+<span class="lineNum">     231 </span><span class="lineNoCov">          0 :           if (e)</span>
+<span class="lineNum">     232 </span><span class="lineNoCov">          0 :             gsi_insert_seq_on_edge_immediate (e, seq);</span>
+<span class="lineNum">     233 </span>            :         }
+<span class="lineNum">     234 </span>            :       else
+<span class="lineNum">     235 </span><span class="lineNoCov">          0 :         gsi_insert_seq_after (&amp;gsi, seq, GSI_NEW_STMT);</span>
+<span class="lineNum">     236 </span>            :     }
+<span class="lineNum">     237 </span>            :   else
+<span class="lineNum">     238 </span><span class="lineCov">        680 :     gsi_insert_seq_before (&amp;gsi, seq, GSI_SAME_STMT);</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span>            :   return true;
+<span class="lineNum">     241 </span>            : }
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span>            : /* Actions for sync/atomic builtin transformations.  */
+<span class="lineNum">     244 </span>            : enum tsan_atomic_action
+<span class="lineNum">     245 </span>            : {
+<span class="lineNum">     246 </span>            :   check_last, add_seq_cst, add_acquire, weak_cas, strong_cas,
+<span class="lineNum">     247 </span>            :   bool_cas, val_cas, lock_release, fetch_op, fetch_op_seq_cst,
+<span class="lineNum">     248 </span>            :   bool_clear, bool_test_and_set
+<span class="lineNum">     249 </span>            : };
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span>            : /* Table how to map sync/atomic builtins to their corresponding
+<span class="lineNum">     252 </span>            :    tsan equivalents.  */
+<span class="lineNum">     253 </span>            : static const struct tsan_map_atomic
+<span class="lineNum">     254 </span>            : {
+<span class="lineNum">     255 </span>            :   enum built_in_function fcode, tsan_fcode;
+<span class="lineNum">     256 </span>            :   enum tsan_atomic_action action;
+<span class="lineNum">     257 </span>            :   enum tree_code code;
+<span class="lineNum">     258 </span>            : } tsan_atomic_table[] =
+<span class="lineNum">     259 </span>            : {
+<span class="lineNum">     260 </span>            : #define TRANSFORM(fcode, tsan_fcode, action, code) \
+<span class="lineNum">     261 </span>            :   { BUILT_IN_##fcode, BUILT_IN_##tsan_fcode, action, code }
+<span class="lineNum">     262 </span>            : #define CHECK_LAST(fcode, tsan_fcode) \
+<span class="lineNum">     263 </span>            :   TRANSFORM (fcode, tsan_fcode, check_last, ERROR_MARK)
+<span class="lineNum">     264 </span>            : #define ADD_SEQ_CST(fcode, tsan_fcode) \
+<span class="lineNum">     265 </span>            :   TRANSFORM (fcode, tsan_fcode, add_seq_cst, ERROR_MARK)
+<span class="lineNum">     266 </span>            : #define ADD_ACQUIRE(fcode, tsan_fcode) \
+<span class="lineNum">     267 </span>            :   TRANSFORM (fcode, tsan_fcode, add_acquire, ERROR_MARK)
+<span class="lineNum">     268 </span>            : #define WEAK_CAS(fcode, tsan_fcode) \
+<span class="lineNum">     269 </span>            :   TRANSFORM (fcode, tsan_fcode, weak_cas, ERROR_MARK)
+<span class="lineNum">     270 </span>            : #define STRONG_CAS(fcode, tsan_fcode) \
+<span class="lineNum">     271 </span>            :   TRANSFORM (fcode, tsan_fcode, strong_cas, ERROR_MARK)
+<span class="lineNum">     272 </span>            : #define BOOL_CAS(fcode, tsan_fcode) \
+<span class="lineNum">     273 </span>            :   TRANSFORM (fcode, tsan_fcode, bool_cas, ERROR_MARK)
+<span class="lineNum">     274 </span>            : #define VAL_CAS(fcode, tsan_fcode) \
+<span class="lineNum">     275 </span>            :   TRANSFORM (fcode, tsan_fcode, val_cas, ERROR_MARK)
+<span class="lineNum">     276 </span>            : #define LOCK_RELEASE(fcode, tsan_fcode) \
+<span class="lineNum">     277 </span>            :   TRANSFORM (fcode, tsan_fcode, lock_release, ERROR_MARK)
+<span class="lineNum">     278 </span>            : #define FETCH_OP(fcode, tsan_fcode, code) \
+<span class="lineNum">     279 </span>            :   TRANSFORM (fcode, tsan_fcode, fetch_op, code)
+<span class="lineNum">     280 </span>            : #define FETCH_OPS(fcode, tsan_fcode, code) \
+<span class="lineNum">     281 </span>            :   TRANSFORM (fcode, tsan_fcode, fetch_op_seq_cst, code)
+<span class="lineNum">     282 </span>            : #define BOOL_CLEAR(fcode, tsan_fcode) \
+<span class="lineNum">     283 </span>            :   TRANSFORM (fcode, tsan_fcode, bool_clear, ERROR_MARK)
+<span class="lineNum">     284 </span>            : #define BOOL_TEST_AND_SET(fcode, tsan_fcode) \
+<span class="lineNum">     285 </span>            :   TRANSFORM (fcode, tsan_fcode, bool_test_and_set, ERROR_MARK)
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span>            :   CHECK_LAST (ATOMIC_LOAD_1, TSAN_ATOMIC8_LOAD),
+<span class="lineNum">     288 </span>            :   CHECK_LAST (ATOMIC_LOAD_2, TSAN_ATOMIC16_LOAD),
+<span class="lineNum">     289 </span>            :   CHECK_LAST (ATOMIC_LOAD_4, TSAN_ATOMIC32_LOAD),
+<span class="lineNum">     290 </span>            :   CHECK_LAST (ATOMIC_LOAD_8, TSAN_ATOMIC64_LOAD),
+<span class="lineNum">     291 </span>            :   CHECK_LAST (ATOMIC_LOAD_16, TSAN_ATOMIC128_LOAD),
+<span class="lineNum">     292 </span>            :   CHECK_LAST (ATOMIC_STORE_1, TSAN_ATOMIC8_STORE),
+<span class="lineNum">     293 </span>            :   CHECK_LAST (ATOMIC_STORE_2, TSAN_ATOMIC16_STORE),
+<span class="lineNum">     294 </span>            :   CHECK_LAST (ATOMIC_STORE_4, TSAN_ATOMIC32_STORE),
+<span class="lineNum">     295 </span>            :   CHECK_LAST (ATOMIC_STORE_8, TSAN_ATOMIC64_STORE),
+<span class="lineNum">     296 </span>            :   CHECK_LAST (ATOMIC_STORE_16, TSAN_ATOMIC128_STORE),
+<span class="lineNum">     297 </span>            :   CHECK_LAST (ATOMIC_EXCHANGE_1, TSAN_ATOMIC8_EXCHANGE),
+<span class="lineNum">     298 </span>            :   CHECK_LAST (ATOMIC_EXCHANGE_2, TSAN_ATOMIC16_EXCHANGE),
+<span class="lineNum">     299 </span>            :   CHECK_LAST (ATOMIC_EXCHANGE_4, TSAN_ATOMIC32_EXCHANGE),
+<span class="lineNum">     300 </span>            :   CHECK_LAST (ATOMIC_EXCHANGE_8, TSAN_ATOMIC64_EXCHANGE),
+<span class="lineNum">     301 </span>            :   CHECK_LAST (ATOMIC_EXCHANGE_16, TSAN_ATOMIC128_EXCHANGE),
+<span class="lineNum">     302 </span>            :   CHECK_LAST (ATOMIC_FETCH_ADD_1, TSAN_ATOMIC8_FETCH_ADD),
+<span class="lineNum">     303 </span>            :   CHECK_LAST (ATOMIC_FETCH_ADD_2, TSAN_ATOMIC16_FETCH_ADD),
+<span class="lineNum">     304 </span>            :   CHECK_LAST (ATOMIC_FETCH_ADD_4, TSAN_ATOMIC32_FETCH_ADD),
+<span class="lineNum">     305 </span>            :   CHECK_LAST (ATOMIC_FETCH_ADD_8, TSAN_ATOMIC64_FETCH_ADD),
+<span class="lineNum">     306 </span>            :   CHECK_LAST (ATOMIC_FETCH_ADD_16, TSAN_ATOMIC128_FETCH_ADD),
+<span class="lineNum">     307 </span>            :   CHECK_LAST (ATOMIC_FETCH_SUB_1, TSAN_ATOMIC8_FETCH_SUB),
+<span class="lineNum">     308 </span>            :   CHECK_LAST (ATOMIC_FETCH_SUB_2, TSAN_ATOMIC16_FETCH_SUB),
+<span class="lineNum">     309 </span>            :   CHECK_LAST (ATOMIC_FETCH_SUB_4, TSAN_ATOMIC32_FETCH_SUB),
+<span class="lineNum">     310 </span>            :   CHECK_LAST (ATOMIC_FETCH_SUB_8, TSAN_ATOMIC64_FETCH_SUB),
+<span class="lineNum">     311 </span>            :   CHECK_LAST (ATOMIC_FETCH_SUB_16, TSAN_ATOMIC128_FETCH_SUB),
+<span class="lineNum">     312 </span>            :   CHECK_LAST (ATOMIC_FETCH_AND_1, TSAN_ATOMIC8_FETCH_AND),
+<span class="lineNum">     313 </span>            :   CHECK_LAST (ATOMIC_FETCH_AND_2, TSAN_ATOMIC16_FETCH_AND),
+<span class="lineNum">     314 </span>            :   CHECK_LAST (ATOMIC_FETCH_AND_4, TSAN_ATOMIC32_FETCH_AND),
+<span class="lineNum">     315 </span>            :   CHECK_LAST (ATOMIC_FETCH_AND_8, TSAN_ATOMIC64_FETCH_AND),
+<span class="lineNum">     316 </span>            :   CHECK_LAST (ATOMIC_FETCH_AND_16, TSAN_ATOMIC128_FETCH_AND),
+<span class="lineNum">     317 </span>            :   CHECK_LAST (ATOMIC_FETCH_OR_1, TSAN_ATOMIC8_FETCH_OR),
+<span class="lineNum">     318 </span>            :   CHECK_LAST (ATOMIC_FETCH_OR_2, TSAN_ATOMIC16_FETCH_OR),
+<span class="lineNum">     319 </span>            :   CHECK_LAST (ATOMIC_FETCH_OR_4, TSAN_ATOMIC32_FETCH_OR),
+<span class="lineNum">     320 </span>            :   CHECK_LAST (ATOMIC_FETCH_OR_8, TSAN_ATOMIC64_FETCH_OR),
+<span class="lineNum">     321 </span>            :   CHECK_LAST (ATOMIC_FETCH_OR_16, TSAN_ATOMIC128_FETCH_OR),
+<span class="lineNum">     322 </span>            :   CHECK_LAST (ATOMIC_FETCH_XOR_1, TSAN_ATOMIC8_FETCH_XOR),
+<span class="lineNum">     323 </span>            :   CHECK_LAST (ATOMIC_FETCH_XOR_2, TSAN_ATOMIC16_FETCH_XOR),
+<span class="lineNum">     324 </span>            :   CHECK_LAST (ATOMIC_FETCH_XOR_4, TSAN_ATOMIC32_FETCH_XOR),
+<span class="lineNum">     325 </span>            :   CHECK_LAST (ATOMIC_FETCH_XOR_8, TSAN_ATOMIC64_FETCH_XOR),
+<span class="lineNum">     326 </span>            :   CHECK_LAST (ATOMIC_FETCH_XOR_16, TSAN_ATOMIC128_FETCH_XOR),
+<span class="lineNum">     327 </span>            :   CHECK_LAST (ATOMIC_FETCH_NAND_1, TSAN_ATOMIC8_FETCH_NAND),
+<span class="lineNum">     328 </span>            :   CHECK_LAST (ATOMIC_FETCH_NAND_2, TSAN_ATOMIC16_FETCH_NAND),
+<span class="lineNum">     329 </span>            :   CHECK_LAST (ATOMIC_FETCH_NAND_4, TSAN_ATOMIC32_FETCH_NAND),
+<span class="lineNum">     330 </span>            :   CHECK_LAST (ATOMIC_FETCH_NAND_8, TSAN_ATOMIC64_FETCH_NAND),
+<span class="lineNum">     331 </span>            :   CHECK_LAST (ATOMIC_FETCH_NAND_16, TSAN_ATOMIC128_FETCH_NAND),
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span>            :   CHECK_LAST (ATOMIC_THREAD_FENCE, TSAN_ATOMIC_THREAD_FENCE),
+<span class="lineNum">     334 </span>            :   CHECK_LAST (ATOMIC_SIGNAL_FENCE, TSAN_ATOMIC_SIGNAL_FENCE),
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span>            :   FETCH_OP (ATOMIC_ADD_FETCH_1, TSAN_ATOMIC8_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     337 </span>            :   FETCH_OP (ATOMIC_ADD_FETCH_2, TSAN_ATOMIC16_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     338 </span>            :   FETCH_OP (ATOMIC_ADD_FETCH_4, TSAN_ATOMIC32_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     339 </span>            :   FETCH_OP (ATOMIC_ADD_FETCH_8, TSAN_ATOMIC64_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     340 </span>            :   FETCH_OP (ATOMIC_ADD_FETCH_16, TSAN_ATOMIC128_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     341 </span>            :   FETCH_OP (ATOMIC_SUB_FETCH_1, TSAN_ATOMIC8_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     342 </span>            :   FETCH_OP (ATOMIC_SUB_FETCH_2, TSAN_ATOMIC16_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     343 </span>            :   FETCH_OP (ATOMIC_SUB_FETCH_4, TSAN_ATOMIC32_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     344 </span>            :   FETCH_OP (ATOMIC_SUB_FETCH_8, TSAN_ATOMIC64_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     345 </span>            :   FETCH_OP (ATOMIC_SUB_FETCH_16, TSAN_ATOMIC128_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     346 </span>            :   FETCH_OP (ATOMIC_AND_FETCH_1, TSAN_ATOMIC8_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     347 </span>            :   FETCH_OP (ATOMIC_AND_FETCH_2, TSAN_ATOMIC16_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     348 </span>            :   FETCH_OP (ATOMIC_AND_FETCH_4, TSAN_ATOMIC32_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     349 </span>            :   FETCH_OP (ATOMIC_AND_FETCH_8, TSAN_ATOMIC64_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     350 </span>            :   FETCH_OP (ATOMIC_AND_FETCH_16, TSAN_ATOMIC128_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     351 </span>            :   FETCH_OP (ATOMIC_OR_FETCH_1, TSAN_ATOMIC8_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     352 </span>            :   FETCH_OP (ATOMIC_OR_FETCH_2, TSAN_ATOMIC16_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     353 </span>            :   FETCH_OP (ATOMIC_OR_FETCH_4, TSAN_ATOMIC32_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     354 </span>            :   FETCH_OP (ATOMIC_OR_FETCH_8, TSAN_ATOMIC64_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     355 </span>            :   FETCH_OP (ATOMIC_OR_FETCH_16, TSAN_ATOMIC128_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     356 </span>            :   FETCH_OP (ATOMIC_XOR_FETCH_1, TSAN_ATOMIC8_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     357 </span>            :   FETCH_OP (ATOMIC_XOR_FETCH_2, TSAN_ATOMIC16_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     358 </span>            :   FETCH_OP (ATOMIC_XOR_FETCH_4, TSAN_ATOMIC32_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     359 </span>            :   FETCH_OP (ATOMIC_XOR_FETCH_8, TSAN_ATOMIC64_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     360 </span>            :   FETCH_OP (ATOMIC_XOR_FETCH_16, TSAN_ATOMIC128_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     361 </span>            :   FETCH_OP (ATOMIC_NAND_FETCH_1, TSAN_ATOMIC8_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     362 </span>            :   FETCH_OP (ATOMIC_NAND_FETCH_2, TSAN_ATOMIC16_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     363 </span>            :   FETCH_OP (ATOMIC_NAND_FETCH_4, TSAN_ATOMIC32_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     364 </span>            :   FETCH_OP (ATOMIC_NAND_FETCH_8, TSAN_ATOMIC64_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     365 </span>            :   FETCH_OP (ATOMIC_NAND_FETCH_16, TSAN_ATOMIC128_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     366 </span>            : 
+<span class="lineNum">     367 </span>            :   ADD_ACQUIRE (SYNC_LOCK_TEST_AND_SET_1, TSAN_ATOMIC8_EXCHANGE),
+<span class="lineNum">     368 </span>            :   ADD_ACQUIRE (SYNC_LOCK_TEST_AND_SET_2, TSAN_ATOMIC16_EXCHANGE),
+<span class="lineNum">     369 </span>            :   ADD_ACQUIRE (SYNC_LOCK_TEST_AND_SET_4, TSAN_ATOMIC32_EXCHANGE),
+<span class="lineNum">     370 </span>            :   ADD_ACQUIRE (SYNC_LOCK_TEST_AND_SET_8, TSAN_ATOMIC64_EXCHANGE),
+<span class="lineNum">     371 </span>            :   ADD_ACQUIRE (SYNC_LOCK_TEST_AND_SET_16, TSAN_ATOMIC128_EXCHANGE),
+<span class="lineNum">     372 </span>            : 
+<span class="lineNum">     373 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_ADD_1, TSAN_ATOMIC8_FETCH_ADD),
+<span class="lineNum">     374 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_ADD_2, TSAN_ATOMIC16_FETCH_ADD),
+<span class="lineNum">     375 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_ADD_4, TSAN_ATOMIC32_FETCH_ADD),
+<span class="lineNum">     376 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_ADD_8, TSAN_ATOMIC64_FETCH_ADD),
+<span class="lineNum">     377 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_ADD_16, TSAN_ATOMIC128_FETCH_ADD),
+<span class="lineNum">     378 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_SUB_1, TSAN_ATOMIC8_FETCH_SUB),
+<span class="lineNum">     379 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_SUB_2, TSAN_ATOMIC16_FETCH_SUB),
+<span class="lineNum">     380 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_SUB_4, TSAN_ATOMIC32_FETCH_SUB),
+<span class="lineNum">     381 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_SUB_8, TSAN_ATOMIC64_FETCH_SUB),
+<span class="lineNum">     382 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_SUB_16, TSAN_ATOMIC128_FETCH_SUB),
+<span class="lineNum">     383 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_AND_1, TSAN_ATOMIC8_FETCH_AND),
+<span class="lineNum">     384 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_AND_2, TSAN_ATOMIC16_FETCH_AND),
+<span class="lineNum">     385 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_AND_4, TSAN_ATOMIC32_FETCH_AND),
+<span class="lineNum">     386 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_AND_8, TSAN_ATOMIC64_FETCH_AND),
+<span class="lineNum">     387 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_AND_16, TSAN_ATOMIC128_FETCH_AND),
+<span class="lineNum">     388 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_OR_1, TSAN_ATOMIC8_FETCH_OR),
+<span class="lineNum">     389 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_OR_2, TSAN_ATOMIC16_FETCH_OR),
+<span class="lineNum">     390 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_OR_4, TSAN_ATOMIC32_FETCH_OR),
+<span class="lineNum">     391 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_OR_8, TSAN_ATOMIC64_FETCH_OR),
+<span class="lineNum">     392 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_OR_16, TSAN_ATOMIC128_FETCH_OR),
+<span class="lineNum">     393 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_XOR_1, TSAN_ATOMIC8_FETCH_XOR),
+<span class="lineNum">     394 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_XOR_2, TSAN_ATOMIC16_FETCH_XOR),
+<span class="lineNum">     395 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_XOR_4, TSAN_ATOMIC32_FETCH_XOR),
+<span class="lineNum">     396 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_XOR_8, TSAN_ATOMIC64_FETCH_XOR),
+<span class="lineNum">     397 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_XOR_16, TSAN_ATOMIC128_FETCH_XOR),
+<span class="lineNum">     398 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_NAND_1, TSAN_ATOMIC8_FETCH_NAND),
+<span class="lineNum">     399 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_NAND_2, TSAN_ATOMIC16_FETCH_NAND),
+<span class="lineNum">     400 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_NAND_4, TSAN_ATOMIC32_FETCH_NAND),
+<span class="lineNum">     401 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_NAND_8, TSAN_ATOMIC64_FETCH_NAND),
+<span class="lineNum">     402 </span>            :   ADD_SEQ_CST (SYNC_FETCH_AND_NAND_16, TSAN_ATOMIC128_FETCH_NAND),
+<span class="lineNum">     403 </span>            : 
+<span class="lineNum">     404 </span>            :   ADD_SEQ_CST (SYNC_SYNCHRONIZE, TSAN_ATOMIC_THREAD_FENCE),
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            :   FETCH_OPS (SYNC_ADD_AND_FETCH_1, TSAN_ATOMIC8_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     407 </span>            :   FETCH_OPS (SYNC_ADD_AND_FETCH_2, TSAN_ATOMIC16_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     408 </span>            :   FETCH_OPS (SYNC_ADD_AND_FETCH_4, TSAN_ATOMIC32_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     409 </span>            :   FETCH_OPS (SYNC_ADD_AND_FETCH_8, TSAN_ATOMIC64_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     410 </span>            :   FETCH_OPS (SYNC_ADD_AND_FETCH_16, TSAN_ATOMIC128_FETCH_ADD, PLUS_EXPR),
+<span class="lineNum">     411 </span>            :   FETCH_OPS (SYNC_SUB_AND_FETCH_1, TSAN_ATOMIC8_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     412 </span>            :   FETCH_OPS (SYNC_SUB_AND_FETCH_2, TSAN_ATOMIC16_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     413 </span>            :   FETCH_OPS (SYNC_SUB_AND_FETCH_4, TSAN_ATOMIC32_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     414 </span>            :   FETCH_OPS (SYNC_SUB_AND_FETCH_8, TSAN_ATOMIC64_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     415 </span>            :   FETCH_OPS (SYNC_SUB_AND_FETCH_16, TSAN_ATOMIC128_FETCH_SUB, MINUS_EXPR),
+<span class="lineNum">     416 </span>            :   FETCH_OPS (SYNC_AND_AND_FETCH_1, TSAN_ATOMIC8_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     417 </span>            :   FETCH_OPS (SYNC_AND_AND_FETCH_2, TSAN_ATOMIC16_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     418 </span>            :   FETCH_OPS (SYNC_AND_AND_FETCH_4, TSAN_ATOMIC32_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     419 </span>            :   FETCH_OPS (SYNC_AND_AND_FETCH_8, TSAN_ATOMIC64_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     420 </span>            :   FETCH_OPS (SYNC_AND_AND_FETCH_16, TSAN_ATOMIC128_FETCH_AND, BIT_AND_EXPR),
+<span class="lineNum">     421 </span>            :   FETCH_OPS (SYNC_OR_AND_FETCH_1, TSAN_ATOMIC8_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     422 </span>            :   FETCH_OPS (SYNC_OR_AND_FETCH_2, TSAN_ATOMIC16_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     423 </span>            :   FETCH_OPS (SYNC_OR_AND_FETCH_4, TSAN_ATOMIC32_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     424 </span>            :   FETCH_OPS (SYNC_OR_AND_FETCH_8, TSAN_ATOMIC64_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     425 </span>            :   FETCH_OPS (SYNC_OR_AND_FETCH_16, TSAN_ATOMIC128_FETCH_OR, BIT_IOR_EXPR),
+<span class="lineNum">     426 </span>            :   FETCH_OPS (SYNC_XOR_AND_FETCH_1, TSAN_ATOMIC8_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     427 </span>            :   FETCH_OPS (SYNC_XOR_AND_FETCH_2, TSAN_ATOMIC16_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     428 </span>            :   FETCH_OPS (SYNC_XOR_AND_FETCH_4, TSAN_ATOMIC32_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     429 </span>            :   FETCH_OPS (SYNC_XOR_AND_FETCH_8, TSAN_ATOMIC64_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     430 </span>            :   FETCH_OPS (SYNC_XOR_AND_FETCH_16, TSAN_ATOMIC128_FETCH_XOR, BIT_XOR_EXPR),
+<span class="lineNum">     431 </span>            :   FETCH_OPS (SYNC_NAND_AND_FETCH_1, TSAN_ATOMIC8_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     432 </span>            :   FETCH_OPS (SYNC_NAND_AND_FETCH_2, TSAN_ATOMIC16_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     433 </span>            :   FETCH_OPS (SYNC_NAND_AND_FETCH_4, TSAN_ATOMIC32_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     434 </span>            :   FETCH_OPS (SYNC_NAND_AND_FETCH_8, TSAN_ATOMIC64_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     435 </span>            :   FETCH_OPS (SYNC_NAND_AND_FETCH_16, TSAN_ATOMIC128_FETCH_NAND, BIT_NOT_EXPR),
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span>            :   WEAK_CAS (ATOMIC_COMPARE_EXCHANGE_1, TSAN_ATOMIC8_COMPARE_EXCHANGE_WEAK),
+<span class="lineNum">     438 </span>            :   WEAK_CAS (ATOMIC_COMPARE_EXCHANGE_2, TSAN_ATOMIC16_COMPARE_EXCHANGE_WEAK),
+<span class="lineNum">     439 </span>            :   WEAK_CAS (ATOMIC_COMPARE_EXCHANGE_4, TSAN_ATOMIC32_COMPARE_EXCHANGE_WEAK),
+<span class="lineNum">     440 </span>            :   WEAK_CAS (ATOMIC_COMPARE_EXCHANGE_8, TSAN_ATOMIC64_COMPARE_EXCHANGE_WEAK),
+<span class="lineNum">     441 </span>            :   WEAK_CAS (ATOMIC_COMPARE_EXCHANGE_16, TSAN_ATOMIC128_COMPARE_EXCHANGE_WEAK),
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span>            :   STRONG_CAS (ATOMIC_COMPARE_EXCHANGE_1, TSAN_ATOMIC8_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     444 </span>            :   STRONG_CAS (ATOMIC_COMPARE_EXCHANGE_2,
+<span class="lineNum">     445 </span>            :               TSAN_ATOMIC16_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     446 </span>            :   STRONG_CAS (ATOMIC_COMPARE_EXCHANGE_4,
+<span class="lineNum">     447 </span>            :               TSAN_ATOMIC32_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     448 </span>            :   STRONG_CAS (ATOMIC_COMPARE_EXCHANGE_8,
+<span class="lineNum">     449 </span>            :               TSAN_ATOMIC64_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     450 </span>            :   STRONG_CAS (ATOMIC_COMPARE_EXCHANGE_16,
+<span class="lineNum">     451 </span>            :               TSAN_ATOMIC128_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     452 </span>            : 
+<span class="lineNum">     453 </span>            :   BOOL_CAS (SYNC_BOOL_COMPARE_AND_SWAP_1,
+<span class="lineNum">     454 </span>            :             TSAN_ATOMIC8_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     455 </span>            :   BOOL_CAS (SYNC_BOOL_COMPARE_AND_SWAP_2,
+<span class="lineNum">     456 </span>            :             TSAN_ATOMIC16_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     457 </span>            :   BOOL_CAS (SYNC_BOOL_COMPARE_AND_SWAP_4,
+<span class="lineNum">     458 </span>            :             TSAN_ATOMIC32_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     459 </span>            :   BOOL_CAS (SYNC_BOOL_COMPARE_AND_SWAP_8,
+<span class="lineNum">     460 </span>            :             TSAN_ATOMIC64_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     461 </span>            :   BOOL_CAS (SYNC_BOOL_COMPARE_AND_SWAP_16,
+<span class="lineNum">     462 </span>            :             TSAN_ATOMIC128_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span>            :   VAL_CAS (SYNC_VAL_COMPARE_AND_SWAP_1, TSAN_ATOMIC8_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     465 </span>            :   VAL_CAS (SYNC_VAL_COMPARE_AND_SWAP_2, TSAN_ATOMIC16_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     466 </span>            :   VAL_CAS (SYNC_VAL_COMPARE_AND_SWAP_4, TSAN_ATOMIC32_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     467 </span>            :   VAL_CAS (SYNC_VAL_COMPARE_AND_SWAP_8, TSAN_ATOMIC64_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     468 </span>            :   VAL_CAS (SYNC_VAL_COMPARE_AND_SWAP_16,
+<span class="lineNum">     469 </span>            :            TSAN_ATOMIC128_COMPARE_EXCHANGE_STRONG),
+<span class="lineNum">     470 </span>            : 
+<span class="lineNum">     471 </span>            :   LOCK_RELEASE (SYNC_LOCK_RELEASE_1, TSAN_ATOMIC8_STORE),
+<span class="lineNum">     472 </span>            :   LOCK_RELEASE (SYNC_LOCK_RELEASE_2, TSAN_ATOMIC16_STORE),
+<span class="lineNum">     473 </span>            :   LOCK_RELEASE (SYNC_LOCK_RELEASE_4, TSAN_ATOMIC32_STORE),
+<span class="lineNum">     474 </span>            :   LOCK_RELEASE (SYNC_LOCK_RELEASE_8, TSAN_ATOMIC64_STORE),
+<span class="lineNum">     475 </span>            :   LOCK_RELEASE (SYNC_LOCK_RELEASE_16, TSAN_ATOMIC128_STORE),
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span>            :   BOOL_CLEAR (ATOMIC_CLEAR, TSAN_ATOMIC8_STORE),
+<span class="lineNum">     478 </span>            : 
+<span class="lineNum">     479 </span>            :   BOOL_TEST_AND_SET (ATOMIC_TEST_AND_SET, TSAN_ATOMIC8_EXCHANGE)
+<span class="lineNum">     480 </span>            : };
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            : /* Instrument an atomic builtin.  */
+<span class="lineNum">     483 </span>            : 
+<span class="lineNum">     484 </span>            : static void
+<span class="lineNum">     485 </span><span class="lineCov">         46 : instrument_builtin_call (gimple_stmt_iterator *gsi)</span>
+<span class="lineNum">     486 </span>            : {
+<span class="lineNum">     487 </span><span class="lineCov">         46 :   gimple *stmt = gsi_stmt (*gsi), *g;</span>
+<span class="lineNum">     488 </span><span class="lineCov">         46 :   tree callee = gimple_call_fndecl (stmt), last_arg, args[6], t, lhs;</span>
+<span class="lineNum">     489 </span><span class="lineCov">         46 :   enum built_in_function fcode = DECL_FUNCTION_CODE (callee);</span>
+<span class="lineNum">     490 </span><span class="lineCov">         46 :   unsigned int i, num = gimple_call_num_args (stmt), j;</span>
+<span class="lineNum">     491 </span><span class="lineCov">        115 :   for (j = 0; j &lt; 6 &amp;&amp; j &lt; num; j++)</span>
+<span class="lineNum">     492 </span><span class="lineCov">         69 :     args[j] = gimple_call_arg (stmt, j);</span>
+<span class="lineNum">     493 </span><span class="lineCov">       6290 :   for (i = 0; i &lt; ARRAY_SIZE (tsan_atomic_table); i++)</span>
+<span class="lineNum">     494 </span><span class="lineCov">       6262 :     if (fcode != tsan_atomic_table[i].fcode)</span>
+<span class="lineNum">     495 </span>            :       continue;
+<span class="lineNum">     496 </span>            :     else
+<span class="lineNum">     497 </span>            :       {
+<span class="lineNum">     498 </span><span class="lineCov">         18 :         tree decl = builtin_decl_implicit (tsan_atomic_table[i].tsan_fcode);</span>
+<span class="lineNum">     499 </span><span class="lineCov">         18 :         if (decl == NULL_TREE)</span>
+<span class="lineNum">     500 </span><span class="lineCov">         18 :           return;</span>
+<span class="lineNum">     501 </span><span class="lineCov">         18 :         switch (tsan_atomic_table[i].action)</span>
+<span class="lineNum">     502 </span>            :           {
+<span class="lineNum">     503 </span><span class="lineCov">         10 :           case check_last:</span>
+<span class="lineNum">     504 </span><span class="lineCov">         10 :           case fetch_op:</span>
+<span class="lineNum">     505 </span><span class="lineCov">         10 :             last_arg = gimple_call_arg (stmt, num - 1);</span>
+<span class="lineNum">     506 </span><span class="lineCov">         10 :             if (tree_fits_uhwi_p (last_arg)</span>
+<span class="lineNum">     507 </span><span class="lineCov">         10 :                 &amp;&amp; memmodel_base (tree_to_uhwi (last_arg)) &gt;= MEMMODEL_LAST)</span>
+<span class="lineNum">     508 </span>            :               return;
+<span class="lineNum">     509 </span><span class="lineCov">         10 :             gimple_call_set_fndecl (stmt, decl);</span>
+<span class="lineNum">     510 </span><span class="lineCov">         10 :             update_stmt (stmt);</span>
+<span class="lineNum">     511 </span><span class="lineCov">         10 :             maybe_clean_eh_stmt (stmt);</span>
+<span class="lineNum">     512 </span><span class="lineCov">         10 :             if (tsan_atomic_table[i].action == fetch_op)</span>
+<span class="lineNum">     513 </span>            :               {
+<span class="lineNum">     514 </span><span class="lineNoCov">          0 :                 args[1] = gimple_call_arg (stmt, 1);</span>
+<span class="lineNum">     515 </span><span class="lineNoCov">          0 :                 goto adjust_result;</span>
+<span class="lineNum">     516 </span>            :               }
+<span class="lineNum">     517 </span>            :             return;
+<span class="lineNum">     518 </span><span class="lineNoCov">          0 :           case add_seq_cst:</span>
+<span class="lineNum">     519 </span><span class="lineNoCov">          0 :           case add_acquire:</span>
+<span class="lineNum">     520 </span><span class="lineNoCov">          0 :           case fetch_op_seq_cst:</span>
+<span class="lineNum">     521 </span><span class="lineNoCov">          0 :             gcc_assert (num &lt;= 2);</span>
+<span class="lineNum">     522 </span><span class="lineNoCov">          0 :             for (j = 0; j &lt; num; j++)</span>
+<span class="lineNum">     523 </span><span class="lineNoCov">          0 :               args[j] = gimple_call_arg (stmt, j);</span>
+<span class="lineNum">     524 </span><span class="lineNoCov">          0 :             for (; j &lt; 2; j++)</span>
+<span class="lineNum">     525 </span><span class="lineNoCov">          0 :               args[j] = NULL_TREE;</span>
+<span class="lineNum">     526 </span><span class="lineNoCov">          0 :             args[num] = build_int_cst (NULL_TREE,</span>
+<span class="lineNum">     527 </span>            :                                        tsan_atomic_table[i].action
+<span class="lineNum">     528 </span>            :                                        != add_acquire
+<span class="lineNum">     529 </span><span class="lineNoCov">          0 :                                        ? MEMMODEL_SEQ_CST</span>
+<span class="lineNum">     530 </span>            :                                        : MEMMODEL_ACQUIRE);
+<span class="lineNum">     531 </span><span class="lineNoCov">          0 :             update_gimple_call (gsi, decl, num + 1, args[0], args[1], args[2]);</span>
+<span class="lineNum">     532 </span><span class="lineNoCov">          0 :             maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     533 </span><span class="lineNoCov">          0 :             stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     534 </span><span class="lineNoCov">          0 :             if (tsan_atomic_table[i].action == fetch_op_seq_cst)</span>
+<span class="lineNum">     535 </span>            :               {
+<span class="lineNum">     536 </span><span class="lineNoCov">          0 :               adjust_result:</span>
+<span class="lineNum">     537 </span><span class="lineNoCov">          0 :                 lhs = gimple_call_lhs (stmt);</span>
+<span class="lineNum">     538 </span><span class="lineNoCov">          0 :                 if (lhs == NULL_TREE)</span>
+<span class="lineNum">     539 </span>            :                   return;
+<span class="lineNum">     540 </span><span class="lineNoCov">          0 :                 if (!useless_type_conversion_p (TREE_TYPE (lhs),</span>
+<span class="lineNum">     541 </span><span class="lineNoCov">          0 :                                                 TREE_TYPE (args[1])))</span>
+<span class="lineNum">     542 </span>            :                   {
+<span class="lineNum">     543 </span><span class="lineNoCov">          0 :                     tree var = make_ssa_name (TREE_TYPE (lhs));</span>
+<span class="lineNum">     544 </span><span class="lineNoCov">          0 :                     g = gimple_build_assign (var, NOP_EXPR, args[1]);</span>
+<span class="lineNum">     545 </span><span class="lineNoCov">          0 :                     gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     546 </span><span class="lineNoCov">          0 :                     args[1] = var;</span>
+<span class="lineNum">     547 </span>            :                   }
+<span class="lineNum">     548 </span><span class="lineNoCov">          0 :                 gimple_call_set_lhs (stmt, make_ssa_name (TREE_TYPE (lhs)));</span>
+<span class="lineNum">     549 </span>            :                 /* BIT_NOT_EXPR stands for NAND.  */
+<span class="lineNum">     550 </span><span class="lineNoCov">          0 :                 if (tsan_atomic_table[i].code == BIT_NOT_EXPR)</span>
+<span class="lineNum">     551 </span>            :                   {
+<span class="lineNum">     552 </span><span class="lineNoCov">          0 :                     tree var = make_ssa_name (TREE_TYPE (lhs));</span>
+<span class="lineNum">     553 </span><span class="lineNoCov">          0 :                     g = gimple_build_assign (var, BIT_AND_EXPR,</span>
+<span class="lineNum">     554 </span>            :                                              gimple_call_lhs (stmt), args[1]);
+<span class="lineNum">     555 </span><span class="lineNoCov">          0 :                     gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     556 </span><span class="lineNoCov">          0 :                     g = gimple_build_assign (lhs, BIT_NOT_EXPR, var);</span>
+<span class="lineNum">     557 </span>            :                   }
+<span class="lineNum">     558 </span>            :                 else
+<span class="lineNum">     559 </span><span class="lineNoCov">          0 :                   g = gimple_build_assign (lhs, tsan_atomic_table[i].code,</span>
+<span class="lineNum">     560 </span>            :                                            gimple_call_lhs (stmt), args[1]);
+<span class="lineNum">     561 </span><span class="lineNoCov">          0 :                 update_stmt (stmt);</span>
+<span class="lineNum">     562 </span><span class="lineNoCov">          0 :                 gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     563 </span>            :               }
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :             return;</span>
+<span class="lineNum">     565 </span><span class="lineNoCov">          0 :           case weak_cas:</span>
+<span class="lineNum">     566 </span><span class="lineNoCov">          0 :             if (!integer_nonzerop (gimple_call_arg (stmt, 3)))</span>
+<span class="lineNum">     567 </span>            :               continue;
+<span class="lineNum">     568 </span>            :             /* FALLTHRU */
+<span class="lineNum">     569 </span><span class="lineNoCov">          0 :           case strong_cas:</span>
+<span class="lineNum">     570 </span><span class="lineNoCov">          0 :             gcc_assert (num == 6);</span>
+<span class="lineNum">     571 </span><span class="lineNoCov">          0 :             for (j = 0; j &lt; 6; j++)</span>
+<span class="lineNum">     572 </span><span class="lineNoCov">          0 :               args[j] = gimple_call_arg (stmt, j);</span>
+<span class="lineNum">     573 </span><span class="lineNoCov">          0 :             if (tree_fits_uhwi_p (args[4])</span>
+<span class="lineNum">     574 </span><span class="lineNoCov">          0 :                 &amp;&amp; memmodel_base (tree_to_uhwi (args[4])) &gt;= MEMMODEL_LAST)</span>
+<span class="lineNum">     575 </span>            :               return;
+<span class="lineNum">     576 </span><span class="lineNoCov">          0 :             if (tree_fits_uhwi_p (args[5])</span>
+<span class="lineNum">     577 </span><span class="lineNoCov">          0 :                 &amp;&amp; memmodel_base (tree_to_uhwi (args[5])) &gt;= MEMMODEL_LAST)</span>
+<span class="lineNum">     578 </span>            :               return;
+<span class="lineNum">     579 </span><span class="lineNoCov">          0 :             update_gimple_call (gsi, decl, 5, args[0], args[1], args[2],</span>
+<span class="lineNum">     580 </span>            :                                 args[4], args[5]);
+<span class="lineNum">     581 </span><span class="lineNoCov">          0 :             maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     582 </span><span class="lineNoCov">          0 :             return;</span>
+<span class="lineNum">     583 </span><span class="lineNoCov">          0 :           case bool_cas:</span>
+<span class="lineNum">     584 </span><span class="lineNoCov">          0 :           case val_cas:</span>
+<span class="lineNum">     585 </span><span class="lineNoCov">          0 :             gcc_assert (num == 3);</span>
+<span class="lineNum">     586 </span><span class="lineNoCov">          0 :             for (j = 0; j &lt; 3; j++)</span>
+<span class="lineNum">     587 </span><span class="lineNoCov">          0 :               args[j] = gimple_call_arg (stmt, j);</span>
+<span class="lineNum">     588 </span><span class="lineNoCov">          0 :             t = TYPE_ARG_TYPES (TREE_TYPE (decl));</span>
+<span class="lineNum">     589 </span><span class="lineNoCov">          0 :             t = TREE_VALUE (TREE_CHAIN (TREE_CHAIN (t)));</span>
+<span class="lineNum">     590 </span><span class="lineNoCov">          0 :             t = create_tmp_var (t);</span>
+<span class="lineNum">     591 </span><span class="lineNoCov">          0 :             mark_addressable (t);</span>
+<span class="lineNum">     592 </span><span class="lineNoCov">          0 :             if (!useless_type_conversion_p (TREE_TYPE (t),</span>
+<span class="lineNum">     593 </span><span class="lineNoCov">          0 :                                             TREE_TYPE (args[1])))</span>
+<span class="lineNum">     594 </span>            :               {
+<span class="lineNum">     595 </span><span class="lineNoCov">          0 :                 g = gimple_build_assign (make_ssa_name (TREE_TYPE (t)),</span>
+<span class="lineNum">     596 </span>            :                                          NOP_EXPR, args[1]);
+<span class="lineNum">     597 </span><span class="lineNoCov">          0 :                 gsi_insert_before (gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">     598 </span><span class="lineNoCov">          0 :                 args[1] = gimple_assign_lhs (g);</span>
+<span class="lineNum">     599 </span>            :               }
+<span class="lineNum">     600 </span><span class="lineNoCov">          0 :             g = gimple_build_assign (t, args[1]);</span>
+<span class="lineNum">     601 </span><span class="lineNoCov">          0 :             gsi_insert_before (gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">     602 </span><span class="lineNoCov">          0 :             lhs = gimple_call_lhs (stmt);</span>
+<span class="lineNum">     603 </span><span class="lineNoCov">          0 :             update_gimple_call (gsi, decl, 5, args[0],</span>
+<span class="lineNum">     604 </span>            :                                 build_fold_addr_expr (t), args[2],
+<span class="lineNum">     605 </span>            :                                 build_int_cst (NULL_TREE,
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :                                                MEMMODEL_SEQ_CST),</span>
+<span class="lineNum">     607 </span>            :                                 build_int_cst (NULL_TREE,
+<span class="lineNum">     608 </span><span class="lineNoCov">          0 :                                                MEMMODEL_SEQ_CST));</span>
+<span class="lineNum">     609 </span><span class="lineNoCov">          0 :             maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     610 </span><span class="lineNoCov">          0 :             if (tsan_atomic_table[i].action == val_cas &amp;&amp; lhs)</span>
+<span class="lineNum">     611 </span>            :               {
+<span class="lineNum">     612 </span><span class="lineNoCov">          0 :                 tree cond;</span>
+<span class="lineNum">     613 </span><span class="lineNoCov">          0 :                 stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     614 </span><span class="lineNoCov">          0 :                 g = gimple_build_assign (make_ssa_name (TREE_TYPE (t)), t);</span>
+<span class="lineNum">     615 </span><span class="lineNoCov">          0 :                 gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     616 </span><span class="lineNoCov">          0 :                 t = make_ssa_name (TREE_TYPE (TREE_TYPE (decl)), stmt);</span>
+<span class="lineNum">     617 </span><span class="lineNoCov">          0 :                 cond = build2 (NE_EXPR, boolean_type_node, t,</span>
+<span class="lineNum">     618 </span><span class="lineNoCov">          0 :                                build_int_cst (TREE_TYPE (t), 0));</span>
+<span class="lineNum">     619 </span><span class="lineNoCov">          0 :                 g = gimple_build_assign (lhs, COND_EXPR, cond, args[1],</span>
+<span class="lineNum">     620 </span>            :                                          gimple_assign_lhs (g));
+<span class="lineNum">     621 </span><span class="lineNoCov">          0 :                 gimple_call_set_lhs (stmt, t);</span>
+<span class="lineNum">     622 </span><span class="lineNoCov">          0 :                 update_stmt (stmt);</span>
+<span class="lineNum">     623 </span><span class="lineNoCov">          0 :                 gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     624 </span>            :               }
+<span class="lineNum">     625 </span><span class="lineNoCov">          0 :             return;</span>
+<span class="lineNum">     626 </span><span class="lineNoCov">          0 :           case lock_release:</span>
+<span class="lineNum">     627 </span><span class="lineNoCov">          0 :             gcc_assert (num == 1);</span>
+<span class="lineNum">     628 </span><span class="lineNoCov">          0 :             t = TYPE_ARG_TYPES (TREE_TYPE (decl));</span>
+<span class="lineNum">     629 </span><span class="lineNoCov">          0 :             t = TREE_VALUE (TREE_CHAIN (t));</span>
+<span class="lineNum">     630 </span><span class="lineNoCov">          0 :             update_gimple_call (gsi, decl, 3, gimple_call_arg (stmt, 0),</span>
+<span class="lineNum">     631 </span><span class="lineNoCov">          0 :                                 build_int_cst (t, 0),</span>
+<span class="lineNum">     632 </span>            :                                 build_int_cst (NULL_TREE,
+<span class="lineNum">     633 </span><span class="lineNoCov">          0 :                                                MEMMODEL_RELEASE));</span>
+<span class="lineNum">     634 </span><span class="lineNoCov">          0 :             maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     635 </span><span class="lineNoCov">          0 :             return;</span>
+<span class="lineNum">     636 </span><span class="lineCov">          8 :           case bool_clear:</span>
+<span class="lineNum">     637 </span><span class="lineCov">          8 :           case bool_test_and_set:</span>
+<span class="lineNum">     638 </span><span class="lineCov">          8 :             if (BOOL_TYPE_SIZE != 8)</span>
+<span class="lineNum">     639 </span>            :               {
+<span class="lineNum">     640 </span>            :                 decl = NULL_TREE;
+<span class="lineNum">     641 </span>            :                 for (j = 1; j &lt; 5; j++)
+<span class="lineNum">     642 </span>            :                   if (BOOL_TYPE_SIZE == (8 &lt;&lt; j))
+<span class="lineNum">     643 </span>            :                     {
+<span class="lineNum">     644 </span>            :                       enum built_in_function tsan_fcode
+<span class="lineNum">     645 </span>            :                         = (enum built_in_function)
+<span class="lineNum">     646 </span>            :                           (tsan_atomic_table[i].tsan_fcode + j);
+<span class="lineNum">     647 </span>            :                       decl = builtin_decl_implicit (tsan_fcode);
+<span class="lineNum">     648 </span>            :                       break;
+<span class="lineNum">     649 </span>            :                     }
+<span class="lineNum">     650 </span>            :                 if (decl == NULL_TREE)
+<span class="lineNum">     651 </span>            :                   return;
+<span class="lineNum">     652 </span>            :               }
+<span class="lineNum">     653 </span><span class="lineCov">          8 :             last_arg = gimple_call_arg (stmt, num - 1);</span>
+<span class="lineNum">     654 </span><span class="lineCov">          8 :             if (tree_fits_uhwi_p (last_arg)</span>
+<span class="lineNum">     655 </span><span class="lineCov">          8 :                 &amp;&amp; memmodel_base (tree_to_uhwi (last_arg)) &gt;= MEMMODEL_LAST)</span>
+<span class="lineNum">     656 </span>            :               return;
+<span class="lineNum">     657 </span><span class="lineCov">          8 :             t = TYPE_ARG_TYPES (TREE_TYPE (decl));</span>
+<span class="lineNum">     658 </span><span class="lineCov">          8 :             t = TREE_VALUE (TREE_CHAIN (t));</span>
+<span class="lineNum">     659 </span><span class="lineCov">          8 :             if (tsan_atomic_table[i].action == bool_clear)</span>
+<span class="lineNum">     660 </span>            :               {
+<span class="lineNum">     661 </span><span class="lineCov">          4 :                 update_gimple_call (gsi, decl, 3, gimple_call_arg (stmt, 0),</span>
+<span class="lineNum">     662 </span><span class="lineCov">          4 :                                     build_int_cst (t, 0), last_arg);</span>
+<span class="lineNum">     663 </span><span class="lineCov">          4 :                 maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     664 </span><span class="lineCov">          4 :                 return;</span>
+<span class="lineNum">     665 </span>            :               }
+<span class="lineNum">     666 </span><span class="lineCov">          8 :             t = build_int_cst (t, targetm.atomic_test_and_set_trueval);</span>
+<span class="lineNum">     667 </span><span class="lineCov">          4 :             update_gimple_call (gsi, decl, 3, gimple_call_arg (stmt, 0),</span>
+<span class="lineNum">     668 </span>            :                                 t, last_arg);
+<span class="lineNum">     669 </span><span class="lineCov">          8 :             maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));</span>
+<span class="lineNum">     670 </span><span class="lineCov">          4 :             stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     671 </span><span class="lineCov">          4 :             lhs = gimple_call_lhs (stmt);</span>
+<span class="lineNum">     672 </span><span class="lineCov">          4 :             if (lhs == NULL_TREE)</span>
+<span class="lineNum">     673 </span>            :               return;
+<span class="lineNum">     674 </span><span class="lineCov">          4 :             if (targetm.atomic_test_and_set_trueval != 1</span>
+<span class="lineNum">     675 </span><span class="lineCov">          8 :                 || !useless_type_conversion_p (TREE_TYPE (lhs),</span>
+<span class="lineNum">     676 </span><span class="lineCov">          4 :                                                TREE_TYPE (t)))</span>
+<span class="lineNum">     677 </span>            :               {
+<span class="lineNum">     678 </span><span class="lineCov">          4 :                 tree new_lhs = make_ssa_name (TREE_TYPE (t));</span>
+<span class="lineNum">     679 </span><span class="lineCov">          4 :                 gimple_call_set_lhs (stmt, new_lhs);</span>
+<span class="lineNum">     680 </span><span class="lineCov">          4 :                 if (targetm.atomic_test_and_set_trueval != 1)</span>
+<span class="lineNum">     681 </span><span class="lineNoCov">          0 :                   g = gimple_build_assign (lhs, NE_EXPR, new_lhs,</span>
+<span class="lineNum">     682 </span><span class="lineNoCov">          0 :                                            build_int_cst (TREE_TYPE (t), 0));</span>
+<span class="lineNum">     683 </span>            :                 else
+<span class="lineNum">     684 </span><span class="lineCov">          4 :                   g = gimple_build_assign (lhs, NOP_EXPR, new_lhs);</span>
+<span class="lineNum">     685 </span><span class="lineCov">          4 :                 gsi_insert_after (gsi, g, GSI_NEW_STMT);</span>
+<span class="lineNum">     686 </span><span class="lineCov">          4 :                 update_stmt (stmt);</span>
+<span class="lineNum">     687 </span>            :               }
+<span class="lineNum">     688 </span><span class="lineCov">          4 :             return;</span>
+<span class="lineNum">     689 </span>            :           default:
+<span class="lineNum">     690 </span>            :             continue;
+<span class="lineNum">     691 </span>            :           }
+<span class="lineNum">     692 </span>            :       }
+<span class="lineNum">     693 </span>            : }
+<span class="lineNum">     694 </span>            : 
+<span class="lineNum">     695 </span>            : /* Instruments the gimple pointed to by GSI. Return
+<span class="lineNum">     696 </span>            :    true if func entry/exit should be instrumented.  */
+<span class="lineNum">     697 </span>            : 
+<span class="lineNum">     698 </span>            : static bool
+<span class="lineNum">     699 </span><span class="lineCov">       5497 : instrument_gimple (gimple_stmt_iterator *gsi)</span>
+<span class="lineNum">     700 </span>            : {
+<span class="lineNum">     701 </span><span class="lineCov">       5497 :   gimple *stmt;</span>
+<span class="lineNum">     702 </span><span class="lineCov">       5497 :   tree rhs, lhs;</span>
+<span class="lineNum">     703 </span><span class="lineCov">       5497 :   bool instrumented = false;</span>
+<span class="lineNum">     704 </span>            : 
+<span class="lineNum">     705 </span><span class="lineCov">       5497 :   stmt = gsi_stmt (*gsi);</span>
+<span class="lineNum">     706 </span><span class="lineCov">       5497 :   if (is_gimple_call (stmt)</span>
+<span class="lineNum">     707 </span><span class="lineCov">       5497 :       &amp;&amp; (gimple_call_fndecl (stmt)</span>
+<span class="lineNum">     708 </span><span class="lineCov">       2598 :           != builtin_decl_implicit (BUILT_IN_TSAN_INIT)))</span>
+<span class="lineNum">     709 </span>            :     {
+<span class="lineNum">     710 </span>            :       /* All functions with function call will have exit instrumented,
+<span class="lineNum">     711 </span>            :          therefore no function calls other than __tsan_func_exit
+<span class="lineNum">     712 </span>            :          shall appear in the functions.  */
+<span class="lineNum">     713 </span><span class="lineCov">       1144 :       gimple_call_set_tail (as_a &lt;gcall *&gt; (stmt), false);</span>
+<span class="lineNum">     714 </span><span class="lineCov">       1144 :       if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))</span>
+<span class="lineNum">     715 </span><span class="lineCov">         46 :         instrument_builtin_call (gsi);</span>
+<span class="lineNum">     716 </span><span class="lineCov">       1144 :       return true;</span>
+<span class="lineNum">     717 </span>            :     }
+<span class="lineNum">     718 </span><span class="lineCov">       4353 :   else if (is_gimple_assign (stmt)</span>
+<span class="lineNum">     719 </span><span class="lineCov">       4353 :            &amp;&amp; !gimple_clobber_p (stmt))</span>
+<span class="lineNum">     720 </span>            :     {
+<span class="lineNum">     721 </span><span class="lineCov">       1230 :       if (gimple_store_p (stmt))</span>
+<span class="lineNum">     722 </span>            :         {
+<span class="lineNum">     723 </span><span class="lineCov">        255 :           lhs = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     724 </span><span class="lineCov">        255 :           instrumented = instrument_expr (*gsi, lhs, true);</span>
+<span class="lineNum">     725 </span>            :         }
+<span class="lineNum">     726 </span><span class="lineCov">       1230 :       if (gimple_assign_load_p (stmt))</span>
+<span class="lineNum">     727 </span>            :         {
+<span class="lineNum">     728 </span><span class="lineCov">        459 :           rhs = gimple_assign_rhs1 (stmt);</span>
+<span class="lineNum">     729 </span><span class="lineCov">        459 :           instrumented = instrument_expr (*gsi, rhs, false);</span>
+<span class="lineNum">     730 </span>            :         }
+<span class="lineNum">     731 </span>            :     }
+<span class="lineNum">     732 </span>            :   return instrumented;
+<span class="lineNum">     733 </span>            : }
+<span class="lineNum">     734 </span>            : 
+<span class="lineNum">     735 </span>            : /* Replace TSAN_FUNC_EXIT internal call with function exit tsan builtin.  */
+<span class="lineNum">     736 </span>            : 
+<span class="lineNum">     737 </span>            : static void
+<span class="lineNum">     738 </span><span class="lineCov">        510 : replace_func_exit (gimple *stmt)</span>
+<span class="lineNum">     739 </span>            : {
+<span class="lineNum">     740 </span><span class="lineCov">        510 :   tree builtin_decl = builtin_decl_implicit (BUILT_IN_TSAN_FUNC_EXIT);</span>
+<span class="lineNum">     741 </span><span class="lineCov">        510 :   gimple *g = gimple_build_call (builtin_decl, 0);</span>
+<span class="lineNum">     742 </span><span class="lineCov">        510 :   gimple_set_location (g, cfun-&gt;function_end_locus);</span>
+<span class="lineNum">     743 </span><span class="lineCov">        510 :   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     744 </span><span class="lineCov">        510 :   gsi_replace (&amp;gsi, g, true);</span>
+<span class="lineNum">     745 </span><span class="lineCov">        510 : }</span>
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span>            : /* Instrument function exit.  Used when TSAN_FUNC_EXIT does not exist.  */
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span>            : static void
+<span class="lineNum">     750 </span><span class="lineCov">          8 : instrument_func_exit (void)</span>
+<span class="lineNum">     751 </span>            : {
+<span class="lineNum">     752 </span><span class="lineCov">          8 :   location_t loc;</span>
+<span class="lineNum">     753 </span><span class="lineCov">          8 :   basic_block exit_bb;</span>
+<span class="lineNum">     754 </span><span class="lineCov">          8 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     755 </span><span class="lineCov">          8 :   gimple *stmt, *g;</span>
+<span class="lineNum">     756 </span><span class="lineCov">          8 :   tree builtin_decl;</span>
+<span class="lineNum">     757 </span><span class="lineCov">          8 :   edge e;</span>
+<span class="lineNum">     758 </span><span class="lineCov">          8 :   edge_iterator ei;</span>
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span>            :   /* Find all function exits.  */
+<span class="lineNum">     761 </span><span class="lineCov">          8 :   exit_bb = EXIT_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">     762 </span><span class="lineCov">         24 :   FOR_EACH_EDGE (e, ei, exit_bb-&gt;preds)</span>
+<span class="lineNum">     763 </span>            :     {
+<span class="lineNum">     764 </span><span class="lineCov">          8 :       gsi = gsi_last_bb (e-&gt;src);</span>
+<span class="lineNum">     765 </span><span class="lineCov">          8 :       stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     766 </span><span class="lineCov">         16 :       gcc_assert (gimple_code (stmt) == GIMPLE_RETURN</span>
+<span class="lineNum">     767 </span>            :                   || gimple_call_builtin_p (stmt, BUILT_IN_RETURN));
+<span class="lineNum">     768 </span><span class="lineCov">          8 :       loc = gimple_location (stmt);</span>
+<span class="lineNum">     769 </span><span class="lineCov">          8 :       builtin_decl = builtin_decl_implicit (BUILT_IN_TSAN_FUNC_EXIT);</span>
+<span class="lineNum">     770 </span><span class="lineCov">          8 :       g = gimple_build_call (builtin_decl, 0);</span>
+<span class="lineNum">     771 </span><span class="lineCov">          8 :       gimple_set_location (g, loc);</span>
+<span class="lineNum">     772 </span><span class="lineCov">          8 :       gsi_insert_before (&amp;gsi, g, GSI_SAME_STMT);</span>
+<span class="lineNum">     773 </span>            :     }
+<span class="lineNum">     774 </span><span class="lineCov">          8 : }</span>
+<span class="lineNum">     775 </span>            : 
+<span class="lineNum">     776 </span>            : /* Instruments all interesting memory accesses in the current function.
+<span class="lineNum">     777 </span>            :    Return true if func entry/exit should be instrumented.  */
+<span class="lineNum">     778 </span>            : 
+<span class="lineNum">     779 </span>            : static bool
+<span class="lineNum">     780 </span><span class="lineCov">        633 : instrument_memory_accesses (bool *cfg_changed)</span>
+<span class="lineNum">     781 </span>            : {
+<span class="lineNum">     782 </span><span class="lineCov">        633 :   basic_block bb;</span>
+<span class="lineNum">     783 </span><span class="lineCov">        633 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     784 </span><span class="lineCov">        633 :   bool fentry_exit_instrument = false;</span>
+<span class="lineNum">     785 </span><span class="lineCov">        633 :   bool func_exit_seen = false;</span>
+<span class="lineNum">     786 </span><span class="lineCov">        633 :   auto_vec&lt;gimple *&gt; tsan_func_exits;</span>
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span><span class="lineCov">       2180 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     789 </span>            :     {
+<span class="lineNum">     790 </span><span class="lineCov">       9328 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     791 </span>            :         {
+<span class="lineNum">     792 </span><span class="lineCov">       6234 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     793 </span><span class="lineCov">       6234 :           if (gimple_call_internal_p (stmt, IFN_TSAN_FUNC_EXIT))</span>
+<span class="lineNum">     794 </span>            :             {
+<span class="lineNum">     795 </span><span class="lineCov">        737 :               if (fentry_exit_instrument)</span>
+<span class="lineNum">     796 </span><span class="lineCov">        508 :                 replace_func_exit (stmt);</span>
+<span class="lineNum">     797 </span>            :               else
+<span class="lineNum">     798 </span><span class="lineCov">        229 :                 tsan_func_exits.safe_push (stmt);</span>
+<span class="lineNum">     799 </span>            :               func_exit_seen = true;
+<span class="lineNum">     800 </span>            :             }
+<span class="lineNum">     801 </span>            :           else
+<span class="lineNum">     802 </span><span class="lineCov">       5497 :             fentry_exit_instrument |= instrument_gimple (&amp;gsi);</span>
+<span class="lineNum">     803 </span>            :         }
+<span class="lineNum">     804 </span><span class="lineCov">       1547 :       if (gimple_purge_dead_eh_edges (bb))</span>
+<span class="lineNum">     805 </span><span class="lineCov">          2 :         *cfg_changed = true;</span>
+<span class="lineNum">     806 </span>            :     }
+<span class="lineNum">     807 </span>            :   unsigned int i;
+<span class="lineNum">     808 </span>            :   gimple *stmt;
+<span class="lineNum">     809 </span><span class="lineCov">        862 :   FOR_EACH_VEC_ELT (tsan_func_exits, i, stmt)</span>
+<span class="lineNum">     810 </span><span class="lineCov">        229 :     if (fentry_exit_instrument)</span>
+<span class="lineNum">     811 </span><span class="lineCov">          2 :       replace_func_exit (stmt);</span>
+<span class="lineNum">     812 </span>            :     else
+<span class="lineNum">     813 </span>            :       {
+<span class="lineNum">     814 </span><span class="lineCov">        227 :         gsi = gsi_for_stmt (stmt);</span>
+<span class="lineNum">     815 </span><span class="lineCov">        227 :         gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     816 </span>            :       }
+<span class="lineNum">     817 </span><span class="lineCov">        633 :   if (fentry_exit_instrument &amp;&amp; !func_exit_seen)</span>
+<span class="lineNum">     818 </span><span class="lineCov">          8 :     instrument_func_exit ();</span>
+<span class="lineNum">     819 </span><span class="lineCov">        633 :   return fentry_exit_instrument;</span>
+<span class="lineNum">     820 </span>            : }
+<span class="lineNum">     821 </span>            : 
+<span class="lineNum">     822 </span>            : /* Instruments function entry.  */
+<span class="lineNum">     823 </span>            : 
+<span class="lineNum">     824 </span>            : static void
+<span class="lineNum">     825 </span><span class="lineCov">        408 : instrument_func_entry (void)</span>
+<span class="lineNum">     826 </span>            : {
+<span class="lineNum">     827 </span><span class="lineCov">        408 :   tree ret_addr, builtin_decl;</span>
+<span class="lineNum">     828 </span><span class="lineCov">        408 :   gimple *g;</span>
+<span class="lineNum">     829 </span><span class="lineCov">        408 :   gimple_seq seq = NULL;</span>
+<span class="lineNum">     830 </span>            : 
+<span class="lineNum">     831 </span><span class="lineCov">        408 :   builtin_decl = builtin_decl_implicit (BUILT_IN_RETURN_ADDRESS);</span>
+<span class="lineNum">     832 </span><span class="lineCov">        408 :   g = gimple_build_call (builtin_decl, 1, integer_zero_node);</span>
+<span class="lineNum">     833 </span><span class="lineCov">        408 :   ret_addr = make_ssa_name (ptr_type_node);</span>
+<span class="lineNum">     834 </span><span class="lineCov">        408 :   gimple_call_set_lhs (g, ret_addr);</span>
+<span class="lineNum">     835 </span><span class="lineCov">        408 :   gimple_set_location (g, cfun-&gt;function_start_locus);</span>
+<span class="lineNum">     836 </span><span class="lineCov">        408 :   gimple_seq_add_stmt_without_update (&amp;seq, g);</span>
+<span class="lineNum">     837 </span>            : 
+<span class="lineNum">     838 </span><span class="lineCov">        408 :   builtin_decl = builtin_decl_implicit (BUILT_IN_TSAN_FUNC_ENTRY);</span>
+<span class="lineNum">     839 </span><span class="lineCov">        408 :   g = gimple_build_call (builtin_decl, 1, ret_addr);</span>
+<span class="lineNum">     840 </span><span class="lineCov">        408 :   gimple_set_location (g, cfun-&gt;function_start_locus);</span>
+<span class="lineNum">     841 </span><span class="lineCov">        408 :   gimple_seq_add_stmt_without_update (&amp;seq, g);</span>
+<span class="lineNum">     842 </span>            : 
+<span class="lineNum">     843 </span><span class="lineCov">        408 :   edge e = single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     844 </span><span class="lineCov">        408 :   gsi_insert_seq_on_edge_immediate (e, seq);</span>
+<span class="lineNum">     845 </span><span class="lineCov">        408 : }</span>
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span>            : /* ThreadSanitizer instrumentation pass.  */
+<a name="848"><span class="lineNum">     848 </span>            : </a>
+<span class="lineNum">     849 </span>            : static unsigned
+<span class="lineNum">     850 </span><span class="lineCov">        633 : tsan_pass (void)</span>
+<span class="lineNum">     851 </span>            : {
+<span class="lineNum">     852 </span><span class="lineCov">        633 :   initialize_sanitizer_builtins ();</span>
+<span class="lineNum">     853 </span><span class="lineCov">        633 :   bool cfg_changed = false;</span>
+<span class="lineNum">     854 </span><span class="lineCov">        633 :   if (instrument_memory_accesses (&amp;cfg_changed))</span>
+<span class="lineNum">     855 </span><span class="lineCov">        408 :     instrument_func_entry ();</span>
+<span class="lineNum">     856 </span><span class="lineCov">        633 :   return cfg_changed ? TODO_cleanup_cfg : 0;</span>
+<span class="lineNum">     857 </span>            : }
+<span class="lineNum">     858 </span>            : 
+<span class="lineNum">     859 </span>            : /* Inserts __tsan_init () into the list of CTORs.  */
+<a name="860"><span class="lineNum">     860 </span>            : </a>
+<span class="lineNum">     861 </span>            : void
+<span class="lineNum">     862 </span><span class="lineCov">        155 : tsan_finish_file (void)</span>
+<span class="lineNum">     863 </span>            : {
+<span class="lineNum">     864 </span><span class="lineCov">        155 :   tree ctor_statements = NULL_TREE;</span>
+<span class="lineNum">     865 </span>            : 
+<span class="lineNum">     866 </span><span class="lineCov">        155 :   initialize_sanitizer_builtins ();</span>
+<span class="lineNum">     867 </span><span class="lineCov">        155 :   tree init_decl = builtin_decl_implicit (BUILT_IN_TSAN_INIT);</span>
+<span class="lineNum">     868 </span><span class="lineCov">        155 :   append_to_statement_list (build_call_expr (init_decl, 0),</span>
+<span class="lineNum">     869 </span>            :                             &amp;ctor_statements);
+<span class="lineNum">     870 </span><span class="lineCov">        155 :   cgraph_build_static_cdtor ('I', ctor_statements,</span>
+<span class="lineNum">     871 </span>            :                              MAX_RESERVED_INIT_PRIORITY - 1);
+<span class="lineNum">     872 </span><span class="lineCov">        155 : }</span>
+<span class="lineNum">     873 </span>            : 
+<span class="lineNum">     874 </span>            : /* The pass descriptor.  */
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span>            : namespace {
+<span class="lineNum">     877 </span>            : 
+<span class="lineNum">     878 </span>            : const pass_data pass_data_tsan =
+<span class="lineNum">     879 </span>            : {
+<span class="lineNum">     880 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     881 </span>            :   &quot;tsan&quot;, /* name */
+<span class="lineNum">     882 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     883 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     884 </span>            :   ( PROP_ssa | PROP_cfg ), /* properties_required */
+<span class="lineNum">     885 </span>            :   0, /* properties_provided */
+<span class="lineNum">     886 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     887 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     888 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     889 </span>            : };
+<span class="lineNum">     890 </span>            : 
+<span class="lineNum">     891 </span>            : class pass_tsan : public gimple_opt_pass
+<span class="lineNum">     892 </span>            : {
+<span class="lineNum">     893 </span>            : public:
+<span class="lineNum">     894 </span>            :   pass_tsan (gcc::context *ctxt)
+<span class="lineNum">     895 </span><span class="lineCov">     681248 :     : gimple_opt_pass (pass_data_tsan, ctxt)</span>
+<span class="lineNum">     896 </span>            :   {}
+<a name="897"><span class="lineNum">     897 </span>            : </a>
+<a name="898"><span class="lineNum">     898 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     899 </span><span class="lineCov">     170312 :   opt_pass * clone () { return new pass_tsan (m_ctxt); }</span>
+<span class="lineNum">     900 </span><span class="lineCov">     622600 :   virtual bool gate (function *)</span>
+<span class="lineNum">     901 </span>            : {
+<span class="lineNum">     902 </span><span class="lineCov">     622600 :   return sanitize_flags_p (SANITIZE_THREAD);</span>
+<a name="903"><span class="lineNum">     903 </span>            : }</a>
+<span class="lineNum">     904 </span>            : 
+<span class="lineNum">     905 </span><span class="lineCov">        267 :   virtual unsigned int execute (function *) { return tsan_pass (); }</span>
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span>            : }; // class pass_tsan
+<span class="lineNum">     908 </span>            : 
+<span class="lineNum">     909 </span>            : } // anon namespace
+<a name="910"><span class="lineNum">     910 </span>            : </a>
+<span class="lineNum">     911 </span>            : gimple_opt_pass *
+<span class="lineNum">     912 </span><span class="lineCov">     170312 : make_pass_tsan (gcc::context *ctxt)</span>
+<span class="lineNum">     913 </span>            : {
+<span class="lineNum">     914 </span><span class="lineCov">     170312 :   return new pass_tsan (ctxt);</span>
+<span class="lineNum">     915 </span>            : }
+<span class="lineNum">     916 </span>            : 
+<span class="lineNum">     917 </span>            : namespace {
+<span class="lineNum">     918 </span>            : 
+<span class="lineNum">     919 </span>            : const pass_data pass_data_tsan_O0 =
+<span class="lineNum">     920 </span>            : {
+<span class="lineNum">     921 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     922 </span>            :   &quot;tsan0&quot;, /* name */
+<span class="lineNum">     923 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     924 </span>            :   TV_NONE, /* tv_id */
+<span class="lineNum">     925 </span>            :   ( PROP_ssa | PROP_cfg ), /* properties_required */
+<span class="lineNum">     926 </span>            :   0, /* properties_provided */
+<span class="lineNum">     927 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     928 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     929 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     930 </span>            : };
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span>            : class pass_tsan_O0 : public gimple_opt_pass
+<span class="lineNum">     933 </span>            : {
+<span class="lineNum">     934 </span>            : public:
+<span class="lineNum">     935 </span>            :   pass_tsan_O0 (gcc::context *ctxt)
+<span class="lineNum">     936 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_tsan_O0, ctxt)</span>
+<span class="lineNum">     937 </span>            :   {}
+<a name="938"><span class="lineNum">     938 </span>            : </a>
+<span class="lineNum">     939 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     940 </span><span class="lineCov">     832898 :   virtual bool gate (function *)</span>
+<span class="lineNum">     941 </span>            :     {
+<span class="lineNum">     942 </span><span class="lineCov">     832898 :       return (sanitize_flags_p (SANITIZE_THREAD) &amp;&amp; !optimize);</span>
+<a name="943"><span class="lineNum">     943 </span>            :     }</a>
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span><span class="lineCov">        366 :   virtual unsigned int execute (function *) { return tsan_pass (); }</span>
+<span class="lineNum">     946 </span>            : 
+<span class="lineNum">     947 </span>            : }; // class pass_tsan_O0
+<span class="lineNum">     948 </span>            : 
+<span class="lineNum">     949 </span>            : } // anon namespace
+<a name="950"><span class="lineNum">     950 </span>            : </a>
+<span class="lineNum">     951 </span>            : gimple_opt_pass *
+<span class="lineNum">     952 </span><span class="lineCov">     170312 : make_pass_tsan_O0 (gcc::context *ctxt)</span>
+<span class="lineNum">     953 </span>            : {
+<span class="lineNum">     954 </span><span class="lineCov">     170312 :   return new pass_tsan_O0 (ctxt);</span>
+<span class="lineNum">     955 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

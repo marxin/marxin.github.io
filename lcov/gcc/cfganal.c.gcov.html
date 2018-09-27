@@ -1,0 +1,1761 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/cfganal.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - cfganal.c<span style="font-size: 80%;"> (source / <a href="cfganal.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">570</td>
+            <td class="headerCovTableEntry">667</td>
+            <td class="headerCovTableEntryMed">85.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntry">42</td>
+            <td class="headerCovTableEntryMed">88.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Control flow graph analysis code for GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1987-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* This file contains various simple utilities to analyze the CFG.  */
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            : namespace {
+<span class="lineNum">      32 </span>            : /* Store the data structures necessary for depth-first search.  */
+<span class="lineNum">      33 </span>            : class depth_first_search
+<span class="lineNum">      34 </span>            :   {
+<span class="lineNum">      35 </span>            : public:
+<span class="lineNum">      36 </span>            :     depth_first_search ();
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            :     basic_block execute (basic_block);
+<span class="lineNum">      39 </span>            :     void add_bb (basic_block);
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : private:
+<span class="lineNum">      42 </span>            :   /* stack for backtracking during the algorithm */
+<span class="lineNum">      43 </span>            :   auto_vec&lt;basic_block, 20&gt; m_stack;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :   /* record of basic blocks already seen by depth-first search */
+<span class="lineNum">      46 </span>            :   auto_sbitmap m_visited_blocks;
+<span class="lineNum">      47 </span>            : };
+<span class="lineNum">      48 </span>            : }
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            : /* Mark the back edges in DFS traversal.
+<span class="lineNum">      51 </span>            :    Return nonzero if a loop (natural or otherwise) is present.
+<span class="lineNum">      52 </span>            :    Inspired by Depth_First_Search_PP described in:
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :      Advanced Compiler Design and Implementation
+<span class="lineNum">      55 </span>            :      Steven Muchnick
+<span class="lineNum">      56 </span>            :      Morgan Kaufmann, 1997
+<span class="lineNum">      57 </span>            : 
+<span class="lineNum">      58 </span>            :    and heavily borrowed from pre_and_rev_post_order_compute.  */
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            : bool
+<span class="lineNum">      61 </span><span class="lineCov">   14738107 : mark_dfs_back_edges (void)</span>
+<span class="lineNum">      62 </span>            : {
+<span class="lineNum">      63 </span><span class="lineCov">   14738107 :   int *pre;</span>
+<span class="lineNum">      64 </span><span class="lineCov">   14738107 :   int *post;</span>
+<span class="lineNum">      65 </span><span class="lineCov">   14738107 :   int prenum = 1;</span>
+<span class="lineNum">      66 </span><span class="lineCov">   14738107 :   int postnum = 1;</span>
+<span class="lineNum">      67 </span><span class="lineCov">   14738107 :   bool found = false;</span>
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span>            :   /* Allocate the preorder and postorder number arrays.  */
+<span class="lineNum">      70 </span><span class="lineCov">   14738107 :   pre = XCNEWVEC (int, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">      71 </span><span class="lineCov">   14738107 :   post = XCNEWVEC (int, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">      72 </span>            : 
+<span class="lineNum">      73 </span>            :   /* Allocate stack for back-tracking up CFG.  */
+<span class="lineNum">      74 </span><span class="lineCov">   14738107 :   auto_vec&lt;edge_iterator, 20&gt; stack (n_basic_blocks_for_fn (cfun) + 1);</span>
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            :   /* Allocate bitmap to track nodes that have been visited.  */
+<span class="lineNum">      77 </span><span class="lineCov">   29476214 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">      78 </span>            : 
+<span class="lineNum">      79 </span>            :   /* None of the nodes in the CFG have been visited yet.  */
+<span class="lineNum">      80 </span><span class="lineCov">   29476214 :   bitmap_clear (visited);</span>
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            :   /* Push the first edge on to the stack.  */
+<span class="lineNum">      83 </span><span class="lineCov">   29476214 :   stack.quick_push (ei_start (ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;succs));</span>
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span><span class="lineCov">  407399446 :   while (!stack.is_empty ())</span>
+<span class="lineNum">      86 </span>            :     {
+<span class="lineNum">      87 </span><span class="lineCov">  392661339 :       basic_block src;</span>
+<span class="lineNum">      88 </span><span class="lineCov">  392661339 :       basic_block dest;</span>
+<span class="lineNum">      89 </span>            : 
+<span class="lineNum">      90 </span>            :       /* Look at the edge on the top of the stack.  */
+<span class="lineNum">      91 </span><span class="lineCov">  392661339 :       edge_iterator ei = stack.last ();</span>
+<span class="lineNum">      92 </span><span class="lineCov">  392661339 :       src = ei_edge (ei)-&gt;src;</span>
+<span class="lineNum">      93 </span><span class="lineCov">  392661339 :       dest = ei_edge (ei)-&gt;dest;</span>
+<span class="lineNum">      94 </span><span class="lineCov">  392661339 :       ei_edge (ei)-&gt;flags &amp;= ~EDGE_DFS_BACK;</span>
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            :       /* Check if the edge destination has been visited yet.  */
+<span class="lineNum">      97 </span><span class="lineCov">  769899739 :       if (dest != EXIT_BLOCK_PTR_FOR_FN (cfun) &amp;&amp; ! bitmap_bit_p (visited,</span>
+<span class="lineNum">      98 </span><span class="lineCov">  754476800 :                                                                   dest-&gt;index))</span>
+<span class="lineNum">      99 </span>            :         {
+<span class="lineNum">     100 </span>            :           /* Mark that we have visited the destination.  */
+<span class="lineNum">     101 </span><span class="lineCov">  313862376 :           bitmap_set_bit (visited, dest-&gt;index);</span>
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span><span class="lineCov">  156931188 :           pre[dest-&gt;index] = prenum++;</span>
+<span class="lineNum">     104 </span><span class="lineCov">  156931188 :           if (EDGE_COUNT (dest-&gt;succs) &gt; 0)</span>
+<span class="lineNum">     105 </span>            :             {
+<span class="lineNum">     106 </span>            :               /* Since the DEST node has been visited for the first
+<span class="lineNum">     107 </span>            :                  time, check its successors.  */
+<span class="lineNum">     108 </span><span class="lineCov">  296807778 :               stack.quick_push (ei_start (dest-&gt;succs));</span>
+<span class="lineNum">     109 </span>            :             }
+<span class="lineNum">     110 </span>            :           else
+<span class="lineNum">     111 </span><span class="lineCov">    8527299 :             post[dest-&gt;index] = postnum++;</span>
+<span class="lineNum">     112 </span>            :         }
+<span class="lineNum">     113 </span>            :       else
+<span class="lineNum">     114 </span>            :         {
+<span class="lineNum">     115 </span><span class="lineCov">  235730151 :           if (dest != EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     116 </span><span class="lineCov">  220307212 :               &amp;&amp; src != ENTRY_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     117 </span><span class="lineCov">  205569105 :               &amp;&amp; pre[src-&gt;index] &gt;= pre[dest-&gt;index]</span>
+<span class="lineNum">     118 </span><span class="lineCov">   50104627 :               &amp;&amp; post[dest-&gt;index] == 0)</span>
+<span class="lineNum">     119 </span><span class="lineCov">    7867311 :             ei_edge (ei)-&gt;flags |= EDGE_DFS_BACK, found = true;</span>
+<span class="lineNum">     120 </span>            : 
+<span class="lineNum">     121 </span><span class="lineCov">  235730151 :           if (ei_one_before_end_p (ei)</span>
+<span class="lineNum">     122 </span><span class="lineCov">  235730151 :               &amp;&amp; src != ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     123 </span><span class="lineCov">  148403889 :             post[src-&gt;index] = postnum++;</span>
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span><span class="lineCov">  235730151 :           if (!ei_one_before_end_p (ei))</span>
+<span class="lineNum">     126 </span><span class="lineCov">   72588155 :             ei_next (&amp;stack.last ());</span>
+<span class="lineNum">     127 </span>            :           else
+<span class="lineNum">     128 </span><span class="lineCov">  163141996 :             stack.pop ();</span>
+<span class="lineNum">     129 </span>            :         }
+<span class="lineNum">     130 </span>            :     }
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span><span class="lineCov">   14738107 :   free (pre);</span>
+<span class="lineNum">     133 </span><span class="lineCov">   14738107 :   free (post);</span>
+<span class="lineNum">     134 </span>            : 
+<span class="lineNum">     135 </span><span class="lineCov">   14738107 :   return found;</span>
+<span class="lineNum">     136 </span>            : }
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span>            : /* Find unreachable blocks.  An unreachable block will have 0 in
+<span class="lineNum">     139 </span>            :    the reachable bit in block-&gt;flags.  A nonzero value indicates the
+<span class="lineNum">     140 </span>            :    block is reachable.  */
+<a name="141"><span class="lineNum">     141 </span>            : </a>
+<span class="lineNum">     142 </span>            : void
+<span class="lineNum">     143 </span><span class="lineCov">   40348361 : find_unreachable_blocks (void)</span>
+<span class="lineNum">     144 </span>            : {
+<span class="lineNum">     145 </span><span class="lineCov">   40348361 :   edge e;</span>
+<span class="lineNum">     146 </span><span class="lineCov">   40348361 :   edge_iterator ei;</span>
+<span class="lineNum">     147 </span><span class="lineCov">   40348361 :   basic_block *tos, *worklist, bb;</span>
+<span class="lineNum">     148 </span>            : 
+<span class="lineNum">     149 </span><span class="lineCov">   40348361 :   tos = worklist = XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     150 </span>            : 
+<span class="lineNum">     151 </span>            :   /* Clear all the reachability flags.  */
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">  538596563 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     154 </span><span class="lineCov">  498248202 :     bb-&gt;flags &amp;= ~BB_REACHABLE;</span>
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span>            :   /* Add our starting points to the worklist.  Almost always there will
+<span class="lineNum">     157 </span>            :      be only one.  It isn't inconceivable that we might one day directly
+<span class="lineNum">     158 </span>            :      support Fortran alternate entry points.  */
+<span class="lineNum">     159 </span>            : 
+<span class="lineNum">     160 </span><span class="lineCov">  121045083 :   FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;succs)</span>
+<span class="lineNum">     161 </span>            :     {
+<span class="lineNum">     162 </span><span class="lineCov">   40348361 :       *tos++ = e-&gt;dest;</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span>            :       /* Mark the block reachable.  */
+<span class="lineNum">     165 </span><span class="lineCov">   40348361 :       e-&gt;dest-&gt;flags |= BB_REACHABLE;</span>
+<span class="lineNum">     166 </span>            :     }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            :   /* Iterate: find everything reachable from what we've already seen.  */
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span><span class="lineCov">  541706499 :   while (tos != worklist)</span>
+<span class="lineNum">     171 </span>            :     {
+<span class="lineNum">     172 </span><span class="lineCov">  501358138 :       basic_block b = *--tos;</span>
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span><span class="lineCov"> 1729107835 :       FOR_EACH_EDGE (e, ei, b-&gt;succs)</span>
+<span class="lineNum">     175 </span>            :         {
+<span class="lineNum">     176 </span><span class="lineCov">  726391559 :           basic_block dest = e-&gt;dest;</span>
+<span class="lineNum">     177 </span>            : 
+<span class="lineNum">     178 </span><span class="lineCov">  726391559 :           if (!(dest-&gt;flags &amp; BB_REACHABLE))</span>
+<span class="lineNum">     179 </span>            :             {
+<span class="lineNum">     180 </span><span class="lineCov">  461009777 :               *tos++ = dest;</span>
+<span class="lineNum">     181 </span><span class="lineCov">  461009777 :               dest-&gt;flags |= BB_REACHABLE;</span>
+<span class="lineNum">     182 </span>            :             }
+<span class="lineNum">     183 </span>            :         }
+<span class="lineNum">     184 </span>            :     }
+<span class="lineNum">     185 </span>            : 
+<span class="lineNum">     186 </span><span class="lineCov">   40348361 :   free (worklist);</span>
+<span class="lineNum">     187 </span><span class="lineCov">   40348361 : }</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            : /* Verify that there are no unreachable blocks in the current function.  */
+<a name="190"><span class="lineNum">     190 </span>            : </a>
+<span class="lineNum">     191 </span>            : void
+<span class="lineNum">     192 </span><span class="lineCov">   23391883 : verify_no_unreachable_blocks (void)</span>
+<span class="lineNum">     193 </span>            : {
+<span class="lineNum">     194 </span><span class="lineCov">   23391883 :   find_unreachable_blocks ();</span>
+<span class="lineNum">     195 </span>            : 
+<span class="lineNum">     196 </span><span class="lineCov">   23391883 :   basic_block bb;</span>
+<span class="lineNum">     197 </span><span class="lineCov">  304785349 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     198 </span><span class="lineCov">  281393466 :     gcc_assert ((bb-&gt;flags &amp; BB_REACHABLE) != 0);</span>
+<span class="lineNum">     199 </span><span class="lineCov">   23391883 : }</span>
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span>            : 
+<span class="lineNum">     202 </span>            : /* Functions to access an edge list with a vector representation.
+<span class="lineNum">     203 </span>            :    Enough data is kept such that given an index number, the
+<span class="lineNum">     204 </span>            :    pred and succ that edge represents can be determined, or
+<span class="lineNum">     205 </span>            :    given a pred and a succ, its index number can be returned.
+<span class="lineNum">     206 </span>            :    This allows algorithms which consume a lot of memory to
+<span class="lineNum">     207 </span>            :    represent the normally full matrix of edge (pred,succ) with a
+<span class="lineNum">     208 </span>            :    single indexed vector,  edge (EDGE_INDEX (pred, succ)), with no
+<span class="lineNum">     209 </span>            :    wasted space in the client code due to sparse flow graphs.  */
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span>            : /* This functions initializes the edge list. Basically the entire
+<span class="lineNum">     212 </span>            :    flowgraph is processed, and all edges are assigned a number,
+<span class="lineNum">     213 </span>            :    and the data structure is filled in.  */
+<span class="lineNum">     214 </span>            : 
+<span class="lineNum">     215 </span>            : struct edge_list *
+<span class="lineNum">     216 </span><span class="lineCov">     310886 : create_edge_list (void)</span>
+<span class="lineNum">     217 </span>            : {
+<span class="lineNum">     218 </span><span class="lineCov">     310886 :   struct edge_list *elist;</span>
+<span class="lineNum">     219 </span><span class="lineCov">     310886 :   edge e;</span>
+<span class="lineNum">     220 </span><span class="lineCov">     310886 :   int num_edges;</span>
+<span class="lineNum">     221 </span><span class="lineCov">     310886 :   basic_block bb;</span>
+<span class="lineNum">     222 </span><span class="lineCov">     310886 :   edge_iterator ei;</span>
+<span class="lineNum">     223 </span>            : 
+<span class="lineNum">     224 </span>            :   /* Determine the number of edges in the flow graph by counting successor
+<span class="lineNum">     225 </span>            :      edges on each basic block.  */
+<span class="lineNum">     226 </span><span class="lineCov">     310886 :   num_edges = 0;</span>
+<span class="lineNum">     227 </span><span class="lineCov">    6048120 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     228 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     229 </span>            :     {
+<span class="lineNum">     230 </span><span class="lineCov">   11473924 :       num_edges += EDGE_COUNT (bb-&gt;succs);</span>
+<span class="lineNum">     231 </span>            :     }
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span><span class="lineCov">     310886 :   elist = XNEW (struct edge_list);</span>
+<span class="lineNum">     234 </span><span class="lineCov">     310886 :   elist-&gt;num_edges = num_edges;</span>
+<span class="lineNum">     235 </span><span class="lineCov">     310886 :   elist-&gt;index_to_edge = XNEWVEC (edge, num_edges);</span>
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span><span class="lineCov">     310886 :   num_edges = 0;</span>
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span>            :   /* Follow successors of blocks, and register these edges.  */
+<span class="lineNum">     240 </span><span class="lineCov">    6048120 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     241 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     242 </span><span class="lineCov">   20044861 :     FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     243 </span><span class="lineCov">    8570393 :       elist-&gt;index_to_edge[num_edges++] = e;</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">     310886 :   return elist;</span>
+<span class="lineNum">     246 </span>            : }
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span>            : /* This function free's memory associated with an edge list.  */
+<a name="249"><span class="lineNum">     249 </span>            : </a>
+<span class="lineNum">     250 </span>            : void
+<span class="lineNum">     251 </span><span class="lineCov">     310886 : free_edge_list (struct edge_list *elist)</span>
+<span class="lineNum">     252 </span>            : {
+<span class="lineNum">     253 </span><span class="lineCov">     310886 :   if (elist)</span>
+<span class="lineNum">     254 </span>            :     {
+<span class="lineNum">     255 </span><span class="lineCov">     310886 :       free (elist-&gt;index_to_edge);</span>
+<span class="lineNum">     256 </span><span class="lineCov">     310886 :       free (elist);</span>
+<span class="lineNum">     257 </span>            :     }
+<span class="lineNum">     258 </span><span class="lineCov">     310886 : }</span>
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            : /* This function provides debug output showing an edge list.  */
+<a name="261"><span class="lineNum">     261 </span>            : </a>
+<span class="lineNum">     262 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     263 </span><span class="lineNoCov">          0 : print_edge_list (FILE *f, struct edge_list *elist)</span>
+<span class="lineNum">     264 </span>            : {
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 :   int x;</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span><span class="lineNoCov">          0 :   fprintf (f, &quot;Compressed edge list, %d BBs + entry &amp; exit, and %d edges\n&quot;,</span>
+<span class="lineNum">     268 </span><span class="lineNoCov">          0 :            n_basic_blocks_for_fn (cfun), elist-&gt;num_edges);</span>
+<span class="lineNum">     269 </span>            : 
+<span class="lineNum">     270 </span><span class="lineNoCov">          0 :   for (x = 0; x &lt; elist-&gt;num_edges; x++)</span>
+<span class="lineNum">     271 </span>            :     {
+<span class="lineNum">     272 </span><span class="lineNoCov">          0 :       fprintf (f, &quot; %-4d - edge(&quot;, x);</span>
+<span class="lineNum">     273 </span><span class="lineNoCov">          0 :       if (INDEX_EDGE_PRED_BB (elist, x) == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     274 </span><span class="lineNoCov">          0 :         fprintf (f, &quot;entry,&quot;);</span>
+<span class="lineNum">     275 </span>            :       else
+<span class="lineNum">     276 </span><span class="lineNoCov">          0 :         fprintf (f, &quot;%d,&quot;, INDEX_EDGE_PRED_BB (elist, x)-&gt;index);</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineNoCov">          0 :       if (INDEX_EDGE_SUCC_BB (elist, x) == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     279 </span><span class="lineNoCov">          0 :         fprintf (f, &quot;exit)\n&quot;);</span>
+<span class="lineNum">     280 </span>            :       else
+<span class="lineNum">     281 </span><span class="lineNoCov">          0 :         fprintf (f, &quot;%d)\n&quot;, INDEX_EDGE_SUCC_BB (elist, x)-&gt;index);</span>
+<span class="lineNum">     282 </span>            :     }
+<span class="lineNum">     283 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     284 </span>            : 
+<span class="lineNum">     285 </span>            : /* This function provides an internal consistency check of an edge list,
+<span class="lineNum">     286 </span>            :    verifying that all edges are present, and that there are no
+<span class="lineNum">     287 </span>            :    extra edges.  */
+<a name="288"><span class="lineNum">     288 </span>            : </a>
+<span class="lineNum">     289 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     290 </span><span class="lineNoCov">          0 : verify_edge_list (FILE *f, struct edge_list *elist)</span>
+<span class="lineNum">     291 </span>            : {
+<span class="lineNum">     292 </span><span class="lineNoCov">          0 :   int pred, succ, index;</span>
+<span class="lineNum">     293 </span><span class="lineNoCov">          0 :   edge e;</span>
+<span class="lineNum">     294 </span><span class="lineNoCov">          0 :   basic_block bb, p, s;</span>
+<span class="lineNum">     295 </span><span class="lineNoCov">          0 :   edge_iterator ei;</span>
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span><span class="lineNoCov">          0 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     298 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     299 </span>            :     {
+<span class="lineNum">     300 </span><span class="lineNoCov">          0 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     301 </span>            :         {
+<span class="lineNum">     302 </span><span class="lineNoCov">          0 :           pred = e-&gt;src-&gt;index;</span>
+<span class="lineNum">     303 </span><span class="lineNoCov">          0 :           succ = e-&gt;dest-&gt;index;</span>
+<span class="lineNum">     304 </span><span class="lineNoCov">          0 :           index = EDGE_INDEX (elist, e-&gt;src, e-&gt;dest);</span>
+<span class="lineNum">     305 </span><span class="lineNoCov">          0 :           if (index == EDGE_INDEX_NO_EDGE)</span>
+<span class="lineNum">     306 </span>            :             {
+<span class="lineNum">     307 </span><span class="lineNoCov">          0 :               fprintf (f, &quot;*p* No index for edge from %d to %d\n&quot;, pred, succ);</span>
+<span class="lineNum">     308 </span><span class="lineNoCov">          0 :               continue;</span>
+<span class="lineNum">     309 </span>            :             }
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span><span class="lineNoCov">          0 :           if (INDEX_EDGE_PRED_BB (elist, index)-&gt;index != pred)</span>
+<span class="lineNum">     312 </span><span class="lineNoCov">          0 :             fprintf (f, &quot;*p* Pred for index %d should be %d not %d\n&quot;,</span>
+<span class="lineNum">     313 </span>            :                      index, pred, INDEX_EDGE_PRED_BB (elist, index)-&gt;index);
+<span class="lineNum">     314 </span><span class="lineNoCov">          0 :           if (INDEX_EDGE_SUCC_BB (elist, index)-&gt;index != succ)</span>
+<span class="lineNum">     315 </span><span class="lineNoCov">          0 :             fprintf (f, &quot;*p* Succ for index %d should be %d not %d\n&quot;,</span>
+<span class="lineNum">     316 </span>            :                      index, succ, INDEX_EDGE_SUCC_BB (elist, index)-&gt;index);
+<span class="lineNum">     317 </span>            :         }
+<span class="lineNum">     318 </span>            :     }
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span>            :   /* We've verified that all the edges are in the list, now lets make sure
+<span class="lineNum">     321 </span>            :      there are no spurious edges in the list.  This is an expensive check!  */
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span><span class="lineNoCov">          0 :   FOR_BB_BETWEEN (p, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     324 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     325 </span><span class="lineNoCov">          0 :     FOR_BB_BETWEEN (s, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb, NULL, next_bb)</span>
+<span class="lineNum">     326 </span>            :       {
+<span class="lineNum">     327 </span><span class="lineNoCov">          0 :         int found_edge = 0;</span>
+<span class="lineNum">     328 </span>            : 
+<span class="lineNum">     329 </span><span class="lineNoCov">          0 :         FOR_EACH_EDGE (e, ei, p-&gt;succs)</span>
+<span class="lineNum">     330 </span><span class="lineNoCov">          0 :           if (e-&gt;dest == s)</span>
+<span class="lineNum">     331 </span>            :             {
+<span class="lineNum">     332 </span>            :               found_edge = 1;
+<span class="lineNum">     333 </span>            :               break;
+<span class="lineNum">     334 </span>            :             }
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineNoCov">          0 :         FOR_EACH_EDGE (e, ei, s-&gt;preds)</span>
+<span class="lineNum">     337 </span><span class="lineNoCov">          0 :           if (e-&gt;src == p)</span>
+<span class="lineNum">     338 </span>            :             {
+<span class="lineNum">     339 </span>            :               found_edge = 1;
+<span class="lineNum">     340 </span>            :               break;
+<span class="lineNum">     341 </span>            :             }
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span><span class="lineNoCov">          0 :         if (EDGE_INDEX (elist, p, s)</span>
+<span class="lineNum">     344 </span><span class="lineNoCov">          0 :             == EDGE_INDEX_NO_EDGE &amp;&amp; found_edge != 0)</span>
+<span class="lineNum">     345 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;*** Edge (%d, %d) appears to not have an index\n&quot;,</span>
+<span class="lineNum">     346 </span>            :                    p-&gt;index, s-&gt;index);
+<span class="lineNum">     347 </span><span class="lineNoCov">          0 :         if (EDGE_INDEX (elist, p, s)</span>
+<span class="lineNum">     348 </span><span class="lineNoCov">          0 :             != EDGE_INDEX_NO_EDGE &amp;&amp; found_edge == 0)</span>
+<span class="lineNum">     349 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;*** Edge (%d, %d) has index %d, but there is no edge\n&quot;,</span>
+<span class="lineNum">     350 </span>            :                    p-&gt;index, s-&gt;index, EDGE_INDEX (elist, p, s));
+<span class="lineNum">     351 </span>            :       }
+<span class="lineNum">     352 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            : 
+<span class="lineNum">     355 </span>            : /* Functions to compute control dependences.  */
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            : /* Indicate block BB is control dependent on an edge with index EDGE_INDEX.  */
+<span class="lineNum">     358 </span>            : void
+<span class="lineNum">     359 </span><span class="lineCov">   21911041 : control_dependences::set_control_dependence_map_bit (basic_block bb,</span>
+<span class="lineNum">     360 </span>            :                                                      int edge_index)
+<span class="lineNum">     361 </span>            : {
+<span class="lineNum">     362 </span><span class="lineCov">   21911041 :   if (bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     363 </span>            :     return;
+<span class="lineNum">     364 </span><span class="lineCov">   21911041 :   gcc_assert (bb != EXIT_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     365 </span><span class="lineCov">   21911041 :   bitmap_set_bit (control_dependence_map[bb-&gt;index], edge_index);</span>
+<span class="lineNum">     366 </span>            : }
+<span class="lineNum">     367 </span>            : 
+<span class="lineNum">     368 </span>            : /* Clear all control dependences for block BB.  */
+<span class="lineNum">     369 </span>            : void
+<span class="lineNum">     370 </span><span class="lineNoCov">          0 : control_dependences::clear_control_dependence_bitmap (basic_block bb)</span>
+<span class="lineNum">     371 </span>            : {
+<span class="lineNum">     372 </span><span class="lineNoCov">          0 :   bitmap_clear (control_dependence_map[bb-&gt;index]);</span>
+<span class="lineNum">     373 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     374 </span>            : 
+<span class="lineNum">     375 </span>            : /* Find the immediate postdominator PDOM of the specified basic block BLOCK.
+<span class="lineNum">     376 </span>            :    This function is necessary because some blocks have negative numbers.  */
+<a name="377"><span class="lineNum">     377 </span>            : </a>
+<span class="lineNum">     378 </span>            : static inline basic_block
+<span class="lineNum">     379 </span><span class="lineCov">   46188176 : find_pdom (basic_block block)</span>
+<span class="lineNum">     380 </span>            : {
+<span class="lineNum">     381 </span><span class="lineCov">   46188176 :   gcc_assert (block != ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     382 </span>            : 
+<span class="lineNum">     383 </span><span class="lineCov">   46188176 :   if (block == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     384 </span>            :     return EXIT_BLOCK_PTR_FOR_FN (cfun);
+<span class="lineNum">     385 </span>            :   else
+<span class="lineNum">     386 </span>            :     {
+<span class="lineNum">     387 </span><span class="lineCov">   46188176 :       basic_block bb = get_immediate_dominator (CDI_POST_DOMINATORS, block);</span>
+<span class="lineNum">     388 </span><span class="lineCov">   46188176 :       if (! bb)</span>
+<span class="lineNum">     389 </span><span class="lineNoCov">          0 :         return EXIT_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">     390 </span>            :       return bb;
+<span class="lineNum">     391 </span>            :     }
+<span class="lineNum">     392 </span>            : }
+<span class="lineNum">     393 </span>            : 
+<span class="lineNum">     394 </span>            : /* Determine all blocks' control dependences on the given edge with edge_list
+<span class="lineNum">     395 </span>            :    EL index EDGE_INDEX, ala Morgan, Section 3.6.  */
+<a name="396"><span class="lineNum">     396 </span>            : </a>
+<span class="lineNum">     397 </span>            : void
+<span class="lineNum">     398 </span><span class="lineCov">   26364664 : control_dependences::find_control_dependence (int edge_index)</span>
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">   26364664 :   basic_block current_block;</span>
+<span class="lineNum">     401 </span><span class="lineCov">   26364664 :   basic_block ending_block;</span>
+<span class="lineNum">     402 </span>            : 
+<span class="lineNum">     403 </span><span class="lineCov">   26364664 :   gcc_assert (get_edge_src (edge_index) != EXIT_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     404 </span>            : 
+<span class="lineNum">     405 </span>            :   /* For abnormal edges, we don't make current_block control
+<span class="lineNum">     406 </span>            :      dependent because instructions that throw are always necessary
+<span class="lineNum">     407 </span>            :      anyway.  */
+<span class="lineNum">     408 </span><span class="lineCov">   26364664 :   edge e = find_edge (get_edge_src (edge_index), get_edge_dest (edge_index));</span>
+<span class="lineNum">     409 </span><span class="lineCov">   26364664 :   if (e-&gt;flags &amp; EDGE_ABNORMAL)</span>
+<span class="lineNum">     410 </span>            :     return;
+<span class="lineNum">     411 </span>            : 
+<span class="lineNum">     412 </span><span class="lineCov">   26354137 :   if (get_edge_src (edge_index) == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     413 </span><span class="lineCov">    2077002 :     ending_block = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     414 </span>            :   else
+<span class="lineNum">     415 </span><span class="lineCov">   24277135 :     ending_block = find_pdom (get_edge_src (edge_index));</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span><span class="lineCov">   48265178 :   for (current_block = get_edge_dest (edge_index);</span>
+<span class="lineNum">     418 </span>            :        current_block != ending_block
+<span class="lineNum">     419 </span><span class="lineCov">   48265178 :        &amp;&amp; current_block != EXIT_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">     420 </span><span class="lineCov">   21911041 :        current_block = find_pdom (current_block))</span>
+<span class="lineNum">     421 </span><span class="lineCov">   21911041 :     set_control_dependence_map_bit (current_block, edge_index);</span>
+<span class="lineNum">     422 </span>            : }
+<span class="lineNum">     423 </span>            : 
+<span class="lineNum">     424 </span>            : /* Record all blocks' control dependences on all edges in the edge
+<span class="lineNum">     425 </span>            :    list EL, ala Morgan, Section 3.6.  */
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span><span class="lineCov">    2077002 : control_dependences::control_dependences ()</span>
+<span class="lineNum">     428 </span>            : {
+<span class="lineNum">     429 </span><span class="lineCov">    2077002 :   timevar_push (TV_CONTROL_DEPENDENCES);</span>
+<span class="lineNum">     430 </span>            : 
+<span class="lineNum">     431 </span>            :   /* Initialize the edge list.  */
+<span class="lineNum">     432 </span><span class="lineCov">    2077002 :   int num_edges = 0;</span>
+<span class="lineNum">     433 </span><span class="lineCov">    2077002 :   basic_block bb;</span>
+<span class="lineNum">     434 </span><span class="lineCov">   21318924 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     435 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     436 </span><span class="lineCov">   38016723 :     num_edges += EDGE_COUNT (bb-&gt;succs);</span>
+<span class="lineNum">     437 </span><span class="lineCov">    2077002 :   m_el.create (num_edges);</span>
+<span class="lineNum">     438 </span><span class="lineCov">    2077002 :   edge e;</span>
+<span class="lineNum">     439 </span><span class="lineCov">    2077002 :   edge_iterator ei;</span>
+<span class="lineNum">     440 </span><span class="lineCov">   21318924 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     441 </span>            :                   EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     442 </span><span class="lineCov">   64848508 :     FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     443 </span><span class="lineCov">   52729328 :       m_el.quick_push (std::make_pair (e-&gt;src-&gt;index, e-&gt;dest-&gt;index));</span>
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span><span class="lineCov">    2077002 :   control_dependence_map.create (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     446 </span><span class="lineCov">   24139127 :   for (int i = 0; i &lt; last_basic_block_for_fn (cfun); ++i)</span>
+<span class="lineNum">     447 </span><span class="lineCov">   22062125 :     control_dependence_map.quick_push (BITMAP_ALLOC (NULL));</span>
+<span class="lineNum">     448 </span><span class="lineCov">   28441666 :   for (int i = 0; i &lt; num_edges; ++i)</span>
+<span class="lineNum">     449 </span><span class="lineCov">   26364664 :     find_control_dependence (i);</span>
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span><span class="lineCov">    2077002 :   timevar_pop (TV_CONTROL_DEPENDENCES);</span>
+<span class="lineNum">     452 </span><span class="lineCov">    2077002 : }</span>
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span>            : /* Free control dependences and the associated edge list.  */
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span><span class="lineCov">    4154004 : control_dependences::~control_dependences ()</span>
+<span class="lineNum">     457 </span>            : {
+<span class="lineNum">     458 </span><span class="lineCov">   48278254 :   for (unsigned i = 0; i &lt; control_dependence_map.length (); ++i)</span>
+<span class="lineNum">     459 </span><span class="lineCov">   22062125 :     BITMAP_FREE (control_dependence_map[i]);</span>
+<span class="lineNum">     460 </span><span class="lineCov">    2077002 :   control_dependence_map.release ();</span>
+<span class="lineNum">     461 </span><span class="lineCov">    2077002 :   m_el.release ();</span>
+<span class="lineNum">     462 </span><span class="lineCov">    2077002 : }</span>
+<span class="lineNum">     463 </span>            : 
+<span class="lineNum">     464 </span>            : /* Returns the bitmap of edges the basic-block I is dependent on.  */
+<span class="lineNum">     465 </span>            : 
+<span class="lineNum">     466 </span>            : bitmap
+<span class="lineNum">     467 </span><span class="lineCov">   16007496 : control_dependences::get_edges_dependent_on (int i)</span>
+<span class="lineNum">     468 </span>            : {
+<span class="lineNum">     469 </span><span class="lineCov">   16007496 :   return control_dependence_map[i];</span>
+<span class="lineNum">     470 </span>            : }
+<span class="lineNum">     471 </span>            : 
+<span class="lineNum">     472 </span>            : /* Returns the edge source with index I from the edge list.  */
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span>            : basic_block
+<span class="lineNum">     475 </span><span class="lineCov">  123785321 : control_dependences::get_edge_src (int i)</span>
+<span class="lineNum">     476 </span>            : {
+<span class="lineNum">     477 </span><span class="lineCov">  123785321 :   return BASIC_BLOCK_FOR_FN (cfun, m_el[i].first);</span>
+<span class="lineNum">     478 </span>            : }
+<span class="lineNum">     479 </span>            : 
+<span class="lineNum">     480 </span>            : /* Returns the edge destination with index I from the edge list.  */
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            : basic_block
+<span class="lineNum">     483 </span><span class="lineCov">   52718801 : control_dependences::get_edge_dest (int i)</span>
+<span class="lineNum">     484 </span>            : {
+<span class="lineNum">     485 </span><span class="lineCov">   52718801 :   return BASIC_BLOCK_FOR_FN (cfun, m_el[i].second);</span>
+<span class="lineNum">     486 </span>            : }
+<span class="lineNum">     487 </span>            : 
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span>            : /* Given PRED and SUCC blocks, return the edge which connects the blocks.
+<span class="lineNum">     490 </span>            :    If no such edge exists, return NULL.  */
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span>            : edge
+<span class="lineNum">     493 </span><span class="lineCov">  349271751 : find_edge (basic_block pred, basic_block succ)</span>
+<span class="lineNum">     494 </span>            : {
+<span class="lineNum">     495 </span><span class="lineCov">  349271751 :   edge e;</span>
+<span class="lineNum">     496 </span><span class="lineCov">  349271751 :   edge_iterator ei;</span>
+<span class="lineNum">     497 </span>            : 
+<span class="lineNum">     498 </span><span class="lineCov">  952288973 :   if (EDGE_COUNT (pred-&gt;succs) &lt;= EDGE_COUNT (succ-&gt;preds))</span>
+<span class="lineNum">     499 </span>            :     {
+<span class="lineNum">     500 </span><span class="lineCov">  618173383 :       FOR_EACH_EDGE (e, ei, pred-&gt;succs)</span>
+<span class="lineNum">     501 </span><span class="lineCov">  264292158 :         if (e-&gt;dest == succ)</span>
+<span class="lineNum">     502 </span><span class="lineCov">  170545529 :           return e;</span>
+<span class="lineNum">     503 </span>            :     }
+<span class="lineNum">     504 </span>            :   else
+<span class="lineNum">     505 </span>            :     {
+<span class="lineNum">     506 </span><span class="lineCov">  184498131 :       FOR_EACH_EDGE (e, ei, succ-&gt;preds)</span>
+<span class="lineNum">     507 </span><span class="lineCov">   53305527 :         if (e-&gt;src == pred)</span>
+<span class="lineNum">     508 </span><span class="lineCov">   42924144 :           return e;</span>
+<span class="lineNum">     509 </span>            :     }
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span>            :   return NULL;
+<span class="lineNum">     512 </span>            : }
+<span class="lineNum">     513 </span>            : 
+<span class="lineNum">     514 </span>            : /* This routine will determine what, if any, edge there is between
+<span class="lineNum">     515 </span>            :    a specified predecessor and successor.  */
+<a name="516"><span class="lineNum">     516 </span>            : </a>
+<span class="lineNum">     517 </span>            : int
+<span class="lineNum">     518 </span><span class="lineCov">          6 : find_edge_index (struct edge_list *edge_list, basic_block pred, basic_block succ)</span>
+<span class="lineNum">     519 </span>            : {
+<span class="lineNum">     520 </span><span class="lineCov">          6 :   int x;</span>
+<span class="lineNum">     521 </span>            : 
+<span class="lineNum">     522 </span><span class="lineCov">         56 :   for (x = 0; x &lt; NUM_EDGES (edge_list); x++)</span>
+<span class="lineNum">     523 </span><span class="lineCov">         56 :     if (INDEX_EDGE_PRED_BB (edge_list, x) == pred</span>
+<span class="lineNum">     524 </span><span class="lineCov">         11 :         &amp;&amp; INDEX_EDGE_SUCC_BB (edge_list, x) == succ)</span>
+<span class="lineNum">     525 </span><span class="lineCov">          6 :       return x;</span>
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span>            :   return (EDGE_INDEX_NO_EDGE);
+<span class="lineNum">     528 </span>            : }
+<span class="lineNum">     529 </span>            : 
+<span class="lineNum">     530 </span>            : /* This routine will remove any fake predecessor edges for a basic block.
+<span class="lineNum">     531 </span>            :    When the edge is removed, it is also removed from whatever successor
+<span class="lineNum">     532 </span>            :    list it is in.  */
+<a name="533"><span class="lineNum">     533 </span>            : </a>
+<span class="lineNum">     534 </span>            : static void
+<span class="lineNum">     535 </span><span class="lineCov">    3639208 : remove_fake_predecessors (basic_block bb)</span>
+<span class="lineNum">     536 </span>            : {
+<span class="lineNum">     537 </span><span class="lineCov">    3639208 :   edge e;</span>
+<span class="lineNum">     538 </span><span class="lineCov">    3639208 :   edge_iterator ei;</span>
+<span class="lineNum">     539 </span>            : 
+<span class="lineNum">     540 </span><span class="lineCov">   12896021 :   for (ei = ei_start (bb-&gt;preds); (e = ei_safe_edge (ei)); )</span>
+<span class="lineNum">     541 </span>            :     {
+<span class="lineNum">     542 </span><span class="lineCov">    5617605 :       if ((e-&gt;flags &amp; EDGE_FAKE) == EDGE_FAKE)</span>
+<span class="lineNum">     543 </span><span class="lineCov">    1955577 :         remove_edge (e);</span>
+<span class="lineNum">     544 </span>            :       else
+<span class="lineNum">     545 </span><span class="lineCov">    3662028 :         ei_next (&amp;ei);</span>
+<span class="lineNum">     546 </span>            :     }
+<span class="lineNum">     547 </span><span class="lineCov">    3639208 : }</span>
+<span class="lineNum">     548 </span>            : 
+<span class="lineNum">     549 </span>            : /* This routine will remove all fake edges from the flow graph.  If
+<span class="lineNum">     550 </span>            :    we remove all fake successors, it will automatically remove all
+<span class="lineNum">     551 </span>            :    fake predecessors.  */
+<a name="552"><span class="lineNum">     552 </span>            : </a>
+<span class="lineNum">     553 </span>            : void
+<span class="lineNum">     554 </span><span class="lineCov">       2000 : remove_fake_edges (void)</span>
+<span class="lineNum">     555 </span>            : {
+<span class="lineNum">     556 </span><span class="lineCov">       2000 :   basic_block bb;</span>
+<span class="lineNum">     557 </span>            : 
+<span class="lineNum">     558 </span><span class="lineCov">      13194 :   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb, NULL, next_bb)</span>
+<span class="lineNum">     559 </span><span class="lineCov">      11194 :     remove_fake_predecessors (bb);</span>
+<span class="lineNum">     560 </span><span class="lineCov">       2000 : }</span>
+<span class="lineNum">     561 </span>            : 
+<span class="lineNum">     562 </span>            : /* This routine will remove all fake edges to the EXIT_BLOCK.  */
+<a name="563"><span class="lineNum">     563 </span>            : </a>
+<span class="lineNum">     564 </span>            : void
+<span class="lineNum">     565 </span><span class="lineCov">    3628014 : remove_fake_exit_edges (void)</span>
+<span class="lineNum">     566 </span>            : {
+<span class="lineNum">     567 </span><span class="lineCov">    3628014 :   remove_fake_predecessors (EXIT_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     568 </span><span class="lineCov">    3628014 : }</span>
+<span class="lineNum">     569 </span>            : 
+<span class="lineNum">     570 </span>            : 
+<span class="lineNum">     571 </span>            : /* This function will add a fake edge between any block which has no
+<span class="lineNum">     572 </span>            :    successors, and the exit block. Some data flow equations require these
+<span class="lineNum">     573 </span>            :    edges to exist.  */
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span>            : void
+<span class="lineNum">     576 </span><span class="lineCov">    2424530 : add_noreturn_fake_exit_edges (void)</span>
+<span class="lineNum">     577 </span>            : {
+<span class="lineNum">     578 </span><span class="lineCov">    2424530 :   basic_block bb;</span>
+<span class="lineNum">     579 </span>            : 
+<span class="lineNum">     580 </span><span class="lineCov">   23376901 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     581 </span><span class="lineCov">   20952371 :     if (EDGE_COUNT (bb-&gt;succs) == 0)</span>
+<span class="lineNum">     582 </span><span class="lineCov">    1231329 :       make_single_succ_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), EDGE_FAKE);</span>
+<span class="lineNum">     583 </span><span class="lineCov">    2424530 : }</span>
+<span class="lineNum">     584 </span>            : 
+<span class="lineNum">     585 </span>            : /* This function adds a fake edge between any infinite loops to the
+<span class="lineNum">     586 </span>            :    exit block.  Some optimizations require a path from each node to
+<span class="lineNum">     587 </span>            :    the exit node.
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span>            :    See also Morgan, Figure 3.10, pp. 82-83.
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span>            :    The current implementation is ugly, not attempting to minimize the
+<span class="lineNum">     592 </span>            :    number of inserted fake edges.  To reduce the number of fake edges
+<span class="lineNum">     593 </span>            :    to insert, add fake edges from _innermost_ loops containing only
+<span class="lineNum">     594 </span>            :    nodes not reachable from the exit block.  */
+<a name="595"><span class="lineNum">     595 </span>            : </a>
+<span class="lineNum">     596 </span>            : void
+<span class="lineNum">     597 </span><span class="lineCov">    2731374 : connect_infinite_loops_to_exit (void)</span>
+<span class="lineNum">     598 </span>            : {
+<span class="lineNum">     599 </span>            :   /* Perform depth-first search in the reverse graph to find nodes
+<span class="lineNum">     600 </span>            :      reachable from the exit block.  */
+<span class="lineNum">     601 </span><span class="lineCov">    5462748 :   depth_first_search dfs;</span>
+<span class="lineNum">     602 </span><span class="lineCov">    2731374 :   dfs.add_bb (EXIT_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     603 </span>            : 
+<span class="lineNum">     604 </span>            :   /* Repeatedly add fake edges, updating the unreachable nodes.  */
+<span class="lineNum">     605 </span><span class="lineCov">    2731374 :   basic_block unvisited_block = EXIT_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">     606 </span><span class="lineCov">    3488165 :   while (1)</span>
+<span class="lineNum">     607 </span>            :     {
+<span class="lineNum">     608 </span><span class="lineCov">    3488165 :       unvisited_block = dfs.execute (unvisited_block);</span>
+<span class="lineNum">     609 </span><span class="lineCov">    3488165 :       if (!unvisited_block)</span>
+<span class="lineNum">     610 </span>            :         break;
+<span class="lineNum">     611 </span>            : 
+<span class="lineNum">     612 </span><span class="lineCov">     756791 :       basic_block deadend_block = dfs_find_deadend (unvisited_block);</span>
+<span class="lineNum">     613 </span><span class="lineCov">     756791 :       edge e = make_edge (deadend_block, EXIT_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     614 </span>            :                           EDGE_FAKE);
+<span class="lineNum">     615 </span><span class="lineCov">     756791 :       e-&gt;probability = profile_probability::never ();</span>
+<span class="lineNum">     616 </span><span class="lineCov">     756791 :       dfs.add_bb (deadend_block);</span>
+<span class="lineNum">     617 </span><span class="lineCov">     756791 :     }</span>
+<span class="lineNum">     618 </span><span class="lineCov">    2731374 : }</span>
+<span class="lineNum">     619 </span>            : 
+<span class="lineNum">     620 </span>            : /* Compute reverse top sort order.  This is computing a post order
+<span class="lineNum">     621 </span>            :    numbering of the graph.  If INCLUDE_ENTRY_EXIT is true, then
+<span class="lineNum">     622 </span>            :    ENTRY_BLOCK and EXIT_BLOCK are included.  If DELETE_UNREACHABLE is
+<span class="lineNum">     623 </span>            :    true, unreachable blocks are deleted.  */
+<span class="lineNum">     624 </span>            : 
+<span class="lineNum">     625 </span>            : int
+<span class="lineNum">     626 </span><span class="lineCov">   21020016 : post_order_compute (int *post_order, bool include_entry_exit,</span>
+<span class="lineNum">     627 </span>            :                     bool delete_unreachable)
+<span class="lineNum">     628 </span>            : {
+<span class="lineNum">     629 </span><span class="lineCov">   21020016 :   int post_order_num = 0;</span>
+<span class="lineNum">     630 </span><span class="lineCov">   21020016 :   int count;</span>
+<span class="lineNum">     631 </span>            : 
+<span class="lineNum">     632 </span><span class="lineCov">   21020016 :   if (include_entry_exit)</span>
+<span class="lineNum">     633 </span><span class="lineCov">   19869575 :     post_order[post_order_num++] = EXIT_BLOCK;</span>
+<span class="lineNum">     634 </span>            : 
+<span class="lineNum">     635 </span>            :   /* Allocate stack for back-tracking up CFG.  */
+<span class="lineNum">     636 </span><span class="lineCov">   21020016 :   auto_vec&lt;edge_iterator, 20&gt; stack (n_basic_blocks_for_fn (cfun) + 1);</span>
+<span class="lineNum">     637 </span>            : 
+<span class="lineNum">     638 </span>            :   /* Allocate bitmap to track nodes that have been visited.  */
+<span class="lineNum">     639 </span><span class="lineCov">   42040032 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     640 </span>            : 
+<span class="lineNum">     641 </span>            :   /* None of the nodes in the CFG have been visited yet.  */
+<span class="lineNum">     642 </span><span class="lineCov">   42040032 :   bitmap_clear (visited);</span>
+<span class="lineNum">     643 </span>            : 
+<span class="lineNum">     644 </span>            :   /* Push the first edge on to the stack.  */
+<span class="lineNum">     645 </span><span class="lineCov">   42040032 :   stack.quick_push (ei_start (ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;succs));</span>
+<span class="lineNum">     646 </span>            : 
+<span class="lineNum">     647 </span><span class="lineCov">  635959428 :   while (!stack.is_empty ())</span>
+<span class="lineNum">     648 </span>            :     {
+<span class="lineNum">     649 </span><span class="lineCov">  614939412 :       basic_block src;</span>
+<span class="lineNum">     650 </span><span class="lineCov">  614939412 :       basic_block dest;</span>
+<span class="lineNum">     651 </span>            : 
+<span class="lineNum">     652 </span>            :       /* Look at the edge on the top of the stack.  */
+<span class="lineNum">     653 </span><span class="lineCov">  614939412 :       edge_iterator ei = stack.last ();</span>
+<span class="lineNum">     654 </span><span class="lineCov">  614939412 :       src = ei_edge (ei)-&gt;src;</span>
+<span class="lineNum">     655 </span><span class="lineCov">  614939412 :       dest = ei_edge (ei)-&gt;dest;</span>
+<span class="lineNum">     656 </span>            : 
+<span class="lineNum">     657 </span>            :       /* Check if the edge destination has been visited yet.  */
+<span class="lineNum">     658 </span><span class="lineCov">  614939412 :       if (dest != EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     659 </span><span class="lineCov">  614939412 :           &amp;&amp; ! bitmap_bit_p (visited, dest-&gt;index))</span>
+<span class="lineNum">     660 </span>            :         {
+<span class="lineNum">     661 </span>            :           /* Mark that we have visited the destination.  */
+<span class="lineNum">     662 </span><span class="lineCov">  481272546 :           bitmap_set_bit (visited, dest-&gt;index);</span>
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span><span class="lineCov">  240636273 :           if (EDGE_COUNT (dest-&gt;succs) &gt; 0)</span>
+<span class="lineNum">     665 </span>            :             /* Since the DEST node has been visited for the first
+<span class="lineNum">     666 </span>            :                time, check its successors.  */
+<span class="lineNum">     667 </span><span class="lineCov">  457702974 :             stack.quick_push (ei_start (dest-&gt;succs));</span>
+<span class="lineNum">     668 </span>            :           else
+<span class="lineNum">     669 </span><span class="lineCov">   11784786 :             post_order[post_order_num++] = dest-&gt;index;</span>
+<span class="lineNum">     670 </span>            :         }
+<span class="lineNum">     671 </span>            :       else
+<span class="lineNum">     672 </span>            :         {
+<span class="lineNum">     673 </span><span class="lineCov">  374303139 :           if (ei_one_before_end_p (ei)</span>
+<span class="lineNum">     674 </span><span class="lineCov">  374303139 :               &amp;&amp; src != ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">     675 </span><span class="lineCov">  228851487 :             post_order[post_order_num++] = src-&gt;index;</span>
+<span class="lineNum">     676 </span>            : 
+<span class="lineNum">     677 </span><span class="lineCov">  374303139 :           if (!ei_one_before_end_p (ei))</span>
+<span class="lineNum">     678 </span><span class="lineCov">  124431636 :             ei_next (&amp;stack.last ());</span>
+<span class="lineNum">     679 </span>            :           else
+<span class="lineNum">     680 </span><span class="lineCov">  249871503 :             stack.pop ();</span>
+<span class="lineNum">     681 </span>            :         }
+<span class="lineNum">     682 </span>            :     }
+<span class="lineNum">     683 </span>            : 
+<span class="lineNum">     684 </span><span class="lineCov">   21020016 :   if (include_entry_exit)</span>
+<span class="lineNum">     685 </span>            :     {
+<span class="lineNum">     686 </span><span class="lineCov">   19869575 :       post_order[post_order_num++] = ENTRY_BLOCK;</span>
+<span class="lineNum">     687 </span><span class="lineCov">   19869575 :       count = post_order_num;</span>
+<span class="lineNum">     688 </span>            :     }
+<span class="lineNum">     689 </span>            :   else
+<span class="lineNum">     690 </span><span class="lineCov">    1150441 :     count = post_order_num + 2;</span>
+<span class="lineNum">     691 </span>            : 
+<span class="lineNum">     692 </span>            :   /* Delete the unreachable blocks if some were found and we are
+<span class="lineNum">     693 </span>            :      supposed to do it.  */
+<span class="lineNum">     694 </span><span class="lineCov">   21020016 :   if (delete_unreachable &amp;&amp; (count != n_basic_blocks_for_fn (cfun)))</span>
+<span class="lineNum">     695 </span>            :     {
+<span class="lineNum">     696 </span><span class="lineCov">       5161 :       basic_block b;</span>
+<span class="lineNum">     697 </span><span class="lineCov">       5161 :       basic_block next_bb;</span>
+<span class="lineNum">     698 </span><span class="lineCov">       5161 :       for (b = ENTRY_BLOCK_PTR_FOR_FN (cfun)-&gt;next_bb; b</span>
+<span class="lineNum">     699 </span><span class="lineCov">     751989 :            != EXIT_BLOCK_PTR_FOR_FN (cfun); b = next_bb)</span>
+<span class="lineNum">     700 </span>            :         {
+<span class="lineNum">     701 </span><span class="lineCov">     746828 :           next_bb = b-&gt;next_bb;</span>
+<span class="lineNum">     702 </span>            : 
+<span class="lineNum">     703 </span><span class="lineCov">    1493656 :           if (!(bitmap_bit_p (visited, b-&gt;index)))</span>
+<span class="lineNum">     704 </span><span class="lineCov">      10086 :             delete_basic_block (b);</span>
+<span class="lineNum">     705 </span>            :         }
+<span class="lineNum">     706 </span>            : 
+<span class="lineNum">     707 </span><span class="lineCov">       5161 :       tidy_fallthru_edges ();</span>
+<span class="lineNum">     708 </span>            :     }
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span><span class="lineCov">   21020016 :   return post_order_num;</span>
+<span class="lineNum">     711 </span>            : }
+<span class="lineNum">     712 </span>            : 
+<span class="lineNum">     713 </span>            : 
+<span class="lineNum">     714 </span>            : /* Helper routine for inverted_post_order_compute
+<span class="lineNum">     715 </span>            :    flow_dfs_compute_reverse_execute, and the reverse-CFG
+<span class="lineNum">     716 </span>            :    deapth first search in dominance.c.
+<span class="lineNum">     717 </span>            :    BB has to belong to a region of CFG
+<span class="lineNum">     718 </span>            :    unreachable by inverted traversal from the exit.
+<span class="lineNum">     719 </span>            :    i.e. there's no control flow path from ENTRY to EXIT
+<span class="lineNum">     720 </span>            :    that contains this BB.
+<span class="lineNum">     721 </span>            :    This can happen in two cases - if there's an infinite loop
+<span class="lineNum">     722 </span>            :    or if there's a block that has no successor
+<span class="lineNum">     723 </span>            :    (call to a function with no return).
+<span class="lineNum">     724 </span>            :    Some RTL passes deal with this condition by
+<span class="lineNum">     725 </span>            :    calling connect_infinite_loops_to_exit () and/or
+<span class="lineNum">     726 </span>            :    add_noreturn_fake_exit_edges ().
+<span class="lineNum">     727 </span>            :    However, those methods involve modifying the CFG itself
+<span class="lineNum">     728 </span>            :    which may not be desirable.
+<span class="lineNum">     729 </span>            :    Hence, we deal with the infinite loop/no return cases
+<span class="lineNum">     730 </span>            :    by identifying a unique basic block that can reach all blocks
+<span class="lineNum">     731 </span>            :    in such a region by inverted traversal.
+<span class="lineNum">     732 </span>            :    This function returns a basic block that guarantees
+<span class="lineNum">     733 </span>            :    that all blocks in the region are reachable
+<span class="lineNum">     734 </span>            :    by starting an inverted traversal from the returned block.  */
+<span class="lineNum">     735 </span>            : 
+<span class="lineNum">     736 </span>            : basic_block
+<span class="lineNum">     737 </span><span class="lineCov">     929683 : dfs_find_deadend (basic_block bb)</span>
+<span class="lineNum">     738 </span>            : {
+<span class="lineNum">     739 </span><span class="lineCov">    1859366 :   auto_bitmap visited;</span>
+<span class="lineNum">     740 </span><span class="lineCov">     929683 :   basic_block next = bb;</span>
+<span class="lineNum">     741 </span>            : 
+<span class="lineNum">     742 </span><span class="lineCov">    1536481 :   for (;;)</span>
+<span class="lineNum">     743 </span>            :     {
+<span class="lineNum">     744 </span><span class="lineCov">    1536481 :       if (EDGE_COUNT (next-&gt;succs) == 0)</span>
+<span class="lineNum">     745 </span><span class="lineCov">     747559 :         return next;</span>
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span><span class="lineCov">    1577844 :       if (! bitmap_set_bit (visited, next-&gt;index))</span>
+<span class="lineNum">     748 </span><span class="lineCov">     182124 :         return bb;</span>
+<span class="lineNum">     749 </span>            : 
+<span class="lineNum">     750 </span><span class="lineCov">     606798 :       bb = next;</span>
+<span class="lineNum">     751 </span>            :       /* If we are in an analyzed cycle make sure to try exiting it.
+<span class="lineNum">     752 </span>            :          Note this is a heuristic only and expected to work when loop
+<span class="lineNum">     753 </span>            :          fixup is needed as well.  */
+<span class="lineNum">     754 </span><span class="lineCov">     606798 :       if (! bb-&gt;loop_father</span>
+<span class="lineNum">     755 </span><span class="lineCov">     772055 :           || ! loop_outer (bb-&gt;loop_father))</span>
+<span class="lineNum">     756 </span><span class="lineCov">     441541 :         next = EDGE_SUCC (bb, 0)-&gt;dest;</span>
+<span class="lineNum">     757 </span>            :       else
+<span class="lineNum">     758 </span>            :         {
+<span class="lineNum">     759 </span><span class="lineCov">     165257 :           edge_iterator ei;</span>
+<span class="lineNum">     760 </span><span class="lineCov">     165257 :           edge e;</span>
+<span class="lineNum">     761 </span><span class="lineCov">     512313 :           FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     762 </span><span class="lineCov">     202323 :             if (loop_exit_edge_p (bb-&gt;loop_father, e))</span>
+<span class="lineNum">     763 </span>            :               break;
+<span class="lineNum">     764 </span><span class="lineCov">     165257 :           next = e ? e-&gt;dest : EDGE_SUCC (bb, 0)-&gt;dest;</span>
+<span class="lineNum">     765 </span>            :         }
+<span class="lineNum">     766 </span>            :     }
+<span class="lineNum">     767 </span>            : 
+<span class="lineNum">     768 </span>            :   gcc_unreachable ();
+<span class="lineNum">     769 </span>            : }
+<span class="lineNum">     770 </span>            : 
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span>            : /* Compute the reverse top sort order of the inverted CFG
+<span class="lineNum">     773 </span>            :    i.e. starting from the exit block and following the edges backward
+<span class="lineNum">     774 </span>            :    (from successors to predecessors).
+<span class="lineNum">     775 </span>            :    This ordering can be used for forward dataflow problems among others.
+<span class="lineNum">     776 </span>            : 
+<span class="lineNum">     777 </span>            :    Optionally if START_POINTS is specified, start from exit block and all
+<span class="lineNum">     778 </span>            :    basic blocks in START_POINTS.  This is used by CD-DCE.
+<span class="lineNum">     779 </span>            : 
+<span class="lineNum">     780 </span>            :    This function assumes that all blocks in the CFG are reachable
+<span class="lineNum">     781 </span>            :    from the ENTRY (but not necessarily from EXIT).
+<span class="lineNum">     782 </span>            : 
+<span class="lineNum">     783 </span>            :    If there's an infinite loop,
+<span class="lineNum">     784 </span>            :    a simple inverted traversal starting from the blocks
+<span class="lineNum">     785 </span>            :    with no successors can't visit all blocks.
+<span class="lineNum">     786 </span>            :    To solve this problem, we first do inverted traversal
+<span class="lineNum">     787 </span>            :    starting from the blocks with no successor.
+<span class="lineNum">     788 </span>            :    And if there's any block left that's not visited by the regular
+<span class="lineNum">     789 </span>            :    inverted traversal from EXIT,
+<span class="lineNum">     790 </span>            :    those blocks are in such problematic region.
+<span class="lineNum">     791 </span>            :    Among those, we find one block that has
+<span class="lineNum">     792 </span>            :    any visited predecessor (which is an entry into such a region),
+<span class="lineNum">     793 </span>            :    and start looking for a &quot;dead end&quot; from that block
+<span class="lineNum">     794 </span>            :    and do another inverted traversal from that block.  */
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span>            : void
+<span class="lineNum">     797 </span><span class="lineCov">   23392191 : inverted_post_order_compute (vec&lt;int&gt; *post_order,</span>
+<span class="lineNum">     798 </span>            :                              sbitmap *start_points)
+<span class="lineNum">     799 </span>            : {
+<span class="lineNum">     800 </span><span class="lineCov">   23392191 :   basic_block bb;</span>
+<span class="lineNum">     801 </span><span class="lineCov">   23392191 :   post_order-&gt;reserve_exact (n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     802 </span>            : 
+<span class="lineNum">     803 </span><span class="lineCov">   23392191 :   if (flag_checking)</span>
+<span class="lineNum">     804 </span><span class="lineCov">   23391883 :     verify_no_unreachable_blocks ();</span>
+<span class="lineNum">     805 </span>            : 
+<span class="lineNum">     806 </span>            :   /* Allocate stack for back-tracking up CFG.  */
+<span class="lineNum">     807 </span><span class="lineCov">   23392191 :   auto_vec&lt;edge_iterator, 20&gt; stack (n_basic_blocks_for_fn (cfun) + 1);</span>
+<span class="lineNum">     808 </span>            : 
+<span class="lineNum">     809 </span>            :   /* Allocate bitmap to track nodes that have been visited.  */
+<span class="lineNum">     810 </span><span class="lineCov">   46784382 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span>            :   /* None of the nodes in the CFG have been visited yet.  */
+<span class="lineNum">     813 </span><span class="lineCov">   46784382 :   bitmap_clear (visited);</span>
+<span class="lineNum">     814 </span>            : 
+<span class="lineNum">     815 </span><span class="lineCov">   23392191 :   if (start_points)</span>
+<span class="lineNum">     816 </span>            :     {
+<span class="lineNum">     817 </span><span class="lineCov">     365597 :       FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     818 </span><span class="lineCov">     355326 :         if (bitmap_bit_p (*start_points, bb-&gt;index)</span>
+<span class="lineNum">     819 </span><span class="lineCov">     355326 :             &amp;&amp; EDGE_COUNT (bb-&gt;preds) &gt; 0)</span>
+<span class="lineNum">     820 </span>            :           {
+<span class="lineNum">     821 </span><span class="lineCov">     523452 :             stack.quick_push (ei_start (bb-&gt;preds));</span>
+<span class="lineNum">     822 </span><span class="lineCov">     523452 :             bitmap_set_bit (visited, bb-&gt;index);</span>
+<span class="lineNum">     823 </span>            :           }
+<span class="lineNum">     824 </span><span class="lineCov">      10271 :       if (EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds))</span>
+<span class="lineNum">     825 </span>            :         {
+<span class="lineNum">     826 </span><span class="lineCov">      19242 :           stack.quick_push (ei_start (EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;preds));</span>
+<span class="lineNum">     827 </span><span class="lineCov">      19242 :           bitmap_set_bit (visited, EXIT_BLOCK_PTR_FOR_FN (cfun)-&gt;index);</span>
+<span class="lineNum">     828 </span>            :         }
+<span class="lineNum">     829 </span>            :     }
+<span class="lineNum">     830 </span>            :   else
+<span class="lineNum">     831 </span>            :   /* Put all blocks that have no successor into the initial work list.  */
+<span class="lineNum">     832 </span><span class="lineCov">  351207052 :   FOR_ALL_BB_FN (bb, cfun)</span>
+<span class="lineNum">     833 </span><span class="lineCov">  327825132 :     if (EDGE_COUNT (bb-&gt;succs) == 0)</span>
+<span class="lineNum">     834 </span>            :       {
+<span class="lineNum">     835 </span>            :         /* Push the initial edge on to the stack.  */
+<span class="lineNum">     836 </span><span class="lineCov">   36088749 :         if (EDGE_COUNT (bb-&gt;preds) &gt; 0)</span>
+<span class="lineNum">     837 </span>            :           {
+<span class="lineNum">     838 </span><span class="lineCov">   71086064 :             stack.quick_push (ei_start (bb-&gt;preds));</span>
+<span class="lineNum">     839 </span><span class="lineCov">   71086064 :             bitmap_set_bit (visited, bb-&gt;index);</span>
+<span class="lineNum">     840 </span>            :           }
+<span class="lineNum">     841 </span>            :       }
+<span class="lineNum">     842 </span>            : 
+<span class="lineNum">     843 </span><span class="lineCov">   23526377 :   do</span>
+<span class="lineNum">     844 </span>            :     {
+<span class="lineNum">     845 </span><span class="lineCov">   23526377 :       bool has_unvisited_bb = false;</span>
+<span class="lineNum">     846 </span>            : 
+<span class="lineNum">     847 </span>            :       /* The inverted traversal loop. */
+<span class="lineNum">     848 </span><span class="lineCov">  752026515 :       while (!stack.is_empty ())</span>
+<span class="lineNum">     849 </span>            :         {
+<span class="lineNum">     850 </span><span class="lineCov">  728500138 :           edge_iterator ei;</span>
+<span class="lineNum">     851 </span><span class="lineCov">  728500138 :           basic_block pred;</span>
+<span class="lineNum">     852 </span>            : 
+<span class="lineNum">     853 </span>            :           /* Look at the edge on the top of the stack.  */
+<span class="lineNum">     854 </span><span class="lineCov">  728500138 :           ei = stack.last ();</span>
+<span class="lineNum">     855 </span><span class="lineCov">  728500138 :           bb = ei_edge (ei)-&gt;dest;</span>
+<span class="lineNum">     856 </span><span class="lineCov">  728500138 :           pred = ei_edge (ei)-&gt;src;</span>
+<span class="lineNum">     857 </span>            : 
+<span class="lineNum">     858 </span>            :           /* Check if the predecessor has been visited yet.  */
+<span class="lineNum">     859 </span><span class="lineCov"> 1457000276 :           if (! bitmap_bit_p (visited, pred-&gt;index))</span>
+<span class="lineNum">     860 </span>            :             {
+<span class="lineNum">     861 </span>            :               /* Mark that we have visited the destination.  */
+<span class="lineNum">     862 </span><span class="lineCov">  583371052 :               bitmap_set_bit (visited, pred-&gt;index);</span>
+<span class="lineNum">     863 </span>            : 
+<span class="lineNum">     864 </span><span class="lineCov">  291685526 :               if (EDGE_COUNT (pred-&gt;preds) &gt; 0)</span>
+<span class="lineNum">     865 </span>            :                 /* Since the predecessor node has been visited for the first
+<span class="lineNum">     866 </span>            :                    time, check its predecessors.  */
+<span class="lineNum">     867 </span><span class="lineCov">  536586670 :                 stack.quick_push (ei_start (pred-&gt;preds));</span>
+<span class="lineNum">     868 </span>            :               else
+<span class="lineNum">     869 </span><span class="lineCov">   23392191 :                 post_order-&gt;quick_push (pred-&gt;index);</span>
+<span class="lineNum">     870 </span>            :             }
+<span class="lineNum">     871 </span>            :           else
+<span class="lineNum">     872 </span>            :             {
+<span class="lineNum">     873 </span><span class="lineCov">  436814612 :               if (bb != EXIT_BLOCK_PTR_FOR_FN (cfun)</span>
+<span class="lineNum">     874 </span><span class="lineCov">  436814612 :                   &amp;&amp; ei_one_before_end_p (ei))</span>
+<span class="lineNum">     875 </span><span class="lineCov">  281396076 :                 post_order-&gt;quick_push (bb-&gt;index);</span>
+<span class="lineNum">     876 </span>            : 
+<span class="lineNum">     877 </span><span class="lineCov">  436814612 :               if (!ei_one_before_end_p (ei))</span>
+<span class="lineNum">     878 </span><span class="lineCov">  132572712 :                 ei_next (&amp;stack.last ());</span>
+<span class="lineNum">     879 </span>            :               else
+<span class="lineNum">     880 </span><span class="lineCov">  304241900 :                 stack.pop ();</span>
+<span class="lineNum">     881 </span>            :             }
+<span class="lineNum">     882 </span>            :         }
+<span class="lineNum">     883 </span>            : 
+<span class="lineNum">     884 </span>            :       /* Detect any infinite loop and activate the kludge.
+<span class="lineNum">     885 </span>            :          Note that this doesn't check EXIT_BLOCK itself
+<span class="lineNum">     886 </span>            :          since EXIT_BLOCK is always added after the outer do-while loop.  */
+<span class="lineNum">     887 </span><span class="lineCov">  329280068 :       FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun),</span>
+<span class="lineNum">     888 </span>            :                       EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+<span class="lineNum">     889 </span><span class="lineCov">  611678812 :         if (!bitmap_bit_p (visited, bb-&gt;index))</span>
+<span class="lineNum">     890 </span>            :           {
+<span class="lineNum">     891 </span><span class="lineCov">     465282 :             has_unvisited_bb = true;</span>
+<span class="lineNum">     892 </span>            : 
+<span class="lineNum">     893 </span><span class="lineCov">     465282 :             if (EDGE_COUNT (bb-&gt;preds) &gt; 0)</span>
+<span class="lineNum">     894 </span>            :               {
+<span class="lineNum">     895 </span><span class="lineCov">     416811 :                 edge_iterator ei;</span>
+<span class="lineNum">     896 </span><span class="lineCov">     416811 :                 edge e;</span>
+<span class="lineNum">     897 </span><span class="lineCov">     416811 :                 basic_block visited_pred = NULL;</span>
+<span class="lineNum">     898 </span>            : 
+<span class="lineNum">     899 </span>            :                 /* Find an already visited predecessor.  */
+<span class="lineNum">     900 </span><span class="lineCov">    1449287 :                 FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     901 </span>            :                   {
+<span class="lineNum">     902 </span><span class="lineCov">    1231330 :                     if (bitmap_bit_p (visited, e-&gt;src-&gt;index))</span>
+<span class="lineNum">     903 </span><span class="lineCov">      92485 :                       visited_pred = e-&gt;src;</span>
+<span class="lineNum">     904 </span>            :                   }
+<span class="lineNum">     905 </span>            : 
+<span class="lineNum">     906 </span><span class="lineCov">     416811 :                 if (visited_pred)</span>
+<span class="lineNum">     907 </span>            :                   {
+<span class="lineNum">     908 </span><span class="lineCov">      85715 :                     basic_block be = dfs_find_deadend (bb);</span>
+<span class="lineNum">     909 </span><span class="lineCov">      85715 :                     gcc_assert (be != NULL);</span>
+<span class="lineNum">     910 </span><span class="lineCov">     171430 :                     bitmap_set_bit (visited, be-&gt;index);</span>
+<span class="lineNum">     911 </span><span class="lineCov">     171430 :                     stack.quick_push (ei_start (be-&gt;preds));</span>
+<span class="lineNum">     912 </span><span class="lineCov">      85715 :                     break;</span>
+<span class="lineNum">     913 </span>            :                   }
+<span class="lineNum">     914 </span>            :               }
+<span class="lineNum">     915 </span>            :           }
+<span class="lineNum">     916 </span>            : 
+<span class="lineNum">     917 </span><span class="lineCov">   23526377 :       if (has_unvisited_bb &amp;&amp; stack.is_empty ())</span>
+<span class="lineNum">     918 </span>            :         {
+<span class="lineNum">     919 </span>            :           /* No blocks are reachable from EXIT at all.
+<span class="lineNum">     920 </span>            :              Find a dead-end from the ENTRY, and restart the iteration. */
+<span class="lineNum">     921 </span><span class="lineCov">      48471 :           basic_block be = dfs_find_deadend (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">     922 </span><span class="lineCov">      48471 :           gcc_assert (be != NULL);</span>
+<span class="lineNum">     923 </span><span class="lineCov">      96942 :           bitmap_set_bit (visited, be-&gt;index);</span>
+<span class="lineNum">     924 </span><span class="lineCov">      96942 :           stack.quick_push (ei_start (be-&gt;preds));</span>
+<span class="lineNum">     925 </span>            :         }
+<span class="lineNum">     926 </span>            : 
+<span class="lineNum">     927 </span>            :       /* The only case the below while fires is
+<span class="lineNum">     928 </span>            :          when there's an infinite loop.  */
+<span class="lineNum">     929 </span>            :     }
+<span class="lineNum">     930 </span><span class="lineCov">   23526377 :   while (!stack.is_empty ());</span>
+<span class="lineNum">     931 </span>            : 
+<span class="lineNum">     932 </span>            :   /* EXIT_BLOCK is always included.  */
+<span class="lineNum">     933 </span><span class="lineCov">   23392191 :   post_order-&gt;quick_push (EXIT_BLOCK);</span>
+<span class="lineNum">     934 </span><span class="lineCov">   23392191 : }</span>
+<span class="lineNum">     935 </span>            : 
+<span class="lineNum">     936 </span>            : /* Compute the depth first search order of FN and store in the array
+<span class="lineNum">     937 </span>            :    PRE_ORDER if nonzero.  If REV_POST_ORDER is nonzero, return the
+<span class="lineNum">     938 </span>            :    reverse completion number for each node.  Returns the number of nodes
+<span class="lineNum">     939 </span>            :    visited.  A depth first search tries to get as far away from the starting
+<span class="lineNum">     940 </span>            :    point as quickly as possible.
+<span class="lineNum">     941 </span>            : 
+<span class="lineNum">     942 </span>            :    In case the function has unreachable blocks the number of nodes
+<span class="lineNum">     943 </span>            :    visited does not include them.
+<span class="lineNum">     944 </span>            : 
+<span class="lineNum">     945 </span>            :    pre_order is a really a preorder numbering of the graph.
+<span class="lineNum">     946 </span>            :    rev_post_order is really a reverse postorder numbering of the graph.  */
+<span class="lineNum">     947 </span>            : 
+<span class="lineNum">     948 </span>            : int
+<span class="lineNum">     949 </span><span class="lineCov">   54898581 : pre_and_rev_post_order_compute_fn (struct function *fn,</span>
+<span class="lineNum">     950 </span>            :                                    int *pre_order, int *rev_post_order,
+<span class="lineNum">     951 </span>            :                                    bool include_entry_exit)
+<span class="lineNum">     952 </span>            : {
+<span class="lineNum">     953 </span><span class="lineCov">   54898581 :   int pre_order_num = 0;</span>
+<span class="lineNum">     954 </span><span class="lineCov">   54898581 :   int rev_post_order_num = n_basic_blocks_for_fn (cfun) - 1;</span>
+<span class="lineNum">     955 </span>            : 
+<span class="lineNum">     956 </span>            :   /* Allocate stack for back-tracking up CFG.  */
+<span class="lineNum">     957 </span><span class="lineCov">   54898581 :   auto_vec&lt;edge_iterator, 20&gt; stack (n_basic_blocks_for_fn (cfun) + 1);</span>
+<span class="lineNum">     958 </span>            : 
+<span class="lineNum">     959 </span><span class="lineCov">   54898581 :   if (include_entry_exit)</span>
+<span class="lineNum">     960 </span>            :     {
+<span class="lineNum">     961 </span><span class="lineCov">   20355803 :       if (pre_order)</span>
+<span class="lineNum">     962 </span><span class="lineNoCov">          0 :         pre_order[pre_order_num] = ENTRY_BLOCK;</span>
+<span class="lineNum">     963 </span><span class="lineCov">   20355803 :       pre_order_num++;</span>
+<span class="lineNum">     964 </span><span class="lineCov">   20355803 :       if (rev_post_order)</span>
+<span class="lineNum">     965 </span><span class="lineCov">   20355803 :         rev_post_order[rev_post_order_num--] = EXIT_BLOCK;</span>
+<span class="lineNum">     966 </span>            :     }
+<span class="lineNum">     967 </span>            :   else
+<span class="lineNum">     968 </span><span class="lineCov">   34542778 :     rev_post_order_num -= NUM_FIXED_BLOCKS;</span>
+<span class="lineNum">     969 </span>            : 
+<span class="lineNum">     970 </span>            :   /* Allocate bitmap to track nodes that have been visited.  */
+<span class="lineNum">     971 </span><span class="lineCov">  109797162 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     972 </span>            : 
+<span class="lineNum">     973 </span>            :   /* None of the nodes in the CFG have been visited yet.  */
+<span class="lineNum">     974 </span><span class="lineCov">  109797162 :   bitmap_clear (visited);</span>
+<span class="lineNum">     975 </span>            : 
+<span class="lineNum">     976 </span>            :   /* Push the first edge on to the stack.  */
+<span class="lineNum">     977 </span><span class="lineCov">  109797162 :   stack.quick_push (ei_start (ENTRY_BLOCK_PTR_FOR_FN (fn)-&gt;succs));</span>
+<span class="lineNum">     978 </span>            : 
+<span class="lineNum">     979 </span><span class="lineCov"> 1513686015 :   while (!stack.is_empty ())</span>
+<span class="lineNum">     980 </span>            :     {
+<span class="lineNum">     981 </span><span class="lineCov"> 1458787434 :       basic_block src;</span>
+<span class="lineNum">     982 </span><span class="lineCov"> 1458787434 :       basic_block dest;</span>
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span>            :       /* Look at the edge on the top of the stack.  */
+<span class="lineNum">     985 </span><span class="lineCov"> 1458787434 :       edge_iterator ei = stack.last ();</span>
+<span class="lineNum">     986 </span><span class="lineCov"> 1458787434 :       src = ei_edge (ei)-&gt;src;</span>
+<span class="lineNum">     987 </span><span class="lineCov"> 1458787434 :       dest = ei_edge (ei)-&gt;dest;</span>
+<span class="lineNum">     988 </span>            : 
+<span class="lineNum">     989 </span>            :       /* Check if the edge destination has been visited yet.  */
+<span class="lineNum">     990 </span><span class="lineCov"> 1458787434 :       if (dest != EXIT_BLOCK_PTR_FOR_FN (fn)</span>
+<span class="lineNum">     991 </span><span class="lineCov"> 1458787434 :           &amp;&amp; ! bitmap_bit_p (visited, dest-&gt;index))</span>
+<span class="lineNum">     992 </span>            :         {
+<span class="lineNum">     993 </span>            :           /* Mark that we have visited the destination.  */
+<span class="lineNum">     994 </span><span class="lineCov"> 1152531104 :           bitmap_set_bit (visited, dest-&gt;index);</span>
+<span class="lineNum">     995 </span>            : 
+<span class="lineNum">     996 </span><span class="lineCov">  576265552 :           if (pre_order)</span>
+<span class="lineNum">     997 </span><span class="lineNoCov">          0 :             pre_order[pre_order_num] = dest-&gt;index;</span>
+<span class="lineNum">     998 </span>            : 
+<span class="lineNum">     999 </span><span class="lineCov">  576265552 :           pre_order_num++;</span>
+<span class="lineNum">    1000 </span>            : 
+<span class="lineNum">    1001 </span><span class="lineCov">  576265552 :           if (EDGE_COUNT (dest-&gt;succs) &gt; 0)</span>
+<span class="lineNum">    1002 </span>            :             /* Since the DEST node has been visited for the first
+<span class="lineNum">    1003 </span>            :                time, check its successors.  */
+<span class="lineNum">    1004 </span><span class="lineCov"> 1080782642 :             stack.quick_push (ei_start (dest-&gt;succs));</span>
+<span class="lineNum">    1005 </span><span class="lineCov">   35874231 :           else if (rev_post_order)</span>
+<span class="lineNum">    1006 </span>            :             /* There are no successors for the DEST node so assign
+<span class="lineNum">    1007 </span>            :                its reverse completion number.  */
+<span class="lineNum">    1008 </span><span class="lineCov">   35874231 :             rev_post_order[rev_post_order_num--] = dest-&gt;index;</span>
+<span class="lineNum">    1009 </span>            :         }
+<span class="lineNum">    1010 </span>            :       else
+<span class="lineNum">    1011 </span>            :         {
+<span class="lineNum">    1012 </span><span class="lineCov">  882521882 :           if (ei_one_before_end_p (ei)</span>
+<span class="lineNum">    1013 </span><span class="lineCov">  595289902 :               &amp;&amp; src != ENTRY_BLOCK_PTR_FOR_FN (fn)</span>
+<span class="lineNum">    1014 </span><span class="lineCov"> 1422913203 :               &amp;&amp; rev_post_order)</span>
+<span class="lineNum">    1015 </span>            :             /* There are no more successors for the SRC node
+<span class="lineNum">    1016 </span>            :                so assign its reverse completion number.  */
+<span class="lineNum">    1017 </span><span class="lineCov">  540391321 :             rev_post_order[rev_post_order_num--] = src-&gt;index;</span>
+<span class="lineNum">    1018 </span>            : 
+<span class="lineNum">    1019 </span><span class="lineCov">  882521882 :           if (!ei_one_before_end_p (ei))</span>
+<span class="lineNum">    1020 </span><span class="lineCov">  287231980 :             ei_next (&amp;stack.last ());</span>
+<span class="lineNum">    1021 </span>            :           else
+<span class="lineNum">    1022 </span><span class="lineCov">  595289902 :             stack.pop ();</span>
+<span class="lineNum">    1023 </span>            :         }
+<span class="lineNum">    1024 </span>            :     }
+<span class="lineNum">    1025 </span>            : 
+<span class="lineNum">    1026 </span><span class="lineCov">   54898581 :   if (include_entry_exit)</span>
+<span class="lineNum">    1027 </span>            :     {
+<span class="lineNum">    1028 </span><span class="lineCov">   20355803 :       if (pre_order)</span>
+<span class="lineNum">    1029 </span><span class="lineNoCov">          0 :         pre_order[pre_order_num] = EXIT_BLOCK;</span>
+<span class="lineNum">    1030 </span><span class="lineCov">   20355803 :       pre_order_num++;</span>
+<span class="lineNum">    1031 </span><span class="lineCov">   20355803 :       if (rev_post_order)</span>
+<span class="lineNum">    1032 </span><span class="lineCov">   20355803 :         rev_post_order[rev_post_order_num--] = ENTRY_BLOCK;</span>
+<span class="lineNum">    1033 </span>            :     }
+<span class="lineNum">    1034 </span>            : 
+<span class="lineNum">    1035 </span><span class="lineCov">   54898581 :   return pre_order_num;</span>
+<span class="lineNum">    1036 </span>            : }
+<span class="lineNum">    1037 </span>            : 
+<span class="lineNum">    1038 </span>            : /* Like pre_and_rev_post_order_compute_fn but operating on the
+<span class="lineNum">    1039 </span>            :    current function and asserting that all nodes were visited.  */
+<a name="1040"><span class="lineNum">    1040 </span>            : </a>
+<span class="lineNum">    1041 </span>            : int
+<span class="lineNum">    1042 </span><span class="lineCov">   46762996 : pre_and_rev_post_order_compute (int *pre_order, int *rev_post_order,</span>
+<span class="lineNum">    1043 </span>            :                                 bool include_entry_exit)
+<span class="lineNum">    1044 </span>            : {
+<span class="lineNum">    1045 </span><span class="lineCov">   46762996 :   int pre_order_num</span>
+<span class="lineNum">    1046 </span><span class="lineCov">   46762996 :     = pre_and_rev_post_order_compute_fn (cfun, pre_order, rev_post_order,</span>
+<span class="lineNum">    1047 </span>            :                                          include_entry_exit);
+<span class="lineNum">    1048 </span><span class="lineCov">   46762996 :   if (include_entry_exit)</span>
+<span class="lineNum">    1049 </span>            :     /* The number of nodes visited should be the number of blocks.  */
+<span class="lineNum">    1050 </span><span class="lineCov">   20338970 :     gcc_assert (pre_order_num == n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">    1051 </span>            :   else
+<span class="lineNum">    1052 </span>            :     /* The number of nodes visited should be the number of blocks minus
+<span class="lineNum">    1053 </span>            :        the entry and exit blocks which are not visited here.  */
+<span class="lineNum">    1054 </span><span class="lineCov">   26424026 :     gcc_assert (pre_order_num</span>
+<span class="lineNum">    1055 </span>            :                 == (n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS));
+<span class="lineNum">    1056 </span>            : 
+<span class="lineNum">    1057 </span><span class="lineCov">   46762996 :   return pre_order_num;</span>
+<span class="lineNum">    1058 </span>            : }
+<span class="lineNum">    1059 </span>            : 
+<span class="lineNum">    1060 </span>            : /* Unlike pre_and_rev_post_order_compute we fill rev_post_order backwards
+<span class="lineNum">    1061 </span>            :    so iterating in RPO order needs to start with rev_post_order[n - 1]
+<span class="lineNum">    1062 </span>            :    going to rev_post_order[0].  If FOR_ITERATION is true then try to
+<span class="lineNum">    1063 </span>            :    make CFG cycles fit into small contiguous regions of the RPO order.
+<span class="lineNum">    1064 </span>            :    When FOR_ITERATION is true this requires up-to-date loop structures.  */
+<span class="lineNum">    1065 </span>            : 
+<span class="lineNum">    1066 </span>            : int
+<span class="lineNum">    1067 </span><span class="lineCov">    2628835 : rev_post_order_and_mark_dfs_back_seme (struct function *fn, edge entry,</span>
+<span class="lineNum">    1068 </span>            :                                        bitmap exit_bbs, bool for_iteration,
+<span class="lineNum">    1069 </span>            :                                        int *rev_post_order)
+<span class="lineNum">    1070 </span>            : {
+<span class="lineNum">    1071 </span><span class="lineCov">    2628835 :   int pre_order_num = 0;</span>
+<span class="lineNum">    1072 </span><span class="lineCov">    2628835 :   int rev_post_order_num = 0;</span>
+<span class="lineNum">    1073 </span>            : 
+<span class="lineNum">    1074 </span>            :   /* Allocate stack for back-tracking up CFG.  Worst case we need
+<span class="lineNum">    1075 </span>            :      O(n^2) edges but the following should suffice in practice without
+<span class="lineNum">    1076 </span>            :      a need to re-allocate.  */
+<span class="lineNum">    1077 </span><span class="lineCov">    2628835 :   auto_vec&lt;edge, 20&gt; stack (2 * n_basic_blocks_for_fn (fn));</span>
+<span class="lineNum">    1078 </span>            : 
+<span class="lineNum">    1079 </span><span class="lineCov">    2628835 :   int *pre = XNEWVEC (int, 2 * last_basic_block_for_fn (fn));</span>
+<span class="lineNum">    1080 </span><span class="lineCov">    2628835 :   int *post = pre + last_basic_block_for_fn (fn);</span>
+<span class="lineNum">    1081 </span>            : 
+<span class="lineNum">    1082 </span>            :   /* BB flag to track nodes that have been visited.  */
+<span class="lineNum">    1083 </span><span class="lineCov">    5257670 :   auto_bb_flag visited (fn);</span>
+<span class="lineNum">    1084 </span>            :   /* BB flag to track which nodes have post[] assigned to avoid
+<span class="lineNum">    1085 </span>            :      zeroing post.  */
+<span class="lineNum">    1086 </span><span class="lineCov">    5257670 :   auto_bb_flag post_assigned (fn);</span>
+<span class="lineNum">    1087 </span>            : 
+<span class="lineNum">    1088 </span>            :   /* Push the first edge on to the stack.  */
+<span class="lineNum">    1089 </span><span class="lineCov">    2628835 :   stack.quick_push (entry);</span>
+<span class="lineNum">    1090 </span>            : 
+<span class="lineNum">    1091 </span><span class="lineCov">   57315870 :   while (!stack.is_empty ())</span>
+<span class="lineNum">    1092 </span>            :     {
+<span class="lineNum">    1093 </span><span class="lineCov">   54687035 :       basic_block src;</span>
+<span class="lineNum">    1094 </span><span class="lineCov">   54687035 :       basic_block dest;</span>
+<span class="lineNum">    1095 </span>            : 
+<span class="lineNum">    1096 </span>            :       /* Look at the edge on the top of the stack.  */
+<span class="lineNum">    1097 </span><span class="lineCov">   54687035 :       int idx = stack.length () - 1;</span>
+<span class="lineNum">    1098 </span><span class="lineCov">   54687035 :       edge e = stack[idx];</span>
+<span class="lineNum">    1099 </span><span class="lineCov">   54687035 :       src = e-&gt;src;</span>
+<span class="lineNum">    1100 </span><span class="lineCov">   54687035 :       dest = e-&gt;dest;</span>
+<span class="lineNum">    1101 </span><span class="lineCov">   54687035 :       e-&gt;flags &amp;= ~EDGE_DFS_BACK;</span>
+<span class="lineNum">    1102 </span>            : 
+<span class="lineNum">    1103 </span>            :       /* Check if the edge destination has been visited yet.  */
+<span class="lineNum">    1104 </span><span class="lineCov">   54687035 :       if (! bitmap_bit_p (exit_bbs, dest-&gt;index)</span>
+<span class="lineNum">    1105 </span><span class="lineCov">   54687035 :           &amp;&amp; ! (dest-&gt;flags &amp; visited))</span>
+<span class="lineNum">    1106 </span>            :         {
+<span class="lineNum">    1107 </span>            :           /* Mark that we have visited the destination.  */
+<span class="lineNum">    1108 </span><span class="lineCov">   21966821 :           dest-&gt;flags |= visited;</span>
+<span class="lineNum">    1109 </span>            : 
+<span class="lineNum">    1110 </span><span class="lineCov">   21966821 :           pre[dest-&gt;index] = pre_order_num++;</span>
+<span class="lineNum">    1111 </span>            : 
+<span class="lineNum">    1112 </span><span class="lineCov">   21966821 :           if (EDGE_COUNT (dest-&gt;succs) &gt; 0)</span>
+<span class="lineNum">    1113 </span>            :             {
+<span class="lineNum">    1114 </span>            :               /* Since the DEST node has been visited for the first
+<span class="lineNum">    1115 </span>            :                  time, check its successors.  */
+<span class="lineNum">    1116 </span>            :               /* Push the edge vector in reverse to match previous behavior.  */
+<span class="lineNum">    1117 </span><span class="lineCov">   40854286 :               stack.reserve (EDGE_COUNT (dest-&gt;succs));</span>
+<span class="lineNum">    1118 </span><span class="lineCov">   70945665 :               for (int i = EDGE_COUNT (dest-&gt;succs) - 1; i &gt;= 0; --i)</span>
+<span class="lineNum">    1119 </span><span class="lineCov">   30091379 :                 stack.quick_push (EDGE_SUCC (dest, i));</span>
+<span class="lineNum">    1120 </span>            :               /* Generalize to handle more successors?  */
+<span class="lineNum">    1121 </span><span class="lineCov">   20427143 :               if (for_iteration</span>
+<span class="lineNum">    1122 </span><span class="lineCov">   20427143 :                   &amp;&amp; EDGE_COUNT (dest-&gt;succs) == 2)</span>
+<span class="lineNum">    1123 </span>            :                 {
+<span class="lineNum">    1124 </span><span class="lineCov">   18995402 :                   edge &amp;e1 = stack[stack.length () - 2];</span>
+<span class="lineNum">    1125 </span><span class="lineCov">    9497701 :                   if (loop_exit_edge_p (e1-&gt;src-&gt;loop_father, e1))</span>
+<span class="lineNum">    1126 </span><span class="lineCov">     697001 :                     std::swap (e1, stack.last ());</span>
+<span class="lineNum">    1127 </span>            :                 }
+<span class="lineNum">    1128 </span>            :             }
+<span class="lineNum">    1129 </span>            :           else
+<span class="lineNum">    1130 </span>            :             {
+<span class="lineNum">    1131 </span>            :               /* There are no successors for the DEST node so assign
+<span class="lineNum">    1132 </span>            :                  its reverse completion number.  */
+<span class="lineNum">    1133 </span><span class="lineCov">    1539678 :               post[dest-&gt;index] = rev_post_order_num;</span>
+<span class="lineNum">    1134 </span><span class="lineCov">    1539678 :               dest-&gt;flags |= post_assigned;</span>
+<span class="lineNum">    1135 </span><span class="lineCov">    1539678 :               rev_post_order[rev_post_order_num] = dest-&gt;index;</span>
+<span class="lineNum">    1136 </span><span class="lineCov">    1539678 :               rev_post_order_num++;</span>
+<span class="lineNum">    1137 </span>            :             }
+<span class="lineNum">    1138 </span>            :         }
+<span class="lineNum">    1139 </span>            :       else
+<span class="lineNum">    1140 </span>            :         {
+<span class="lineNum">    1141 </span><span class="lineCov">   32720214 :           if (dest-&gt;flags &amp; visited</span>
+<span class="lineNum">    1142 </span><span class="lineCov">   30097679 :               &amp;&amp; src != entry-&gt;src</span>
+<span class="lineNum">    1143 </span><span class="lineCov">   27468844 :               &amp;&amp; pre[src-&gt;index] &gt;= pre[dest-&gt;index]</span>
+<span class="lineNum">    1144 </span><span class="lineCov">   39527896 :               &amp;&amp; !(dest-&gt;flags &amp; post_assigned))</span>
+<span class="lineNum">    1145 </span><span class="lineCov">    1074422 :             e-&gt;flags |= EDGE_DFS_BACK;</span>
+<span class="lineNum">    1146 </span>            : 
+<span class="lineNum">    1147 </span><span class="lineCov">   32720214 :           if (idx != 0 &amp;&amp; stack[idx - 1]-&gt;src != src)</span>
+<span class="lineNum">    1148 </span>            :             {
+<span class="lineNum">    1149 </span>            :               /* There are no more successors for the SRC node
+<span class="lineNum">    1150 </span>            :                  so assign its reverse completion number.  */
+<span class="lineNum">    1151 </span><span class="lineCov">   20427143 :               post[src-&gt;index] = rev_post_order_num;</span>
+<span class="lineNum">    1152 </span><span class="lineCov">   20427143 :               src-&gt;flags |= post_assigned;</span>
+<span class="lineNum">    1153 </span><span class="lineCov">   20427143 :               rev_post_order[rev_post_order_num] = src-&gt;index;</span>
+<span class="lineNum">    1154 </span><span class="lineCov">   20427143 :               rev_post_order_num++;</span>
+<span class="lineNum">    1155 </span>            :             }
+<span class="lineNum">    1156 </span>            : 
+<span class="lineNum">    1157 </span><span class="lineCov">   32720214 :           stack.pop ();</span>
+<span class="lineNum">    1158 </span>            :         }
+<span class="lineNum">    1159 </span>            :     }
+<span class="lineNum">    1160 </span>            : 
+<span class="lineNum">    1161 </span><span class="lineCov">    2628835 :   XDELETEVEC (pre);</span>
+<span class="lineNum">    1162 </span>            : 
+<span class="lineNum">    1163 </span>            :   /* Clear the temporarily allocated flags.  */
+<span class="lineNum">    1164 </span><span class="lineCov">   24595656 :   for (int i = 0; i &lt; rev_post_order_num; ++i)</span>
+<span class="lineNum">    1165 </span><span class="lineCov">   65900463 :     BASIC_BLOCK_FOR_FN (fn, rev_post_order[i])-&gt;flags</span>
+<span class="lineNum">    1166 </span><span class="lineCov">   21966821 :       &amp;= ~(post_assigned|visited);</span>
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span><span class="lineCov">    2628835 :   return rev_post_order_num;</span>
+<span class="lineNum">    1169 </span>            : }
+<span class="lineNum">    1170 </span>            : 
+<span class="lineNum">    1171 </span>            : 
+<span class="lineNum">    1172 </span>            : 
+<span class="lineNum">    1173 </span>            : /* Compute the depth first search order on the _reverse_ graph and
+<span class="lineNum">    1174 </span>            :    store it in the array DFS_ORDER, marking the nodes visited in VISITED.
+<span class="lineNum">    1175 </span>            :    Returns the number of nodes visited.
+<span class="lineNum">    1176 </span>            : 
+<span class="lineNum">    1177 </span>            :    The computation is split into three pieces:
+<span class="lineNum">    1178 </span>            : 
+<span class="lineNum">    1179 </span>            :    flow_dfs_compute_reverse_init () creates the necessary data
+<span class="lineNum">    1180 </span>            :    structures.
+<span class="lineNum">    1181 </span>            : 
+<span class="lineNum">    1182 </span>            :    flow_dfs_compute_reverse_add_bb () adds a basic block to the data
+<span class="lineNum">    1183 </span>            :    structures.  The block will start the search.
+<span class="lineNum">    1184 </span>            : 
+<span class="lineNum">    1185 </span>            :    flow_dfs_compute_reverse_execute () continues (or starts) the
+<span class="lineNum">    1186 </span>            :    search using the block on the top of the stack, stopping when the
+<span class="lineNum">    1187 </span>            :    stack is empty.
+<span class="lineNum">    1188 </span>            : 
+<span class="lineNum">    1189 </span>            :    flow_dfs_compute_reverse_finish () destroys the necessary data
+<span class="lineNum">    1190 </span>            :    structures.
+<span class="lineNum">    1191 </span>            : 
+<span class="lineNum">    1192 </span>            :    Thus, the user will probably call ..._init(), call ..._add_bb() to
+<span class="lineNum">    1193 </span>            :    add a beginning basic block to the stack, call ..._execute(),
+<span class="lineNum">    1194 </span>            :    possibly add another bb to the stack and again call ..._execute(),
+<span class="lineNum">    1195 </span>            :    ..., and finally call _finish().  */
+<span class="lineNum">    1196 </span>            : 
+<span class="lineNum">    1197 </span>            : /* Initialize the data structures used for depth-first search on the
+<span class="lineNum">    1198 </span>            :    reverse graph.  If INITIALIZE_STACK is nonzero, the exit block is
+<span class="lineNum">    1199 </span>            :    added to the basic block stack.  DATA is the current depth-first
+<span class="lineNum">    1200 </span>            :    search context.  If INITIALIZE_STACK is nonzero, there is an
+<a name="1201"><span class="lineNum">    1201 </span>            :    element on the stack.  */</a>
+<span class="lineNum">    1202 </span>            : 
+<span class="lineNum">    1203 </span><span class="lineCov">    2731374 : depth_first_search::depth_first_search () :</span>
+<span class="lineNum">    1204 </span><span class="lineCov">    2731374 :   m_stack (n_basic_blocks_for_fn (cfun)),</span>
+<span class="lineNum">    1205 </span><span class="lineCov">    2731374 :   m_visited_blocks (last_basic_block_for_fn (cfun))</span>
+<span class="lineNum">    1206 </span>            : {
+<span class="lineNum">    1207 </span><span class="lineCov">    5462748 :   bitmap_clear (m_visited_blocks);</span>
+<span class="lineNum">    1208 </span><span class="lineCov">    2731374 : }</span>
+<span class="lineNum">    1209 </span>            : 
+<span class="lineNum">    1210 </span>            : /* Add the specified basic block to the top of the dfs data
+<span class="lineNum">    1211 </span>            :    structures.  When the search continues, it will start at the
+<span class="lineNum">    1212 </span>            :    block.  */
+<span class="lineNum">    1213 </span>            : 
+<span class="lineNum">    1214 </span>            : void
+<span class="lineNum">    1215 </span><span class="lineCov">   30720755 : depth_first_search::add_bb (basic_block bb)</span>
+<span class="lineNum">    1216 </span>            : {
+<span class="lineNum">    1217 </span><span class="lineCov">   30720755 :   m_stack.quick_push (bb);</span>
+<span class="lineNum">    1218 </span><span class="lineCov">   61441510 :   bitmap_set_bit (m_visited_blocks, bb-&gt;index);</span>
+<span class="lineNum">    1219 </span><span class="lineCov">   30720755 : }</span>
+<span class="lineNum">    1220 </span>            : 
+<span class="lineNum">    1221 </span>            : /* Continue the depth-first search through the reverse graph starting with the
+<span class="lineNum">    1222 </span>            :    block at the stack's top and ending when the stack is empty.  Visited nodes
+<span class="lineNum">    1223 </span>            :    are marked.  Returns an unvisited basic block, or NULL if there is none
+<span class="lineNum">    1224 </span>            :    available.  */
+<span class="lineNum">    1225 </span>            : 
+<span class="lineNum">    1226 </span>            : basic_block
+<span class="lineNum">    1227 </span><span class="lineCov">    3488165 : depth_first_search::execute (basic_block last_unvisited)</span>
+<span class="lineNum">    1228 </span>            : {
+<span class="lineNum">    1229 </span><span class="lineCov">   34208920 :   basic_block bb;</span>
+<span class="lineNum">    1230 </span><span class="lineCov">   34208920 :   edge e;</span>
+<span class="lineNum">    1231 </span><span class="lineCov">   34208920 :   edge_iterator ei;</span>
+<span class="lineNum">    1232 </span>            : 
+<span class="lineNum">    1233 </span><span class="lineCov">   34208920 :   while (!m_stack.is_empty ())</span>
+<span class="lineNum">    1234 </span>            :     {
+<span class="lineNum">    1235 </span><span class="lineCov">   30720755 :       bb = m_stack.pop ();</span>
+<span class="lineNum">    1236 </span>            : 
+<span class="lineNum">    1237 </span>            :       /* Perform depth-first search on adjacent vertices.  */
+<span class="lineNum">    1238 </span><span class="lineCov">   98558479 :       FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1239 </span><span class="lineCov">   74233938 :         if (!bitmap_bit_p (m_visited_blocks, e-&gt;src-&gt;index))</span>
+<span class="lineNum">    1240 </span><span class="lineCov">   27232590 :           add_bb (e-&gt;src);</span>
+<span class="lineNum">    1241 </span>            :     }
+<span class="lineNum">    1242 </span>            : 
+<span class="lineNum">    1243 </span>            :   /* Determine if there are unvisited basic blocks.  */
+<span class="lineNum">    1244 </span><span class="lineCov">   34208920 :   FOR_BB_BETWEEN (bb, last_unvisited, NULL, prev_bb)</span>
+<span class="lineNum">    1245 </span><span class="lineCov">   62955092 :     if (!bitmap_bit_p (m_visited_blocks, bb-&gt;index))</span>
+<span class="lineNum">    1246 </span><span class="lineCov">     756791 :       return bb;</span>
+<span class="lineNum">    1247 </span>            : 
+<span class="lineNum">    1248 </span>            :   return NULL;
+<span class="lineNum">    1249 </span>            : }
+<span class="lineNum">    1250 </span>            : 
+<span class="lineNum">    1251 </span>            : /* Performs dfs search from BB over vertices satisfying PREDICATE;
+<span class="lineNum">    1252 </span>            :    if REVERSE, go against direction of edges.  Returns number of blocks
+<a name="1253"><span class="lineNum">    1253 </span>            :    found and their list in RSLT.  RSLT can contain at most RSLT_MAX items.  */</a>
+<span class="lineNum">    1254 </span>            : int
+<span class="lineNum">    1255 </span><span class="lineCov">   98605207 : dfs_enumerate_from (basic_block bb, int reverse,</span>
+<span class="lineNum">    1256 </span>            :                     bool (*predicate) (const_basic_block, const void *),
+<span class="lineNum">    1257 </span>            :                     basic_block *rslt, int rslt_max, const void *data)
+<span class="lineNum">    1258 </span>            : {
+<span class="lineNum">    1259 </span><span class="lineCov">   98605207 :   basic_block *st, lbb;</span>
+<span class="lineNum">    1260 </span><span class="lineCov">   98605207 :   int sp = 0, tv = 0;</span>
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span><span class="lineCov">   98605207 :   auto_bb_flag visited (cfun);</span>
+<span class="lineNum">    1263 </span>            : 
+<span class="lineNum">    1264 </span>            : #define MARK_VISITED(BB) ((BB)-&gt;flags |= visited)
+<span class="lineNum">    1265 </span>            : #define UNMARK_VISITED(BB) ((BB)-&gt;flags &amp;= ~visited)
+<span class="lineNum">    1266 </span>            : #define VISITED_P(BB) (((BB)-&gt;flags &amp; visited) != 0)
+<span class="lineNum">    1267 </span>            : 
+<span class="lineNum">    1268 </span><span class="lineCov">   98605207 :   st = XNEWVEC (basic_block, rslt_max);</span>
+<span class="lineNum">    1269 </span><span class="lineCov">   98605207 :   rslt[tv++] = st[sp++] = bb;</span>
+<span class="lineNum">    1270 </span><span class="lineCov">   98605207 :   MARK_VISITED (bb);</span>
+<span class="lineNum">    1271 </span><span class="lineCov">  679408727 :   while (sp)</span>
+<span class="lineNum">    1272 </span>            :     {
+<span class="lineNum">    1273 </span><span class="lineCov">  580803520 :       edge e;</span>
+<span class="lineNum">    1274 </span><span class="lineCov">  580803520 :       edge_iterator ei;</span>
+<span class="lineNum">    1275 </span><span class="lineCov">  580803520 :       lbb = st[--sp];</span>
+<span class="lineNum">    1276 </span><span class="lineCov">  580803520 :       if (reverse)</span>
+<span class="lineNum">    1277 </span>            :         {
+<span class="lineNum">    1278 </span><span class="lineCov"> 1993518291 :           FOR_EACH_EDGE (e, ei, lbb-&gt;preds)</span>
+<span class="lineNum">    1279 </span><span class="lineCov">  832514265 :             if (!VISITED_P (e-&gt;src) &amp;&amp; predicate (e-&gt;src, data))</span>
+<span class="lineNum">    1280 </span>            :               {
+<span class="lineNum">    1281 </span><span class="lineCov">  482159389 :                 gcc_assert (tv != rslt_max);</span>
+<span class="lineNum">    1282 </span><span class="lineCov">  482159389 :                 rslt[tv++] = st[sp++] = e-&gt;src;</span>
+<span class="lineNum">    1283 </span><span class="lineCov">  482159389 :                 MARK_VISITED (e-&gt;src);</span>
+<span class="lineNum">    1284 </span>            :               }
+<span class="lineNum">    1285 </span>            :         }
+<span class="lineNum">    1286 </span>            :       else
+<span class="lineNum">    1287 </span>            :         {
+<span class="lineNum">    1288 </span><span class="lineCov">     940009 :           FOR_EACH_EDGE (e, ei, lbb-&gt;succs)</span>
+<span class="lineNum">    1289 </span><span class="lineCov">     336995 :             if (!VISITED_P (e-&gt;dest) &amp;&amp; predicate (e-&gt;dest, data))</span>
+<span class="lineNum">    1290 </span>            :               {
+<span class="lineNum">    1291 </span><span class="lineCov">      38924 :                 gcc_assert (tv != rslt_max);</span>
+<span class="lineNum">    1292 </span><span class="lineCov">      38924 :                 rslt[tv++] = st[sp++] = e-&gt;dest;</span>
+<span class="lineNum">    1293 </span><span class="lineCov">      38924 :                 MARK_VISITED (e-&gt;dest);</span>
+<span class="lineNum">    1294 </span>            :               }
+<span class="lineNum">    1295 </span>            :         }
+<span class="lineNum">    1296 </span>            :     }
+<span class="lineNum">    1297 </span><span class="lineCov">   98605207 :   free (st);</span>
+<span class="lineNum">    1298 </span><span class="lineCov">  679408727 :   for (sp = 0; sp &lt; tv; sp++)</span>
+<span class="lineNum">    1299 </span><span class="lineCov">  580803520 :     UNMARK_VISITED (rslt[sp]);</span>
+<span class="lineNum">    1300 </span><span class="lineCov">   98605207 :   return tv;</span>
+<span class="lineNum">    1301 </span>            : #undef MARK_VISITED
+<span class="lineNum">    1302 </span>            : #undef UNMARK_VISITED
+<span class="lineNum">    1303 </span>            : #undef VISITED_P
+<span class="lineNum">    1304 </span>            : }
+<span class="lineNum">    1305 </span>            : 
+<span class="lineNum">    1306 </span>            : 
+<span class="lineNum">    1307 </span>            : /* Compute dominance frontiers, ala Harvey, Ferrante, et al.
+<span class="lineNum">    1308 </span>            : 
+<span class="lineNum">    1309 </span>            :    This algorithm can be found in Timothy Harvey's PhD thesis, at
+<span class="lineNum">    1310 </span>            :    http://www.cs.rice.edu/~harv/dissertation.pdf in the section on iterative
+<span class="lineNum">    1311 </span>            :    dominance algorithms.
+<span class="lineNum">    1312 </span>            : 
+<span class="lineNum">    1313 </span>            :    First, we identify each join point, j (any node with more than one
+<span class="lineNum">    1314 </span>            :    incoming edge is a join point).
+<span class="lineNum">    1315 </span>            : 
+<span class="lineNum">    1316 </span>            :    We then examine each predecessor, p, of j and walk up the dominator tree
+<span class="lineNum">    1317 </span>            :    starting at p.
+<span class="lineNum">    1318 </span>            : 
+<span class="lineNum">    1319 </span>            :    We stop the walk when we reach j's immediate dominator - j is in the
+<span class="lineNum">    1320 </span>            :    dominance frontier of each of  the nodes in the walk, except for j's
+<span class="lineNum">    1321 </span>            :    immediate dominator. Intuitively, all of the rest of j's dominators are
+<span class="lineNum">    1322 </span>            :    shared by j's predecessors as well.
+<span class="lineNum">    1323 </span>            :    Since they dominate j, they will not have j in their dominance frontiers.
+<span class="lineNum">    1324 </span>            : 
+<span class="lineNum">    1325 </span>            :    The number of nodes touched by this algorithm is equal to the size
+<span class="lineNum">    1326 </span>            :    of the dominance frontiers, no more, no less.
+<span class="lineNum">    1327 </span>            : */
+<span class="lineNum">    1328 </span>            : 
+<span class="lineNum">    1329 </span>            : 
+<span class="lineNum">    1330 </span>            : static void
+<span class="lineNum">    1331 </span><span class="lineCov">    5605506 : compute_dominance_frontiers_1 (bitmap_head *frontiers)</span>
+<span class="lineNum">    1332 </span>            : {
+<span class="lineNum">    1333 </span><span class="lineCov">    5605506 :   edge p;</span>
+<span class="lineNum">    1334 </span><span class="lineCov">    5605506 :   edge_iterator ei;</span>
+<span class="lineNum">    1335 </span><span class="lineCov">    5605506 :   basic_block b;</span>
+<span class="lineNum">    1336 </span><span class="lineCov">   79593067 :   FOR_EACH_BB_FN (b, cfun)</span>
+<span class="lineNum">    1337 </span>            :     {
+<span class="lineNum">    1338 </span><span class="lineCov">   73987561 :       if (EDGE_COUNT (b-&gt;preds) &gt;= 2)</span>
+<span class="lineNum">    1339 </span>            :         {
+<span class="lineNum">    1340 </span><span class="lineCov">   87918910 :           FOR_EACH_EDGE (p, ei, b-&gt;preds)</span>
+<span class="lineNum">    1341 </span>            :             {
+<span class="lineNum">    1342 </span><span class="lineCov">   51311804 :               basic_block runner = p-&gt;src;</span>
+<span class="lineNum">    1343 </span><span class="lineCov">   51311804 :               basic_block domsb;</span>
+<span class="lineNum">    1344 </span><span class="lineCov">   51311804 :               if (runner == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1345 </span>            :                 continue;
+<span class="lineNum">    1346 </span>            : 
+<span class="lineNum">    1347 </span><span class="lineCov">   51296894 :               domsb = get_immediate_dominator (CDI_DOMINATORS, b);</span>
+<span class="lineNum">    1348 </span><span class="lineCov">  132325399 :               while (runner != domsb)</span>
+<span class="lineNum">    1349 </span>            :                 {
+<span class="lineNum">    1350 </span><span class="lineCov">   95170837 :                   if (!bitmap_set_bit (&amp;frontiers[runner-&gt;index],</span>
+<span class="lineNum">    1351 </span>            :                                        b-&gt;index))
+<span class="lineNum">    1352 </span>            :                     break;
+<span class="lineNum">    1353 </span><span class="lineCov">   81028505 :                   runner = get_immediate_dominator (CDI_DOMINATORS,</span>
+<span class="lineNum">    1354 </span>            :                                                     runner);
+<span class="lineNum">    1355 </span>            :                 }
+<span class="lineNum">    1356 </span>            :             }
+<span class="lineNum">    1357 </span>            :         }
+<span class="lineNum">    1358 </span>            :     }
+<span class="lineNum">    1359 </span><span class="lineCov">    5605506 : }</span>
+<span class="lineNum">    1360 </span>            : 
+<a name="1361"><span class="lineNum">    1361 </span>            : </a>
+<span class="lineNum">    1362 </span>            : void
+<span class="lineNum">    1363 </span><span class="lineCov">    5605506 : compute_dominance_frontiers (bitmap_head *frontiers)</span>
+<span class="lineNum">    1364 </span>            : {
+<span class="lineNum">    1365 </span><span class="lineCov">    5605506 :   timevar_push (TV_DOM_FRONTIERS);</span>
+<span class="lineNum">    1366 </span>            : 
+<span class="lineNum">    1367 </span><span class="lineCov">    5605506 :   compute_dominance_frontiers_1 (frontiers);</span>
+<span class="lineNum">    1368 </span>            : 
+<span class="lineNum">    1369 </span><span class="lineCov">    5605506 :   timevar_pop (TV_DOM_FRONTIERS);</span>
+<span class="lineNum">    1370 </span><span class="lineCov">    5605506 : }</span>
+<span class="lineNum">    1371 </span>            : 
+<span class="lineNum">    1372 </span>            : /* Given a set of blocks with variable definitions (DEF_BLOCKS),
+<span class="lineNum">    1373 </span>            :    return a bitmap with all the blocks in the iterated dominance
+<span class="lineNum">    1374 </span>            :    frontier of the blocks in DEF_BLOCKS.  DFS contains dominance
+<span class="lineNum">    1375 </span>            :    frontier information as returned by compute_dominance_frontiers.
+<span class="lineNum">    1376 </span>            : 
+<span class="lineNum">    1377 </span>            :    The resulting set of blocks are the potential sites where PHI nodes
+<span class="lineNum">    1378 </span>            :    are needed.  The caller is responsible for freeing the memory
+<span class="lineNum">    1379 </span>            :    allocated for the return value.  */
+<span class="lineNum">    1380 </span>            : 
+<span class="lineNum">    1381 </span>            : bitmap
+<span class="lineNum">    1382 </span><span class="lineCov">   13307233 : compute_idf (bitmap def_blocks, bitmap_head *dfs)</span>
+<span class="lineNum">    1383 </span>            : {
+<span class="lineNum">    1384 </span><span class="lineCov">   13307233 :   bitmap_iterator bi;</span>
+<span class="lineNum">    1385 </span><span class="lineCov">   13307233 :   unsigned bb_index, i;</span>
+<span class="lineNum">    1386 </span><span class="lineCov">   13307233 :   bitmap phi_insertion_points;</span>
+<span class="lineNum">    1387 </span>            : 
+<span class="lineNum">    1388 </span>            :   /* Each block can appear at most twice on the work-stack.  */
+<span class="lineNum">    1389 </span><span class="lineCov">   13307233 :   auto_vec&lt;int&gt; work_stack (2 * n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">    1390 </span><span class="lineCov">   13307233 :   phi_insertion_points = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">    1391 </span>            : 
+<span class="lineNum">    1392 </span>            :   /* Seed the work list with all the blocks in DEF_BLOCKS.  We use
+<span class="lineNum">    1393 </span>            :      vec::quick_push here for speed.  This is safe because we know that
+<span class="lineNum">    1394 </span>            :      the number of definition blocks is no greater than the number of
+<span class="lineNum">    1395 </span>            :      basic blocks, which is the initial capacity of WORK_STACK.  */
+<span class="lineNum">    1396 </span><span class="lineCov">   46141020 :   EXECUTE_IF_SET_IN_BITMAP (def_blocks, 0, bb_index, bi)</span>
+<span class="lineNum">    1397 </span><span class="lineCov">   32833787 :     work_stack.quick_push (bb_index);</span>
+<span class="lineNum">    1398 </span>            : 
+<span class="lineNum">    1399 </span>            :   /* Pop a block off the worklist, add every block that appears in
+<span class="lineNum">    1400 </span>            :      the original block's DF that we have not already processed to
+<span class="lineNum">    1401 </span>            :      the worklist.  Iterate until the worklist is empty.   Blocks
+<span class="lineNum">    1402 </span>            :      which are added to the worklist are potential sites for
+<span class="lineNum">    1403 </span>            :      PHI nodes.  */
+<span class="lineNum">    1404 </span><span class="lineCov">   70586569 :   while (work_stack.length () &gt; 0)</span>
+<span class="lineNum">    1405 </span>            :     {
+<span class="lineNum">    1406 </span><span class="lineCov">   57279336 :       bb_index = work_stack.pop ();</span>
+<span class="lineNum">    1407 </span>            : 
+<span class="lineNum">    1408 </span>            :       /* Since the registration of NEW -&gt; OLD name mappings is done
+<span class="lineNum">    1409 </span>            :          separately from the call to update_ssa, when updating the SSA
+<span class="lineNum">    1410 </span>            :          form, the basic blocks where new and/or old names are defined
+<span class="lineNum">    1411 </span>            :          may have disappeared by CFG cleanup calls.  In this case,
+<span class="lineNum">    1412 </span>            :          we may pull a non-existing block from the work stack.  */
+<span class="lineNum">    1413 </span><span class="lineCov">   57279336 :       gcc_checking_assert (bb_index</span>
+<span class="lineNum">    1414 </span>            :                            &lt; (unsigned) last_basic_block_for_fn (cfun));
+<span class="lineNum">    1415 </span>            : 
+<span class="lineNum">    1416 </span><span class="lineCov">   81724885 :       EXECUTE_IF_AND_COMPL_IN_BITMAP (&amp;dfs[bb_index], phi_insertion_points,</span>
+<span class="lineNum">    1417 </span>            :                                       0, i, bi)
+<span class="lineNum">    1418 </span>            :         {
+<span class="lineNum">    1419 </span><span class="lineCov">   24445549 :           work_stack.quick_push (i);</span>
+<span class="lineNum">    1420 </span><span class="lineCov">   24445549 :           bitmap_set_bit (phi_insertion_points, i);</span>
+<span class="lineNum">    1421 </span>            :         }
+<span class="lineNum">    1422 </span>            :     }
+<span class="lineNum">    1423 </span>            : 
+<span class="lineNum">    1424 </span><span class="lineCov">   13307233 :   return phi_insertion_points;</span>
+<span class="lineNum">    1425 </span>            : }
+<span class="lineNum">    1426 </span>            : 
+<span class="lineNum">    1427 </span>            : /* Intersection and union of preds/succs for sbitmap based data flow
+<span class="lineNum">    1428 </span>            :    solvers.  All four functions defined below take the same arguments:
+<span class="lineNum">    1429 </span>            :    B is the basic block to perform the operation for.  DST is the
+<span class="lineNum">    1430 </span>            :    target sbitmap, i.e. the result.  SRC is an sbitmap vector of size
+<span class="lineNum">    1431 </span>            :    last_basic_block so that it can be indexed with basic block indices.
+<span class="lineNum">    1432 </span>            :    DST may be (but does not have to be) SRC[B-&gt;index].  */
+<span class="lineNum">    1433 </span>            : 
+<span class="lineNum">    1434 </span>            : /* Set the bitmap DST to the intersection of SRC of successors of
+<span class="lineNum">    1435 </span>            :    basic block B.  */
+<span class="lineNum">    1436 </span>            : 
+<span class="lineNum">    1437 </span>            : void
+<span class="lineNum">    1438 </span><span class="lineCov">    6034921 : bitmap_intersection_of_succs (sbitmap dst, sbitmap *src, basic_block b)</span>
+<span class="lineNum">    1439 </span>            : {
+<span class="lineNum">    1440 </span><span class="lineCov">    6034921 :   unsigned int set_size = dst-&gt;size;</span>
+<span class="lineNum">    1441 </span><span class="lineCov">    6034921 :   edge e;</span>
+<span class="lineNum">    1442 </span><span class="lineCov">    6034921 :   unsigned ix;</span>
+<span class="lineNum">    1443 </span>            : 
+<span class="lineNum">    1444 </span><span class="lineCov">   12070067 :   for (e = NULL, ix = 0; ix &lt; EDGE_COUNT (b-&gt;succs); ix++)</span>
+<span class="lineNum">    1445 </span>            :     {
+<span class="lineNum">    1446 </span><span class="lineCov">    5992688 :       e = EDGE_SUCC (b, ix);</span>
+<span class="lineNum">    1447 </span><span class="lineCov">    5992688 :       if (e-&gt;dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1448 </span><span class="lineCov">        730 :         continue;</span>
+<span class="lineNum">    1449 </span>            : 
+<span class="lineNum">    1450 </span><span class="lineCov">    5991958 :       bitmap_copy (dst, src[e-&gt;dest-&gt;index]);</span>
+<span class="lineNum">    1451 </span><span class="lineCov">    5991958 :       break;</span>
+<span class="lineNum">    1452 </span>            :     }
+<span class="lineNum">    1453 </span>            : 
+<span class="lineNum">    1454 </span><span class="lineCov">    6034921 :   if (e == 0)</span>
+<span class="lineNum">    1455 </span><span class="lineCov">      42233 :     bitmap_ones (dst);</span>
+<span class="lineNum">    1456 </span>            :   else
+<span class="lineNum">    1457 </span><span class="lineCov">   19201392 :     for (++ix; ix &lt; EDGE_COUNT (b-&gt;succs); ix++)</span>
+<span class="lineNum">    1458 </span>            :       {
+<span class="lineNum">    1459 </span><span class="lineCov">    3608008 :         unsigned int i;</span>
+<span class="lineNum">    1460 </span><span class="lineCov">    3608008 :         SBITMAP_ELT_TYPE *p, *r;</span>
+<span class="lineNum">    1461 </span>            : 
+<span class="lineNum">    1462 </span><span class="lineCov">    3608008 :         e = EDGE_SUCC (b, ix);</span>
+<span class="lineNum">    1463 </span><span class="lineCov">    3608008 :         if (e-&gt;dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1464 </span>            :           continue;
+<span class="lineNum">    1465 </span>            : 
+<span class="lineNum">    1466 </span><span class="lineCov">    3608008 :         p = src[e-&gt;dest-&gt;index]-&gt;elms;</span>
+<span class="lineNum">    1467 </span><span class="lineCov">    3608008 :         r = dst-&gt;elms;</span>
+<span class="lineNum">    1468 </span><span class="lineCov">   13335436 :         for (i = 0; i &lt; set_size; i++)</span>
+<span class="lineNum">    1469 </span><span class="lineCov">    9727428 :           *r++ &amp;= *p++;</span>
+<span class="lineNum">    1470 </span>            :       }
+<span class="lineNum">    1471 </span><span class="lineCov">    6034921 : }</span>
+<span class="lineNum">    1472 </span>            : 
+<span class="lineNum">    1473 </span>            : /* Set the bitmap DST to the intersection of SRC of predecessors of
+<span class="lineNum">    1474 </span>            :    basic block B.  */
+<span class="lineNum">    1475 </span>            : 
+<span class="lineNum">    1476 </span>            : void
+<span class="lineNum">    1477 </span><span class="lineCov">   29886802 : bitmap_intersection_of_preds (sbitmap dst, sbitmap *src, basic_block b)</span>
+<span class="lineNum">    1478 </span>            : {
+<span class="lineNum">    1479 </span><span class="lineCov">   29886802 :   unsigned int set_size = dst-&gt;size;</span>
+<span class="lineNum">    1480 </span><span class="lineCov">   29886802 :   edge e;</span>
+<span class="lineNum">    1481 </span><span class="lineCov">   29886802 :   unsigned ix;</span>
+<span class="lineNum">    1482 </span>            : 
+<span class="lineNum">    1483 </span><span class="lineCov">   59773604 :   for (e = NULL, ix = 0; ix &lt; EDGE_COUNT (b-&gt;preds); ix++)</span>
+<span class="lineNum">    1484 </span>            :     {
+<span class="lineNum">    1485 </span><span class="lineCov">   29886802 :       e = EDGE_PRED (b, ix);</span>
+<span class="lineNum">    1486 </span><span class="lineCov">   29886802 :       if (e-&gt;src == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1487 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">    1488 </span>            : 
+<span class="lineNum">    1489 </span><span class="lineCov">   29886802 :       bitmap_copy (dst, src[e-&gt;src-&gt;index]);</span>
+<span class="lineNum">    1490 </span><span class="lineCov">   29886802 :       break;</span>
+<span class="lineNum">    1491 </span>            :     }
+<span class="lineNum">    1492 </span>            : 
+<span class="lineNum">    1493 </span><span class="lineCov">   29886802 :   if (e == 0)</span>
+<span class="lineNum">    1494 </span><span class="lineNoCov">          0 :     bitmap_ones (dst);</span>
+<span class="lineNum">    1495 </span>            :   else
+<span class="lineNum">    1496 </span><span class="lineCov">  154490440 :     for (++ix; ix &lt; EDGE_COUNT (b-&gt;preds); ix++)</span>
+<span class="lineNum">    1497 </span>            :       {
+<span class="lineNum">    1498 </span><span class="lineCov">   47358418 :         unsigned int i;</span>
+<span class="lineNum">    1499 </span><span class="lineCov">   47358418 :         SBITMAP_ELT_TYPE *p, *r;</span>
+<span class="lineNum">    1500 </span>            : 
+<span class="lineNum">    1501 </span><span class="lineCov">   47358418 :         e = EDGE_PRED (b, ix);</span>
+<span class="lineNum">    1502 </span><span class="lineCov">   47358418 :         if (e-&gt;src == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1503 </span>            :           continue;
+<span class="lineNum">    1504 </span>            : 
+<span class="lineNum">    1505 </span><span class="lineCov">   47358418 :         p = src[e-&gt;src-&gt;index]-&gt;elms;</span>
+<span class="lineNum">    1506 </span><span class="lineCov">   47358418 :         r = dst-&gt;elms;</span>
+<span class="lineNum">    1507 </span><span class="lineCov">  498617158 :         for (i = 0; i &lt; set_size; i++)</span>
+<span class="lineNum">    1508 </span><span class="lineCov">  451258740 :           *r++ &amp;= *p++;</span>
+<span class="lineNum">    1509 </span>            :       }
+<span class="lineNum">    1510 </span><span class="lineCov">   29886802 : }</span>
+<span class="lineNum">    1511 </span>            : 
+<span class="lineNum">    1512 </span>            : /* Set the bitmap DST to the union of SRC of successors of
+<span class="lineNum">    1513 </span>            :    basic block B.  */
+<span class="lineNum">    1514 </span>            : 
+<span class="lineNum">    1515 </span>            : void
+<span class="lineNum">    1516 </span><span class="lineNoCov">          0 : bitmap_union_of_succs (sbitmap dst, sbitmap *src, basic_block b)</span>
+<span class="lineNum">    1517 </span>            : {
+<span class="lineNum">    1518 </span><span class="lineNoCov">          0 :   unsigned int set_size = dst-&gt;size;</span>
+<span class="lineNum">    1519 </span><span class="lineNoCov">          0 :   edge e;</span>
+<span class="lineNum">    1520 </span><span class="lineNoCov">          0 :   unsigned ix;</span>
+<span class="lineNum">    1521 </span>            : 
+<span class="lineNum">    1522 </span><span class="lineNoCov">          0 :   for (ix = 0; ix &lt; EDGE_COUNT (b-&gt;succs); ix++)</span>
+<span class="lineNum">    1523 </span>            :     {
+<span class="lineNum">    1524 </span><span class="lineNoCov">          0 :       e = EDGE_SUCC (b, ix);</span>
+<span class="lineNum">    1525 </span><span class="lineNoCov">          0 :       if (e-&gt;dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1526 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">    1527 </span>            : 
+<span class="lineNum">    1528 </span><span class="lineNoCov">          0 :       bitmap_copy (dst, src[e-&gt;dest-&gt;index]);</span>
+<span class="lineNum">    1529 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1530 </span>            :     }
+<span class="lineNum">    1531 </span>            : 
+<span class="lineNum">    1532 </span><span class="lineNoCov">          0 :   if (ix == EDGE_COUNT (b-&gt;succs))</span>
+<span class="lineNum">    1533 </span><span class="lineNoCov">          0 :     bitmap_clear (dst);</span>
+<span class="lineNum">    1534 </span>            :   else
+<span class="lineNum">    1535 </span><span class="lineNoCov">          0 :     for (ix++; ix &lt; EDGE_COUNT (b-&gt;succs); ix++)</span>
+<span class="lineNum">    1536 </span>            :       {
+<span class="lineNum">    1537 </span><span class="lineNoCov">          0 :         unsigned int i;</span>
+<span class="lineNum">    1538 </span><span class="lineNoCov">          0 :         SBITMAP_ELT_TYPE *p, *r;</span>
+<span class="lineNum">    1539 </span>            : 
+<span class="lineNum">    1540 </span><span class="lineNoCov">          0 :         e = EDGE_SUCC (b, ix);</span>
+<span class="lineNum">    1541 </span><span class="lineNoCov">          0 :         if (e-&gt;dest == EXIT_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1542 </span>            :           continue;
+<span class="lineNum">    1543 </span>            : 
+<span class="lineNum">    1544 </span><span class="lineNoCov">          0 :         p = src[e-&gt;dest-&gt;index]-&gt;elms;</span>
+<span class="lineNum">    1545 </span><span class="lineNoCov">          0 :         r = dst-&gt;elms;</span>
+<span class="lineNum">    1546 </span><span class="lineNoCov">          0 :         for (i = 0; i &lt; set_size; i++)</span>
+<span class="lineNum">    1547 </span><span class="lineNoCov">          0 :           *r++ |= *p++;</span>
+<span class="lineNum">    1548 </span>            :       }
+<span class="lineNum">    1549 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1550 </span>            : 
+<span class="lineNum">    1551 </span>            : /* Set the bitmap DST to the union of SRC of predecessors of
+<span class="lineNum">    1552 </span>            :    basic block B.  */
+<span class="lineNum">    1553 </span>            : 
+<span class="lineNum">    1554 </span>            : void
+<span class="lineNum">    1555 </span><span class="lineNoCov">          0 : bitmap_union_of_preds (sbitmap dst, sbitmap *src, basic_block b)</span>
+<span class="lineNum">    1556 </span>            : {
+<span class="lineNum">    1557 </span><span class="lineNoCov">          0 :   unsigned int set_size = dst-&gt;size;</span>
+<span class="lineNum">    1558 </span><span class="lineNoCov">          0 :   edge e;</span>
+<span class="lineNum">    1559 </span><span class="lineNoCov">          0 :   unsigned ix;</span>
+<span class="lineNum">    1560 </span>            : 
+<span class="lineNum">    1561 </span><span class="lineNoCov">          0 :   for (ix = 0; ix &lt; EDGE_COUNT (b-&gt;preds); ix++)</span>
+<span class="lineNum">    1562 </span>            :     {
+<span class="lineNum">    1563 </span><span class="lineNoCov">          0 :       e = EDGE_PRED (b, ix);</span>
+<span class="lineNum">    1564 </span><span class="lineNoCov">          0 :       if (e-&gt;src== ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1565 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">    1566 </span>            : 
+<span class="lineNum">    1567 </span><span class="lineNoCov">          0 :       bitmap_copy (dst, src[e-&gt;src-&gt;index]);</span>
+<span class="lineNum">    1568 </span><span class="lineNoCov">          0 :       break;</span>
+<span class="lineNum">    1569 </span>            :     }
+<span class="lineNum">    1570 </span>            : 
+<span class="lineNum">    1571 </span><span class="lineNoCov">          0 :   if (ix == EDGE_COUNT (b-&gt;preds))</span>
+<span class="lineNum">    1572 </span><span class="lineNoCov">          0 :     bitmap_clear (dst);</span>
+<span class="lineNum">    1573 </span>            :   else
+<span class="lineNum">    1574 </span><span class="lineNoCov">          0 :     for (ix++; ix &lt; EDGE_COUNT (b-&gt;preds); ix++)</span>
+<span class="lineNum">    1575 </span>            :       {
+<span class="lineNum">    1576 </span><span class="lineNoCov">          0 :         unsigned int i;</span>
+<span class="lineNum">    1577 </span><span class="lineNoCov">          0 :         SBITMAP_ELT_TYPE *p, *r;</span>
+<span class="lineNum">    1578 </span>            : 
+<span class="lineNum">    1579 </span><span class="lineNoCov">          0 :         e = EDGE_PRED (b, ix);</span>
+<span class="lineNum">    1580 </span><span class="lineNoCov">          0 :         if (e-&gt;src == ENTRY_BLOCK_PTR_FOR_FN (cfun))</span>
+<span class="lineNum">    1581 </span>            :           continue;
+<span class="lineNum">    1582 </span>            : 
+<span class="lineNum">    1583 </span><span class="lineNoCov">          0 :         p = src[e-&gt;src-&gt;index]-&gt;elms;</span>
+<span class="lineNum">    1584 </span><span class="lineNoCov">          0 :         r = dst-&gt;elms;</span>
+<span class="lineNum">    1585 </span><span class="lineNoCov">          0 :         for (i = 0; i &lt; set_size; i++)</span>
+<span class="lineNum">    1586 </span><span class="lineNoCov">          0 :           *r++ |= *p++;</span>
+<span class="lineNum">    1587 </span>            :       }
+<span class="lineNum">    1588 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1589 </span>            : 
+<span class="lineNum">    1590 </span>            : /* Returns the list of basic blocks in the function in an order that guarantees
+<span class="lineNum">    1591 </span>            :    that if a block X has just a single predecessor Y, then Y is after X in the
+<span class="lineNum">    1592 </span>            :    ordering.  */
+<span class="lineNum">    1593 </span>            : 
+<span class="lineNum">    1594 </span>            : basic_block *
+<span class="lineNum">    1595 </span><span class="lineCov">    3104649 : single_pred_before_succ_order (void)</span>
+<span class="lineNum">    1596 </span>            : {
+<span class="lineNum">    1597 </span><span class="lineCov">    3104649 :   basic_block x, y;</span>
+<span class="lineNum">    1598 </span><span class="lineCov">    3104649 :   basic_block *order = XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">    1599 </span><span class="lineCov">    3104649 :   unsigned n = n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS;</span>
+<span class="lineNum">    1600 </span><span class="lineCov">    3104649 :   unsigned np, i;</span>
+<span class="lineNum">    1601 </span><span class="lineCov">    3104649 :   auto_sbitmap visited (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">    1602 </span>            : 
+<span class="lineNum">    1603 </span>            : #define MARK_VISITED(BB) (bitmap_set_bit (visited, (BB)-&gt;index))
+<span class="lineNum">    1604 </span>            : #define VISITED_P(BB) (bitmap_bit_p (visited, (BB)-&gt;index))
+<span class="lineNum">    1605 </span>            : 
+<span class="lineNum">    1606 </span><span class="lineCov">    6209298 :   bitmap_clear (visited);</span>
+<span class="lineNum">    1607 </span>            : 
+<span class="lineNum">    1608 </span><span class="lineCov">    6209298 :   MARK_VISITED (ENTRY_BLOCK_PTR_FOR_FN (cfun));</span>
+<span class="lineNum">    1609 </span><span class="lineCov">   31375584 :   FOR_EACH_BB_FN (x, cfun)</span>
+<span class="lineNum">    1610 </span>            :     {
+<span class="lineNum">    1611 </span><span class="lineCov">   56541870 :       if (VISITED_P (x))</span>
+<span class="lineNum">    1612 </span>            :         continue;
+<span class="lineNum">    1613 </span>            : 
+<span class="lineNum">    1614 </span>            :       /* Walk the predecessors of x as long as they have precisely one
+<span class="lineNum">    1615 </span>            :          predecessor and add them to the list, so that they get stored
+<span class="lineNum">    1616 </span>            :          after x.  */
+<span class="lineNum">    1617 </span><span class="lineCov">     547175 :       for (y = x, np = 1;</span>
+<span class="lineNum">    1618 </span><span class="lineCov">   28270935 :            single_pred_p (y) &amp;&amp; !VISITED_P (single_pred (y));</span>
+<span class="lineNum">    1619 </span><span class="lineCov">     547175 :            y = single_pred (y))</span>
+<span class="lineNum">    1620 </span><span class="lineCov">     547175 :         np++;</span>
+<span class="lineNum">    1621 </span><span class="lineCov">   27723760 :       for (y = x, i = n - np;</span>
+<span class="lineNum">    1622 </span><span class="lineCov">   28270935 :            single_pred_p (y) &amp;&amp; !VISITED_P (single_pred (y));</span>
+<span class="lineNum">    1623 </span><span class="lineCov">     547175 :            y = single_pred (y), i++)</span>
+<span class="lineNum">    1624 </span>            :         {
+<span class="lineNum">    1625 </span><span class="lineCov">     547175 :           order[i] = y;</span>
+<span class="lineNum">    1626 </span><span class="lineCov">    1094350 :           MARK_VISITED (y);</span>
+<span class="lineNum">    1627 </span>            :         }
+<span class="lineNum">    1628 </span><span class="lineCov">   27723760 :       order[i] = y;</span>
+<span class="lineNum">    1629 </span><span class="lineCov">   55447520 :       MARK_VISITED (y);</span>
+<span class="lineNum">    1630 </span>            : 
+<span class="lineNum">    1631 </span><span class="lineCov">   27723760 :       gcc_assert (i == n - 1);</span>
+<span class="lineNum">    1632 </span>            :       n -= np;
+<span class="lineNum">    1633 </span>            :     }
+<span class="lineNum">    1634 </span>            : 
+<span class="lineNum">    1635 </span><span class="lineCov">    3104649 :   gcc_assert (n == 0);</span>
+<span class="lineNum">    1636 </span><span class="lineCov">    6209298 :   return order;</span>
+<span class="lineNum">    1637 </span>            : 
+<span class="lineNum">    1638 </span>            : #undef MARK_VISITED
+<span class="lineNum">    1639 </span>            : #undef VISITED_P
+<span class="lineNum">    1640 </span>            : }
+<span class="lineNum">    1641 </span>            : 
+<span class="lineNum">    1642 </span>            : /* Ignoring loop backedges, if BB has precisely one incoming edge then
+<span class="lineNum">    1643 </span>            :    return that edge.  Otherwise return NULL.
+<span class="lineNum">    1644 </span>            : 
+<span class="lineNum">    1645 </span>            :    When IGNORE_NOT_EXECUTABLE is true, also ignore edges that are not marked
+<span class="lineNum">    1646 </span>            :    as executable.  */
+<a name="1647"><span class="lineNum">    1647 </span>            : </a>
+<span class="lineNum">    1648 </span>            : edge
+<span class="lineNum">    1649 </span><span class="lineCov">   50307667 : single_pred_edge_ignoring_loop_edges (basic_block bb,</span>
+<span class="lineNum">    1650 </span>            :                                       bool ignore_not_executable)
+<span class="lineNum">    1651 </span>            : {
+<span class="lineNum">    1652 </span><span class="lineCov">   50307667 :   edge retval = NULL;</span>
+<span class="lineNum">    1653 </span><span class="lineCov">   50307667 :   edge e;</span>
+<span class="lineNum">    1654 </span><span class="lineCov">   50307667 :   edge_iterator ei;</span>
+<span class="lineNum">    1655 </span>            : 
+<span class="lineNum">    1656 </span><span class="lineCov">  148765764 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">    1657 </span>            :     {
+<span class="lineNum">    1658 </span>            :       /* A loop back edge can be identified by the destination of
+<span class="lineNum">    1659 </span>            :          the edge dominating the source of the edge.  */
+<span class="lineNum">    1660 </span><span class="lineCov">   56148167 :       if (dominated_by_p (CDI_DOMINATORS, e-&gt;src, e-&gt;dest))</span>
+<span class="lineNum">    1661 </span>            :         continue;
+<span class="lineNum">    1662 </span>            : 
+<span class="lineNum">    1663 </span>            :       /* We can safely ignore edges that are not executable.  */
+<span class="lineNum">    1664 </span><span class="lineCov">   53877320 :       if (ignore_not_executable</span>
+<span class="lineNum">    1665 </span><span class="lineCov">   14436902 :           &amp;&amp; (e-&gt;flags &amp; EDGE_EXECUTABLE) == 0)</span>
+<span class="lineNum">    1666 </span>            :         continue;
+<span class="lineNum">    1667 </span>            : 
+<span class="lineNum">    1668 </span>            :       /* If we have already seen a non-loop edge, then we must have
+<span class="lineNum">    1669 </span>            :          multiple incoming non-loop edges and thus we return NULL.  */
+<span class="lineNum">    1670 </span><span class="lineCov">   53838413 :       if (retval)</span>
+<span class="lineNum">    1671 </span>            :         return NULL;
+<span class="lineNum">    1672 </span>            : 
+<span class="lineNum">    1673 </span>            :       /* This is the first non-loop incoming edge we have found.  Record
+<span class="lineNum">    1674 </span>            :          it.  */
+<span class="lineNum">    1675 </span><span class="lineCov">   45840676 :       retval = e;</span>
+<span class="lineNum">    1676 </span>            :     }
+<span class="lineNum">    1677 </span>            : 
+<span class="lineNum">    1678 </span>            :   return retval;
+<span class="lineNum">    1679 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

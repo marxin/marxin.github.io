@@ -1,0 +1,531 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tracer.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tracer.c<span style="font-size: 80%;"> (source / <a href="tracer.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">174</td>
+            <td class="headerCovTableEntry">183</td>
+            <td class="headerCovTableEntryHi">95.1 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntryMed">84.6 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* The tracer pass for the GNU compiler.</a>
+<span class="lineNum">       2 </span>            :    Contributed by Jan Hubicka, SuSE Labs.
+<span class="lineNum">       3 </span>            :    Adapted to work on GIMPLE instead of RTL by Robert Kidd, UIUC.
+<span class="lineNum">       4 </span>            :    Copyright (C) 2001-2018 Free Software Foundation, Inc.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            :    This file is part of GCC.
+<span class="lineNum">       7 </span>            : 
+<span class="lineNum">       8 </span>            :    GCC is free software; you can redistribute it and/or modify it
+<span class="lineNum">       9 </span>            :    under the terms of the GNU General Public License as published by
+<span class="lineNum">      10 </span>            :    the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      11 </span>            :    any later version.
+<span class="lineNum">      12 </span>            : 
+<span class="lineNum">      13 </span>            :    GCC is distributed in the hope that it will be useful, but WITHOUT
+<span class="lineNum">      14 </span>            :    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+<span class="lineNum">      15 </span>            :    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+<span class="lineNum">      16 </span>            :    License for more details.
+<span class="lineNum">      17 </span>            : 
+<span class="lineNum">      18 </span>            :    You should have received a copy of the GNU General Public License
+<span class="lineNum">      19 </span>            :    along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      20 </span>            :    &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : /* This pass performs the tail duplication needed for superblock formation.
+<span class="lineNum">      23 </span>            :    For more information see:
+<span class="lineNum">      24 </span>            : 
+<span class="lineNum">      25 </span>            :      Design and Analysis of Profile-Based Optimization in Compaq's
+<span class="lineNum">      26 </span>            :      Compilation Tools for Alpha; Journal of Instruction-Level
+<span class="lineNum">      27 </span>            :      Parallelism 3 (2000) 1-25
+<span class="lineNum">      28 </span>            : 
+<span class="lineNum">      29 </span>            :    Unlike Compaq's implementation we don't do the loop peeling as most
+<span class="lineNum">      30 </span>            :    probably a better job can be done by a special pass and we don't
+<span class="lineNum">      31 </span>            :    need to worry too much about the code size implications as the tail
+<span class="lineNum">      32 </span>            :    duplicates are crossjumped again if optimizations are not
+<span class="lineNum">      33 </span>            :    performed.  */
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : 
+<span class="lineNum">      36 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;cfghooks.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;profile.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;cfganal.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;params.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;tree-cfg.h&quot;
+<span class="lineNum">      50 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      51 </span>            : #include &quot;tree-inline.h&quot;
+<span class="lineNum">      52 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      53 </span>            : #include &quot;fibonacci_heap.h&quot;
+<span class="lineNum">      54 </span>            : #include &quot;tracer.h&quot;
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : static int count_insns (basic_block);
+<span class="lineNum">      57 </span>            : static bool better_p (const_edge, const_edge);
+<span class="lineNum">      58 </span>            : static edge find_best_successor (basic_block);
+<span class="lineNum">      59 </span>            : static edge find_best_predecessor (basic_block);
+<span class="lineNum">      60 </span>            : static int find_trace (basic_block, basic_block *);
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            : /* Minimal outgoing edge probability considered for superblock formation.  */
+<span class="lineNum">      63 </span>            : static int probability_cutoff;
+<span class="lineNum">      64 </span>            : static int branch_ratio_cutoff;
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            : /* A bit BB-&gt;index is set if BB has already been seen, i.e. it is
+<span class="lineNum">      67 </span>            :    connected to some trace already.  */
+<span class="lineNum">      68 </span>            : static sbitmap bb_seen;
+<a name="69"><span class="lineNum">      69 </span>            : </a>
+<span class="lineNum">      70 </span>            : static inline void
+<span class="lineNum">      71 </span><span class="lineNoCov">          0 : mark_bb_seen (basic_block bb)</span>
+<span class="lineNum">      72 </span>            : {
+<span class="lineNum">      73 </span><span class="lineNoCov">          0 :   unsigned int size = SBITMAP_SIZE (bb_seen);</span>
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span><span class="lineNoCov">          0 :   if ((unsigned int)bb-&gt;index &gt;= size)</span>
+<span class="lineNum">      76 </span><span class="lineNoCov">          0 :     bb_seen = sbitmap_resize (bb_seen, size * 2, 0);</span>
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span><span class="lineNoCov">          0 :   bitmap_set_bit (bb_seen, bb-&gt;index);</span>
+<span class="lineNum">      79 </span><span class="lineNoCov">          0 : }</span>
+<a name="80"><span class="lineNum">      80 </span>            : </a>
+<span class="lineNum">      81 </span>            : static inline bool
+<span class="lineNum">      82 </span><span class="lineNoCov">          0 : bb_seen_p (basic_block bb)</span>
+<span class="lineNum">      83 </span>            : {
+<span class="lineNum">      84 </span><span class="lineNoCov">          0 :   return bitmap_bit_p (bb_seen, bb-&gt;index);</span>
+<span class="lineNum">      85 </span>            : }
+<span class="lineNum">      86 </span>            : 
+<a name="87"><span class="lineNum">      87 </span>            : /* Return true if we should ignore the basic block for purposes of tracing.  */</a>
+<span class="lineNum">      88 </span>            : bool
+<span class="lineNum">      89 </span><span class="lineCov">     431664 : ignore_bb_p (const_basic_block bb)</span>
+<span class="lineNum">      90 </span>            : {
+<span class="lineNum">      91 </span><span class="lineCov">     431664 :   if (bb-&gt;index &lt; NUM_FIXED_BLOCKS)</span>
+<span class="lineNum">      92 </span>            :     return true;
+<span class="lineNum">      93 </span><span class="lineCov">     422607 :   if (optimize_bb_for_size_p (bb))</span>
+<span class="lineNum">      94 </span>            :     return true;
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span><span class="lineCov">     387741 :   if (gimple *g = last_stmt (CONST_CAST_BB (bb)))</span>
+<span class="lineNum">      97 </span>            :     {
+<span class="lineNum">      98 </span>            :       /* A transaction is a single entry multiple exit region.  It
+<span class="lineNum">      99 </span>            :          must be duplicated in its entirety or not at all.  */
+<span class="lineNum">     100 </span><span class="lineCov">     695362 :       if (gimple_code (g) == GIMPLE_TRANSACTION)</span>
+<span class="lineNum">     101 </span>            :         return true;
+<span class="lineNum">     102 </span>            : 
+<span class="lineNum">     103 </span>            :       /* An IFN_UNIQUE call must be duplicated as part of its group,
+<span class="lineNum">     104 </span>            :          or not at all.  */
+<span class="lineNum">     105 </span><span class="lineCov">     347681 :       if (is_gimple_call (g)</span>
+<span class="lineNum">     106 </span><span class="lineCov">      11228 :           &amp;&amp; gimple_call_internal_p (g)</span>
+<span class="lineNum">     107 </span><span class="lineCov">     347775 :           &amp;&amp; gimple_call_internal_unique_p (g))</span>
+<span class="lineNum">     108 </span><span class="lineNoCov">          0 :         return true;</span>
+<span class="lineNum">     109 </span>            :     }
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            :   return false;
+<span class="lineNum">     112 </span>            : }
+<span class="lineNum">     113 </span>            : 
+<span class="lineNum">     114 </span>            : /* Return number of instructions in the block.  */
+<a name="115"><span class="lineNum">     115 </span>            : </a>
+<span class="lineNum">     116 </span>            : static int
+<span class="lineNum">     117 </span><span class="lineCov">     141084 : count_insns (basic_block bb)</span>
+<span class="lineNum">     118 </span>            : {
+<span class="lineNum">     119 </span><span class="lineCov">     141084 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     120 </span><span class="lineCov">     141084 :   gimple *stmt;</span>
+<span class="lineNum">     121 </span><span class="lineCov">     141084 :   int n = 0;</span>
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span><span class="lineCov">    1801028 :   for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     124 </span>            :     {
+<span class="lineNum">     125 </span><span class="lineCov">     759430 :       stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     126 </span><span class="lineCov">     759430 :       n += estimate_num_insns (stmt, &amp;eni_size_weights);</span>
+<span class="lineNum">     127 </span>            :     }
+<span class="lineNum">     128 </span><span class="lineCov">     141084 :   return n;</span>
+<span class="lineNum">     129 </span>            : }
+<span class="lineNum">     130 </span>            : 
+<a name="131"><span class="lineNum">     131 </span>            : /* Return true if E1 is more frequent than E2.  */</a>
+<span class="lineNum">     132 </span>            : static bool
+<span class="lineNum">     133 </span><span class="lineCov">     114328 : better_p (const_edge e1, const_edge e2)</span>
+<span class="lineNum">     134 </span>            : {
+<span class="lineNum">     135 </span><span class="lineCov">     114328 :   if ((e1-&gt;count () &gt; e2-&gt;count ()) || (e1-&gt;count () &lt; e2-&gt;count ()))</span>
+<span class="lineNum">     136 </span><span class="lineCov">     104088 :     return e1-&gt;count () &gt; e2-&gt;count ();</span>
+<span class="lineNum">     137 </span>            :   /* This is needed to avoid changes in the decision after
+<span class="lineNum">     138 </span>            :      CFG is modified.  */
+<span class="lineNum">     139 </span><span class="lineCov">      10240 :   if (e1-&gt;src != e2-&gt;src)</span>
+<span class="lineNum">     140 </span><span class="lineCov">       3179 :     return e1-&gt;src-&gt;index &gt; e2-&gt;src-&gt;index;</span>
+<span class="lineNum">     141 </span><span class="lineCov">       7061 :   return e1-&gt;dest-&gt;index &gt; e2-&gt;dest-&gt;index;</span>
+<span class="lineNum">     142 </span>            : }
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            : /* Return most frequent successor of basic block BB.  */
+<a name="145"><span class="lineNum">     145 </span>            : </a>
+<span class="lineNum">     146 </span>            : static edge
+<span class="lineNum">     147 </span><span class="lineCov">      93333 : find_best_successor (basic_block bb)</span>
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span><span class="lineCov">      93333 :   edge e;</span>
+<span class="lineNum">     150 </span><span class="lineCov">      93333 :   edge best = NULL;</span>
+<span class="lineNum">     151 </span><span class="lineCov">      93333 :   edge_iterator ei;</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">     349701 :   FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     154 </span>            :     {
+<span class="lineNum">     155 </span><span class="lineCov">     163078 :       if (!e-&gt;count ().initialized_p ())</span>
+<span class="lineNum">     156 </span>            :         return NULL;
+<span class="lineNum">     157 </span><span class="lineCov">     163035 :       if (!best || better_p (e, best))</span>
+<span class="lineNum">     158 </span><span class="lineCov">     148696 :         best = e;</span>
+<span class="lineNum">     159 </span>            :     }
+<span class="lineNum">     160 </span><span class="lineCov">      93290 :   if (!best || ignore_bb_p (best-&gt;dest))</span>
+<span class="lineNum">     161 </span><span class="lineCov">       5837 :     return NULL;</span>
+<span class="lineNum">     162 </span><span class="lineCov">      87453 :   if (!best-&gt;probability.initialized_p ()</span>
+<span class="lineNum">     163 </span><span class="lineCov">      87453 :       || best-&gt;probability.to_reg_br_prob_base () &lt;= probability_cutoff)</span>
+<span class="lineNum">     164 </span><span class="lineCov">       6624 :     return NULL;</span>
+<span class="lineNum">     165 </span>            :   return best;
+<span class="lineNum">     166 </span>            : }
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            : /* Return most frequent predecessor of basic block BB.  */
+<a name="169"><span class="lineNum">     169 </span>            : </a>
+<span class="lineNum">     170 </span>            : static edge
+<span class="lineNum">     171 </span><span class="lineCov">      90740 : find_best_predecessor (basic_block bb)</span>
+<span class="lineNum">     172 </span>            : {
+<span class="lineNum">     173 </span><span class="lineCov">      90740 :   edge e;</span>
+<span class="lineNum">     174 </span><span class="lineCov">      90740 :   edge best = NULL;</span>
+<span class="lineNum">     175 </span><span class="lineCov">      90740 :   edge_iterator ei;</span>
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span><span class="lineCov">     316623 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     178 </span>            :     {
+<span class="lineNum">     179 </span><span class="lineCov">     135185 :       if (!e-&gt;count ().initialized_p ())</span>
+<span class="lineNum">     180 </span>            :         return NULL;
+<span class="lineNum">     181 </span><span class="lineCov">     135143 :       if (!best || better_p (e, best))</span>
+<span class="lineNum">     182 </span><span class="lineCov">     110570 :         best = e;</span>
+<span class="lineNum">     183 </span>            :     }
+<span class="lineNum">     184 </span><span class="lineCov">      90698 :   if (!best || ignore_bb_p (best-&gt;src))</span>
+<span class="lineNum">     185 </span><span class="lineCov">       6125 :     return NULL;</span>
+<span class="lineNum">     186 </span><span class="lineCov">      84573 :   if (bb-&gt;count.initialized_p ()</span>
+<span class="lineNum">     187 </span><span class="lineCov">     168899 :       &amp;&amp; (best-&gt;count ().to_frequency (cfun) * REG_BR_PROB_BASE</span>
+<span class="lineNum">     188 </span><span class="lineCov">      84562 :           &lt; bb-&gt;count.to_frequency (cfun) * branch_ratio_cutoff))</span>
+<span class="lineNum">     189 </span><span class="lineCov">        236 :     return NULL;</span>
+<span class="lineNum">     190 </span>            :   return best;
+<span class="lineNum">     191 </span>            : }
+<span class="lineNum">     192 </span>            : 
+<span class="lineNum">     193 </span>            : /* Find the trace using bb and record it in the TRACE array.
+<span class="lineNum">     194 </span>            :    Return number of basic blocks recorded.  */
+<a name="195"><span class="lineNum">     195 </span>            : </a>
+<span class="lineNum">     196 </span>            : static int
+<span class="lineNum">     197 </span><span class="lineCov">      18487 : find_trace (basic_block bb, basic_block *trace)</span>
+<span class="lineNum">     198 </span>            : {
+<span class="lineNum">     199 </span><span class="lineCov">      18487 :   int i = 0;</span>
+<span class="lineNum">     200 </span><span class="lineCov">      18487 :   edge e;</span>
+<span class="lineNum">     201 </span>            : 
+<span class="lineNum">     202 </span><span class="lineCov">      18487 :   if (dump_file)</span>
+<span class="lineNum">     203 </span><span class="lineCov">         17 :     fprintf (dump_file, &quot;Trace seed %i [%i]&quot;, bb-&gt;index, bb-&gt;count.to_frequency (cfun));</span>
+<span class="lineNum">     204 </span>            : 
+<span class="lineNum">     205 </span><span class="lineCov">      30762 :   while ((e = find_best_predecessor (bb)) != NULL)</span>
+<span class="lineNum">     206 </span>            :     {
+<span class="lineNum">     207 </span><span class="lineCov">      24378 :       basic_block bb2 = e-&gt;src;</span>
+<span class="lineNum">     208 </span><span class="lineCov">      47221 :       if (bb_seen_p (bb2) || (e-&gt;flags &amp; (EDGE_DFS_BACK | EDGE_COMPLEX))</span>
+<span class="lineNum">     209 </span><span class="lineCov">      41396 :           || find_best_successor (bb2) != e)</span>
+<span class="lineNum">     210 </span>            :         break;
+<span class="lineNum">     211 </span><span class="lineCov">      12275 :       if (dump_file)</span>
+<span class="lineNum">     212 </span><span class="lineCov">         16 :         fprintf (dump_file, &quot;,%i [%i]&quot;, bb-&gt;index, bb-&gt;count.to_frequency (cfun));</span>
+<span class="lineNum">     213 </span>            :       bb = bb2;
+<span class="lineNum">     214 </span>            :     }
+<span class="lineNum">     215 </span><span class="lineCov">      18487 :   if (dump_file)</span>
+<span class="lineNum">     216 </span><span class="lineCov">         17 :     fprintf (dump_file, &quot; forward %i [%i]&quot;, bb-&gt;index, bb-&gt;count.to_frequency (cfun));</span>
+<span class="lineNum">     217 </span><span class="lineCov">      18487 :   trace[i++] = bb;</span>
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            :   /* Follow the trace in forward direction.  */
+<span class="lineNum">     220 </span><span class="lineCov">      76315 :   while ((e = find_best_successor (bb)) != NULL)</span>
+<span class="lineNum">     221 </span>            :     {
+<span class="lineNum">     222 </span><span class="lineCov">      66800 :       bb = e-&gt;dest;</span>
+<span class="lineNum">     223 </span><span class="lineCov">     133528 :       if (bb_seen_p (bb) || (e-&gt;flags &amp; (EDGE_DFS_BACK | EDGE_COMPLEX))</span>
+<span class="lineNum">     224 </span><span class="lineCov">     126778 :           || find_best_predecessor (bb) != e)</span>
+<span class="lineNum">     225 </span>            :         break;
+<span class="lineNum">     226 </span><span class="lineCov">      57828 :       if (dump_file)</span>
+<span class="lineNum">     227 </span><span class="lineCov">         26 :         fprintf (dump_file, &quot;,%i [%i]&quot;, bb-&gt;index, bb-&gt;count.to_frequency (cfun));</span>
+<span class="lineNum">     228 </span><span class="lineCov">      57828 :       trace[i++] = bb;</span>
+<span class="lineNum">     229 </span>            :     }
+<span class="lineNum">     230 </span><span class="lineCov">      18487 :   if (dump_file)</span>
+<span class="lineNum">     231 </span><span class="lineCov">         17 :     fprintf (dump_file, &quot;\n&quot;);</span>
+<span class="lineNum">     232 </span><span class="lineCov">      18487 :   return i;</span>
+<span class="lineNum">     233 </span>            : }
+<span class="lineNum">     234 </span>            : 
+<span class="lineNum">     235 </span>            : /* Duplicate block BB2, placing it after BB in the CFG.  Return the
+<a name="236"><span class="lineNum">     236 </span>            :    newly created block.  */</a>
+<span class="lineNum">     237 </span>            : basic_block
+<span class="lineNum">     238 </span><span class="lineCov">      15218 : transform_duplicate (basic_block bb, basic_block bb2)</span>
+<span class="lineNum">     239 </span>            : {
+<span class="lineNum">     240 </span><span class="lineCov">      15218 :   edge e;</span>
+<span class="lineNum">     241 </span><span class="lineCov">      15218 :   basic_block copy;</span>
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span><span class="lineCov">      15218 :   e = find_edge (bb, bb2);</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">      15218 :   copy = duplicate_block (bb2, e, bb);</span>
+<span class="lineNum">     246 </span><span class="lineCov">      15218 :   flush_pending_stmts (e);</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">      15218 :   add_phi_args_after_copy (&amp;copy, 1, NULL);</span>
+<span class="lineNum">     249 </span>            : 
+<span class="lineNum">     250 </span><span class="lineCov">      15218 :   return (copy);</span>
+<span class="lineNum">     251 </span>            : }
+<span class="lineNum">     252 </span>            : 
+<span class="lineNum">     253 </span>            : /* Look for basic blocks in frequency order, construct traces and tail duplicate
+<span class="lineNum">     254 </span>            :    if profitable.  */
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span>            : static bool
+<span class="lineNum">     257 </span><span class="lineCov">       7206 : tail_duplicate (void)</span>
+<span class="lineNum">     258 </span>            : {
+<span class="lineNum">     259 </span><span class="lineCov">       7206 :   auto_vec&lt;fibonacci_node&lt;long, basic_block_def&gt;*&gt; blocks;</span>
+<span class="lineNum">     260 </span><span class="lineCov">       7206 :   blocks.safe_grow_cleared (last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     261 </span>            : 
+<span class="lineNum">     262 </span><span class="lineCov">       7206 :   basic_block *trace = XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun));</span>
+<span class="lineNum">     263 </span><span class="lineCov">       7206 :   int *counts = XNEWVEC (int, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     264 </span><span class="lineCov">       7206 :   int ninsns = 0, nduplicated = 0;</span>
+<span class="lineNum">     265 </span><span class="lineCov">       7206 :   gcov_type weighted_insns = 0, traced_insns = 0;</span>
+<span class="lineNum">     266 </span><span class="lineCov">      14412 :   fibonacci_heap&lt;long, basic_block_def&gt; heap (LONG_MIN);</span>
+<span class="lineNum">     267 </span><span class="lineCov">       7206 :   gcov_type cover_insns;</span>
+<span class="lineNum">     268 </span><span class="lineCov">       7206 :   int max_dup_insns;</span>
+<span class="lineNum">     269 </span><span class="lineCov">       7206 :   basic_block bb;</span>
+<span class="lineNum">     270 </span><span class="lineCov">       7206 :   bool changed = false;</span>
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span>            :   /* Create an oversized sbitmap to reduce the chance that we need to
+<span class="lineNum">     273 </span>            :      resize it.  */
+<span class="lineNum">     274 </span><span class="lineCov">       7206 :   bb_seen = sbitmap_alloc (last_basic_block_for_fn (cfun) * 2);</span>
+<span class="lineNum">     275 </span><span class="lineCov">       7206 :   bitmap_clear (bb_seen);</span>
+<span class="lineNum">     276 </span><span class="lineCov">       7206 :   initialize_original_copy_tables ();</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineCov">       7206 :   if (profile_info &amp;&amp; profile_status_for_fn (cfun) == PROFILE_READ)</span>
+<span class="lineNum">     279 </span><span class="lineCov">        127 :     probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY_FEEDBACK);</span>
+<span class="lineNum">     280 </span>            :   else
+<span class="lineNum">     281 </span><span class="lineCov">       7079 :     probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY);</span>
+<span class="lineNum">     282 </span><span class="lineCov">       7206 :   probability_cutoff = REG_BR_PROB_BASE / 100 * probability_cutoff;</span>
+<span class="lineNum">     283 </span>            : 
+<span class="lineNum">     284 </span><span class="lineCov">      14412 :   branch_ratio_cutoff =</span>
+<span class="lineNum">     285 </span><span class="lineCov">       7206 :     (REG_BR_PROB_BASE / 100 * PARAM_VALUE (TRACER_MIN_BRANCH_RATIO));</span>
+<span class="lineNum">     286 </span>            : 
+<span class="lineNum">     287 </span><span class="lineCov">     148290 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     288 </span>            :     {
+<span class="lineNum">     289 </span><span class="lineCov">     141084 :       int n = count_insns (bb);</span>
+<span class="lineNum">     290 </span><span class="lineCov">     141084 :       if (!ignore_bb_p (bb))</span>
+<span class="lineNum">     291 </span><span class="lineCov">     109766 :         blocks[bb-&gt;index] = heap.insert (-bb-&gt;count.to_frequency (cfun), bb);</span>
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span><span class="lineCov">     141084 :       counts [bb-&gt;index] = n;</span>
+<span class="lineNum">     294 </span><span class="lineCov">     141084 :       ninsns += n;</span>
+<span class="lineNum">     295 </span><span class="lineCov">     141084 :       weighted_insns += n * bb-&gt;count.to_frequency (cfun);</span>
+<span class="lineNum">     296 </span>            :     }
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span><span class="lineCov">       7206 :   if (profile_info &amp;&amp; profile_status_for_fn (cfun) == PROFILE_READ)</span>
+<span class="lineNum">     299 </span><span class="lineCov">        127 :     cover_insns = PARAM_VALUE (TRACER_DYNAMIC_COVERAGE_FEEDBACK);</span>
+<span class="lineNum">     300 </span>            :   else
+<span class="lineNum">     301 </span><span class="lineCov">       7079 :     cover_insns = PARAM_VALUE (TRACER_DYNAMIC_COVERAGE);</span>
+<span class="lineNum">     302 </span><span class="lineCov">       7206 :   cover_insns = (weighted_insns * cover_insns + 50) / 100;</span>
+<span class="lineNum">     303 </span><span class="lineCov">       7206 :   max_dup_insns = (ninsns * PARAM_VALUE (TRACER_MAX_CODE_GROWTH) + 50) / 100;</span>
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span><span class="lineCov">      25981 :   while (traced_insns &lt; cover_insns &amp;&amp; nduplicated &lt; max_dup_insns</span>
+<span class="lineNum">     306 </span><span class="lineCov">      25981 :          &amp;&amp; !heap.empty ())</span>
+<span class="lineNum">     307 </span>            :     {
+<span class="lineNum">     308 </span><span class="lineCov">      18775 :       basic_block bb = heap.extract_min ();</span>
+<span class="lineNum">     309 </span><span class="lineCov">      18775 :       int n, pos;</span>
+<span class="lineNum">     310 </span>            : 
+<span class="lineNum">     311 </span><span class="lineCov">      18775 :       if (!bb)</span>
+<span class="lineNum">     312 </span>            :         break;
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span><span class="lineCov">      18775 :       blocks[bb-&gt;index] = NULL;</span>
+<span class="lineNum">     315 </span>            : 
+<span class="lineNum">     316 </span><span class="lineCov">      18775 :       if (ignore_bb_p (bb))</span>
+<span class="lineNum">     317 </span>            :         continue;
+<span class="lineNum">     318 </span><span class="lineCov">      18487 :       gcc_assert (!bb_seen_p (bb));</span>
+<span class="lineNum">     319 </span>            : 
+<span class="lineNum">     320 </span><span class="lineCov">      18487 :       n = find_trace (bb, trace);</span>
+<span class="lineNum">     321 </span>            : 
+<span class="lineNum">     322 </span><span class="lineCov">      18487 :       bb = trace[0];</span>
+<span class="lineNum">     323 </span><span class="lineCov">      18487 :       traced_insns += bb-&gt;count.to_frequency (cfun) * counts [bb-&gt;index];</span>
+<span class="lineNum">     324 </span><span class="lineCov">      18487 :       if (blocks[bb-&gt;index])</span>
+<span class="lineNum">     325 </span>            :         {
+<span class="lineNum">     326 </span><span class="lineCov">       8368 :           heap.delete_node (blocks[bb-&gt;index]);</span>
+<span class="lineNum">     327 </span><span class="lineCov">       4184 :           blocks[bb-&gt;index] = NULL;</span>
+<span class="lineNum">     328 </span>            :         }
+<span class="lineNum">     329 </span>            : 
+<span class="lineNum">     330 </span><span class="lineCov">      70726 :       for (pos = 1; pos &lt; n; pos++)</span>
+<span class="lineNum">     331 </span>            :         {
+<span class="lineNum">     332 </span><span class="lineCov">      52670 :           basic_block bb2 = trace[pos];</span>
+<span class="lineNum">     333 </span>            : 
+<span class="lineNum">     334 </span><span class="lineCov">      52670 :           if (blocks[bb2-&gt;index])</span>
+<span class="lineNum">     335 </span>            :             {
+<span class="lineNum">     336 </span><span class="lineCov">      97016 :               heap.delete_node (blocks[bb2-&gt;index]);</span>
+<span class="lineNum">     337 </span><span class="lineCov">      48508 :               blocks[bb2-&gt;index] = NULL;</span>
+<span class="lineNum">     338 </span>            :             }
+<span class="lineNum">     339 </span><span class="lineCov">      52670 :           traced_insns += bb2-&gt;count.to_frequency (cfun) * counts [bb2-&gt;index];</span>
+<span class="lineNum">     340 </span><span class="lineCov">      52670 :           if (EDGE_COUNT (bb2-&gt;preds) &gt; 1</span>
+<span class="lineNum">     341 </span><span class="lineCov">      15817 :               &amp;&amp; can_duplicate_block_p (bb2)</span>
+<span class="lineNum">     342 </span>            :               /* We have the tendency to duplicate the loop header
+<span class="lineNum">     343 </span>            :                  of all do { } while loops.  Do not do that - it is
+<span class="lineNum">     344 </span>            :                  not profitable and it might create a loop with multiple
+<span class="lineNum">     345 </span>            :                  entries or at least rotate the loop.  */
+<span class="lineNum">     346 </span><span class="lineCov">      68487 :               &amp;&amp; bb2-&gt;loop_father-&gt;header != bb2)</span>
+<span class="lineNum">     347 </span>            :             {
+<span class="lineNum">     348 </span><span class="lineCov">      14236 :               nduplicated += counts [bb2-&gt;index];</span>
+<span class="lineNum">     349 </span><span class="lineCov">      14236 :               basic_block copy = transform_duplicate (bb, bb2);</span>
+<span class="lineNum">     350 </span>            : 
+<span class="lineNum">     351 </span>            :               /* Reconsider the original copy of block we've duplicated.
+<span class="lineNum">     352 </span>            :                  Removing the most common predecessor may make it to be
+<span class="lineNum">     353 </span>            :                  head.  */
+<span class="lineNum">     354 </span><span class="lineCov">      14236 :               blocks[bb2-&gt;index] = heap.insert (-bb2-&gt;count.to_frequency (cfun), bb2);</span>
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span><span class="lineCov">      14236 :               if (dump_file)</span>
+<span class="lineNum">     357 </span><span class="lineCov">         11 :                 fprintf (dump_file, &quot;Duplicated %i as %i [%i]\n&quot;,</span>
+<span class="lineNum">     358 </span>            :                          bb2-&gt;index, copy-&gt;index, copy-&gt;count.to_frequency (cfun));
+<span class="lineNum">     359 </span>            : 
+<span class="lineNum">     360 </span>            :               bb2 = copy;
+<span class="lineNum">     361 </span>            :               changed = true;
+<span class="lineNum">     362 </span>            :             }
+<span class="lineNum">     363 </span><span class="lineCov">      52670 :           mark_bb_seen (bb2);</span>
+<span class="lineNum">     364 </span><span class="lineCov">      52670 :           bb = bb2;</span>
+<span class="lineNum">     365 </span>            :           /* In case the trace became infrequent, stop duplicating.  */
+<span class="lineNum">     366 </span><span class="lineCov">      52670 :           if (ignore_bb_p (bb))</span>
+<span class="lineNum">     367 </span>            :             break;
+<span class="lineNum">     368 </span>            :         }
+<span class="lineNum">     369 </span><span class="lineCov">      18487 :       if (dump_file)</span>
+<span class="lineNum">     370 </span><span class="lineCov">         34 :         fprintf (dump_file, &quot; covered now %.1f\n\n&quot;,</span>
+<span class="lineNum">     371 </span><span class="lineCov">         17 :                  traced_insns * 100.0 / weighted_insns);</span>
+<span class="lineNum">     372 </span>            :     }
+<span class="lineNum">     373 </span><span class="lineCov">       7206 :   if (dump_file)</span>
+<span class="lineNum">     374 </span><span class="lineCov">         14 :     fprintf (dump_file, &quot;Duplicated %i insns (%i%%)\n&quot;, nduplicated,</span>
+<span class="lineNum">     375 </span><span class="lineCov">          7 :              nduplicated * 100 / ninsns);</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">       7206 :   free_original_copy_tables ();</span>
+<span class="lineNum">     378 </span><span class="lineCov">       7206 :   sbitmap_free (bb_seen);</span>
+<span class="lineNum">     379 </span><span class="lineCov">       7206 :   free (trace);</span>
+<span class="lineNum">     380 </span><span class="lineCov">       7206 :   free (counts);</span>
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span><span class="lineCov">       7206 :   return changed;</span>
+<span class="lineNum">     383 </span>            : }
+<span class="lineNum">     384 </span>            : 
+<span class="lineNum">     385 </span>            : namespace {
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            : const pass_data pass_data_tracer =
+<span class="lineNum">     388 </span>            : {
+<span class="lineNum">     389 </span>            :   GIMPLE_PASS, /* type */
+<span class="lineNum">     390 </span>            :   &quot;tracer&quot;, /* name */
+<span class="lineNum">     391 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     392 </span>            :   TV_TRACER, /* tv_id */
+<span class="lineNum">     393 </span>            :   0, /* properties_required */
+<span class="lineNum">     394 </span>            :   0, /* properties_provided */
+<span class="lineNum">     395 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     396 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     397 </span>            :   TODO_update_ssa, /* todo_flags_finish */
+<span class="lineNum">     398 </span>            : };
+<span class="lineNum">     399 </span>            : 
+<span class="lineNum">     400 </span>            : class pass_tracer : public gimple_opt_pass
+<span class="lineNum">     401 </span>            : {
+<span class="lineNum">     402 </span>            : public:
+<span class="lineNum">     403 </span>            :   pass_tracer (gcc::context *ctxt)
+<span class="lineNum">     404 </span><span class="lineCov">     340624 :     : gimple_opt_pass (pass_data_tracer, ctxt)</span>
+<span class="lineNum">     405 </span>            :   {}
+<a name="406"><span class="lineNum">     406 </span>            : </a>
+<span class="lineNum">     407 </span>            :   /* opt_pass methods: */
+<span class="lineNum">     408 </span><span class="lineCov">     620946 :   virtual bool gate (function *)</span>
+<span class="lineNum">     409 </span>            :     {
+<span class="lineNum">     410 </span><span class="lineCov">     620946 :       return (optimize &gt; 0 &amp;&amp; flag_tracer &amp;&amp; flag_reorder_blocks);</span>
+<span class="lineNum">     411 </span>            :     }
+<span class="lineNum">     412 </span>            : 
+<span class="lineNum">     413 </span>            :   virtual unsigned int execute (function *);
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span>            : }; // class pass_tracer
+<a name="416"><span class="lineNum">     416 </span>            : </a>
+<span class="lineNum">     417 </span>            : unsigned int
+<span class="lineNum">     418 </span><span class="lineCov">      12628 : pass_tracer::execute (function *fun)</span>
+<span class="lineNum">     419 </span>            : {
+<span class="lineNum">     420 </span><span class="lineCov">      12628 :   bool changed;</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span><span class="lineCov">      12628 :   if (n_basic_blocks_for_fn (fun) &lt;= NUM_FIXED_BLOCKS + 1)</span>
+<span class="lineNum">     423 </span>            :     return 0;
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">       7206 :   mark_dfs_back_edges ();</span>
+<span class="lineNum">     426 </span><span class="lineCov">       7206 :   if (dump_file)</span>
+<span class="lineNum">     427 </span><span class="lineCov">          7 :     brief_dump_cfg (dump_file, dump_flags);</span>
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            :   /* Trace formation is done on the fly inside tail_duplicate */
+<span class="lineNum">     430 </span><span class="lineCov">       7206 :   changed = tail_duplicate ();</span>
+<span class="lineNum">     431 </span><span class="lineCov">       7206 :   if (changed)</span>
+<span class="lineNum">     432 </span>            :     {
+<span class="lineNum">     433 </span><span class="lineCov">       2526 :       free_dominance_info (CDI_DOMINATORS);</span>
+<span class="lineNum">     434 </span>            :       /* If we changed the CFG schedule loops for fixup by cleanup_cfg.  */
+<span class="lineNum">     435 </span><span class="lineCov">       2526 :       loops_state_set (LOOPS_NEED_FIXUP);</span>
+<span class="lineNum">     436 </span>            :     }
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span><span class="lineCov">       7206 :   if (dump_file)</span>
+<span class="lineNum">     439 </span><span class="lineCov">          7 :     brief_dump_cfg (dump_file, dump_flags);</span>
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span><span class="lineCov">       7206 :   return changed ? TODO_cleanup_cfg : 0;</span>
+<span class="lineNum">     442 </span>            : }
+<span class="lineNum">     443 </span>            : } // anon namespace
+<a name="444"><span class="lineNum">     444 </span>            : </a>
+<span class="lineNum">     445 </span>            : gimple_opt_pass *
+<span class="lineNum">     446 </span><span class="lineCov">     170312 : make_pass_tracer (gcc::context *ctxt)</span>
+<span class="lineNum">     447 </span>            : {
+<span class="lineNum">     448 </span><span class="lineCov">     170312 :   return new pass_tracer (ctxt);</span>
+<span class="lineNum">     449 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

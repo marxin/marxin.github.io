@@ -1,0 +1,547 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/regstat.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - regstat.c<span style="font-size: 80%;"> (source / <a href="regstat.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">163</td>
+            <td class="headerCovTableEntry">205</td>
+            <td class="headerCovTableEntryMed">79.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Scanning of rtl for dataflow analysis.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2007-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Kenneth Zadeck (zadeck@naturalbridge.com).
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;predict.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            : 
+<span class="lineNum">      32 </span>            : struct regstat_n_sets_and_refs_t *regstat_n_sets_and_refs;
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            : /*----------------------------------------------------------------------------
+<span class="lineNum">      35 </span>            :    REG_N_SETS and REG_N_REFS.
+<span class="lineNum">      36 </span>            :    ----------------------------------------------------------------------------*/
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : /* If a pass need to change these values in some magical way or the
+<span class="lineNum">      39 </span>            :    pass needs to have accurate values for these and is not using
+<span class="lineNum">      40 </span>            :    incremental df scanning, then it should use REG_N_SETS and
+<span class="lineNum">      41 </span>            :    REG_N_USES.  If the pass is doing incremental scanning then it
+<span class="lineNum">      42 </span>            :    should be getting the info from DF_REG_DEF_COUNT and
+<span class="lineNum">      43 </span>            :    DF_REG_USE_COUNT.  */
+<a name="44"><span class="lineNum">      44 </span>            : </a>
+<span class="lineNum">      45 </span>            : void
+<span class="lineNum">      46 </span><span class="lineCov">    2110468 : regstat_init_n_sets_and_refs (void)</span>
+<span class="lineNum">      47 </span>            : {
+<span class="lineNum">      48 </span><span class="lineCov">    2110468 :   unsigned int i;</span>
+<span class="lineNum">      49 </span><span class="lineCov">    2110468 :   unsigned int max_regno = max_reg_num ();</span>
+<span class="lineNum">      50 </span>            : 
+<span class="lineNum">      51 </span><span class="lineCov">    2110468 :   timevar_push (TV_REG_STATS);</span>
+<span class="lineNum">      52 </span><span class="lineCov">    2110468 :   df_grow_reg_info ();</span>
+<span class="lineNum">      53 </span><span class="lineCov">    2110468 :   gcc_assert (!regstat_n_sets_and_refs);</span>
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span><span class="lineCov">    2110468 :   regstat_n_sets_and_refs = XNEWVEC (struct regstat_n_sets_and_refs_t, max_regno);</span>
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span><span class="lineCov">    2110468 :   if (MAY_HAVE_DEBUG_BIND_INSNS)</span>
+<span class="lineNum">      58 </span><span class="lineCov">  124897069 :     for (i = 0; i &lt; max_regno; i++)</span>
+<span class="lineNum">      59 </span>            :       {
+<span class="lineNum">      60 </span><span class="lineCov">  123942111 :         int use_count;</span>
+<span class="lineNum">      61 </span><span class="lineCov">  123942111 :         df_ref use;</span>
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span><span class="lineCov">  123942111 :         use_count = DF_REG_USE_COUNT (i);</span>
+<span class="lineNum">      64 </span><span class="lineCov">  291165432 :         for (use = DF_REG_USE_CHAIN (i); use; use = DF_REF_NEXT_REG (use))</span>
+<span class="lineNum">      65 </span><span class="lineCov">  167223321 :           if (DF_REF_INSN_INFO (use) &amp;&amp; DEBUG_INSN_P (DF_REF_INSN (use)))</span>
+<span class="lineNum">      66 </span><span class="lineCov">   16610005 :             use_count--;</span>
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : 
+<span class="lineNum">      69 </span><span class="lineCov">  123942111 :         SET_REG_N_SETS (i, DF_REG_DEF_COUNT (i));</span>
+<span class="lineNum">      70 </span><span class="lineCov">  247884222 :         SET_REG_N_REFS (i, use_count + REG_N_SETS (i));</span>
+<span class="lineNum">      71 </span>            :       }
+<span class="lineNum">      72 </span>            :   else
+<span class="lineNum">      73 </span><span class="lineCov">  134311105 :     for (i = 0; i &lt; max_regno; i++)</span>
+<span class="lineNum">      74 </span>            :       {
+<span class="lineNum">      75 </span><span class="lineCov">  133155595 :         SET_REG_N_SETS (i, DF_REG_DEF_COUNT (i));</span>
+<span class="lineNum">      76 </span><span class="lineCov">  266311190 :         SET_REG_N_REFS (i, DF_REG_USE_COUNT (i) + REG_N_SETS (i));</span>
+<span class="lineNum">      77 </span>            :       }
+<span class="lineNum">      78 </span><span class="lineCov">    2110468 :   timevar_pop (TV_REG_STATS);</span>
+<span class="lineNum">      79 </span>            : 
+<span class="lineNum">      80 </span><span class="lineCov">    2110468 : }</span>
+<span class="lineNum">      81 </span>            : 
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            : /* Free the array that holds the REG_N_SETS and REG_N_REFS.  */
+<a name="84"><span class="lineNum">      84 </span>            : </a>
+<span class="lineNum">      85 </span>            : void
+<span class="lineNum">      86 </span><span class="lineCov">    2110468 : regstat_free_n_sets_and_refs (void)</span>
+<span class="lineNum">      87 </span>            : {
+<span class="lineNum">      88 </span><span class="lineCov">    2110468 :   gcc_assert (regstat_n_sets_and_refs);</span>
+<span class="lineNum">      89 </span><span class="lineCov">    2110468 :   free (regstat_n_sets_and_refs);</span>
+<span class="lineNum">      90 </span><span class="lineCov">    2110468 :   regstat_n_sets_and_refs = NULL;</span>
+<span class="lineNum">      91 </span><span class="lineCov">    2110468 : }</span>
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            : /*----------------------------------------------------------------------------
+<span class="lineNum">      95 </span>            :    REGISTER INFORMATION
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            :    Process REG_N_DEATHS, REG_N_CALLS_CROSSED, and REG_BASIC_BLOCK.
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            :    ----------------------------------------------------------------------------*/
+<span class="lineNum">     100 </span>            : 
+<span class="lineNum">     101 </span>            : static bitmap setjmp_crosses;
+<span class="lineNum">     102 </span>            : struct reg_info_t *reg_info_p;
+<span class="lineNum">     103 </span>            : 
+<span class="lineNum">     104 </span>            : /* The number allocated elements of reg_info_p.  */
+<span class="lineNum">     105 </span>            : size_t reg_info_p_size;
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            : /* Compute register info: lifetime, bb, and number of defs and uses
+<span class="lineNum">     108 </span>            :    for basic block BB.  LIVE is a scratch bitvector used here.  */
+<a name="109"><span class="lineNum">     109 </span>            : </a>
+<span class="lineNum">     110 </span>            : static void
+<span class="lineNum">     111 </span><span class="lineCov">   15468764 : regstat_bb_compute_ri (basic_block bb, bitmap live)</span>
+<span class="lineNum">     112 </span>            : {
+<span class="lineNum">     113 </span><span class="lineCov">   15468764 :   rtx_insn *insn;</span>
+<span class="lineNum">     114 </span><span class="lineCov">   15468764 :   df_ref def, use;</span>
+<span class="lineNum">     115 </span><span class="lineCov">   15468764 :   bitmap_iterator bi;</span>
+<span class="lineNum">     116 </span><span class="lineCov">   15468764 :   unsigned int regno;</span>
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span><span class="lineCov">   15468764 :   bitmap_copy (live, df_get_live_out (bb));</span>
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span>            :   /* Process the regs live at the end of the block.  Mark them as
+<span class="lineNum">     121 </span>            :      not local to any one basic block.  */
+<span class="lineNum">     122 </span><span class="lineCov">  230321982 :   EXECUTE_IF_SET_IN_BITMAP (live, 0, regno, bi)</span>
+<span class="lineNum">     123 </span><span class="lineCov">  214853218 :     REG_BASIC_BLOCK (regno) = REG_BLOCK_GLOBAL;</span>
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            :   /* Process the artificial defs and uses at the bottom of the block
+<span class="lineNum">     126 </span>            :      to begin processing.  */
+<span class="lineNum">     127 </span><span class="lineCov">   31511528 :   FOR_EACH_ARTIFICIAL_DEF (def, bb-&gt;index)</span>
+<span class="lineNum">     128 </span><span class="lineCov">     574000 :     if ((DF_REF_FLAGS (def) &amp; DF_REF_AT_TOP) == 0)</span>
+<span class="lineNum">     129 </span><span class="lineNoCov">          0 :       bitmap_clear_bit (live, DF_REF_REGNO (def));</span>
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span><span class="lineCov">   92812584 :   FOR_EACH_ARTIFICIAL_USE (use, bb-&gt;index)</span>
+<span class="lineNum">     132 </span><span class="lineCov">   61875056 :     if ((DF_REF_FLAGS (use) &amp; DF_REF_AT_TOP) == 0)</span>
+<span class="lineNum">     133 </span>            :       {
+<span class="lineNum">     134 </span><span class="lineCov">   61875056 :         regno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     135 </span><span class="lineCov">   61875056 :         bitmap_set_bit (live, regno);</span>
+<span class="lineNum">     136 </span>            :       }
+<span class="lineNum">     137 </span>            : 
+<span class="lineNum">     138 </span><span class="lineCov">  537990089 :   FOR_BB_INSNS_REVERSE (bb, insn)</span>
+<span class="lineNum">     139 </span>            :     {
+<span class="lineNum">     140 </span><span class="lineCov">  174173775 :       struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);</span>
+<span class="lineNum">     141 </span><span class="lineCov">  174173775 :       bitmap_iterator bi;</span>
+<span class="lineNum">     142 </span><span class="lineCov">  174173775 :       rtx link;</span>
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span><span class="lineCov">  174173775 :       if (!NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     145 </span><span class="lineCov">   85935368 :         continue;</span>
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span><span class="lineCov">   88238407 :       link = REG_NOTES (insn);</span>
+<span class="lineNum">     148 </span><span class="lineCov">  181936690 :       while (link)</span>
+<span class="lineNum">     149 </span>            :         {
+<span class="lineNum">     150 </span><span class="lineCov">   93698283 :           if (REG_NOTE_KIND (link) == REG_DEAD)</span>
+<span class="lineNum">     151 </span><span class="lineCov">   98383790 :             REG_N_DEATHS (REGNO (XEXP (link, 0)))++;</span>
+<span class="lineNum">     152 </span><span class="lineCov">   93698283 :           link = XEXP (link, 1);</span>
+<span class="lineNum">     153 </span>            :         }
+<span class="lineNum">     154 </span>            : 
+<span class="lineNum">     155 </span>            :       /* Process the defs.  */
+<span class="lineNum">     156 </span><span class="lineCov">   88238407 :       if (CALL_P (insn))</span>
+<span class="lineNum">     157 </span>            :         {
+<span class="lineNum">     158 </span><span class="lineCov">    6984344 :           bool set_jump = (find_reg_note (insn, REG_SETJMP, NULL) != NULL);</span>
+<span class="lineNum">     159 </span><span class="lineCov">   72637877 :           EXECUTE_IF_SET_IN_BITMAP (live, 0, regno, bi)</span>
+<span class="lineNum">     160 </span>            :             {
+<span class="lineNum">     161 </span><span class="lineCov">   65653533 :               REG_N_CALLS_CROSSED (regno)++;</span>
+<span class="lineNum">     162 </span>            : 
+<span class="lineNum">     163 </span>            :               /* We have a problem with any pseudoreg that lives
+<span class="lineNum">     164 </span>            :                  across the setjmp.  ANSI says that if a user variable
+<span class="lineNum">     165 </span>            :                  does not change in value between the setjmp and the
+<span class="lineNum">     166 </span>            :                  longjmp, then the longjmp preserves it.  This
+<span class="lineNum">     167 </span>            :                  includes longjmp from a place where the pseudo
+<span class="lineNum">     168 </span>            :                  appears dead.  (In principle, the value still exists
+<span class="lineNum">     169 </span>            :                  if it is in scope.)  If the pseudo goes in a hard
+<span class="lineNum">     170 </span>            :                  reg, some other value may occupy that hard reg where
+<span class="lineNum">     171 </span>            :                  this pseudo is dead, thus clobbering the pseudo.
+<span class="lineNum">     172 </span>            :                  Conclusion: such a pseudo must not go in a hard
+<span class="lineNum">     173 </span>            :                  reg.  */
+<span class="lineNum">     174 </span><span class="lineCov">   65653533 :               if (set_jump)</span>
+<span class="lineNum">     175 </span><span class="lineCov">       7755 :                 bitmap_set_bit (setjmp_crosses, regno);</span>
+<span class="lineNum">     176 </span>            :             }
+<span class="lineNum">     177 </span>            :         }
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            :       /* All of the defs except the return value are some sort of
+<span class="lineNum">     180 </span>            :          clobber.  This code is for the return.  */
+<span class="lineNum">     181 </span><span class="lineCov">  627455862 :       FOR_EACH_INSN_INFO_DEF (def, insn_info)</span>
+<span class="lineNum">     182 </span>            :         {
+<span class="lineNum">     183 </span><span class="lineCov">  539217455 :           if ((!CALL_P (insn))</span>
+<span class="lineNum">     184 </span><span class="lineCov">  468220565 :               || (!(DF_REF_FLAGS (def)</span>
+<span class="lineNum">     185 </span>            :                     &amp; (DF_REF_MUST_CLOBBER | DF_REF_MAY_CLOBBER))))
+<span class="lineNum">     186 </span>            :             {
+<span class="lineNum">     187 </span><span class="lineCov">   74173074 :               unsigned int dregno = DF_REF_REGNO (def);</span>
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            :               /* Kill this register if it is not a subreg store or
+<span class="lineNum">     190 </span>            :                  conditional store.
+<span class="lineNum">     191 </span>            :                  ??? This means that any partial store is live from
+<span class="lineNum">     192 </span>            :                  the last use in a basic block to the start of this
+<span class="lineNum">     193 </span>            :                  basic block.  */
+<span class="lineNum">     194 </span><span class="lineCov">   74173074 :               if (!(DF_REF_FLAGS (def)</span>
+<span class="lineNum">     195 </span>            :                     &amp; (DF_REF_PARTIAL | DF_REF_CONDITIONAL)))
+<span class="lineNum">     196 </span><span class="lineCov">   73670550 :                 bitmap_clear_bit (live, dregno);</span>
+<span class="lineNum">     197 </span>            : 
+<span class="lineNum">     198 </span><span class="lineCov">   74173074 :               if (dregno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     199 </span>            :                 {
+<span class="lineNum">     200 </span><span class="lineCov">   32785979 :                   REG_FREQ (dregno) += REG_FREQ_FROM_BB (bb);</span>
+<span class="lineNum">     201 </span><span class="lineCov">   65571958 :                   REG_FREQ (dregno) =</span>
+<span class="lineNum">     202 </span><span class="lineCov">   32785979 :                     MIN (REG_FREQ (dregno), REG_FREQ_MAX);</span>
+<span class="lineNum">     203 </span>            : 
+<span class="lineNum">     204 </span><span class="lineCov">   32785979 :                   if (REG_BASIC_BLOCK (dregno) == REG_BLOCK_UNKNOWN)</span>
+<span class="lineNum">     205 </span><span class="lineCov">     383704 :                     REG_BASIC_BLOCK (dregno) = bb-&gt;index;</span>
+<span class="lineNum">     206 </span><span class="lineCov">   32402275 :                   else if (REG_BASIC_BLOCK (dregno) != bb-&gt;index)</span>
+<span class="lineNum">     207 </span><span class="lineCov">   12536424 :                     REG_BASIC_BLOCK (dregno) = REG_BLOCK_GLOBAL;</span>
+<span class="lineNum">     208 </span>            :                 }
+<span class="lineNum">     209 </span>            :             }
+<span class="lineNum">     210 </span>            :         }
+<span class="lineNum">     211 </span>            : 
+<span class="lineNum">     212 </span><span class="lineCov">  195984511 :       FOR_EACH_INSN_INFO_USE (use, insn_info)</span>
+<span class="lineNum">     213 </span>            :         {
+<span class="lineNum">     214 </span><span class="lineCov">  107746104 :           unsigned int uregno = DF_REF_REGNO (use);</span>
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span><span class="lineCov">  107746104 :           if (uregno &gt;= FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     217 </span>            :             {
+<span class="lineNum">     218 </span><span class="lineCov">   52510922 :               REG_FREQ (uregno) += REG_FREQ_FROM_BB (bb);</span>
+<span class="lineNum">     219 </span><span class="lineCov">  105021844 :               REG_FREQ (uregno) =</span>
+<span class="lineNum">     220 </span><span class="lineCov">   52510922 :                 MIN (REG_FREQ (uregno), REG_FREQ_MAX);</span>
+<span class="lineNum">     221 </span>            : 
+<span class="lineNum">     222 </span><span class="lineCov">   52510922 :               if (REG_BASIC_BLOCK (uregno) == REG_BLOCK_UNKNOWN)</span>
+<span class="lineNum">     223 </span><span class="lineCov">   19260797 :                 REG_BASIC_BLOCK (uregno) = bb-&gt;index;</span>
+<span class="lineNum">     224 </span><span class="lineCov">   33250125 :               else if (REG_BASIC_BLOCK (uregno) != bb-&gt;index)</span>
+<span class="lineNum">     225 </span><span class="lineCov">   28311147 :                 REG_BASIC_BLOCK (uregno) = REG_BLOCK_GLOBAL;</span>
+<span class="lineNum">     226 </span>            :             }
+<span class="lineNum">     227 </span>            :         }
+<span class="lineNum">     228 </span>            :     }
+<span class="lineNum">     229 </span><span class="lineCov">   15468764 : }</span>
+<span class="lineNum">     230 </span>            : 
+<span class="lineNum">     231 </span>            : 
+<a name="232"><span class="lineNum">     232 </span>            : /* Compute register info: lifetime, bb, and number of defs and uses.  */</a>
+<span class="lineNum">     233 </span>            : void
+<span class="lineNum">     234 </span><span class="lineCov">    1475686 : regstat_compute_ri (void)</span>
+<span class="lineNum">     235 </span>            : {
+<span class="lineNum">     236 </span><span class="lineCov">    1475686 :   basic_block bb;</span>
+<span class="lineNum">     237 </span><span class="lineCov">    1475686 :   bitmap live = BITMAP_ALLOC (&amp;df_bitmap_obstack);</span>
+<span class="lineNum">     238 </span><span class="lineCov">    1475686 :   unsigned int regno;</span>
+<span class="lineNum">     239 </span><span class="lineCov">    1475686 :   bitmap_iterator bi;</span>
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span>            :   /* Initialize everything.  */
+<span class="lineNum">     242 </span>            : 
+<span class="lineNum">     243 </span><span class="lineCov">    1475686 :   gcc_assert (!reg_info_p);</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span><span class="lineCov">    1475686 :   timevar_push (TV_REG_STATS);</span>
+<span class="lineNum">     246 </span><span class="lineCov">    1475686 :   setjmp_crosses = BITMAP_ALLOC (&amp;df_bitmap_obstack);</span>
+<span class="lineNum">     247 </span><span class="lineCov">    1475686 :   max_regno = max_reg_num ();</span>
+<span class="lineNum">     248 </span><span class="lineCov">    1475686 :   reg_info_p_size = max_regno;</span>
+<span class="lineNum">     249 </span><span class="lineCov">    1475686 :   reg_info_p = XCNEWVEC (struct reg_info_t, max_regno);</span>
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span><span class="lineCov">   16944450 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     252 </span>            :     {
+<span class="lineNum">     253 </span><span class="lineCov">   15468764 :       regstat_bb_compute_ri (bb, live);</span>
+<span class="lineNum">     254 </span>            :     }
+<span class="lineNum">     255 </span>            : 
+<span class="lineNum">     256 </span><span class="lineCov">    1475686 :   BITMAP_FREE (live);</span>
+<span class="lineNum">     257 </span>            : 
+<span class="lineNum">     258 </span>            :   /* See the setjmp comment in regstat_bb_compute_ri.  */
+<span class="lineNum">     259 </span><span class="lineCov">    1476455 :   EXECUTE_IF_SET_IN_BITMAP (setjmp_crosses, FIRST_PSEUDO_REGISTER, regno, bi)</span>
+<span class="lineNum">     260 </span>            :     {
+<span class="lineNum">     261 </span><span class="lineCov">        769 :       REG_BASIC_BLOCK (regno) = REG_BLOCK_UNKNOWN;</span>
+<span class="lineNum">     262 </span>            :     }
+<span class="lineNum">     263 </span>            : 
+<span class="lineNum">     264 </span><span class="lineCov">    1475686 :   timevar_pop (TV_REG_STATS);</span>
+<span class="lineNum">     265 </span><span class="lineCov">    1475686 : }</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            : 
+<span class="lineNum">     268 </span>            : /* Free all storage associated with the problem.  */
+<a name="269"><span class="lineNum">     269 </span>            : </a>
+<span class="lineNum">     270 </span>            : void
+<span class="lineNum">     271 </span><span class="lineCov">    1475686 : regstat_free_ri (void)</span>
+<span class="lineNum">     272 </span>            : {
+<span class="lineNum">     273 </span><span class="lineCov">    1475686 :   gcc_assert (reg_info_p);</span>
+<span class="lineNum">     274 </span><span class="lineCov">    1475686 :   reg_info_p_size = 0;</span>
+<span class="lineNum">     275 </span><span class="lineCov">    1475686 :   free (reg_info_p);</span>
+<span class="lineNum">     276 </span><span class="lineCov">    1475686 :   reg_info_p = NULL;</span>
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span><span class="lineCov">    1475686 :   BITMAP_FREE (setjmp_crosses);</span>
+<span class="lineNum">     279 </span><span class="lineCov">    1475686 : }</span>
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            : 
+<span class="lineNum">     282 </span>            : /* Return a bitmap containing the set of registers that cross a setjmp.
+<span class="lineNum">     283 </span>            :    The client should not change or delete this bitmap.  */
+<a name="284"><span class="lineNum">     284 </span>            : </a>
+<span class="lineNum">     285 </span>            : bitmap
+<span class="lineNum">     286 </span><span class="lineCov">     955433 : regstat_get_setjmp_crosses (void)</span>
+<span class="lineNum">     287 </span>            : {
+<span class="lineNum">     288 </span><span class="lineCov">     955433 :   return setjmp_crosses;</span>
+<span class="lineNum">     289 </span>            : }
+<span class="lineNum">     290 </span>            : 
+<span class="lineNum">     291 </span>            : /*----------------------------------------------------------------------------
+<span class="lineNum">     292 </span>            :    Process REG_N_CALLS_CROSSED.
+<span class="lineNum">     293 </span>            : 
+<span class="lineNum">     294 </span>            :    This is used by sched_deps.  A good implementation of sched-deps
+<span class="lineNum">     295 </span>            :    would really process the blocks directly rather than going through
+<span class="lineNum">     296 </span>            :    lists of insns.  If it did this, it could use the exact regs that
+<span class="lineNum">     297 </span>            :    cross an individual call rather than using this info that merges
+<span class="lineNum">     298 </span>            :    the info for all calls.
+<span class="lineNum">     299 </span>            : 
+<span class="lineNum">     300 </span>            :    ----------------------------------------------------------------------------*/
+<span class="lineNum">     301 </span>            : 
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span>            : /* Compute calls crossed for BB. Live is a scratch bitvector.  */
+<a name="305"><span class="lineNum">     305 </span>            : </a>
+<span class="lineNum">     306 </span>            : static void
+<span class="lineNum">     307 </span><span class="lineCov">    5680984 : regstat_bb_compute_calls_crossed (unsigned int bb_index, bitmap live)</span>
+<span class="lineNum">     308 </span>            : {
+<span class="lineNum">     309 </span><span class="lineCov">    5680984 :   basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bb_index);</span>
+<span class="lineNum">     310 </span><span class="lineCov">    5680984 :   rtx_insn *insn;</span>
+<span class="lineNum">     311 </span><span class="lineCov">    5680984 :   df_ref def, use;</span>
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span><span class="lineCov">    5680984 :   bitmap_copy (live, df_get_live_out (bb));</span>
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            :   /* Process the artificial defs and uses at the bottom of the block
+<span class="lineNum">     316 </span>            :      to begin processing.  */
+<span class="lineNum">     317 </span><span class="lineCov">   11609021 :   FOR_EACH_ARTIFICIAL_DEF (def, bb_index)</span>
+<span class="lineNum">     318 </span><span class="lineCov">     247053 :     if ((DF_REF_FLAGS (def) &amp; DF_REF_AT_TOP) == 0)</span>
+<span class="lineNum">     319 </span><span class="lineNoCov">          0 :       bitmap_clear_bit (live, DF_REF_REGNO (def));</span>
+<span class="lineNum">     320 </span>            : 
+<span class="lineNum">     321 </span><span class="lineCov">   17915134 :   FOR_EACH_ARTIFICIAL_USE (use, bb_index)</span>
+<span class="lineNum">     322 </span><span class="lineCov">    6553166 :     if ((DF_REF_FLAGS (use) &amp; DF_REF_AT_TOP) == 0)</span>
+<span class="lineNum">     323 </span><span class="lineCov">    6553166 :       bitmap_set_bit (live, DF_REF_REGNO (use));</span>
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span><span class="lineCov">  229579465 :   FOR_BB_INSNS_REVERSE (bb, insn)</span>
+<span class="lineNum">     326 </span>            :     {
+<span class="lineNum">     327 </span><span class="lineCov">   74632827 :       struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);</span>
+<span class="lineNum">     328 </span><span class="lineCov">   74632827 :       unsigned int regno;</span>
+<span class="lineNum">     329 </span>            : 
+<span class="lineNum">     330 </span><span class="lineCov">   74632827 :       if (!NONDEBUG_INSN_P (insn))</span>
+<span class="lineNum">     331 </span><span class="lineCov">   39801718 :         continue;</span>
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span>            :       /* Process the defs.  */
+<span class="lineNum">     334 </span><span class="lineCov">   34831109 :       if (CALL_P (insn))</span>
+<span class="lineNum">     335 </span>            :         {
+<span class="lineNum">     336 </span><span class="lineCov">    2809923 :           bitmap_iterator bi;</span>
+<span class="lineNum">     337 </span><span class="lineCov">   12116692 :           EXECUTE_IF_SET_IN_BITMAP (live, 0, regno, bi)</span>
+<span class="lineNum">     338 </span>            :             {
+<span class="lineNum">     339 </span><span class="lineCov">    9306769 :               REG_N_CALLS_CROSSED (regno)++;</span>
+<span class="lineNum">     340 </span>            :             }
+<span class="lineNum">     341 </span>            :         }
+<span class="lineNum">     342 </span>            : 
+<span class="lineNum">     343 </span>            :       /* All of the defs except the return value are some sort of
+<span class="lineNum">     344 </span>            :          clobber.  This code is for the return.  */
+<span class="lineNum">     345 </span><span class="lineCov">  249986296 :       FOR_EACH_INSN_INFO_DEF (def, insn_info)</span>
+<span class="lineNum">     346 </span>            :         {
+<span class="lineNum">     347 </span><span class="lineCov">  215155187 :           if ((!CALL_P (insn))</span>
+<span class="lineNum">     348 </span><span class="lineCov">  187627726 :               || (!(DF_REF_FLAGS (def) &amp; (DF_REF_MUST_CLOBBER | DF_REF_MAY_CLOBBER))))</span>
+<span class="lineNum">     349 </span>            :             {
+<span class="lineNum">     350 </span>            :               /* Kill this register if it is not a subreg store or conditional store.  */
+<span class="lineNum">     351 </span><span class="lineCov">   28853320 :               if (!(DF_REF_FLAGS (def) &amp; (DF_REF_PARTIAL | DF_REF_CONDITIONAL)))</span>
+<span class="lineNum">     352 </span><span class="lineCov">   28819780 :                 bitmap_clear_bit (live, DF_REF_REGNO (def));</span>
+<span class="lineNum">     353 </span>            :             }
+<span class="lineNum">     354 </span>            :         }
+<span class="lineNum">     355 </span>            : 
+<span class="lineNum">     356 </span><span class="lineCov">   78929253 :       FOR_EACH_INSN_INFO_USE (use, insn_info)</span>
+<span class="lineNum">     357 </span><span class="lineCov">   44098144 :         bitmap_set_bit (live, DF_REF_REGNO (use));</span>
+<span class="lineNum">     358 </span>            :     }
+<span class="lineNum">     359 </span><span class="lineCov">    5680984 : }</span>
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span>            : 
+<a name="362"><span class="lineNum">     362 </span>            : /* Compute register info: lifetime, bb, and number of defs and uses.  */</a>
+<span class="lineNum">     363 </span>            : void
+<span class="lineNum">     364 </span><span class="lineCov">     584294 : regstat_compute_calls_crossed (void)</span>
+<span class="lineNum">     365 </span>            : {
+<span class="lineNum">     366 </span><span class="lineCov">     584294 :   basic_block bb;</span>
+<span class="lineNum">     367 </span><span class="lineCov">     584294 :   bitmap live = BITMAP_ALLOC (&amp;df_bitmap_obstack);</span>
+<span class="lineNum">     368 </span>            : 
+<span class="lineNum">     369 </span>            :   /* Initialize everything.  */
+<span class="lineNum">     370 </span><span class="lineCov">     584294 :   gcc_assert (!reg_info_p);</span>
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span><span class="lineCov">     584294 :   timevar_push (TV_REG_STATS);</span>
+<span class="lineNum">     373 </span><span class="lineCov">     584294 :   max_regno = max_reg_num ();</span>
+<span class="lineNum">     374 </span><span class="lineCov">     584294 :   reg_info_p_size = max_regno;</span>
+<span class="lineNum">     375 </span><span class="lineCov">     584294 :   reg_info_p = XCNEWVEC (struct reg_info_t, max_regno);</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">    6265278 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     378 </span>            :     {
+<span class="lineNum">     379 </span><span class="lineCov">    5680984 :       regstat_bb_compute_calls_crossed (bb-&gt;index, live);</span>
+<span class="lineNum">     380 </span>            :     }
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span><span class="lineCov">     584294 :   BITMAP_FREE (live);</span>
+<span class="lineNum">     383 </span><span class="lineCov">     584294 :   timevar_pop (TV_REG_STATS);</span>
+<span class="lineNum">     384 </span><span class="lineCov">     584294 : }</span>
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            : /* Free all storage associated with the problem.  */
+<a name="388"><span class="lineNum">     388 </span>            : </a>
+<span class="lineNum">     389 </span>            : void
+<span class="lineNum">     390 </span><span class="lineCov">     584294 : regstat_free_calls_crossed (void)</span>
+<span class="lineNum">     391 </span>            : {
+<span class="lineNum">     392 </span><span class="lineCov">     584294 :   gcc_assert (reg_info_p);</span>
+<span class="lineNum">     393 </span><span class="lineCov">     584294 :   reg_info_p_size = 0;</span>
+<span class="lineNum">     394 </span><span class="lineCov">     584294 :   free (reg_info_p);</span>
+<span class="lineNum">     395 </span><span class="lineCov">     584294 :   reg_info_p = NULL;</span>
+<span class="lineNum">     396 </span><span class="lineCov">     584294 : }</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span>            : /* Dump the register info to FILE.  */
+<a name="399"><span class="lineNum">     399 </span>            : </a>
+<span class="lineNum">     400 </span>            : void
+<span class="lineNum">     401 </span><span class="lineCov">        111 : dump_reg_info (FILE *file)</span>
+<span class="lineNum">     402 </span>            : {
+<span class="lineNum">     403 </span><span class="lineCov">        111 :   unsigned int i, max = max_reg_num ();</span>
+<span class="lineNum">     404 </span><span class="lineCov">        111 :   if (reload_completed)</span>
+<span class="lineNum">     405 </span>            :     return;
+<span class="lineNum">     406 </span>            : 
+<span class="lineNum">     407 </span><span class="lineCov">         84 :   if (reg_info_p_size &lt; max)</span>
+<span class="lineNum">     408 </span><span class="lineCov">         84 :     max = reg_info_p_size;</span>
+<span class="lineNum">     409 </span>            : 
+<span class="lineNum">     410 </span><span class="lineCov">         84 :   fprintf (file, &quot;%d registers.\n&quot;, max);</span>
+<span class="lineNum">     411 </span><span class="lineCov">         84 :   for (i = FIRST_PSEUDO_REGISTER; i &lt; max; i++)</span>
+<span class="lineNum">     412 </span>            :     {
+<span class="lineNum">     413 </span><span class="lineNoCov">          0 :       enum reg_class rclass, altclass;</span>
+<span class="lineNum">     414 </span>            : 
+<span class="lineNum">     415 </span><span class="lineNoCov">          0 :       if (regstat_n_sets_and_refs)</span>
+<span class="lineNum">     416 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;\nRegister %d used %d times&quot;,</span>
+<span class="lineNum">     417 </span>            :                  i, REG_N_REFS (i));
+<span class="lineNum">     418 </span><span class="lineNoCov">          0 :       else if (df)</span>
+<span class="lineNum">     419 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;\nRegister %d used %d times&quot;,</span>
+<span class="lineNum">     420 </span><span class="lineNoCov">          0 :                  i, DF_REG_USE_COUNT (i) + DF_REG_DEF_COUNT (i));</span>
+<span class="lineNum">     421 </span>            : 
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :       if (REG_BASIC_BLOCK (i) &gt;= NUM_FIXED_BLOCKS)</span>
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :         fprintf (file, &quot; in block %d&quot;, REG_BASIC_BLOCK (i));</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :       if (regstat_n_sets_and_refs)</span>
+<span class="lineNum">     425 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;; set %d time%s&quot;, REG_N_SETS (i),</span>
+<span class="lineNum">     426 </span><span class="lineNoCov">          0 :                  (REG_N_SETS (i) == 1) ? &quot;&quot; : &quot;s&quot;);</span>
+<span class="lineNum">     427 </span><span class="lineNoCov">          0 :       else if (df)</span>
+<span class="lineNum">     428 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;; set %d time%s&quot;, DF_REG_DEF_COUNT (i),</span>
+<span class="lineNum">     429 </span><span class="lineNoCov">          0 :                  (DF_REG_DEF_COUNT (i) == 1) ? &quot;&quot; : &quot;s&quot;);</span>
+<span class="lineNum">     430 </span><span class="lineNoCov">          0 :       if (regno_reg_rtx[i] != NULL &amp;&amp; REG_USERVAR_P (regno_reg_rtx[i]))</span>
+<span class="lineNum">     431 </span><span class="lineNoCov">          0 :         fputs (&quot;; user var&quot;, file);</span>
+<span class="lineNum">     432 </span><span class="lineNoCov">          0 :       if (REG_N_DEATHS (i) != 1)</span>
+<span class="lineNum">     433 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;; dies in %d places&quot;, REG_N_DEATHS (i));</span>
+<span class="lineNum">     434 </span><span class="lineNoCov">          0 :       if (REG_N_CALLS_CROSSED (i) == 1)</span>
+<span class="lineNum">     435 </span><span class="lineNoCov">          0 :         fputs (&quot;; crosses 1 call&quot;, file);</span>
+<span class="lineNum">     436 </span><span class="lineNoCov">          0 :       else if (REG_N_CALLS_CROSSED (i))</span>
+<span class="lineNum">     437 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;; crosses %d calls&quot;, REG_N_CALLS_CROSSED (i));</span>
+<span class="lineNum">     438 </span><span class="lineNoCov">          0 :       if (regno_reg_rtx[i] != NULL</span>
+<span class="lineNum">     439 </span><span class="lineNoCov">          0 :           &amp;&amp; maybe_ne (PSEUDO_REGNO_BYTES (i), UNITS_PER_WORD))</span>
+<span class="lineNum">     440 </span>            :         {
+<span class="lineNum">     441 </span><span class="lineNoCov">          0 :           fprintf (file, &quot;; &quot;);</span>
+<span class="lineNum">     442 </span><span class="lineNoCov">          0 :           print_dec (PSEUDO_REGNO_BYTES (i), file, SIGNED);</span>
+<span class="lineNum">     443 </span><span class="lineNoCov">          0 :           fprintf (file, &quot; bytes&quot;);</span>
+<span class="lineNum">     444 </span>            :         }
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span><span class="lineNoCov">          0 :       rclass = reg_preferred_class (i);</span>
+<span class="lineNum">     447 </span><span class="lineNoCov">          0 :       altclass = reg_alternate_class (i);</span>
+<span class="lineNum">     448 </span><span class="lineNoCov">          0 :       if (rclass != GENERAL_REGS || altclass != ALL_REGS)</span>
+<span class="lineNum">     449 </span>            :         {
+<span class="lineNum">     450 </span><span class="lineNoCov">          0 :           if (altclass == ALL_REGS || rclass == ALL_REGS)</span>
+<span class="lineNum">     451 </span><span class="lineNoCov">          0 :             fprintf (file, &quot;; pref %s&quot;, reg_class_names[(int) rclass]);</span>
+<span class="lineNum">     452 </span><span class="lineNoCov">          0 :           else if (altclass == NO_REGS)</span>
+<span class="lineNum">     453 </span><span class="lineNoCov">          0 :             fprintf (file, &quot;; %s or none&quot;, reg_class_names[(int) rclass]);</span>
+<span class="lineNum">     454 </span>            :           else
+<span class="lineNum">     455 </span><span class="lineNoCov">          0 :             fprintf (file, &quot;; pref %s, else %s&quot;,</span>
+<span class="lineNum">     456 </span><span class="lineNoCov">          0 :                      reg_class_names[(int) rclass],</span>
+<span class="lineNum">     457 </span><span class="lineNoCov">          0 :                      reg_class_names[(int) altclass]);</span>
+<span class="lineNum">     458 </span>            :         }
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span><span class="lineNoCov">          0 :       if (regno_reg_rtx[i] != NULL &amp;&amp; REG_POINTER (regno_reg_rtx[i]))</span>
+<span class="lineNum">     461 </span><span class="lineNoCov">          0 :         fputs (&quot;; pointer&quot;, file);</span>
+<span class="lineNum">     462 </span><span class="lineNoCov">          0 :       fputs (&quot;.\n&quot;, file);</span>
+<span class="lineNum">     463 </span>            :     }
+<span class="lineNum">     464 </span>            : }
+<span class="lineNum">     465 </span>            : 
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

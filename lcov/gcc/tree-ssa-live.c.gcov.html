@@ -1,0 +1,1523 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-live.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-live.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-live.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">563</td>
+            <td class="headerCovTableEntry">642</td>
+            <td class="headerCovTableEntryMed">87.7 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">27</td>
+            <td class="headerCovTableEntry">34</td>
+            <td class="headerCovTableEntryMed">79.4 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Liveness for SSA trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Andrew MacLeod &lt;amacleod@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       8 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       9 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">      10 </span>            : any later version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      13 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      14 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      15 </span>            : GNU General Public License for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;cgraph.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;gimple-iterator.h&quot;
+<span class="lineNum">      34 </span>            : #include &quot;tree-dfa.h&quot;
+<span class="lineNum">      35 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      36 </span>            : #include &quot;tree-ssa-live.h&quot;
+<span class="lineNum">      37 </span>            : #include &quot;debug.h&quot;
+<span class="lineNum">      38 </span>            : #include &quot;tree-ssa.h&quot;
+<span class="lineNum">      39 </span>            : #include &quot;ipa-utils.h&quot;
+<span class="lineNum">      40 </span>            : #include &quot;cfgloop.h&quot;
+<span class="lineNum">      41 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;optinfo.h&quot;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            : static void verify_live_on_entry (tree_live_info_p);
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            : 
+<span class="lineNum">      48 </span>            : /* VARMAP maintains a mapping from SSA version number to real variables.
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :    All SSA_NAMES are divided into partitions.  Initially each ssa_name is the
+<span class="lineNum">      51 </span>            :    only member of it's own partition.  Coalescing will attempt to group any
+<span class="lineNum">      52 </span>            :    ssa_names which occur in a copy or in a PHI node into the same partition.
+<span class="lineNum">      53 </span>            : 
+<span class="lineNum">      54 </span>            :    At the end of out-of-ssa, each partition becomes a &quot;real&quot; variable and is
+<span class="lineNum">      55 </span>            :    rewritten as a compiler variable.
+<span class="lineNum">      56 </span>            : 
+<span class="lineNum">      57 </span>            :    The var_map data structure is used to manage these partitions.  It allows
+<span class="lineNum">      58 </span>            :    partitions to be combined, and determines which partition belongs to what
+<span class="lineNum">      59 </span>            :    ssa_name or variable, and vice versa.  */
+<span class="lineNum">      60 </span>            : 
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            : /* Remove the base table in MAP.  */
+<a name="63"><span class="lineNum">      63 </span>            : </a>
+<span class="lineNum">      64 </span>            : static void
+<span class="lineNum">      65 </span><span class="lineNoCov">          0 : var_map_base_fini (var_map map)</span>
+<span class="lineNum">      66 </span>            : {
+<span class="lineNum">      67 </span>            :   /* Free the basevar info if it is present.  */
+<span class="lineNum">      68 </span><span class="lineNoCov">          0 :   if (map-&gt;partition_to_base_index != NULL)</span>
+<span class="lineNum">      69 </span>            :     {
+<span class="lineNum">      70 </span><span class="lineCov">     832898 :       free (map-&gt;partition_to_base_index);</span>
+<span class="lineNum">      71 </span><span class="lineCov">     832898 :       map-&gt;partition_to_base_index = NULL;</span>
+<span class="lineNum">      72 </span><span class="lineCov">     832898 :       map-&gt;num_basevars = 0;</span>
+<span class="lineNum">      73 </span>            :     }
+<span class="lineNum">      74 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">      75 </span>            : /* Create a variable partition map of SIZE for region, initialize and return
+<span class="lineNum">      76 </span>            :    it.  Region is a loop if LOOP is non-NULL, otherwise is the current
+<span class="lineNum">      77 </span>            :    function.  */
+<a name="78"><span class="lineNum">      78 </span>            : </a>
+<span class="lineNum">      79 </span>            : var_map
+<span class="lineNum">      80 </span><span class="lineCov">     832898 : init_var_map (int size, struct loop *loop)</span>
+<span class="lineNum">      81 </span>            : {
+<span class="lineNum">      82 </span><span class="lineCov">     832898 :   var_map map;</span>
+<span class="lineNum">      83 </span>            : 
+<span class="lineNum">      84 </span><span class="lineCov">     832898 :   map = (var_map) xmalloc (sizeof (struct _var_map));</span>
+<span class="lineNum">      85 </span><span class="lineCov">     832898 :   map-&gt;var_partition = partition_new (size);</span>
+<span class="lineNum">      86 </span>            : 
+<span class="lineNum">      87 </span><span class="lineCov">     832898 :   map-&gt;partition_to_view = NULL;</span>
+<span class="lineNum">      88 </span><span class="lineCov">     832898 :   map-&gt;view_to_partition = NULL;</span>
+<span class="lineNum">      89 </span><span class="lineCov">     832898 :   map-&gt;num_partitions = size;</span>
+<span class="lineNum">      90 </span><span class="lineCov">     832898 :   map-&gt;partition_size = size;</span>
+<span class="lineNum">      91 </span><span class="lineCov">     832898 :   map-&gt;num_basevars = 0;</span>
+<span class="lineNum">      92 </span><span class="lineCov">     832898 :   map-&gt;partition_to_base_index = NULL;</span>
+<span class="lineNum">      93 </span><span class="lineCov">     832898 :   map-&gt;vec_bbs = vNULL;</span>
+<span class="lineNum">      94 </span><span class="lineCov">     832898 :   if (loop)</span>
+<span class="lineNum">      95 </span>            :     {
+<span class="lineNum">      96 </span><span class="lineNoCov">          0 :       map-&gt;bmp_bbs = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">      97 </span><span class="lineNoCov">          0 :       map-&gt;outofssa_p = false;</span>
+<span class="lineNum">      98 </span><span class="lineNoCov">          0 :       basic_block *bbs = get_loop_body_in_dom_order (loop);</span>
+<span class="lineNum">      99 </span><span class="lineNoCov">          0 :       for (unsigned i = 0; i &lt; loop-&gt;num_nodes; ++i)</span>
+<span class="lineNum">     100 </span>            :         {
+<span class="lineNum">     101 </span><span class="lineNoCov">          0 :           bitmap_set_bit (map-&gt;bmp_bbs, bbs[i]-&gt;index);</span>
+<span class="lineNum">     102 </span><span class="lineNoCov">          0 :           map-&gt;vec_bbs.safe_push (bbs[i]);</span>
+<span class="lineNum">     103 </span>            :         }
+<span class="lineNum">     104 </span><span class="lineNoCov">          0 :       free (bbs);</span>
+<span class="lineNum">     105 </span>            :     }
+<span class="lineNum">     106 </span>            :   else
+<span class="lineNum">     107 </span>            :     {
+<span class="lineNum">     108 </span><span class="lineCov">     832898 :       map-&gt;bmp_bbs = NULL;</span>
+<span class="lineNum">     109 </span><span class="lineCov">     832898 :       map-&gt;outofssa_p = true;</span>
+<span class="lineNum">     110 </span><span class="lineCov">     832898 :       basic_block bb;</span>
+<span class="lineNum">     111 </span><span class="lineCov">    7800109 :       FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     112 </span><span class="lineCov">    6967211 :         map-&gt;vec_bbs.safe_push (bb);</span>
+<span class="lineNum">     113 </span>            :     }
+<span class="lineNum">     114 </span><span class="lineCov">     832898 :   return map;</span>
+<span class="lineNum">     115 </span>            : }
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            : /* Free memory associated with MAP.  */
+<span class="lineNum">     119 </span>            : 
+<span class="lineNum">     120 </span>            : void
+<span class="lineNum">     121 </span><span class="lineCov">     832898 : delete_var_map (var_map map)</span>
+<span class="lineNum">     122 </span>            : {
+<span class="lineNum">     123 </span><span class="lineCov">     832898 :   var_map_base_fini (map);</span>
+<span class="lineNum">     124 </span><span class="lineCov">     832898 :   partition_delete (map-&gt;var_partition);</span>
+<span class="lineNum">     125 </span><span class="lineCov">     832898 :   free (map-&gt;partition_to_view);</span>
+<span class="lineNum">     126 </span><span class="lineCov">     832898 :   free (map-&gt;view_to_partition);</span>
+<span class="lineNum">     127 </span><span class="lineCov">     832898 :   if (map-&gt;bmp_bbs)</span>
+<span class="lineNum">     128 </span><span class="lineNoCov">          0 :     BITMAP_FREE (map-&gt;bmp_bbs);</span>
+<span class="lineNum">     129 </span><span class="lineCov">     832898 :   map-&gt;vec_bbs.release ();</span>
+<span class="lineNum">     130 </span><span class="lineCov">     832898 :   free (map);</span>
+<span class="lineNum">     131 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">     132 </span>            : 
+<span class="lineNum">     133 </span>            : 
+<span class="lineNum">     134 </span>            : /* This function will combine the partitions in MAP for VAR1 and VAR2.  It
+<span class="lineNum">     135 </span>            :    Returns the partition which represents the new partition.  If the two
+<span class="lineNum">     136 </span>            :    partitions cannot be combined, NO_PARTITION is returned.  */
+<a name="137"><span class="lineNum">     137 </span>            : </a>
+<span class="lineNum">     138 </span>            : int
+<span class="lineNum">     139 </span><span class="lineCov">    2652773 : var_union (var_map map, tree var1, tree var2)</span>
+<span class="lineNum">     140 </span>            : {
+<span class="lineNum">     141 </span><span class="lineCov">    2652773 :   int p1, p2, p3;</span>
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span><span class="lineCov">    2652773 :   gcc_assert (TREE_CODE (var1) == SSA_NAME);</span>
+<span class="lineNum">     144 </span><span class="lineCov">    2652773 :   gcc_assert (TREE_CODE (var2) == SSA_NAME);</span>
+<span class="lineNum">     145 </span>            : 
+<span class="lineNum">     146 </span>            :   /* This is independent of partition_to_view. If partition_to_view is
+<span class="lineNum">     147 </span>            :      on, then whichever one of these partitions is absorbed will never have a
+<span class="lineNum">     148 </span>            :      dereference into the partition_to_view array any more.  */
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">    2652773 :   p1 = partition_find (map-&gt;var_partition, SSA_NAME_VERSION (var1));</span>
+<span class="lineNum">     151 </span><span class="lineCov">    2652773 :   p2 = partition_find (map-&gt;var_partition, SSA_NAME_VERSION (var2));</span>
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span><span class="lineCov">    2652773 :   gcc_assert (p1 != NO_PARTITION);</span>
+<span class="lineNum">     154 </span><span class="lineCov">    2652773 :   gcc_assert (p2 != NO_PARTITION);</span>
+<span class="lineNum">     155 </span>            : 
+<span class="lineNum">     156 </span><span class="lineCov">    2652773 :   if (p1 == p2)</span>
+<span class="lineNum">     157 </span>            :     p3 = p1;
+<span class="lineNum">     158 </span>            :   else
+<span class="lineNum">     159 </span><span class="lineCov">    2652773 :     p3 = partition_union (map-&gt;var_partition, p1, p2);</span>
+<span class="lineNum">     160 </span>            : 
+<span class="lineNum">     161 </span><span class="lineCov">    2652773 :   if (map-&gt;partition_to_view)</span>
+<span class="lineNum">     162 </span><span class="lineCov">    2652773 :     p3 = map-&gt;partition_to_view[p3];</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">    2652773 :   return p3;</span>
+<span class="lineNum">     165 </span>            : }
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span>            : /* Compress the partition numbers in MAP such that they fall in the range
+<span class="lineNum">     169 </span>            :    0..(num_partitions-1) instead of wherever they turned out during
+<span class="lineNum">     170 </span>            :    the partitioning exercise.  This removes any references to unused
+<span class="lineNum">     171 </span>            :    partitions, thereby allowing bitmaps and other vectors to be much
+<span class="lineNum">     172 </span>            :    denser.
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span>            :    This is implemented such that compaction doesn't affect partitioning.
+<span class="lineNum">     175 </span>            :    Ie., once partitions are created and possibly merged, running one
+<span class="lineNum">     176 </span>            :    or more different kind of compaction will not affect the partitions
+<span class="lineNum">     177 </span>            :    themselves.  Their index might change, but all the same variables will
+<span class="lineNum">     178 </span>            :    still be members of the same partition group.  This allows work on reduced
+<span class="lineNum">     179 </span>            :    sets, and no loss of information when a larger set is later desired.
+<span class="lineNum">     180 </span>            : 
+<span class="lineNum">     181 </span>            :    In particular, coalescing can work on partitions which have 2 or more
+<span class="lineNum">     182 </span>            :    definitions, and then 'recompact' later to include all the single
+<span class="lineNum">     183 </span>            :    definitions for assignment to program variables.  */
+<span class="lineNum">     184 </span>            : 
+<span class="lineNum">     185 </span>            : 
+<span class="lineNum">     186 </span>            : /* Set MAP back to the initial state of having no partition view.  Return a
+<span class="lineNum">     187 </span>            :    bitmap which has a bit set for each partition number which is in use in the
+<span class="lineNum">     188 </span>            :    varmap.  */
+<span class="lineNum">     189 </span>            : 
+<span class="lineNum">     190 </span>            : static bitmap
+<span class="lineNum">     191 </span><span class="lineCov">    1665796 : partition_view_init (var_map map)</span>
+<span class="lineNum">     192 </span>            : {
+<span class="lineNum">     193 </span><span class="lineCov">    1665796 :   bitmap used;</span>
+<span class="lineNum">     194 </span><span class="lineCov">    1665796 :   int tmp;</span>
+<span class="lineNum">     195 </span><span class="lineCov">    1665796 :   unsigned int x;</span>
+<span class="lineNum">     196 </span>            : 
+<span class="lineNum">     197 </span><span class="lineCov">    1665796 :   used = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     198 </span>            : 
+<span class="lineNum">     199 </span>            :   /* Already in a view? Abandon the old one.  */
+<span class="lineNum">     200 </span><span class="lineCov">    1665796 :   if (map-&gt;partition_to_view)</span>
+<span class="lineNum">     201 </span>            :     {
+<span class="lineNum">     202 </span><span class="lineCov">     832898 :       free (map-&gt;partition_to_view);</span>
+<span class="lineNum">     203 </span><span class="lineCov">     832898 :       map-&gt;partition_to_view = NULL;</span>
+<span class="lineNum">     204 </span>            :     }
+<span class="lineNum">     205 </span><span class="lineCov">    1665796 :   if (map-&gt;view_to_partition)</span>
+<span class="lineNum">     206 </span>            :     {
+<span class="lineNum">     207 </span><span class="lineCov">     832898 :       free (map-&gt;view_to_partition);</span>
+<span class="lineNum">     208 </span><span class="lineCov">     832898 :       map-&gt;view_to_partition = NULL;</span>
+<span class="lineNum">     209 </span>            :     }
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span>            :   /* Find out which partitions are actually referenced.  */
+<span class="lineNum">     212 </span><span class="lineCov">   80020204 :   for (x = 0; x &lt; map-&gt;partition_size; x++)</span>
+<span class="lineNum">     213 </span>            :     {
+<span class="lineNum">     214 </span><span class="lineCov">   78354408 :       tmp = partition_find (map-&gt;var_partition, x);</span>
+<span class="lineNum">     215 </span><span class="lineCov">  188478424 :       if (ssa_name (tmp) != NULL_TREE &amp;&amp; !virtual_operand_p (ssa_name (tmp))</span>
+<span class="lineNum">     216 </span><span class="lineCov">  112078172 :           &amp;&amp; (!has_zero_uses (ssa_name (tmp))</span>
+<span class="lineNum">     217 </span><span class="lineCov">    2686661 :               || !SSA_NAME_IS_DEFAULT_DEF (ssa_name (tmp))</span>
+<span class="lineNum">     218 </span><span class="lineCov">    4764420 :               || (SSA_NAME_VAR (ssa_name (tmp))</span>
+<span class="lineNum">     219 </span><span class="lineCov">    4764420 :                   &amp;&amp; !VAR_P (SSA_NAME_VAR (ssa_name (tmp))))))</span>
+<span class="lineNum">     220 </span><span class="lineCov">   33451418 :         bitmap_set_bit (used, tmp);</span>
+<span class="lineNum">     221 </span>            :     }
+<span class="lineNum">     222 </span>            : 
+<span class="lineNum">     223 </span><span class="lineCov">    1665796 :   map-&gt;num_partitions = map-&gt;partition_size;</span>
+<span class="lineNum">     224 </span><span class="lineCov">    1665796 :   return used;</span>
+<span class="lineNum">     225 </span>            : }
+<span class="lineNum">     226 </span>            : 
+<span class="lineNum">     227 </span>            : 
+<span class="lineNum">     228 </span>            : /* This routine will finalize the view data for MAP based on the partitions
+<span class="lineNum">     229 </span>            :    set in SELECTED.  This is either the same bitmap returned from
+<span class="lineNum">     230 </span>            :    partition_view_init, or a trimmed down version if some of those partitions
+<span class="lineNum">     231 </span>            :    were not desired in this view.  SELECTED is freed before returning.  */
+<a name="232"><span class="lineNum">     232 </span>            : </a>
+<span class="lineNum">     233 </span>            : static void
+<span class="lineNum">     234 </span><span class="lineCov">    1665796 : partition_view_fini (var_map map, bitmap selected)</span>
+<span class="lineNum">     235 </span>            : {
+<span class="lineNum">     236 </span><span class="lineCov">    1665796 :   bitmap_iterator bi;</span>
+<span class="lineNum">     237 </span><span class="lineCov">    1665796 :   unsigned count, i, x, limit;</span>
+<span class="lineNum">     238 </span>            : 
+<span class="lineNum">     239 </span><span class="lineCov">    1665796 :   gcc_assert (selected);</span>
+<span class="lineNum">     240 </span>            : 
+<span class="lineNum">     241 </span><span class="lineCov">    1665796 :   count = bitmap_count_bits (selected);</span>
+<span class="lineNum">     242 </span><span class="lineCov">    1665796 :   limit = map-&gt;partition_size;</span>
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span>            :   /* If its a one-to-one ratio, we don't need any view compaction.  */
+<span class="lineNum">     245 </span><span class="lineCov">    1665796 :   if (count &lt; limit)</span>
+<span class="lineNum">     246 </span>            :     {
+<span class="lineNum">     247 </span><span class="lineCov">    1665796 :       map-&gt;partition_to_view = (int *)xmalloc (limit * sizeof (int));</span>
+<span class="lineNum">     248 </span><span class="lineCov">    1665796 :       memset (map-&gt;partition_to_view, 0xff, (limit * sizeof (int)));</span>
+<span class="lineNum">     249 </span><span class="lineCov">    1665796 :       map-&gt;view_to_partition = (int *)xmalloc (count * sizeof (int));</span>
+<span class="lineNum">     250 </span>            : 
+<span class="lineNum">     251 </span><span class="lineCov">    1665796 :       i = 0;</span>
+<span class="lineNum">     252 </span>            :       /* Give each selected partition an index.  */
+<span class="lineNum">     253 </span><span class="lineCov">   21658031 :       EXECUTE_IF_SET_IN_BITMAP (selected, 0, x, bi)</span>
+<span class="lineNum">     254 </span>            :         {
+<span class="lineNum">     255 </span><span class="lineCov">   19992235 :           map-&gt;partition_to_view[x] = i;</span>
+<span class="lineNum">     256 </span><span class="lineCov">   19992235 :           map-&gt;view_to_partition[i] = x;</span>
+<span class="lineNum">     257 </span><span class="lineCov">   19992235 :           i++;</span>
+<span class="lineNum">     258 </span>            :         }
+<span class="lineNum">     259 </span><span class="lineCov">    1665796 :       gcc_assert (i == count);</span>
+<span class="lineNum">     260 </span><span class="lineCov">    1665796 :       map-&gt;num_partitions = i;</span>
+<span class="lineNum">     261 </span>            :     }
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span><span class="lineCov">    1665796 :   BITMAP_FREE (selected);</span>
+<span class="lineNum">     264 </span><span class="lineCov">    1665796 : }</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span>            : /* Create a partition view which includes all the used partitions in MAP.  */
+<a name="268"><span class="lineNum">     268 </span>            : </a>
+<span class="lineNum">     269 </span>            : void
+<span class="lineNum">     270 </span><span class="lineCov">     832898 : partition_view_normal (var_map map)</span>
+<span class="lineNum">     271 </span>            : {
+<span class="lineNum">     272 </span><span class="lineCov">     832898 :   bitmap used;</span>
+<span class="lineNum">     273 </span>            : 
+<span class="lineNum">     274 </span><span class="lineCov">     832898 :   used = partition_view_init (map);</span>
+<span class="lineNum">     275 </span><span class="lineCov">     832898 :   partition_view_fini (map, used);</span>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">     832898 :   var_map_base_fini (map);</span>
+<span class="lineNum">     278 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            : /* Create a partition view in MAP which includes just partitions which occur in
+<span class="lineNum">     282 </span>            :    the bitmap ONLY. If WANT_BASES is true, create the base variable map
+<span class="lineNum">     283 </span>            :    as well.  */
+<a name="284"><span class="lineNum">     284 </span>            : </a>
+<span class="lineNum">     285 </span>            : void
+<span class="lineNum">     286 </span><span class="lineCov">     832898 : partition_view_bitmap (var_map map, bitmap only)</span>
+<span class="lineNum">     287 </span>            : {
+<span class="lineNum">     288 </span><span class="lineCov">     832898 :   bitmap used;</span>
+<span class="lineNum">     289 </span><span class="lineCov">     832898 :   bitmap new_partitions = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     290 </span><span class="lineCov">     832898 :   unsigned x, p;</span>
+<span class="lineNum">     291 </span><span class="lineCov">     832898 :   bitmap_iterator bi;</span>
+<span class="lineNum">     292 </span>            : 
+<span class="lineNum">     293 </span><span class="lineCov">     832898 :   used = partition_view_init (map);</span>
+<span class="lineNum">     294 </span><span class="lineCov">    6752197 :   EXECUTE_IF_SET_IN_BITMAP (only, 0, x, bi)</span>
+<span class="lineNum">     295 </span>            :     {
+<span class="lineNum">     296 </span><span class="lineCov">    5919299 :       p = partition_find (map-&gt;var_partition, x);</span>
+<span class="lineNum">     297 </span><span class="lineCov">    5919299 :       gcc_assert (bitmap_bit_p (used, p));</span>
+<span class="lineNum">     298 </span><span class="lineCov">    5919299 :       bitmap_set_bit (new_partitions, p);</span>
+<span class="lineNum">     299 </span>            :     }
+<span class="lineNum">     300 </span><span class="lineCov">     832898 :   partition_view_fini (map, new_partitions);</span>
+<span class="lineNum">     301 </span>            : 
+<span class="lineNum">     302 </span><span class="lineCov">     832898 :   var_map_base_fini (map);</span>
+<span class="lineNum">     303 </span><span class="lineCov">     832898 : }</span>
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span>            : 
+<span class="lineNum">     306 </span>            : static bitmap usedvars;
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            : /* Mark VAR as used, so that it'll be preserved during rtl expansion.
+<span class="lineNum">     309 </span>            :    Returns true if VAR wasn't marked before.  */
+<a name="310"><span class="lineNum">     310 </span>            : </a>
+<span class="lineNum">     311 </span>            : static inline bool
+<span class="lineNum">     312 </span><span class="lineCov">   57906306 : set_is_used (tree var)</span>
+<span class="lineNum">     313 </span>            : {
+<span class="lineNum">     314 </span><span class="lineCov">   57906306 :   return bitmap_set_bit (usedvars, DECL_UID (var));</span>
+<span class="lineNum">     315 </span>            : }
+<span class="lineNum">     316 </span>            : 
+<span class="lineNum">     317 </span>            : /* Return true if VAR is marked as used.  */
+<a name="318"><span class="lineNum">     318 </span>            : </a>
+<span class="lineNum">     319 </span>            : static inline bool
+<span class="lineNum">     320 </span><span class="lineCov">   63244317 : is_used_p (tree var)</span>
+<span class="lineNum">     321 </span>            : {
+<span class="lineNum">     322 </span><span class="lineCov">   63244317 :   return bitmap_bit_p (usedvars, DECL_UID (var));</span>
+<span class="lineNum">     323 </span>            : }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            : static inline void mark_all_vars_used (tree *);
+<span class="lineNum">     326 </span>            : 
+<span class="lineNum">     327 </span>            : /* Helper function for mark_all_vars_used, called via walk_tree.  */
+<a name="328"><span class="lineNum">     328 </span>            : </a>
+<span class="lineNum">     329 </span>            : static tree
+<span class="lineNum">     330 </span><span class="lineCov">  341683668 : mark_all_vars_used_1 (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">     331 </span>            : {
+<span class="lineNum">     332 </span><span class="lineCov">  341683668 :   tree t = *tp;</span>
+<span class="lineNum">     333 </span><span class="lineCov">  341683668 :   enum tree_code_class c = TREE_CODE_CLASS (TREE_CODE (t));</span>
+<span class="lineNum">     334 </span><span class="lineCov">  341683668 :   tree b;</span>
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span><span class="lineCov">  341683668 :   if (TREE_CODE (t) == SSA_NAME)</span>
+<span class="lineNum">     337 </span>            :     {
+<span class="lineNum">     338 </span><span class="lineCov">  133165322 :       *walk_subtrees = 0;</span>
+<span class="lineNum">     339 </span><span class="lineCov">  133165322 :       t = SSA_NAME_VAR (t);</span>
+<span class="lineNum">     340 </span>            :       if (!t)
+<span class="lineNum">     341 </span>            :         return NULL;
+<span class="lineNum">     342 </span>            :     }
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span><span class="lineCov">  250217857 :   if (IS_EXPR_CODE_CLASS (c)</span>
+<span class="lineNum">     345 </span><span class="lineCov">  250217857 :       &amp;&amp; (b = TREE_BLOCK (t)) != NULL)</span>
+<span class="lineNum">     346 </span><span class="lineCov">   24055920 :     TREE_USED (b) = true;</span>
+<span class="lineNum">     347 </span>            : 
+<span class="lineNum">     348 </span>            :   /* Ignore TMR_OFFSET and TMR_STEP for TARGET_MEM_REFS, as those
+<span class="lineNum">     349 </span>            :      fields do not contain vars.  */
+<span class="lineNum">     350 </span><span class="lineCov">  250217857 :   if (TREE_CODE (t) == TARGET_MEM_REF)</span>
+<span class="lineNum">     351 </span>            :     {
+<span class="lineNum">     352 </span><span class="lineCov">     901554 :       mark_all_vars_used (&amp;TMR_BASE (t));</span>
+<span class="lineNum">     353 </span><span class="lineCov">     450777 :       mark_all_vars_used (&amp;TMR_INDEX (t));</span>
+<span class="lineNum">     354 </span><span class="lineCov">     450777 :       mark_all_vars_used (&amp;TMR_INDEX2 (t));</span>
+<span class="lineNum">     355 </span><span class="lineCov">     450777 :       *walk_subtrees = 0;</span>
+<span class="lineNum">     356 </span><span class="lineCov">     450777 :       return NULL;</span>
+<span class="lineNum">     357 </span>            :     }
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            :   /* Only need to mark VAR_DECLS; parameters and return results are not
+<span class="lineNum">     360 </span>            :      eliminated as unused.  */
+<span class="lineNum">     361 </span><span class="lineCov">  249767080 :   if (VAR_P (t))</span>
+<span class="lineNum">     362 </span>            :     {
+<span class="lineNum">     363 </span>            :       /* When a global var becomes used for the first time also walk its
+<span class="lineNum">     364 </span>            :          initializer (non global ones don't have any).  */
+<span class="lineNum">     365 </span><span class="lineCov">   71944272 :       if (set_is_used (t) &amp;&amp; is_global_var (t)</span>
+<span class="lineNum">     366 </span><span class="lineCov">   60261586 :           &amp;&amp; DECL_CONTEXT (t) == current_function_decl)</span>
+<span class="lineNum">     367 </span><span class="lineCov">     410986 :         mark_all_vars_used (&amp;DECL_INITIAL (t));</span>
+<span class="lineNum">     368 </span>            :     }
+<span class="lineNum">     369 </span>            :   /* remove_unused_scope_block_p requires information about labels
+<span class="lineNum">     370 </span>            :      which are not DECL_IGNORED_P to tell if they might be used in the IL.  */
+<span class="lineNum">     371 </span><span class="lineCov">  191860774 :   else if (TREE_CODE (t) == LABEL_DECL)</span>
+<span class="lineNum">     372 </span>            :     /* Although the TREE_USED values that the frontend uses would be
+<span class="lineNum">     373 </span>            :        acceptable (albeit slightly over-conservative) for our purposes,
+<span class="lineNum">     374 </span>            :        init_vars_expansion clears TREE_USED for LABEL_DECLs too, so we
+<span class="lineNum">     375 </span>            :        must re-compute it here.  */
+<span class="lineNum">     376 </span><span class="lineCov">    1600853 :     TREE_USED (t) = 1;</span>
+<span class="lineNum">     377 </span>            : 
+<span class="lineNum">     378 </span><span class="lineCov">  249767080 :   if (IS_TYPE_OR_DECL_P (t))</span>
+<span class="lineNum">     379 </span><span class="lineCov">  112256602 :     *walk_subtrees = 0;</span>
+<span class="lineNum">     380 </span>            : 
+<span class="lineNum">     381 </span>            :   return NULL;
+<span class="lineNum">     382 </span>            : }
+<span class="lineNum">     383 </span>            : 
+<span class="lineNum">     384 </span>            : /* Mark the scope block SCOPE and its subblocks unused when they can be
+<span class="lineNum">     385 </span>            :    possibly eliminated if dead.  */
+<a name="386"><span class="lineNum">     386 </span>            : </a>
+<span class="lineNum">     387 </span>            : static void
+<span class="lineNum">     388 </span><span class="lineCov">   36550699 : mark_scope_block_unused (tree scope)</span>
+<span class="lineNum">     389 </span>            : {
+<span class="lineNum">     390 </span><span class="lineCov">   36550699 :   tree t;</span>
+<span class="lineNum">     391 </span><span class="lineCov">   36550699 :   TREE_USED (scope) = false;</span>
+<span class="lineNum">     392 </span><span class="lineCov">   36550699 :   if (!(*debug_hooks-&gt;ignore_block) (scope))</span>
+<span class="lineNum">     393 </span><span class="lineCov">      45802 :     TREE_USED (scope) = true;</span>
+<span class="lineNum">     394 </span><span class="lineCov">   68972743 :   for (t = BLOCK_SUBBLOCKS (scope); t ; t = BLOCK_CHAIN (t))</span>
+<span class="lineNum">     395 </span><span class="lineCov">   32422044 :     mark_scope_block_unused (t);</span>
+<span class="lineNum">     396 </span><span class="lineCov">   36550699 : }</span>
+<span class="lineNum">     397 </span>            : 
+<span class="lineNum">     398 </span>            : /* Look if the block is dead (by possibly eliminating its dead subblocks)
+<span class="lineNum">     399 </span>            :    and return true if so.
+<span class="lineNum">     400 </span>            :    Block is declared dead if:
+<span class="lineNum">     401 </span>            :      1) No statements are associated with it.
+<span class="lineNum">     402 </span>            :      2) Declares no live variables
+<span class="lineNum">     403 </span>            :      3) All subblocks are dead
+<span class="lineNum">     404 </span>            :         or there is precisely one subblocks and the block
+<span class="lineNum">     405 </span>            :         has same abstract origin as outer block and declares
+<span class="lineNum">     406 </span>            :         no variables, so it is pure wrapper.
+<span class="lineNum">     407 </span>            :    When we are not outputting full debug info, we also eliminate dead variables
+<span class="lineNum">     408 </span>            :    out of scope blocks to let them to be recycled by GGC and to save copying work
+<span class="lineNum">     409 </span>            :    done by the inliner.  */
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            : static bool
+<span class="lineNum">     412 </span><span class="lineCov">   36550699 : remove_unused_scope_block_p (tree scope, bool in_ctor_dtor_block)</span>
+<span class="lineNum">     413 </span>            : {
+<span class="lineNum">     414 </span><span class="lineCov">   36550699 :   tree *t, *next;</span>
+<span class="lineNum">     415 </span><span class="lineCov">   36550699 :   bool unused = !TREE_USED (scope);</span>
+<span class="lineNum">     416 </span><span class="lineCov">   36550699 :   int nsubblocks = 0;</span>
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span>            :   /* For ipa-polymorphic-call.c purposes, preserve blocks:
+<span class="lineNum">     419 </span>            :      1) with BLOCK_ABSTRACT_ORIGIN of a ctor/dtor or their clones  */
+<span class="lineNum">     420 </span><span class="lineCov">   36550699 :   if (inlined_polymorphic_ctor_dtor_block_p (scope, true))</span>
+<span class="lineNum">     421 </span>            :     {
+<span class="lineNum">     422 </span>            :       in_ctor_dtor_block = true;
+<span class="lineNum">     423 </span>            :       unused = false;
+<span class="lineNum">     424 </span>            :     }
+<span class="lineNum">     425 </span>            :   /* 2) inside such blocks, the outermost block with block_ultimate_origin
+<span class="lineNum">     426 </span>            :      being a FUNCTION_DECL.  */
+<span class="lineNum">     427 </span><span class="lineCov">   30540161 :   else if (in_ctor_dtor_block)</span>
+<span class="lineNum">     428 </span>            :     {
+<span class="lineNum">     429 </span><span class="lineCov">    5856637 :       tree fn = block_ultimate_origin (scope);</span>
+<span class="lineNum">     430 </span><span class="lineCov">    5856637 :       if (fn &amp;&amp; TREE_CODE (fn) == FUNCTION_DECL)</span>
+<span class="lineNum">     431 </span>            :         {
+<span class="lineNum">     432 </span><span class="lineCov">    1893761 :           in_ctor_dtor_block = false;</span>
+<span class="lineNum">     433 </span><span class="lineCov">    1893761 :           unused = false;</span>
+<span class="lineNum">     434 </span>            :         }
+<span class="lineNum">     435 </span>            :     }
+<span class="lineNum">     436 </span>            : 
+<span class="lineNum">     437 </span><span class="lineCov">   72655690 :   for (t = &amp;BLOCK_VARS (scope); *t; t = next)</span>
+<span class="lineNum">     438 </span>            :     {
+<span class="lineNum">     439 </span><span class="lineCov">   36104991 :       next = &amp;DECL_CHAIN (*t);</span>
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span>            :       /* Debug info of nested function refers to the block of the
+<span class="lineNum">     442 </span>            :          function.  We might stil call it even if all statements
+<span class="lineNum">     443 </span>            :          of function it was nested into was elliminated.
+<span class="lineNum">     444 </span>            : 
+<span class="lineNum">     445 </span>            :          TODO: We can actually look into cgraph to see if function
+<span class="lineNum">     446 </span>            :          will be output to file.  */
+<span class="lineNum">     447 </span><span class="lineCov">   36104991 :       if (TREE_CODE (*t) == FUNCTION_DECL)</span>
+<span class="lineNum">     448 </span>            :         unused = false;
+<span class="lineNum">     449 </span>            : 
+<span class="lineNum">     450 </span>            :       /* If a decl has a value expr, we need to instantiate it
+<span class="lineNum">     451 </span>            :          regardless of debug info generation, to avoid codegen
+<span class="lineNum">     452 </span>            :          differences in memory overlap tests.  update_equiv_regs() may
+<span class="lineNum">     453 </span>            :          indirectly call validate_equiv_mem() to test whether a
+<span class="lineNum">     454 </span>            :          SET_DEST overlaps with others, and if the value expr changes
+<span class="lineNum">     455 </span>            :          by virtual register instantiation, we may get end up with
+<span class="lineNum">     456 </span>            :          different results.  */
+<span class="lineNum">     457 </span><span class="lineCov">   35999630 :       else if (VAR_P (*t) &amp;&amp; DECL_HAS_VALUE_EXPR_P (*t))</span>
+<span class="lineNum">     458 </span>            :         unused = false;
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span>            :       /* Remove everything we don't generate debug info for.  */
+<span class="lineNum">     461 </span><span class="lineCov">   35836120 :       else if (DECL_IGNORED_P (*t))</span>
+<span class="lineNum">     462 </span>            :         {
+<span class="lineNum">     463 </span><span class="lineCov">    4486260 :           *t = DECL_CHAIN (*t);</span>
+<span class="lineNum">     464 </span><span class="lineCov">    2243130 :           next = t;</span>
+<span class="lineNum">     465 </span>            :         }
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            :       /* When we are outputting debug info, we usually want to output
+<span class="lineNum">     468 </span>            :          info about optimized-out variables in the scope blocks.
+<span class="lineNum">     469 </span>            :          Exception are the scope blocks not containing any instructions
+<span class="lineNum">     470 </span>            :          at all so user can't get into the scopes at first place.  */
+<span class="lineNum">     471 </span><span class="lineCov">   33592990 :       else if (is_used_p (*t))</span>
+<span class="lineNum">     472 </span>            :         unused = false;
+<span class="lineNum">     473 </span><span class="lineCov">   29017568 :       else if (TREE_CODE (*t) == LABEL_DECL &amp;&amp; TREE_USED (*t))</span>
+<span class="lineNum">     474 </span>            :         /* For labels that are still used in the IL, the decision to
+<span class="lineNum">     475 </span>            :            preserve them must not depend DEBUG_INFO_LEVEL, otherwise we
+<span class="lineNum">     476 </span>            :            risk having different ordering in debug vs.  non-debug builds
+<span class="lineNum">     477 </span>            :            during inlining or versioning.
+<span class="lineNum">     478 </span>            :            A label appearing here (we have already checked DECL_IGNORED_P)
+<span class="lineNum">     479 </span>            :            should not be used in the IL unless it has been explicitly used
+<span class="lineNum">     480 </span>            :            before, so we use TREE_USED as an approximation.  */
+<span class="lineNum">     481 </span>            :         /* In principle, we should do the same here as for the debug case
+<span class="lineNum">     482 </span>            :            below, however, when debugging, there might be additional nested
+<span class="lineNum">     483 </span>            :            levels that keep an upper level with a label live, so we have to
+<span class="lineNum">     484 </span>            :            force this block to be considered used, too.  */
+<span class="lineNum">     485 </span>            :         unused = false;
+<span class="lineNum">     486 </span>            : 
+<span class="lineNum">     487 </span>            :       /* When we are not doing full debug info, we however can keep around
+<span class="lineNum">     488 </span>            :          only the used variables for cfgexpand's memory packing saving quite
+<span class="lineNum">     489 </span>            :          a lot of memory.
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span>            :          For sake of -g3, we keep around those vars but we don't count this as
+<span class="lineNum">     492 </span>            :          use of block, so innermost block with no used vars and no instructions
+<span class="lineNum">     493 </span>            :          can be considered dead.  We only want to keep around blocks user can
+<span class="lineNum">     494 </span>            :          breakpoint into and ask about value of optimized out variables.
+<span class="lineNum">     495 </span>            : 
+<span class="lineNum">     496 </span>            :          Similarly we need to keep around types at least until all
+<span class="lineNum">     497 </span>            :          variables of all nested blocks are gone.  We track no
+<span class="lineNum">     498 </span>            :          information on whether given type is used or not, so we have
+<span class="lineNum">     499 </span>            :          to keep them even when not emitting debug information,
+<span class="lineNum">     500 </span>            :          otherwise we may end up remapping variables and their (local)
+<span class="lineNum">     501 </span>            :          types in different orders depending on whether debug
+<span class="lineNum">     502 </span>            :          information is being generated.  */
+<span class="lineNum">     503 </span>            : 
+<span class="lineNum">     504 </span><span class="lineCov">   29001932 :       else if (TREE_CODE (*t) == TYPE_DECL</span>
+<span class="lineNum">     505 </span><span class="lineCov">   28112700 :                || debug_info_level == DINFO_LEVEL_NORMAL</span>
+<span class="lineNum">     506 </span><span class="lineCov">    1132171 :                || debug_info_level == DINFO_LEVEL_VERBOSE)</span>
+<span class="lineNum">     507 </span>            :         ;
+<span class="lineNum">     508 </span>            :       else
+<span class="lineNum">     509 </span>            :         {
+<span class="lineNum">     510 </span><span class="lineCov">    1125961 :           *t = DECL_CHAIN (*t);</span>
+<span class="lineNum">     511 </span><span class="lineCov">    1125961 :           next = t;</span>
+<span class="lineNum">     512 </span>            :         }
+<span class="lineNum">     513 </span>            :     }
+<span class="lineNum">     514 </span>            : 
+<span class="lineNum">     515 </span><span class="lineCov">   68972743 :   for (t = &amp;BLOCK_SUBBLOCKS (scope); *t ;)</span>
+<span class="lineNum">     516 </span><span class="lineCov">   32422044 :     if (remove_unused_scope_block_p (*t, in_ctor_dtor_block))</span>
+<span class="lineNum">     517 </span>            :       {
+<span class="lineNum">     518 </span><span class="lineCov">    3813603 :         if (BLOCK_SUBBLOCKS (*t))</span>
+<span class="lineNum">     519 </span>            :           {
+<span class="lineNum">     520 </span><span class="lineCov">    1393209 :             tree next = BLOCK_CHAIN (*t);</span>
+<span class="lineNum">     521 </span><span class="lineCov">    1393209 :             tree supercontext = BLOCK_SUPERCONTEXT (*t);</span>
+<span class="lineNum">     522 </span>            : 
+<span class="lineNum">     523 </span><span class="lineCov">    2786418 :             *t = BLOCK_SUBBLOCKS (*t);</span>
+<span class="lineNum">     524 </span><span class="lineCov">    1731102 :             while (BLOCK_CHAIN (*t))</span>
+<span class="lineNum">     525 </span>            :               {
+<span class="lineNum">     526 </span><span class="lineCov">     337893 :                 BLOCK_SUPERCONTEXT (*t) = supercontext;</span>
+<span class="lineNum">     527 </span><span class="lineCov">     337893 :                 t = &amp;BLOCK_CHAIN (*t);</span>
+<span class="lineNum">     528 </span>            :               }
+<span class="lineNum">     529 </span><span class="lineCov">    1393209 :             BLOCK_CHAIN (*t) = next;</span>
+<span class="lineNum">     530 </span><span class="lineCov">    1393209 :             BLOCK_SUPERCONTEXT (*t) = supercontext;</span>
+<span class="lineNum">     531 </span><span class="lineCov">    1393209 :             t = &amp;BLOCK_CHAIN (*t);</span>
+<span class="lineNum">     532 </span><span class="lineCov">    1393209 :             nsubblocks ++;</span>
+<span class="lineNum">     533 </span>            :           }
+<span class="lineNum">     534 </span>            :         else
+<span class="lineNum">     535 </span><span class="lineCov">    4840788 :           *t = BLOCK_CHAIN (*t);</span>
+<span class="lineNum">     536 </span>            :       }
+<span class="lineNum">     537 </span>            :     else
+<span class="lineNum">     538 </span>            :       {
+<span class="lineNum">     539 </span><span class="lineCov">   28608441 :         t = &amp;BLOCK_CHAIN (*t);</span>
+<span class="lineNum">     540 </span><span class="lineCov">   28608441 :         nsubblocks ++;</span>
+<span class="lineNum">     541 </span>            :       }
+<span class="lineNum">     542 </span>            : 
+<span class="lineNum">     543 </span>            : 
+<span class="lineNum">     544 </span><span class="lineCov">   36550699 :    if (!unused)</span>
+<span class="lineNum">     545 </span>            :      ;
+<span class="lineNum">     546 </span>            :    /* Outer scope is always used.  */
+<span class="lineNum">     547 </span><span class="lineCov">    8350682 :    else if (!BLOCK_SUPERCONTEXT (scope)</span>
+<span class="lineNum">     548 </span><span class="lineCov">    8350682 :             || TREE_CODE (BLOCK_SUPERCONTEXT (scope)) == FUNCTION_DECL)</span>
+<span class="lineNum">     549 </span>            :      unused = false;
+<span class="lineNum">     550 </span>            :    /* Innermost blocks with no live variables nor statements can be always
+<span class="lineNum">     551 </span>            :       eliminated.  */
+<span class="lineNum">     552 </span><span class="lineCov">    8127557 :    else if (!nsubblocks)</span>
+<span class="lineNum">     553 </span>            :      ;
+<span class="lineNum">     554 </span>            :    /* When not generating debug info we can eliminate info on unused
+<span class="lineNum">     555 </span>            :       variables.  */
+<span class="lineNum">     556 </span><span class="lineCov">    5707163 :    else if (!flag_auto_profile &amp;&amp; debug_info_level == DINFO_LEVEL_NONE</span>
+<span class="lineNum">     557 </span><span class="lineCov">    5850469 :             &amp;&amp; !optinfo_wants_inlining_info_p ())</span>
+<span class="lineNum">     558 </span>            :      {
+<span class="lineNum">     559 </span>            :        /* Even for -g0 don't prune outer scopes from artificial
+<span class="lineNum">     560 </span>            :           functions, otherwise diagnostics using tree_nonartificial_location
+<span class="lineNum">     561 </span>            :           will not be emitted properly.  */
+<span class="lineNum">     562 </span><span class="lineCov">     143306 :        if (inlined_function_outer_scope_p (scope))</span>
+<span class="lineNum">     563 </span>            :          {
+<span class="lineNum">     564 </span>            :            tree ao = scope;
+<span class="lineNum">     565 </span>            : 
+<span class="lineNum">     566 </span><span class="lineCov">     151624 :            while (ao</span>
+<span class="lineNum">     567 </span><span class="lineCov">     151624 :                   &amp;&amp; TREE_CODE (ao) == BLOCK</span>
+<span class="lineNum">     568 </span><span class="lineCov">     317282 :                   &amp;&amp; BLOCK_ABSTRACT_ORIGIN (ao) != ao)</span>
+<span class="lineNum">     569 </span>            :              ao = BLOCK_ABSTRACT_ORIGIN (ao);
+<span class="lineNum">     570 </span><span class="lineCov">      68795 :            if (ao</span>
+<span class="lineNum">     571 </span><span class="lineCov">      68795 :                &amp;&amp; TREE_CODE (ao) == FUNCTION_DECL</span>
+<span class="lineNum">     572 </span><span class="lineCov">     137590 :                &amp;&amp; DECL_DECLARED_INLINE_P (ao)</span>
+<span class="lineNum">     573 </span><span class="lineCov">     101328 :                &amp;&amp; lookup_attribute (&quot;artificial&quot;, DECL_ATTRIBUTES (ao)))</span>
+<span class="lineNum">     574 </span>            :              unused = false;
+<span class="lineNum">     575 </span>            :          }
+<span class="lineNum">     576 </span>            :      }
+<span class="lineNum">     577 </span><span class="lineCov">    5563857 :    else if (BLOCK_VARS (scope) || BLOCK_NUM_NONLOCALIZED_VARS (scope))</span>
+<span class="lineNum">     578 </span>            :      unused = false;
+<span class="lineNum">     579 </span>            :    /* See if this block is important for representation of inlined
+<span class="lineNum">     580 </span>            :       function.  Inlined functions are always represented by block
+<span class="lineNum">     581 </span>            :       with block_ultimate_origin being set to FUNCTION_DECL and
+<span class="lineNum">     582 </span>            :       DECL_SOURCE_LOCATION set, unless they expand to nothing...  */
+<span class="lineNum">     583 </span><span class="lineCov">    1302229 :    else if (inlined_function_outer_scope_p (scope))</span>
+<span class="lineNum">     584 </span>            :      unused = false;
+<span class="lineNum">     585 </span>            :    else
+<span class="lineNum">     586 </span>            :    /* Verfify that only blocks with source location set
+<span class="lineNum">     587 </span>            :       are entry points to the inlined functions.  */
+<span class="lineNum">     588 </span><span class="lineCov">    1263739 :      gcc_assert (LOCATION_LOCUS (BLOCK_SOURCE_LOCATION (scope))</span>
+<span class="lineNum">     589 </span>            :                  == UNKNOWN_LOCATION);
+<span class="lineNum">     590 </span>            : 
+<span class="lineNum">     591 </span><span class="lineCov">   36550699 :    TREE_USED (scope) = !unused;</span>
+<span class="lineNum">     592 </span><span class="lineCov">   36550699 :    return unused;</span>
+<span class="lineNum">     593 </span>            : }
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span>            : /* Mark all VAR_DECLS under *EXPR_P as used, so that they won't be
+<span class="lineNum">     596 </span>            :    eliminated during the tree-&gt;rtl conversion process.  */
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            : static inline void
+<span class="lineNum">     599 </span>            : mark_all_vars_used (tree *expr_p)
+<span class="lineNum">     600 </span>            : {
+<span class="lineNum">     601 </span><span class="lineCov">    1763317 :   walk_tree (expr_p, mark_all_vars_used_1, NULL, NULL);</span>
+<span class="lineNum">     602 </span>            : }
+<span class="lineNum">     603 </span>            : 
+<span class="lineNum">     604 </span>            : /* Helper function for clear_unused_block_pointer, called via walk_tree.  */
+<a name="605"><span class="lineNum">     605 </span>            : </a>
+<span class="lineNum">     606 </span>            : static tree
+<span class="lineNum">     607 </span><span class="lineCov">  183427636 : clear_unused_block_pointer_1 (tree *tp, int *, void *)</span>
+<span class="lineNum">     608 </span>            : {
+<span class="lineNum">     609 </span><span class="lineCov">   25279035 :   if (EXPR_P (*tp) &amp;&amp; TREE_BLOCK (*tp)</span>
+<span class="lineNum">     610 </span><span class="lineCov">  201810029 :       &amp;&amp; !TREE_USED (TREE_BLOCK (*tp)))</span>
+<span class="lineNum">     611 </span><span class="lineCov">     627867 :     TREE_SET_BLOCK (*tp, NULL);</span>
+<span class="lineNum">     612 </span><span class="lineCov">  183427636 :   return NULL_TREE;</span>
+<span class="lineNum">     613 </span>            : }
+<span class="lineNum">     614 </span>            : 
+<span class="lineNum">     615 </span>            : /* Set all block pointer in debug or clobber stmt to NULL if the block
+<span class="lineNum">     616 </span>            :    is unused, so that they will not be streamed out.  */
+<a name="617"><span class="lineNum">     617 </span>            : </a>
+<span class="lineNum">     618 </span>            : static void
+<span class="lineNum">     619 </span><span class="lineCov">    4128655 : clear_unused_block_pointer (void)</span>
+<span class="lineNum">     620 </span>            : {
+<span class="lineNum">     621 </span><span class="lineCov">    4128655 :   basic_block bb;</span>
+<span class="lineNum">     622 </span><span class="lineCov">    4128655 :   gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     623 </span>            : 
+<span class="lineNum">     624 </span><span class="lineCov">   30181718 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     625 </span><span class="lineCov">  253522664 :     for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     626 </span>            :       {
+<span class="lineNum">     627 </span><span class="lineCov">  201416538 :         unsigned i;</span>
+<span class="lineNum">     628 </span><span class="lineCov">  201416538 :         tree b;</span>
+<span class="lineNum">     629 </span><span class="lineCov">  201416538 :         gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     630 </span>            : 
+<span class="lineNum">     631 </span><span class="lineCov">  402833076 :         if (!is_gimple_debug (stmt) &amp;&amp; !gimple_clobber_p (stmt))</span>
+<span class="lineNum">     632 </span>            :           continue;
+<span class="lineNum">     633 </span><span class="lineCov">  112684731 :         b = gimple_block (stmt);</span>
+<span class="lineNum">     634 </span><span class="lineCov">   79187559 :         if (b &amp;&amp; !TREE_USED (b))</span>
+<span class="lineNum">     635 </span><span class="lineCov">    3858411 :           gimple_set_block (stmt, NULL);</span>
+<span class="lineNum">     636 </span><span class="lineCov">  394713550 :         for (i = 0; i &lt; gimple_num_ops (stmt); i++)</span>
+<span class="lineNum">     637 </span><span class="lineCov">  169344088 :           walk_tree (gimple_op_ptr (stmt, i), clear_unused_block_pointer_1,</span>
+<span class="lineNum">     638 </span>            :                      NULL, NULL);
+<span class="lineNum">     639 </span>            :       }
+<span class="lineNum">     640 </span><span class="lineCov">    4128655 : }</span>
+<span class="lineNum">     641 </span>            : 
+<span class="lineNum">     642 </span>            : /* Dump scope blocks starting at SCOPE to FILE.  INDENT is the
+<span class="lineNum">     643 </span>            :    indentation level and FLAGS is as in print_generic_expr.  */
+<span class="lineNum">     644 </span>            : 
+<span class="lineNum">     645 </span>            : static void
+<span class="lineNum">     646 </span><span class="lineCov">        402 : dump_scope_block (FILE *file, int indent, tree scope, dump_flags_t flags)</span>
+<span class="lineNum">     647 </span>            : {
+<span class="lineNum">     648 </span><span class="lineCov">        402 :   tree var, t;</span>
+<span class="lineNum">     649 </span><span class="lineCov">        402 :   unsigned int i;</span>
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span><span class="lineCov">        804 :   fprintf (file, &quot;\n%*s{ Scope block #%i%s%s&quot;,indent, &quot;&quot; , BLOCK_NUMBER (scope),</span>
+<span class="lineNum">     652 </span><span class="lineCov">        402 :            TREE_USED (scope) ? &quot;&quot; : &quot; (unused)&quot;,</span>
+<span class="lineNum">     653 </span><span class="lineCov">        402 :            BLOCK_ABSTRACT (scope) ? &quot; (abstract)&quot;: &quot;&quot;);</span>
+<span class="lineNum">     654 </span><span class="lineCov">        402 :   if (LOCATION_LOCUS (BLOCK_SOURCE_LOCATION (scope)) != UNKNOWN_LOCATION)</span>
+<span class="lineNum">     655 </span>            :     {
+<span class="lineNum">     656 </span><span class="lineCov">        134 :       expanded_location s = expand_location (BLOCK_SOURCE_LOCATION (scope));</span>
+<span class="lineNum">     657 </span><span class="lineCov">        134 :       fprintf (file, &quot; %s:%i&quot;, s.file, s.line);</span>
+<span class="lineNum">     658 </span>            :     }
+<span class="lineNum">     659 </span><span class="lineCov">        402 :   if (BLOCK_ABSTRACT_ORIGIN (scope))</span>
+<span class="lineNum">     660 </span>            :     {
+<span class="lineNum">     661 </span><span class="lineCov">        320 :       tree origin = block_ultimate_origin (scope);</span>
+<span class="lineNum">     662 </span><span class="lineCov">        320 :       if (origin)</span>
+<span class="lineNum">     663 </span>            :         {
+<span class="lineNum">     664 </span><span class="lineCov">        320 :           fprintf (file, &quot; Originating from :&quot;);</span>
+<span class="lineNum">     665 </span><span class="lineCov">        320 :           if (DECL_P (origin))</span>
+<span class="lineNum">     666 </span><span class="lineCov">        134 :             print_generic_decl (file, origin, flags);</span>
+<span class="lineNum">     667 </span>            :           else
+<span class="lineNum">     668 </span><span class="lineCov">        186 :             fprintf (file, &quot;#%i&quot;, BLOCK_NUMBER (origin));</span>
+<span class="lineNum">     669 </span>            :         }
+<span class="lineNum">     670 </span>            :     }
+<span class="lineNum">     671 </span><span class="lineCov">        402 :   if (BLOCK_FRAGMENT_ORIGIN (scope))</span>
+<span class="lineNum">     672 </span><span class="lineNoCov">          0 :     fprintf (file, &quot; Fragment of : #%i&quot;,</span>
+<span class="lineNum">     673 </span><span class="lineNoCov">          0 :              BLOCK_NUMBER (BLOCK_FRAGMENT_ORIGIN (scope)));</span>
+<span class="lineNum">     674 </span><span class="lineCov">        804 :   else if (BLOCK_FRAGMENT_CHAIN (scope))</span>
+<span class="lineNum">     675 </span>            :     {
+<span class="lineNum">     676 </span><span class="lineNoCov">          0 :       fprintf (file, &quot; Fragment chain :&quot;);</span>
+<span class="lineNum">     677 </span><span class="lineNoCov">          0 :       for (t = BLOCK_FRAGMENT_CHAIN (scope); t ;</span>
+<span class="lineNum">     678 </span><span class="lineNoCov">          0 :            t = BLOCK_FRAGMENT_CHAIN (t))</span>
+<span class="lineNum">     679 </span><span class="lineNoCov">          0 :         fprintf (file, &quot; #%i&quot;, BLOCK_NUMBER (t));</span>
+<span class="lineNum">     680 </span>            :     }
+<span class="lineNum">     681 </span><span class="lineCov">        402 :   fprintf (file, &quot; \n&quot;);</span>
+<span class="lineNum">     682 </span><span class="lineCov">        507 :   for (var = BLOCK_VARS (scope); var; var = DECL_CHAIN (var))</span>
+<span class="lineNum">     683 </span>            :     {
+<span class="lineNum">     684 </span><span class="lineCov">        105 :       fprintf (file, &quot;%*s&quot;, indent, &quot;&quot;);</span>
+<span class="lineNum">     685 </span><span class="lineCov">        105 :       print_generic_decl (file, var, flags);</span>
+<span class="lineNum">     686 </span><span class="lineCov">        105 :       fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">     687 </span>            :     }
+<span class="lineNum">     688 </span><span class="lineCov">        402 :   for (i = 0; i &lt; BLOCK_NUM_NONLOCALIZED_VARS (scope); i++)</span>
+<span class="lineNum">     689 </span>            :     {
+<span class="lineNum">     690 </span><span class="lineNoCov">          0 :       fprintf (file, &quot;%*s&quot;,indent, &quot;&quot;);</span>
+<span class="lineNum">     691 </span><span class="lineNoCov">          0 :       print_generic_decl (file, BLOCK_NONLOCALIZED_VAR (scope, i),</span>
+<span class="lineNum">     692 </span>            :                           flags);
+<span class="lineNum">     693 </span><span class="lineNoCov">          0 :       fprintf (file, &quot; (nonlocalized)\n&quot;);</span>
+<span class="lineNum">     694 </span>            :     }
+<span class="lineNum">     695 </span><span class="lineCov">       1139 :   for (t = BLOCK_SUBBLOCKS (scope); t ; t = BLOCK_CHAIN (t))</span>
+<span class="lineNum">     696 </span><span class="lineCov">        335 :     dump_scope_block (file, indent + 2, t, flags);</span>
+<span class="lineNum">     697 </span><span class="lineCov">        402 :   fprintf (file, &quot;\n%*s}\n&quot;,indent, &quot;&quot;);</span>
+<span class="lineNum">     698 </span><span class="lineCov">        402 : }</span>
+<span class="lineNum">     699 </span>            : 
+<span class="lineNum">     700 </span>            : /* Dump the tree of lexical scopes starting at SCOPE to stderr.  FLAGS
+<span class="lineNum">     701 </span>            :    is as in print_generic_expr.  */
+<a name="702"><span class="lineNum">     702 </span>            : </a>
+<span class="lineNum">     703 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     704 </span><span class="lineNoCov">          0 : debug_scope_block (tree scope, dump_flags_t flags)</span>
+<span class="lineNum">     705 </span>            : {
+<span class="lineNum">     706 </span><span class="lineNoCov">          0 :   dump_scope_block (stderr, 0, scope, flags);</span>
+<span class="lineNum">     707 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     708 </span>            : 
+<span class="lineNum">     709 </span>            : 
+<span class="lineNum">     710 </span>            : /* Dump the tree of lexical scopes of current_function_decl to FILE.
+<span class="lineNum">     711 </span>            :    FLAGS is as in print_generic_expr.  */
+<a name="712"><span class="lineNum">     712 </span>            : </a>
+<span class="lineNum">     713 </span>            : void
+<span class="lineNum">     714 </span><span class="lineCov">         67 : dump_scope_blocks (FILE *file, dump_flags_t flags)</span>
+<span class="lineNum">     715 </span>            : {
+<span class="lineNum">     716 </span><span class="lineCov">         67 :   dump_scope_block (file, 0, DECL_INITIAL (current_function_decl), flags);</span>
+<span class="lineNum">     717 </span><span class="lineCov">         67 : }</span>
+<span class="lineNum">     718 </span>            : 
+<span class="lineNum">     719 </span>            : 
+<span class="lineNum">     720 </span>            : /* Dump the tree of lexical scopes of current_function_decl to stderr.
+<span class="lineNum">     721 </span>            :    FLAGS is as in print_generic_expr.  */
+<a name="722"><span class="lineNum">     722 </span>            : </a>
+<span class="lineNum">     723 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">     724 </span><span class="lineNoCov">          0 : debug_scope_blocks (dump_flags_t flags)</span>
+<span class="lineNum">     725 </span>            : {
+<span class="lineNum">     726 </span><span class="lineNoCov">          0 :   dump_scope_blocks (stderr, flags);</span>
+<span class="lineNum">     727 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     728 </span>            : 
+<span class="lineNum">     729 </span>            : /* Remove local variables that are not referenced in the IL.  */
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            : void
+<span class="lineNum">     732 </span><span class="lineCov">    4767604 : remove_unused_locals (void)</span>
+<span class="lineNum">     733 </span>            : {
+<span class="lineNum">     734 </span><span class="lineCov">    4767604 :   basic_block bb;</span>
+<span class="lineNum">     735 </span><span class="lineCov">    4767604 :   tree var;</span>
+<span class="lineNum">     736 </span><span class="lineCov">    4767604 :   unsigned srcidx, dstidx, num;</span>
+<span class="lineNum">     737 </span><span class="lineCov">    4767604 :   bool have_local_clobbers = false;</span>
+<span class="lineNum">     738 </span>            : 
+<span class="lineNum">     739 </span>            :   /* Removing declarations from lexical blocks when not optimizing is
+<span class="lineNum">     740 </span>            :      not only a waste of time, it actually causes differences in stack
+<span class="lineNum">     741 </span>            :      layout.  */
+<span class="lineNum">     742 </span><span class="lineCov">    4767604 :   if (!optimize)</span>
+<span class="lineNum">     743 </span>            :     return;
+<span class="lineNum">     744 </span>            : 
+<span class="lineNum">     745 </span><span class="lineCov">    4128655 :   timevar_push (TV_REMOVE_UNUSED);</span>
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span><span class="lineCov">    4128655 :   mark_scope_block_unused (DECL_INITIAL (current_function_decl));</span>
+<span class="lineNum">     748 </span>            : 
+<span class="lineNum">     749 </span><span class="lineCov">    4128655 :   usedvars = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     750 </span>            : 
+<span class="lineNum">     751 </span>            :   /* Walk the CFG marking all referenced symbols.  */
+<span class="lineNum">     752 </span><span class="lineCov">   30181718 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     753 </span>            :     {
+<span class="lineNum">     754 </span><span class="lineCov">   26053063 :       gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     755 </span><span class="lineCov">   26053063 :       size_t i;</span>
+<span class="lineNum">     756 </span><span class="lineCov">   26053063 :       edge_iterator ei;</span>
+<span class="lineNum">     757 </span><span class="lineCov">   26053063 :       edge e;</span>
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            :       /* Walk the statements.  */
+<span class="lineNum">     760 </span><span class="lineCov">  253854496 :       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">     761 </span>            :         {
+<span class="lineNum">     762 </span><span class="lineCov">  201748370 :           gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     763 </span><span class="lineCov">  201748370 :           tree b = gimple_block (stmt);</span>
+<span class="lineNum">     764 </span>            : 
+<span class="lineNum">     765 </span>            :           /* If we wanted to mark the block referenced by the inline
+<span class="lineNum">     766 </span>            :              entry point marker as used, this would be a good spot to
+<span class="lineNum">     767 </span>            :              do it.  If the block is not otherwise used, the stmt will
+<span class="lineNum">     768 </span>            :              be cleaned up in clean_unused_block_pointer.  */
+<span class="lineNum">     769 </span><span class="lineCov">  403496740 :           if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     770 </span>            :             continue;
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span><span class="lineCov">   93330535 :           if (gimple_clobber_p (stmt))</span>
+<span class="lineNum">     773 </span>            :             {
+<span class="lineNum">     774 </span>            :               have_local_clobbers = true;
+<span class="lineNum">     775 </span>            :               continue;
+<span class="lineNum">     776 </span>            :             }
+<span class="lineNum">     777 </span>            : 
+<span class="lineNum">     778 </span><span class="lineCov">   88731807 :           if (b)</span>
+<span class="lineNum">     779 </span><span class="lineCov">   81673966 :             TREE_USED (b) = true;</span>
+<span class="lineNum">     780 </span>            : 
+<span class="lineNum">     781 </span><span class="lineCov">  668565194 :           for (i = 0; i &lt; gimple_num_ops (stmt); i++)</span>
+<span class="lineNum">     782 </span><span class="lineCov">  491101580 :             mark_all_vars_used (gimple_op_ptr (gsi_stmt (gsi), i));</span>
+<span class="lineNum">     783 </span>            :         }
+<span class="lineNum">     784 </span>            : 
+<span class="lineNum">     785 </span><span class="lineCov">   26053063 :       for (gphi_iterator gpi = gsi_start_phis (bb);</span>
+<span class="lineNum">     786 </span><span class="lineCov">   69001880 :            !gsi_end_p (gpi);</span>
+<span class="lineNum">     787 </span><span class="lineCov">    8447877 :            gsi_next (&amp;gpi))</span>
+<span class="lineNum">     788 </span>            :         {
+<span class="lineNum">     789 </span><span class="lineCov">    8447877 :           use_operand_p arg_p;</span>
+<span class="lineNum">     790 </span><span class="lineCov">    8447877 :           ssa_op_iter i;</span>
+<span class="lineNum">     791 </span><span class="lineCov">    8447877 :           tree def;</span>
+<span class="lineNum">     792 </span><span class="lineCov">    8447877 :           gphi *phi = gpi.phi ();</span>
+<span class="lineNum">     793 </span>            : 
+<span class="lineNum">     794 </span><span class="lineCov">   25343631 :           if (virtual_operand_p (gimple_phi_result (phi)))</span>
+<span class="lineNum">     795 </span><span class="lineCov">    4138786 :             continue;</span>
+<span class="lineNum">     796 </span>            : 
+<span class="lineNum">     797 </span><span class="lineCov">    4309091 :           def = gimple_phi_result (phi);</span>
+<span class="lineNum">     798 </span><span class="lineCov">    4309091 :           mark_all_vars_used (&amp;def);</span>
+<span class="lineNum">     799 </span>            : 
+<span class="lineNum">     800 </span><span class="lineCov">   23519997 :           FOR_EACH_PHI_ARG (arg_p, phi, i, SSA_OP_ALL_USES)</span>
+<span class="lineNum">     801 </span>            :             {
+<span class="lineNum">     802 </span><span class="lineCov">    9605453 :               tree arg = USE_FROM_PTR (arg_p);</span>
+<span class="lineNum">     803 </span><span class="lineCov">    9605453 :               int index = PHI_ARG_INDEX_FROM_USE (arg_p);</span>
+<span class="lineNum">     804 </span><span class="lineCov">    9605453 :               tree block =</span>
+<span class="lineNum">     805 </span><span class="lineCov">    9605453 :                 LOCATION_BLOCK (gimple_phi_arg_location (phi, index));</span>
+<span class="lineNum">     806 </span><span class="lineCov">    6194866 :               if (block != NULL)</span>
+<span class="lineNum">     807 </span><span class="lineCov">    6194813 :                 TREE_USED (block) = true;</span>
+<span class="lineNum">     808 </span><span class="lineCov">    9605453 :               mark_all_vars_used (&amp;arg);</span>
+<span class="lineNum">     809 </span>            :             }
+<span class="lineNum">     810 </span>            :         }
+<span class="lineNum">     811 </span>            : 
+<span class="lineNum">     812 </span><span class="lineCov">   88446265 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">     813 </span><span class="lineCov">   72680278 :         if (LOCATION_BLOCK (e-&gt;goto_locus) != NULL)</span>
+<span class="lineNum">     814 </span><span class="lineCov">   49137918 :           TREE_USED (LOCATION_BLOCK (e-&gt;goto_locus)) = true;</span>
+<span class="lineNum">     815 </span>            :     }
+<span class="lineNum">     816 </span>            : 
+<span class="lineNum">     817 </span>            :   /* We do a two-pass approach about the out-of-scope clobbers.  We want
+<span class="lineNum">     818 </span>            :      to remove them if they are the only references to a local variable,
+<span class="lineNum">     819 </span>            :      but we want to retain them when there's any other.  So the first pass
+<span class="lineNum">     820 </span>            :      ignores them, and the second pass (if there were any) tries to remove
+<span class="lineNum">     821 </span>            :      them.  */
+<span class="lineNum">     822 </span><span class="lineCov">    4128655 :   if (have_local_clobbers)</span>
+<span class="lineNum">     823 </span><span class="lineCov">   16368253 :     FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">     824 </span>            :       {
+<span class="lineNum">     825 </span><span class="lineCov">   15170008 :         gimple_stmt_iterator gsi;</span>
+<span class="lineNum">     826 </span>            : 
+<span class="lineNum">     827 </span><span class="lineCov">  312513356 :         for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)</span>
+<span class="lineNum">     828 </span>            :           {
+<span class="lineNum">     829 </span><span class="lineCov">  141086670 :             gimple *stmt = gsi_stmt (gsi);</span>
+<span class="lineNum">     830 </span><span class="lineCov">  141086670 :             tree b = gimple_block (stmt);</span>
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span><span class="lineCov">  141086670 :             if (gimple_clobber_p (stmt))</span>
+<span class="lineNum">     833 </span>            :               {
+<span class="lineNum">     834 </span><span class="lineCov">    4598728 :                 tree lhs = gimple_assign_lhs (stmt);</span>
+<span class="lineNum">     835 </span><span class="lineCov">    4598728 :                 tree base = get_base_address (lhs);</span>
+<span class="lineNum">     836 </span>            :                 /* Remove clobbers referencing unused vars, or clobbers
+<span class="lineNum">     837 </span>            :                    with MEM_REF lhs referencing uninitialized pointers.  */
+<span class="lineNum">     838 </span><span class="lineCov">    3806112 :                 if ((VAR_P (base) &amp;&amp; !is_used_p (base))</span>
+<span class="lineNum">     839 </span><span class="lineCov">    8088639 :                     || (TREE_CODE (lhs) == MEM_REF</span>
+<span class="lineNum">     840 </span><span class="lineCov">    1411160 :                         &amp;&amp; TREE_CODE (TREE_OPERAND (lhs, 0)) == SSA_NAME</span>
+<span class="lineNum">     841 </span><span class="lineCov">     785529 :                         &amp;&amp; SSA_NAME_IS_DEFAULT_DEF (TREE_OPERAND (lhs, 0))</span>
+<span class="lineNum">     842 </span><span class="lineCov">     534945 :                         &amp;&amp; (TREE_CODE (SSA_NAME_VAR (TREE_OPERAND (lhs, 0)))</span>
+<span class="lineNum">     843 </span>            :                             != PARM_DECL)))
+<span class="lineNum">     844 </span>            :                   {
+<span class="lineNum">     845 </span><span class="lineCov">     331832 :                     unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     846 </span><span class="lineCov">     331832 :                     gsi_remove (&amp;gsi, true);</span>
+<span class="lineNum">     847 </span><span class="lineCov">     331832 :                     release_defs (stmt);</span>
+<span class="lineNum">     848 </span><span class="lineCov">     331832 :                     continue;</span>
+<span class="lineNum">     849 </span>            :                   }
+<span class="lineNum">     850 </span><span class="lineCov">    4266896 :                 if (b)</span>
+<span class="lineNum">     851 </span><span class="lineCov">    4264641 :                   TREE_USED (b) = true;</span>
+<span class="lineNum">     852 </span>            :               }
+<span class="lineNum">     853 </span><span class="lineCov">  140754838 :             gsi_next (&amp;gsi);</span>
+<span class="lineNum">     854 </span>            :           }
+<span class="lineNum">     855 </span>            :       }
+<span class="lineNum">     856 </span>            : 
+<span class="lineNum">     857 </span><span class="lineCov">    4128655 :   if (cfun-&gt;has_simduid_loops)</span>
+<span class="lineNum">     858 </span>            :     {
+<span class="lineNum">     859 </span><span class="lineCov">       5247 :       struct loop *loop;</span>
+<span class="lineNum">     860 </span><span class="lineCov">      17961 :       FOR_EACH_LOOP (loop, 0)</span>
+<span class="lineNum">     861 </span><span class="lineCov">       7467 :         if (loop-&gt;simduid &amp;&amp; !is_used_p (loop-&gt;simduid))</span>
+<span class="lineNum">     862 </span><span class="lineCov">         78 :           loop-&gt;simduid = NULL_TREE;</span>
+<span class="lineNum">     863 </span>            :     }
+<span class="lineNum">     864 </span>            : 
+<span class="lineNum">     865 </span><span class="lineCov">    4128655 :   cfun-&gt;has_local_explicit_reg_vars = false;</span>
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span>            :   /* Remove unmarked local and global vars from local_decls.  */
+<span class="lineNum">     868 </span><span class="lineCov">    4128655 :   num = vec_safe_length (cfun-&gt;local_decls);</span>
+<span class="lineNum">     869 </span><span class="lineCov">   29971523 :   for (srcidx = 0, dstidx = 0; srcidx &lt; num; srcidx++)</span>
+<span class="lineNum">     870 </span>            :     {
+<span class="lineNum">     871 </span><span class="lineCov">   25842868 :       var = (*cfun-&gt;local_decls)[srcidx];</span>
+<span class="lineNum">     872 </span><span class="lineCov">   25842868 :       if (VAR_P (var))</span>
+<span class="lineNum">     873 </span>            :         {
+<span class="lineNum">     874 </span><span class="lineCov">   25842868 :           if (!is_used_p (var))</span>
+<span class="lineNum">     875 </span>            :             {
+<span class="lineNum">     876 </span><span class="lineCov">   13700658 :               tree def;</span>
+<span class="lineNum">     877 </span><span class="lineCov">   13700658 :               if (cfun-&gt;nonlocal_goto_save_area</span>
+<span class="lineNum">     878 </span><span class="lineCov">   13700658 :                   &amp;&amp; TREE_OPERAND (cfun-&gt;nonlocal_goto_save_area, 0) == var)</span>
+<span class="lineNum">     879 </span><span class="lineCov">         10 :                 cfun-&gt;nonlocal_goto_save_area = NULL;</span>
+<span class="lineNum">     880 </span>            :               /* Release any default def associated with var.  */
+<span class="lineNum">     881 </span><span class="lineCov">   13700658 :               if ((def = ssa_default_def (cfun, var)) != NULL_TREE)</span>
+<span class="lineNum">     882 </span>            :                 {
+<span class="lineNum">     883 </span><span class="lineCov">     494079 :                   set_ssa_default_def (cfun, var, NULL_TREE);</span>
+<span class="lineNum">     884 </span><span class="lineCov">     494079 :                   release_ssa_name (def);</span>
+<span class="lineNum">     885 </span>            :                 }
+<span class="lineNum">     886 </span><span class="lineCov">   13700658 :               continue;</span>
+<span class="lineNum">     887 </span>            :             }
+<span class="lineNum">     888 </span>            :         }
+<span class="lineNum">     889 </span><span class="lineCov">   12142210 :       if (VAR_P (var) &amp;&amp; DECL_HARD_REGISTER (var) &amp;&amp; !is_global_var (var))</span>
+<span class="lineNum">     890 </span><span class="lineCov">       1760 :         cfun-&gt;has_local_explicit_reg_vars = true;</span>
+<span class="lineNum">     891 </span>            : 
+<span class="lineNum">     892 </span><span class="lineCov">   12142210 :       if (srcidx != dstidx)</span>
+<span class="lineNum">     893 </span><span class="lineCov">    7501808 :         (*cfun-&gt;local_decls)[dstidx] = var;</span>
+<span class="lineNum">     894 </span><span class="lineCov">   12142210 :       dstidx++;</span>
+<span class="lineNum">     895 </span>            :     }
+<span class="lineNum">     896 </span><span class="lineCov">    4128655 :   if (dstidx != num)</span>
+<span class="lineNum">     897 </span>            :     {
+<span class="lineNum">     898 </span><span class="lineCov">    2474719 :       statistics_counter_event (cfun, &quot;unused VAR_DECLs removed&quot;, num - dstidx);</span>
+<span class="lineNum">     899 </span><span class="lineCov">    2474719 :       cfun-&gt;local_decls-&gt;truncate (dstidx);</span>
+<span class="lineNum">     900 </span>            :     }
+<span class="lineNum">     901 </span>            : 
+<span class="lineNum">     902 </span><span class="lineCov">    4128655 :   remove_unused_scope_block_p (DECL_INITIAL (current_function_decl),</span>
+<span class="lineNum">     903 </span><span class="lineCov">    4128655 :                                polymorphic_ctor_dtor_p (current_function_decl,</span>
+<span class="lineNum">     904 </span>            :                                                         true) != NULL_TREE);
+<span class="lineNum">     905 </span><span class="lineCov">    4128655 :   clear_unused_block_pointer ();</span>
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span><span class="lineCov">    4128655 :   BITMAP_FREE (usedvars);</span>
+<span class="lineNum">     908 </span>            : 
+<span class="lineNum">     909 </span><span class="lineCov">    4128655 :   if (dump_file &amp;&amp; (dump_flags &amp; TDF_DETAILS))</span>
+<span class="lineNum">     910 </span>            :     {
+<span class="lineNum">     911 </span><span class="lineCov">         65 :       fprintf (dump_file, &quot;Scope blocks after cleanups:\n&quot;);</span>
+<span class="lineNum">     912 </span><span class="lineCov">         65 :       dump_scope_blocks (dump_file, dump_flags);</span>
+<span class="lineNum">     913 </span>            :     }
+<span class="lineNum">     914 </span>            : 
+<span class="lineNum">     915 </span><span class="lineCov">    4128655 :   timevar_pop (TV_REMOVE_UNUSED);</span>
+<span class="lineNum">     916 </span>            : }
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span>            : /* Allocate and return a new live range information object base on MAP.  */
+<span class="lineNum">     919 </span>            : 
+<span class="lineNum">     920 </span>            : static tree_live_info_p
+<span class="lineNum">     921 </span><span class="lineCov">     738165 : new_tree_live_info (var_map map)</span>
+<span class="lineNum">     922 </span>            : {
+<span class="lineNum">     923 </span><span class="lineCov">     738165 :   tree_live_info_p live;</span>
+<span class="lineNum">     924 </span><span class="lineCov">     738165 :   basic_block bb;</span>
+<span class="lineNum">     925 </span>            : 
+<span class="lineNum">     926 </span><span class="lineCov">     738165 :   live = XNEW (struct tree_live_info_d);</span>
+<span class="lineNum">     927 </span><span class="lineCov">     738165 :   live-&gt;map = map;</span>
+<span class="lineNum">     928 </span><span class="lineCov">     738165 :   live-&gt;num_blocks = last_basic_block_for_fn (cfun);</span>
+<span class="lineNum">     929 </span>            : 
+<span class="lineNum">     930 </span><span class="lineCov">     738165 :   bitmap_obstack_initialize (&amp;live-&gt;livein_obstack);</span>
+<span class="lineNum">     931 </span><span class="lineCov">     738165 :   bitmap_obstack_initialize (&amp;live-&gt;liveout_obstack);</span>
+<span class="lineNum">     932 </span>            : 
+<span class="lineNum">     933 </span><span class="lineCov">     738165 :   live-&gt;livein = XCNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     934 </span><span class="lineCov">     738165 :   live-&gt;liveout = XCNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     935 </span><span class="lineCov">    7190622 :   for (unsigned i = 0; map-&gt;vec_bbs.iterate (i, &amp;bb); ++i)</span>
+<span class="lineNum">     936 </span>            :     {
+<span class="lineNum">     937 </span><span class="lineCov">    6452457 :       bitmap_initialize (&amp;live-&gt;livein[bb-&gt;index], &amp;live-&gt;livein_obstack);</span>
+<span class="lineNum">     938 </span><span class="lineCov">   12904914 :       bitmap_initialize (&amp;live-&gt;liveout[bb-&gt;index], &amp;live-&gt;liveout_obstack);</span>
+<span class="lineNum">     939 </span>            :     }
+<span class="lineNum">     940 </span>            : 
+<span class="lineNum">     941 </span><span class="lineCov">     738165 :   live-&gt;work_stack = XNEWVEC (int, last_basic_block_for_fn (cfun));</span>
+<span class="lineNum">     942 </span><span class="lineCov">     738165 :   live-&gt;stack_top = live-&gt;work_stack;</span>
+<span class="lineNum">     943 </span>            : 
+<span class="lineNum">     944 </span><span class="lineCov">     738165 :   live-&gt;global = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     945 </span><span class="lineCov">     738165 :   return live;</span>
+<span class="lineNum">     946 </span>            : }
+<span class="lineNum">     947 </span>            : 
+<span class="lineNum">     948 </span>            : 
+<span class="lineNum">     949 </span>            : /* Free storage for live range info object LIVE.  */
+<a name="950"><span class="lineNum">     950 </span>            : </a>
+<span class="lineNum">     951 </span>            : void
+<span class="lineNum">     952 </span><span class="lineCov">     738165 : delete_tree_live_info (tree_live_info_p live)</span>
+<span class="lineNum">     953 </span>            : {
+<span class="lineNum">     954 </span><span class="lineCov">     738165 :   if (live-&gt;livein)</span>
+<span class="lineNum">     955 </span>            :     {
+<span class="lineNum">     956 </span><span class="lineNoCov">          0 :       bitmap_obstack_release (&amp;live-&gt;livein_obstack);</span>
+<span class="lineNum">     957 </span><span class="lineNoCov">          0 :       free (live-&gt;livein);</span>
+<span class="lineNum">     958 </span>            :     }
+<span class="lineNum">     959 </span><span class="lineCov">     738165 :   if (live-&gt;liveout)</span>
+<span class="lineNum">     960 </span>            :     {
+<span class="lineNum">     961 </span><span class="lineCov">     738165 :       bitmap_obstack_release (&amp;live-&gt;liveout_obstack);</span>
+<span class="lineNum">     962 </span><span class="lineCov">     738165 :       free (live-&gt;liveout);</span>
+<span class="lineNum">     963 </span>            :     }
+<span class="lineNum">     964 </span><span class="lineCov">     738165 :   BITMAP_FREE (live-&gt;global);</span>
+<span class="lineNum">     965 </span><span class="lineCov">     738165 :   free (live-&gt;work_stack);</span>
+<span class="lineNum">     966 </span><span class="lineCov">     738165 :   free (live);</span>
+<span class="lineNum">     967 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">     968 </span>            : 
+<span class="lineNum">     969 </span>            : 
+<span class="lineNum">     970 </span>            : /* Visit basic block BB and propagate any required live on entry bits from
+<span class="lineNum">     971 </span>            :    LIVE into the predecessors.  VISITED is the bitmap of visited blocks.
+<span class="lineNum">     972 </span>            :    TMP is a temporary work bitmap which is passed in to avoid reallocating
+<span class="lineNum">     973 </span>            :    it each time.  */
+<a name="974"><span class="lineNum">     974 </span>            : </a>
+<span class="lineNum">     975 </span>            : static void
+<span class="lineNum">     976 </span><span class="lineCov">    7437788 : loe_visit_block (tree_live_info_p live, basic_block bb, sbitmap visited)</span>
+<span class="lineNum">     977 </span>            : {
+<span class="lineNum">     978 </span><span class="lineCov">    7437788 :   edge e;</span>
+<span class="lineNum">     979 </span><span class="lineCov">    7437788 :   bool change;</span>
+<span class="lineNum">     980 </span><span class="lineCov">    7437788 :   edge_iterator ei;</span>
+<span class="lineNum">     981 </span><span class="lineCov">    7437788 :   basic_block pred_bb;</span>
+<span class="lineNum">     982 </span><span class="lineCov">    7437788 :   bitmap loe;</span>
+<span class="lineNum">     983 </span>            : 
+<span class="lineNum">     984 </span><span class="lineCov">    7437788 :   gcc_checking_assert (!bitmap_bit_p (visited, bb-&gt;index));</span>
+<span class="lineNum">     985 </span><span class="lineCov">    7437788 :   bitmap_set_bit (visited, bb-&gt;index);</span>
+<span class="lineNum">     986 </span>            : 
+<span class="lineNum">     987 </span><span class="lineCov">    7437788 :   loe = live_on_entry (live, bb);</span>
+<span class="lineNum">     988 </span>            : 
+<span class="lineNum">     989 </span><span class="lineCov">   25706161 :   FOR_EACH_EDGE (e, ei, bb-&gt;preds)</span>
+<span class="lineNum">     990 </span>            :     {
+<span class="lineNum">     991 </span><span class="lineCov">   10830585 :       pred_bb = e-&gt;src;</span>
+<span class="lineNum">     992 </span><span class="lineCov">   21661170 :       if (!region_contains_p (live-&gt;map, pred_bb))</span>
+<span class="lineNum">     993 </span>            :         continue;
+<span class="lineNum">     994 </span>            :       /* Variables live-on-entry from BB that aren't defined in the
+<span class="lineNum">     995 </span>            :          predecessor block.  This should be the live on entry vars to pred.
+<span class="lineNum">     996 </span>            :          Note that liveout is the DEFs in a block while live on entry is
+<span class="lineNum">     997 </span>            :          being calculated.
+<span class="lineNum">     998 </span>            :          Add these bits to live-on-entry for the pred. if there are any
+<span class="lineNum">     999 </span>            :          changes, and pred_bb has been visited already, add it to the
+<span class="lineNum">    1000 </span>            :          revisit stack.  */
+<span class="lineNum">    1001 </span><span class="lineCov">   10084778 :       change = bitmap_ior_and_compl_into (live_on_entry (live, pred_bb),</span>
+<span class="lineNum">    1002 </span><span class="lineCov">   10084778 :                                           loe, &amp;live-&gt;liveout[pred_bb-&gt;index]);</span>
+<span class="lineNum">    1003 </span><span class="lineCov">   10084778 :       if (change</span>
+<span class="lineNum">    1004 </span><span class="lineCov">   10084778 :           &amp;&amp; bitmap_bit_p (visited, pred_bb-&gt;index))</span>
+<span class="lineNum">    1005 </span>            :         {
+<span class="lineNum">    1006 </span><span class="lineCov">     985331 :           bitmap_clear_bit (visited, pred_bb-&gt;index);</span>
+<span class="lineNum">    1007 </span><span class="lineCov">     985331 :           *(live-&gt;stack_top)++ = pred_bb-&gt;index;</span>
+<span class="lineNum">    1008 </span>            :         }
+<span class="lineNum">    1009 </span>            :     }
+<span class="lineNum">    1010 </span><span class="lineCov">    7437788 : }</span>
+<span class="lineNum">    1011 </span>            : 
+<span class="lineNum">    1012 </span>            : 
+<span class="lineNum">    1013 </span>            : /* Using LIVE, fill in all the live-on-entry blocks between the defs and uses
+<span class="lineNum">    1014 </span>            :    of all the variables.  */
+<span class="lineNum">    1015 </span>            : 
+<span class="lineNum">    1016 </span>            : static void
+<span class="lineNum">    1017 </span><span class="lineCov">     738165 : live_worklist (tree_live_info_p live)</span>
+<span class="lineNum">    1018 </span>            : {
+<span class="lineNum">    1019 </span><span class="lineCov">     738165 :   unsigned b;</span>
+<span class="lineNum">    1020 </span><span class="lineCov">     738165 :   basic_block bb;</span>
+<span class="lineNum">    1021 </span><span class="lineCov">     738165 :   auto_sbitmap visited (last_basic_block_for_fn (cfun) + 1);</span>
+<span class="lineNum">    1022 </span>            : 
+<span class="lineNum">    1023 </span><span class="lineCov">    1476330 :   bitmap_clear (visited);</span>
+<span class="lineNum">    1024 </span>            : 
+<span class="lineNum">    1025 </span>            :   /* Visit region's blocks in reverse order and propagate live on entry values
+<span class="lineNum">    1026 </span>            :      into the predecessors blocks.  */
+<span class="lineNum">    1027 </span><span class="lineCov">    7928787 :   for (unsigned i = live-&gt;map-&gt;vec_bbs.length () - 1;</span>
+<span class="lineNum">    1028 </span><span class="lineCov">    7190622 :        live-&gt;map-&gt;vec_bbs.iterate (i, &amp;bb); --i)</span>
+<span class="lineNum">    1029 </span><span class="lineCov">   12904914 :     loe_visit_block (live, bb, visited);</span>
+<span class="lineNum">    1030 </span>            : 
+<span class="lineNum">    1031 </span>            :   /* Process any blocks which require further iteration.  */
+<span class="lineNum">    1032 </span><span class="lineCov">    1723496 :   while (live-&gt;stack_top != live-&gt;work_stack)</span>
+<span class="lineNum">    1033 </span>            :     {
+<span class="lineNum">    1034 </span><span class="lineCov">     985331 :       b = *--(live-&gt;stack_top);</span>
+<span class="lineNum">    1035 </span><span class="lineCov">    1970662 :       loe_visit_block (live, BASIC_BLOCK_FOR_FN (cfun, b), visited);</span>
+<span class="lineNum">    1036 </span>            :     }
+<span class="lineNum">    1037 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">    1038 </span>            : 
+<span class="lineNum">    1039 </span>            : 
+<span class="lineNum">    1040 </span>            : /* Calculate the initial live on entry vector for SSA_NAME using immediate_use
+<span class="lineNum">    1041 </span>            :    links.  Set the live on entry fields in LIVE.  Def's are marked temporarily
+<span class="lineNum">    1042 </span>            :    in the liveout vector.  */
+<span class="lineNum">    1043 </span>            : 
+<span class="lineNum">    1044 </span>            : static void
+<span class="lineNum">    1045 </span><span class="lineCov">    5919299 : set_var_live_on_entry (tree ssa_name, tree_live_info_p live)</span>
+<span class="lineNum">    1046 </span>            : {
+<span class="lineNum">    1047 </span><span class="lineCov">    5919299 :   int p;</span>
+<span class="lineNum">    1048 </span><span class="lineCov">    5919299 :   gimple *stmt;</span>
+<span class="lineNum">    1049 </span><span class="lineCov">    5919299 :   use_operand_p use;</span>
+<span class="lineNum">    1050 </span><span class="lineCov">    5919299 :   basic_block def_bb = NULL;</span>
+<span class="lineNum">    1051 </span><span class="lineCov">    5919299 :   imm_use_iterator imm_iter;</span>
+<span class="lineNum">    1052 </span><span class="lineCov">    5919299 :   bool global = false;</span>
+<span class="lineNum">    1053 </span>            : 
+<span class="lineNum">    1054 </span><span class="lineCov">    5919299 :   p = var_to_partition (live-&gt;map, ssa_name);</span>
+<span class="lineNum">    1055 </span><span class="lineCov">    5919299 :   if (p == NO_PARTITION)</span>
+<span class="lineNum">    1056 </span><span class="lineCov">     414893 :     return;</span>
+<span class="lineNum">    1057 </span>            : 
+<span class="lineNum">    1058 </span><span class="lineCov">    5919299 :   stmt = SSA_NAME_DEF_STMT (ssa_name);</span>
+<span class="lineNum">    1059 </span><span class="lineCov">    5919299 :   if (stmt)</span>
+<span class="lineNum">    1060 </span>            :     {
+<span class="lineNum">    1061 </span><span class="lineCov">    5919299 :       def_bb = gimple_bb (stmt);</span>
+<span class="lineNum">    1062 </span>            :       /* Mark defs in liveout bitmap temporarily.  */
+<span class="lineNum">    1063 </span><span class="lineCov">    9673738 :       if (def_bb &amp;&amp; region_contains_p (live-&gt;map, def_bb))</span>
+<span class="lineNum">    1064 </span><span class="lineCov">    3754439 :         bitmap_set_bit (&amp;live-&gt;liveout[def_bb-&gt;index], p);</span>
+<span class="lineNum">    1065 </span>            :     }
+<span class="lineNum">    1066 </span>            :   else
+<span class="lineNum">    1067 </span><span class="lineNoCov">          0 :     def_bb = ENTRY_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">    1068 </span>            : 
+<span class="lineNum">    1069 </span>            :   /* An undefined local variable does not need to be very alive.  */
+<span class="lineNum">    1070 </span><span class="lineCov">    5919299 :   if (ssa_undefined_value_p (ssa_name, false))</span>
+<span class="lineNum">    1071 </span>            :     return;
+<span class="lineNum">    1072 </span>            : 
+<span class="lineNum">    1073 </span>            :   /* Visit each use of SSA_NAME and if it isn't in the same block as the def,
+<span class="lineNum">    1074 </span>            :      add it to the list of live on entry blocks.  */
+<span class="lineNum">    1075 </span><span class="lineCov">   17758487 :   FOR_EACH_IMM_USE_FAST (use, imm_iter, ssa_name)</span>
+<span class="lineNum">    1076 </span>            :     {
+<span class="lineNum">    1077 </span><span class="lineCov">   12254081 :       gimple *use_stmt = USE_STMT (use);</span>
+<span class="lineNum">    1078 </span><span class="lineCov">   12254081 :       basic_block add_block = NULL;</span>
+<span class="lineNum">    1079 </span>            : 
+<span class="lineNum">    1080 </span><span class="lineCov">   24508162 :       if (gimple_code (use_stmt) == GIMPLE_PHI)</span>
+<span class="lineNum">    1081 </span>            :         {
+<span class="lineNum">    1082 </span>            :           /* Uses in PHI's are considered to be live at exit of the SRC block
+<span class="lineNum">    1083 </span>            :              as this is where a copy would be inserted.  Check to see if it is
+<span class="lineNum">    1084 </span>            :              defined in that block, or whether its live on entry.  */
+<span class="lineNum">    1085 </span><span class="lineCov">    2807806 :           int index = PHI_ARG_INDEX_FROM_USE (use);</span>
+<span class="lineNum">    1086 </span><span class="lineCov">    5615612 :           edge e = gimple_phi_arg_edge (as_a &lt;gphi *&gt; (use_stmt), index);</span>
+<span class="lineNum">    1087 </span><span class="lineCov">    3665741 :           if (e-&gt;src != def_bb &amp;&amp; region_contains_p (live-&gt;map, e-&gt;src))</span>
+<span class="lineNum">    1088 </span><span class="lineCov">     857721 :             add_block = e-&gt;src;</span>
+<span class="lineNum">    1089 </span>            :         }
+<span class="lineNum">    1090 </span><span class="lineCov">   18892550 :       else if (is_gimple_debug (use_stmt))</span>
+<span class="lineNum">    1091 </span>            :         continue;
+<span class="lineNum">    1092 </span>            :       else
+<span class="lineNum">    1093 </span>            :         {
+<span class="lineNum">    1094 </span>            :           /* If its not defined in this block, its live on entry.  */
+<span class="lineNum">    1095 </span><span class="lineCov">    6840005 :           basic_block use_bb = gimple_bb (use_stmt);</span>
+<span class="lineNum">    1096 </span><span class="lineCov">   11370129 :           if (use_bb != def_bb &amp;&amp; region_contains_p (live-&gt;map, use_bb))</span>
+<span class="lineNum">    1097 </span>            :             add_block = use_bb;
+<span class="lineNum">    1098 </span>            :         }
+<span class="lineNum">    1099 </span>            : 
+<span class="lineNum">    1100 </span>            :       /* If there was a live on entry use, set the bit.  */
+<span class="lineNum">    1101 </span><span class="lineCov">    5387845 :       if (add_block)</span>
+<span class="lineNum">    1102 </span>            :         {
+<span class="lineNum">    1103 </span><span class="lineCov">    5387845 :           global = true;</span>
+<span class="lineNum">    1104 </span><span class="lineCov">    5387845 :           bitmap_set_bit (&amp;live-&gt;livein[add_block-&gt;index], p);</span>
+<span class="lineNum">    1105 </span>            :         }
+<span class="lineNum">    1106 </span>            :     }
+<span class="lineNum">    1107 </span>            : 
+<span class="lineNum">    1108 </span>            :   /* If SSA_NAME is live on entry to at least one block, fill in all the live
+<span class="lineNum">    1109 </span>            :      on entry blocks between the def and all the uses.  */
+<span class="lineNum">    1110 </span><span class="lineCov">    5504406 :   if (global)</span>
+<span class="lineNum">    1111 </span><span class="lineCov">    2109163 :     bitmap_set_bit (live-&gt;global, p);</span>
+<span class="lineNum">    1112 </span>            : }
+<span class="lineNum">    1113 </span>            : 
+<span class="lineNum">    1114 </span>            : 
+<span class="lineNum">    1115 </span>            : /* Calculate the live on exit vectors based on the entry info in LIVEINFO.  */
+<span class="lineNum">    1116 </span>            : 
+<span class="lineNum">    1117 </span>            : static void
+<span class="lineNum">    1118 </span><span class="lineCov">     738165 : calculate_live_on_exit (tree_live_info_p liveinfo)</span>
+<span class="lineNum">    1119 </span>            : {
+<span class="lineNum">    1120 </span><span class="lineCov">     738165 :   basic_block bb;</span>
+<span class="lineNum">    1121 </span><span class="lineCov">     738165 :   edge e;</span>
+<span class="lineNum">    1122 </span><span class="lineCov">     738165 :   edge_iterator ei;</span>
+<span class="lineNum">    1123 </span>            : 
+<span class="lineNum">    1124 </span>            :   /* live on entry calculations used liveout vectors for defs, clear them.  */
+<span class="lineNum">    1125 </span><span class="lineCov">    7190622 :   for (unsigned i = 0; liveinfo-&gt;map-&gt;vec_bbs.iterate (i, &amp;bb); ++i)</span>
+<span class="lineNum">    1126 </span><span class="lineCov">    6452457 :     bitmap_clear (&amp;liveinfo-&gt;liveout[bb-&gt;index]);</span>
+<span class="lineNum">    1127 </span>            : 
+<span class="lineNum">    1128 </span>            :   /* Set all the live-on-exit bits for uses in PHIs.  */
+<span class="lineNum">    1129 </span><span class="lineCov">    7190622 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1130 </span>            :     {
+<span class="lineNum">    1131 </span><span class="lineCov">    6452457 :       gphi_iterator gsi;</span>
+<span class="lineNum">    1132 </span><span class="lineCov">    6452457 :       size_t i;</span>
+<span class="lineNum">    1133 </span>            : 
+<span class="lineNum">    1134 </span>            :       /* Mark the PHI arguments which are live on exit to the pred block.  */
+<span class="lineNum">    1135 </span><span class="lineCov">    7842516 :       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1136 </span>            :         {
+<span class="lineNum">    1137 </span><span class="lineCov">    1390059 :           gphi *phi = gsi.phi ();</span>
+<span class="lineNum">    1138 </span><span class="lineCov">    4170177 :           if (virtual_operand_p (gimple_phi_result (phi)))</span>
+<span class="lineNum">    1139 </span>            :             continue;
+<span class="lineNum">    1140 </span><span class="lineCov">    4772842 :           for (i = 0; i &lt; gimple_phi_num_args (phi); i++)</span>
+<span class="lineNum">    1141 </span>            :             {
+<span class="lineNum">    1142 </span><span class="lineCov">    3382783 :               tree t = PHI_ARG_DEF (phi, i);</span>
+<span class="lineNum">    1143 </span><span class="lineCov">    3382783 :               int p;</span>
+<span class="lineNum">    1144 </span>            : 
+<span class="lineNum">    1145 </span><span class="lineCov">    3382783 :               if (TREE_CODE (t) != SSA_NAME)</span>
+<span class="lineNum">    1146 </span>            :                 continue;
+<span class="lineNum">    1147 </span>            : 
+<span class="lineNum">    1148 </span><span class="lineCov">    2817913 :               p = var_to_partition (liveinfo-&gt;map, t);</span>
+<span class="lineNum">    1149 </span><span class="lineCov">    2817913 :               if (p == NO_PARTITION)</span>
+<span class="lineNum">    1150 </span>            :                 continue;
+<span class="lineNum">    1151 </span><span class="lineCov">    2817812 :               e = gimple_phi_arg_edge (phi, i);</span>
+<span class="lineNum">    1152 </span><span class="lineCov">    5635624 :               if (region_contains_p (liveinfo-&gt;map, e-&gt;src))</span>
+<span class="lineNum">    1153 </span><span class="lineCov">    2817532 :                 bitmap_set_bit (&amp;liveinfo-&gt;liveout[e-&gt;src-&gt;index], p);</span>
+<span class="lineNum">    1154 </span>            :             }
+<span class="lineNum">    1155 </span>            :         }
+<span class="lineNum">    1156 </span>            : 
+<span class="lineNum">    1157 </span><span class="lineCov">   12904914 :       if (!region_contains_p (liveinfo-&gt;map, bb))</span>
+<span class="lineNum">    1158 </span><span class="lineNoCov">          0 :         continue;</span>
+<span class="lineNum">    1159 </span>            : 
+<span class="lineNum">    1160 </span>            :       /* Add each successors live on entry to this bock live on exit.  */
+<span class="lineNum">    1161 </span><span class="lineCov">   22283120 :       FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1162 </span><span class="lineCov">   18756412 :         if (region_contains_p (liveinfo-&gt;map, e-&gt;dest))</span>
+<span class="lineNum">    1163 </span><span class="lineCov">    8655370 :           bitmap_ior_into (&amp;liveinfo-&gt;liveout[bb-&gt;index],</span>
+<span class="lineNum">    1164 </span><span class="lineCov">    8655370 :                            live_on_entry (liveinfo, e-&gt;dest));</span>
+<span class="lineNum">    1165 </span>            :     }
+<span class="lineNum">    1166 </span><span class="lineCov">     738165 : }</span>
+<span class="lineNum">    1167 </span>            : 
+<span class="lineNum">    1168 </span>            : 
+<span class="lineNum">    1169 </span>            : /* Given partition map MAP, calculate all the live on entry bitmaps for
+<span class="lineNum">    1170 </span>            :    each partition.  Return a new live info object.  */
+<a name="1171"><span class="lineNum">    1171 </span>            : </a>
+<span class="lineNum">    1172 </span>            : tree_live_info_p
+<span class="lineNum">    1173 </span><span class="lineCov">     738165 : calculate_live_ranges (var_map map, bool want_livein)</span>
+<span class="lineNum">    1174 </span>            : {
+<span class="lineNum">    1175 </span><span class="lineCov">     738165 :   tree var;</span>
+<span class="lineNum">    1176 </span><span class="lineCov">     738165 :   unsigned i;</span>
+<span class="lineNum">    1177 </span><span class="lineCov">     738165 :   tree_live_info_p live;</span>
+<span class="lineNum">    1178 </span>            : 
+<span class="lineNum">    1179 </span><span class="lineCov">     738165 :   live = new_tree_live_info (map);</span>
+<span class="lineNum">    1180 </span><span class="lineCov">    6657464 :   for (i = 0; i &lt; num_var_partitions (map); i++)</span>
+<span class="lineNum">    1181 </span>            :     {
+<span class="lineNum">    1182 </span><span class="lineCov">    5919299 :       var = partition_to_var (map, i);</span>
+<span class="lineNum">    1183 </span><span class="lineCov">    5919299 :       if (var != NULL_TREE)</span>
+<span class="lineNum">    1184 </span><span class="lineCov">    5919299 :         set_var_live_on_entry (var, live);</span>
+<span class="lineNum">    1185 </span>            :     }
+<span class="lineNum">    1186 </span>            : 
+<span class="lineNum">    1187 </span><span class="lineCov">     738165 :   live_worklist (live);</span>
+<span class="lineNum">    1188 </span>            : 
+<span class="lineNum">    1189 </span><span class="lineCov">     738165 :   if (flag_checking)</span>
+<span class="lineNum">    1190 </span><span class="lineCov">     738154 :     verify_live_on_entry (live);</span>
+<span class="lineNum">    1191 </span>            : 
+<span class="lineNum">    1192 </span><span class="lineCov">     738165 :   calculate_live_on_exit (live);</span>
+<span class="lineNum">    1193 </span>            : 
+<span class="lineNum">    1194 </span><span class="lineCov">     738165 :   if (!want_livein)</span>
+<span class="lineNum">    1195 </span>            :     {
+<span class="lineNum">    1196 </span><span class="lineCov">     738165 :       bitmap_obstack_release (&amp;live-&gt;livein_obstack);</span>
+<span class="lineNum">    1197 </span><span class="lineCov">     738165 :       free (live-&gt;livein);</span>
+<span class="lineNum">    1198 </span><span class="lineCov">     738165 :       live-&gt;livein = NULL;</span>
+<span class="lineNum">    1199 </span>            :     }
+<span class="lineNum">    1200 </span>            : 
+<span class="lineNum">    1201 </span><span class="lineCov">     738165 :   return live;</span>
+<span class="lineNum">    1202 </span>            : }
+<span class="lineNum">    1203 </span>            : 
+<span class="lineNum">    1204 </span>            : 
+<span class="lineNum">    1205 </span>            : /* Output partition map MAP to file F.  */
+<span class="lineNum">    1206 </span>            : 
+<span class="lineNum">    1207 </span>            : void
+<span class="lineNum">    1208 </span><span class="lineCov">        120 : dump_var_map (FILE *f, var_map map)</span>
+<span class="lineNum">    1209 </span>            : {
+<span class="lineNum">    1210 </span><span class="lineCov">        120 :   int t;</span>
+<span class="lineNum">    1211 </span><span class="lineCov">        120 :   unsigned x, y;</span>
+<span class="lineNum">    1212 </span><span class="lineCov">        120 :   int p;</span>
+<span class="lineNum">    1213 </span>            : 
+<span class="lineNum">    1214 </span><span class="lineCov">        120 :   fprintf (f, &quot;\nPartition map \n\n&quot;);</span>
+<span class="lineNum">    1215 </span>            : 
+<span class="lineNum">    1216 </span><span class="lineCov">        658 :   for (x = 0; x &lt; map-&gt;num_partitions; x++)</span>
+<span class="lineNum">    1217 </span>            :     {
+<span class="lineNum">    1218 </span><span class="lineCov">        538 :       if (map-&gt;view_to_partition != NULL)</span>
+<span class="lineNum">    1219 </span><span class="lineCov">        252 :         p = map-&gt;view_to_partition[x];</span>
+<span class="lineNum">    1220 </span>            :       else
+<span class="lineNum">    1221 </span><span class="lineCov">        286 :         p = x;</span>
+<span class="lineNum">    1222 </span>            : 
+<span class="lineNum">    1223 </span><span class="lineCov">        538 :       if (ssa_name (p) == NULL_TREE</span>
+<span class="lineNum">    1224 </span><span class="lineCov">       1002 :           || virtual_operand_p (ssa_name (p)))</span>
+<span class="lineNum">    1225 </span>            :         continue;
+<span class="lineNum">    1226 </span>            : 
+<span class="lineNum">    1227 </span>            :       t = 0;
+<span class="lineNum">    1228 </span><span class="lineCov">      15338 :       for (y = 1; y &lt; num_ssa_names; y++)</span>
+<span class="lineNum">    1229 </span>            :         {
+<span class="lineNum">    1230 </span><span class="lineCov">       7282 :           p = partition_find (map-&gt;var_partition, y);</span>
+<span class="lineNum">    1231 </span><span class="lineCov">       7282 :           if (map-&gt;partition_to_view)</span>
+<span class="lineNum">    1232 </span><span class="lineCov">       4561 :             p = map-&gt;partition_to_view[p];</span>
+<span class="lineNum">    1233 </span><span class="lineCov">       7282 :           if (p == (int)x)</span>
+<span class="lineNum">    1234 </span>            :             {
+<span class="lineNum">    1235 </span><span class="lineCov">        410 :               if (t++ == 0)</span>
+<span class="lineNum">    1236 </span>            :                 {
+<span class="lineNum">    1237 </span><span class="lineCov">        387 :                   fprintf (f, &quot;Partition %d (&quot;, x);</span>
+<span class="lineNum">    1238 </span><span class="lineCov">        387 :                   print_generic_expr (f, partition_to_var (map, p), TDF_SLIM);</span>
+<span class="lineNum">    1239 </span><span class="lineCov">        387 :                   fprintf (f, &quot; - &quot;);</span>
+<span class="lineNum">    1240 </span>            :                 }
+<span class="lineNum">    1241 </span><span class="lineCov">        410 :               fprintf (f, &quot;%d &quot;, y);</span>
+<span class="lineNum">    1242 </span>            :             }
+<span class="lineNum">    1243 </span>            :         }
+<span class="lineNum">    1244 </span><span class="lineCov">        387 :       if (t != 0)</span>
+<span class="lineNum">    1245 </span><span class="lineCov">        387 :         fprintf (f, &quot;)\n&quot;);</span>
+<span class="lineNum">    1246 </span>            :     }
+<span class="lineNum">    1247 </span><span class="lineCov">        120 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1248 </span><span class="lineCov">        120 : }</span>
+<span class="lineNum">    1249 </span>            : 
+<span class="lineNum">    1250 </span>            : 
+<span class="lineNum">    1251 </span>            : /* Generic dump for the above.  */
+<a name="1252"><span class="lineNum">    1252 </span>            : </a>
+<span class="lineNum">    1253 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1254 </span><span class="lineNoCov">          0 : debug (_var_map &amp;ref)</span>
+<span class="lineNum">    1255 </span>            : {
+<span class="lineNum">    1256 </span><span class="lineNoCov">          0 :   dump_var_map (stderr, &amp;ref);</span>
+<span class="lineNum">    1257 </span><span class="lineNoCov">          0 : }</span>
+<a name="1258"><span class="lineNum">    1258 </span>            : </a>
+<span class="lineNum">    1259 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1260 </span><span class="lineNoCov">          0 : debug (_var_map *ptr)</span>
+<span class="lineNum">    1261 </span>            : {
+<span class="lineNum">    1262 </span><span class="lineNoCov">          0 :   if (ptr)</span>
+<span class="lineNum">    1263 </span><span class="lineNoCov">          0 :     debug (*ptr);</span>
+<span class="lineNum">    1264 </span>            :   else
+<span class="lineNum">    1265 </span><span class="lineNoCov">          0 :     fprintf (stderr, &quot;&lt;nil&gt;\n&quot;);</span>
+<span class="lineNum">    1266 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1267 </span>            : 
+<span class="lineNum">    1268 </span>            : 
+<span class="lineNum">    1269 </span>            : /* Output live range info LIVE to file F, controlled by FLAG.  */
+<a name="1270"><span class="lineNum">    1270 </span>            : </a>
+<span class="lineNum">    1271 </span>            : void
+<span class="lineNum">    1272 </span><span class="lineCov">         28 : dump_live_info (FILE *f, tree_live_info_p live, int flag)</span>
+<span class="lineNum">    1273 </span>            : {
+<span class="lineNum">    1274 </span><span class="lineCov">         28 :   basic_block bb;</span>
+<span class="lineNum">    1275 </span><span class="lineCov">         28 :   unsigned i;</span>
+<span class="lineNum">    1276 </span><span class="lineCov">         28 :   var_map map = live-&gt;map;</span>
+<span class="lineNum">    1277 </span><span class="lineCov">         28 :   bitmap_iterator bi;</span>
+<span class="lineNum">    1278 </span>            : 
+<span class="lineNum">    1279 </span><span class="lineCov">         28 :   if ((flag &amp; LIVEDUMP_ENTRY) &amp;&amp; live-&gt;livein)</span>
+<span class="lineNum">    1280 </span>            :     {
+<span class="lineNum">    1281 </span><span class="lineNoCov">          0 :       FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1282 </span>            :         {
+<span class="lineNum">    1283 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;\nLive on entry to BB%d : &quot;, bb-&gt;index);</span>
+<span class="lineNum">    1284 </span><span class="lineNoCov">          0 :           EXECUTE_IF_SET_IN_BITMAP (&amp;live-&gt;livein[bb-&gt;index], 0, i, bi)</span>
+<span class="lineNum">    1285 </span>            :             {
+<span class="lineNum">    1286 </span><span class="lineNoCov">          0 :               print_generic_expr (f, partition_to_var (map, i), TDF_SLIM);</span>
+<span class="lineNum">    1287 </span><span class="lineNoCov">          0 :               fprintf (f, &quot;  &quot;);</span>
+<span class="lineNum">    1288 </span>            :             }
+<span class="lineNum">    1289 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1290 </span>            :         }
+<span class="lineNum">    1291 </span>            :     }
+<span class="lineNum">    1292 </span>            : 
+<span class="lineNum">    1293 </span><span class="lineCov">         28 :   if ((flag &amp; LIVEDUMP_EXIT) &amp;&amp; live-&gt;liveout)</span>
+<span class="lineNum">    1294 </span>            :     {
+<span class="lineNum">    1295 </span><span class="lineNoCov">          0 :       FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">    1296 </span>            :         {
+<span class="lineNum">    1297 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;\nLive on exit from BB%d : &quot;, bb-&gt;index);</span>
+<span class="lineNum">    1298 </span><span class="lineNoCov">          0 :           EXECUTE_IF_SET_IN_BITMAP (&amp;live-&gt;liveout[bb-&gt;index], 0, i, bi)</span>
+<span class="lineNum">    1299 </span>            :             {
+<span class="lineNum">    1300 </span><span class="lineNoCov">          0 :               print_generic_expr (f, partition_to_var (map, i), TDF_SLIM);</span>
+<span class="lineNum">    1301 </span><span class="lineNoCov">          0 :               fprintf (f, &quot;  &quot;);</span>
+<span class="lineNum">    1302 </span>            :             }
+<span class="lineNum">    1303 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1304 </span>            :         }
+<span class="lineNum">    1305 </span>            :     }
+<span class="lineNum">    1306 </span><span class="lineCov">         28 : }</span>
+<span class="lineNum">    1307 </span>            : 
+<span class="lineNum">    1308 </span>            : 
+<span class="lineNum">    1309 </span>            : /* Generic dump for the above.  */
+<a name="1310"><span class="lineNum">    1310 </span>            : </a>
+<span class="lineNum">    1311 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1312 </span><span class="lineNoCov">          0 : debug (tree_live_info_d &amp;ref)</span>
+<span class="lineNum">    1313 </span>            : {
+<span class="lineNum">    1314 </span><span class="lineNoCov">          0 :   dump_live_info (stderr, &amp;ref, 0);</span>
+<span class="lineNum">    1315 </span><span class="lineNoCov">          0 : }</span>
+<a name="1316"><span class="lineNum">    1316 </span>            : </a>
+<span class="lineNum">    1317 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1318 </span><span class="lineNoCov">          0 : debug (tree_live_info_d *ptr)</span>
+<span class="lineNum">    1319 </span>            : {
+<span class="lineNum">    1320 </span><span class="lineNoCov">          0 :   if (ptr)</span>
+<span class="lineNum">    1321 </span><span class="lineNoCov">          0 :     debug (*ptr);</span>
+<span class="lineNum">    1322 </span>            :   else
+<span class="lineNum">    1323 </span><span class="lineNoCov">          0 :     fprintf (stderr, &quot;&lt;nil&gt;\n&quot;);</span>
+<span class="lineNum">    1324 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1325 </span>            : 
+<span class="lineNum">    1326 </span>            : 
+<span class="lineNum">    1327 </span>            : /* Verify that the info in LIVE matches the current cfg.  */
+<a name="1328"><span class="lineNum">    1328 </span>            : </a>
+<span class="lineNum">    1329 </span>            : static void
+<span class="lineNum">    1330 </span><span class="lineCov">     738154 : verify_live_on_entry (tree_live_info_p live)</span>
+<span class="lineNum">    1331 </span>            : {
+<span class="lineNum">    1332 </span><span class="lineCov">     738154 :   unsigned i;</span>
+<span class="lineNum">    1333 </span><span class="lineCov">     738154 :   tree var;</span>
+<span class="lineNum">    1334 </span><span class="lineCov">     738154 :   gimple *stmt;</span>
+<span class="lineNum">    1335 </span><span class="lineCov">     738154 :   basic_block bb;</span>
+<span class="lineNum">    1336 </span><span class="lineCov">     738154 :   edge e;</span>
+<span class="lineNum">    1337 </span><span class="lineCov">     738154 :   int num;</span>
+<span class="lineNum">    1338 </span><span class="lineCov">     738154 :   edge_iterator ei;</span>
+<span class="lineNum">    1339 </span><span class="lineCov">     738154 :   var_map map = live-&gt;map;</span>
+<span class="lineNum">    1340 </span>            : 
+<span class="lineNum">    1341 </span>            :    /* Check for live on entry partitions and report those with a DEF in
+<span class="lineNum">    1342 </span>            :       the program. This will typically mean an optimization has done
+<span class="lineNum">    1343 </span>            :       something wrong.  */
+<span class="lineNum">    1344 </span><span class="lineCov">     738154 :   bb = ENTRY_BLOCK_PTR_FOR_FN (cfun);</span>
+<span class="lineNum">    1345 </span><span class="lineCov">     738154 :   num = 0;</span>
+<span class="lineNum">    1346 </span><span class="lineCov">    2214462 :   FOR_EACH_EDGE (e, ei, bb-&gt;succs)</span>
+<span class="lineNum">    1347 </span>            :     {
+<span class="lineNum">    1348 </span><span class="lineCov">     738154 :       int entry_block = e-&gt;dest-&gt;index;</span>
+<span class="lineNum">    1349 </span><span class="lineCov">    1476308 :       if (!region_contains_p (live-&gt;map, e-&gt;dest))</span>
+<span class="lineNum">    1350 </span>            :         continue;
+<span class="lineNum">    1351 </span><span class="lineCov">    7395515 :       for (i = 0; i &lt; (unsigned)num_var_partitions (map); i++)</span>
+<span class="lineNum">    1352 </span>            :         {
+<span class="lineNum">    1353 </span><span class="lineCov">    5919207 :           basic_block tmp;</span>
+<span class="lineNum">    1354 </span><span class="lineCov">    5919207 :           tree d = NULL_TREE;</span>
+<span class="lineNum">    1355 </span><span class="lineCov">    5919207 :           bitmap loe;</span>
+<span class="lineNum">    1356 </span><span class="lineCov">    5919207 :           var = partition_to_var (map, i);</span>
+<span class="lineNum">    1357 </span><span class="lineCov">    5919207 :           stmt = SSA_NAME_DEF_STMT (var);</span>
+<span class="lineNum">    1358 </span><span class="lineCov">    5919207 :           tmp = gimple_bb (stmt);</span>
+<span class="lineNum">    1359 </span><span class="lineCov">   11838414 :           if (SSA_NAME_VAR (var))</span>
+<span class="lineNum">    1360 </span><span class="lineCov">    8494950 :             d = ssa_default_def (cfun, SSA_NAME_VAR (var));</span>
+<span class="lineNum">    1361 </span>            : 
+<span class="lineNum">    1362 </span><span class="lineCov">    5919207 :           loe = live_on_entry (live, e-&gt;dest);</span>
+<span class="lineNum">    1363 </span><span class="lineCov">    5919207 :           if (loe &amp;&amp; bitmap_bit_p (loe, i))</span>
+<span class="lineNum">    1364 </span>            :             {
+<span class="lineNum">    1365 </span><span class="lineCov">    1999410 :               if (!gimple_nop_p (stmt))</span>
+<span class="lineNum">    1366 </span>            :                 {
+<span class="lineNum">    1367 </span><span class="lineNoCov">          0 :                   num++;</span>
+<span class="lineNum">    1368 </span><span class="lineNoCov">          0 :                   print_generic_expr (stderr, var, TDF_SLIM);</span>
+<span class="lineNum">    1369 </span><span class="lineNoCov">          0 :                   fprintf (stderr, &quot; is defined &quot;);</span>
+<span class="lineNum">    1370 </span><span class="lineNoCov">          0 :                   if (tmp)</span>
+<span class="lineNum">    1371 </span><span class="lineNoCov">          0 :                     fprintf (stderr, &quot; in BB%d, &quot;, tmp-&gt;index);</span>
+<span class="lineNum">    1372 </span><span class="lineNoCov">          0 :                   fprintf (stderr, &quot;by:\n&quot;);</span>
+<span class="lineNum">    1373 </span><span class="lineNoCov">          0 :                   print_gimple_stmt (stderr, stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">    1374 </span><span class="lineNoCov">          0 :                   fprintf (stderr, &quot;\nIt is also live-on-entry to entry BB %d&quot;,</span>
+<span class="lineNum">    1375 </span>            :                            entry_block);
+<span class="lineNum">    1376 </span><span class="lineNoCov">          0 :                   fprintf (stderr, &quot; So it appears to have multiple defs.\n&quot;);</span>
+<span class="lineNum">    1377 </span>            :                 }
+<span class="lineNum">    1378 </span>            :               else
+<span class="lineNum">    1379 </span>            :                 {
+<span class="lineNum">    1380 </span><span class="lineCov">     999705 :                   if (d != var)</span>
+<span class="lineNum">    1381 </span>            :                     {
+<span class="lineNum">    1382 </span><span class="lineNoCov">          0 :                       num++;</span>
+<span class="lineNum">    1383 </span><span class="lineNoCov">          0 :                       print_generic_expr (stderr, var, TDF_SLIM);</span>
+<span class="lineNum">    1384 </span><span class="lineNoCov">          0 :                       fprintf (stderr, &quot; is live-on-entry to BB%d &quot;,</span>
+<span class="lineNum">    1385 </span>            :                                entry_block);
+<span class="lineNum">    1386 </span><span class="lineNoCov">          0 :                       if (d)</span>
+<span class="lineNum">    1387 </span>            :                         {
+<span class="lineNum">    1388 </span><span class="lineNoCov">          0 :                           fprintf (stderr, &quot; but is not the default def of &quot;);</span>
+<span class="lineNum">    1389 </span><span class="lineNoCov">          0 :                           print_generic_expr (stderr, d, TDF_SLIM);</span>
+<span class="lineNum">    1390 </span><span class="lineNoCov">          0 :                           fprintf (stderr, &quot;\n&quot;);</span>
+<span class="lineNum">    1391 </span>            :                         }
+<span class="lineNum">    1392 </span>            :                       else
+<span class="lineNum">    1393 </span><span class="lineNoCov">          0 :                         fprintf (stderr, &quot; and there is no default def.\n&quot;);</span>
+<span class="lineNum">    1394 </span>            :                     }
+<span class="lineNum">    1395 </span>            :                 }
+<span class="lineNum">    1396 </span>            :             }
+<span class="lineNum">    1397 </span>            :           else
+<span class="lineNum">    1398 </span><span class="lineCov">    4919502 :             if (d == var)</span>
+<span class="lineNum">    1399 </span>            :               {
+<span class="lineNum">    1400 </span>            :                 /* An undefined local variable does not need to be very
+<span class="lineNum">    1401 </span>            :                    alive.  */
+<span class="lineNum">    1402 </span><span class="lineCov">    1165136 :                 if (ssa_undefined_value_p (var, false))</span>
+<span class="lineNum">    1403 </span><span class="lineCov">    1165136 :                   continue;</span>
+<span class="lineNum">    1404 </span>            : 
+<span class="lineNum">    1405 </span>            :                 /* The only way this var shouldn't be marked live on entry is
+<span class="lineNum">    1406 </span>            :                    if it occurs in a PHI argument of the block.  */
+<span class="lineNum">    1407 </span><span class="lineCov">     750250 :                 size_t z;</span>
+<span class="lineNum">    1408 </span><span class="lineCov">     750250 :                 bool ok = false;</span>
+<span class="lineNum">    1409 </span><span class="lineCov">     750250 :                 gphi_iterator gsi;</span>
+<span class="lineNum">    1410 </span><span class="lineCov">     750250 :                 for (gsi = gsi_start_phis (e-&gt;dest);</span>
+<span class="lineNum">    1411 </span><span class="lineCov">    1501064 :                      !gsi_end_p (gsi) &amp;&amp; !ok;</span>
+<span class="lineNum">    1412 </span><span class="lineCov">        282 :                      gsi_next (&amp;gsi))</span>
+<span class="lineNum">    1413 </span>            :                   {
+<span class="lineNum">    1414 </span><span class="lineCov">        282 :                     gphi *phi = gsi.phi ();</span>
+<span class="lineNum">    1415 </span><span class="lineCov">        846 :                     if (virtual_operand_p (gimple_phi_result (phi)))</span>
+<span class="lineNum">    1416 </span>            :                       continue;
+<span class="lineNum">    1417 </span><span class="lineCov">        715 :                     for (z = 0; z &lt; gimple_phi_num_args (phi); z++)</span>
+<span class="lineNum">    1418 </span><span class="lineCov">        359 :                       if (var == gimple_phi_arg_def (phi, z))</span>
+<span class="lineNum">    1419 </span>            :                         {
+<span class="lineNum">    1420 </span>            :                           ok = true;
+<span class="lineNum">    1421 </span>            :                           break;
+<span class="lineNum">    1422 </span>            :                         }
+<span class="lineNum">    1423 </span>            :                   }
+<span class="lineNum">    1424 </span><span class="lineCov">     750250 :                 if (ok)</span>
+<span class="lineNum">    1425 </span>            :                   continue;
+<span class="lineNum">    1426 </span>            :                 /* Expand adds unused default defs for PARM_DECLs and
+<span class="lineNum">    1427 </span>            :                    RESULT_DECLs.  They're ok.  */
+<span class="lineNum">    1428 </span><span class="lineCov">     750042 :                 if (has_zero_uses (var)</span>
+<span class="lineNum">    1429 </span><span class="lineCov">     750042 :                     &amp;&amp; SSA_NAME_VAR (var)</span>
+<span class="lineNum">    1430 </span><span class="lineCov">    2250126 :                     &amp;&amp; !VAR_P (SSA_NAME_VAR (var)))</span>
+<span class="lineNum">    1431 </span>            :                   continue;
+<span class="lineNum">    1432 </span><span class="lineNoCov">          0 :                 num++;</span>
+<span class="lineNum">    1433 </span><span class="lineNoCov">          0 :                 print_generic_expr (stderr, var, TDF_SLIM);</span>
+<span class="lineNum">    1434 </span><span class="lineNoCov">          0 :                 fprintf (stderr, &quot; is not marked live-on-entry to entry BB%d &quot;,</span>
+<span class="lineNum">    1435 </span>            :                          entry_block);
+<span class="lineNum">    1436 </span><span class="lineNoCov">          0 :                 fprintf (stderr, &quot;but it is a default def so it should be.\n&quot;);</span>
+<span class="lineNum">    1437 </span>            :               }
+<span class="lineNum">    1438 </span>            :         }
+<span class="lineNum">    1439 </span>            :     }
+<span class="lineNum">    1440 </span><span class="lineCov">     738154 :   gcc_assert (num &lt;= 0);</span>
+<span class="lineNum">    1441 </span><span class="lineCov">     738154 : }</span>
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

@@ -1,0 +1,1431 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/tree-ssa-operands.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - tree-ssa-operands.c<span style="font-size: 80%;"> (source / <a href="tree-ssa-operands.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">507</td>
+            <td class="headerCovTableEntry">588</td>
+            <td class="headerCovTableEntryMed">86.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">30</td>
+            <td class="headerCovTableEntry">34</td>
+            <td class="headerCovTableEntryMed">88.2 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* SSA operands management for trees.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2003-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify
+<span class="lineNum">       7 </span>            : it under the terms of the GNU General Public License as published by
+<span class="lineNum">       8 </span>            : the Free Software Foundation; either version 3, or (at your option)
+<span class="lineNum">       9 </span>            : any later version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful,
+<span class="lineNum">      12 </span>            : but WITHOUT ANY WARRANTY; without even the implied warranty of
+<span class="lineNum">      13 </span>            : MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+<span class="lineNum">      14 </span>            : GNU General Public License for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      21 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tree.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;gimple.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;timevar.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;ssa.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;gimple-pretty-print.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;diagnostic-core.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;stmt.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;print-tree.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;dumpfile.h&quot;
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : /* This file contains the code required to manage the operands cache of the
+<span class="lineNum">      36 </span>            :    SSA optimizer.  For every stmt, we maintain an operand cache in the stmt
+<span class="lineNum">      37 </span>            :    annotation.  This cache contains operands that will be of interest to
+<span class="lineNum">      38 </span>            :    optimizers and other passes wishing to manipulate the IL.
+<span class="lineNum">      39 </span>            : 
+<span class="lineNum">      40 </span>            :    The operand type are broken up into REAL and VIRTUAL operands.  The real
+<span class="lineNum">      41 </span>            :    operands are represented as pointers into the stmt's operand tree.  Thus
+<span class="lineNum">      42 </span>            :    any manipulation of the real operands will be reflected in the actual tree.
+<span class="lineNum">      43 </span>            :    Virtual operands are represented solely in the cache, although the base
+<span class="lineNum">      44 </span>            :    variable for the SSA_NAME may, or may not occur in the stmt's tree.
+<span class="lineNum">      45 </span>            :    Manipulation of the virtual operands will not be reflected in the stmt tree.
+<span class="lineNum">      46 </span>            : 
+<span class="lineNum">      47 </span>            :    The routines in this file are concerned with creating this operand cache
+<span class="lineNum">      48 </span>            :    from a stmt tree.
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span>            :    The operand tree is the parsed by the various get_* routines which look
+<span class="lineNum">      51 </span>            :    through the stmt tree for the occurrence of operands which may be of
+<span class="lineNum">      52 </span>            :    interest, and calls are made to the append_* routines whenever one is
+<span class="lineNum">      53 </span>            :    found.  There are 4 of these routines, each representing one of the
+<span class="lineNum">      54 </span>            :    4 types of operands. Defs, Uses, Virtual Uses, and Virtual May Defs.
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            :    The append_* routines check for duplication, and simply keep a list of
+<span class="lineNum">      57 </span>            :    unique objects for each operand type in the build_* extendable vectors.
+<span class="lineNum">      58 </span>            : 
+<span class="lineNum">      59 </span>            :    Once the stmt tree is completely parsed, the finalize_ssa_operands()
+<span class="lineNum">      60 </span>            :    routine is called, which proceeds to perform the finalization routine
+<span class="lineNum">      61 </span>            :    on each of the 4 operand vectors which have been built up.
+<span class="lineNum">      62 </span>            : 
+<span class="lineNum">      63 </span>            :    If the stmt had a previous operand cache, the finalization routines
+<span class="lineNum">      64 </span>            :    attempt to match up the new operands with the old ones.  If it's a perfect
+<span class="lineNum">      65 </span>            :    match, the old vector is simply reused.  If it isn't a perfect match, then
+<span class="lineNum">      66 </span>            :    a new vector is created and the new operands are placed there.  For
+<span class="lineNum">      67 </span>            :    virtual operands, if the previous cache had SSA_NAME version of a
+<span class="lineNum">      68 </span>            :    variable, and that same variable occurs in the same operands cache, then
+<span class="lineNum">      69 </span>            :    the new cache vector will also get the same SSA_NAME.
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            :    i.e., if a stmt had a VUSE of 'a_5', and 'a' occurs in the new
+<span class="lineNum">      72 </span>            :    operand vector for VUSE, then the new vector will also be modified
+<span class="lineNum">      73 </span>            :    such that it contains 'a_5' rather than 'a'.  */
+<span class="lineNum">      74 </span>            : 
+<span class="lineNum">      75 </span>            : 
+<span class="lineNum">      76 </span>            : /* Flags to describe operand properties in helpers.  */
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* By default, operands are loaded.  */
+<span class="lineNum">      79 </span>            : #define opf_use         0
+<span class="lineNum">      80 </span>            : 
+<span class="lineNum">      81 </span>            : /* Operand is the target of an assignment expression or a
+<span class="lineNum">      82 </span>            :    call-clobbered variable.  */
+<span class="lineNum">      83 </span>            : #define opf_def         (1 &lt;&lt; 0)
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span>            : /* No virtual operands should be created in the expression.  This is used
+<span class="lineNum">      86 </span>            :    when traversing ADDR_EXPR nodes which have different semantics than
+<span class="lineNum">      87 </span>            :    other expressions.  Inside an ADDR_EXPR node, the only operands that we
+<span class="lineNum">      88 </span>            :    need to consider are indices into arrays.  For instance, &amp;a.b[i] should
+<span class="lineNum">      89 </span>            :    generate a USE of 'i' but it should not generate a VUSE for 'a' nor a
+<span class="lineNum">      90 </span>            :    VUSE for 'b'.  */
+<span class="lineNum">      91 </span>            : #define opf_no_vops     (1 &lt;&lt; 1)
+<span class="lineNum">      92 </span>            : 
+<span class="lineNum">      93 </span>            : /* Operand is in a place where address-taken does not imply addressable.  */
+<span class="lineNum">      94 </span>            : #define opf_non_addressable (1 &lt;&lt; 3)
+<span class="lineNum">      95 </span>            : 
+<span class="lineNum">      96 </span>            : /* Operand is in a place where opf_non_addressable does not apply.  */
+<span class="lineNum">      97 </span>            : #define opf_not_non_addressable (1 &lt;&lt; 4)
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            : /* Operand is having its address taken.  */
+<span class="lineNum">     100 </span>            : #define opf_address_taken (1 &lt;&lt; 5)
+<span class="lineNum">     101 </span>            : 
+<span class="lineNum">     102 </span>            : /* Array for building all the use operands.  */
+<span class="lineNum">     103 </span>            : static vec&lt;tree *&gt; build_uses;
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            : /* The built VDEF operand.  */
+<span class="lineNum">     106 </span>            : static tree build_vdef;
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            : /* The built VUSE operand.  */
+<span class="lineNum">     109 </span>            : static tree build_vuse;
+<span class="lineNum">     110 </span>            : 
+<span class="lineNum">     111 </span>            : /* Bitmap obstack for our datastructures that needs to survive across
+<span class="lineNum">     112 </span>            :    compilations of multiple functions.  */
+<span class="lineNum">     113 </span>            : static bitmap_obstack operands_bitmap_obstack;
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span>            : static void get_expr_operands (struct function *, gimple *, tree *, int);
+<span class="lineNum">     116 </span>            : 
+<span class="lineNum">     117 </span>            : /* Number of functions with initialized ssa_operands.  */
+<span class="lineNum">     118 </span>            : static int n_initialized = 0;
+<span class="lineNum">     119 </span>            : 
+<a name="120"><span class="lineNum">     120 </span>            : /* Accessor to tree-ssa-operands.c caches.  */</a>
+<span class="lineNum">     121 </span>            : static inline struct ssa_operands *
+<span class="lineNum">     122 </span><span class="lineNoCov">          0 : gimple_ssa_operands (const struct function *fun)</span>
+<span class="lineNum">     123 </span>            : {
+<span class="lineNum">     124 </span><span class="lineCov"> 1214227786 :   return &amp;fun-&gt;gimple_df-&gt;ssa_operands;</span>
+<span class="lineNum">     125 </span>            : }
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span>            : 
+<span class="lineNum">     128 </span>            : /*  Return true if the SSA operands cache is active.  */
+<a name="129"><span class="lineNum">     129 </span>            : </a>
+<span class="lineNum">     130 </span>            : bool
+<span class="lineNum">     131 </span><span class="lineCov">  533648905 : ssa_operands_active (struct function *fun)</span>
+<span class="lineNum">     132 </span>            : {
+<span class="lineNum">     133 </span><span class="lineCov">  533648905 :   if (fun == NULL)</span>
+<span class="lineNum">     134 </span>            :     return false;
+<span class="lineNum">     135 </span>            : 
+<span class="lineNum">     136 </span><span class="lineCov">  533648905 :   return fun-&gt;gimple_df &amp;&amp; gimple_ssa_operands (fun)-&gt;ops_active;</span>
+<span class="lineNum">     137 </span>            : }
+<span class="lineNum">     138 </span>            : 
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            : /* Create the VOP variable, an artificial global variable to act as a
+<span class="lineNum">     141 </span>            :    representative of all of the virtual operands FUD chain.  */
+<a name="142"><span class="lineNum">     142 </span>            : </a>
+<span class="lineNum">     143 </span>            : static void
+<span class="lineNum">     144 </span><span class="lineCov">    1979679 : create_vop_var (struct function *fn)</span>
+<span class="lineNum">     145 </span>            : {
+<span class="lineNum">     146 </span><span class="lineCov">    1979679 :   tree global_var;</span>
+<span class="lineNum">     147 </span>            : 
+<span class="lineNum">     148 </span><span class="lineCov">    1979679 :   gcc_assert (fn-&gt;gimple_df-&gt;vop == NULL_TREE);</span>
+<span class="lineNum">     149 </span>            : 
+<span class="lineNum">     150 </span><span class="lineCov">    1979679 :   global_var = build_decl (BUILTINS_LOCATION, VAR_DECL,</span>
+<span class="lineNum">     151 </span>            :                            get_identifier (&quot;.MEM&quot;),
+<span class="lineNum">     152 </span>            :                            void_type_node);
+<span class="lineNum">     153 </span><span class="lineCov">    1979679 :   DECL_ARTIFICIAL (global_var) = 1;</span>
+<span class="lineNum">     154 </span><span class="lineCov">    1979679 :   DECL_IGNORED_P (global_var) = 1;</span>
+<span class="lineNum">     155 </span><span class="lineCov">    1979679 :   TREE_READONLY (global_var) = 0;</span>
+<span class="lineNum">     156 </span><span class="lineCov">    1979679 :   DECL_EXTERNAL (global_var) = 1;</span>
+<span class="lineNum">     157 </span><span class="lineCov">    1979679 :   TREE_STATIC (global_var) = 1;</span>
+<span class="lineNum">     158 </span><span class="lineCov">    1979679 :   TREE_USED (global_var) = 1;</span>
+<span class="lineNum">     159 </span><span class="lineCov">    1979679 :   DECL_CONTEXT (global_var) = NULL_TREE;</span>
+<span class="lineNum">     160 </span><span class="lineCov">    1979679 :   TREE_THIS_VOLATILE (global_var) = 0;</span>
+<span class="lineNum">     161 </span><span class="lineCov">    1979679 :   TREE_ADDRESSABLE (global_var) = 0;</span>
+<span class="lineNum">     162 </span><span class="lineCov">    1979679 :   VAR_DECL_IS_VIRTUAL_OPERAND (global_var) = 1;</span>
+<span class="lineNum">     163 </span>            : 
+<span class="lineNum">     164 </span><span class="lineCov">    1979679 :   fn-&gt;gimple_df-&gt;vop = global_var;</span>
+<span class="lineNum">     165 </span><span class="lineCov">    1979679 : }</span>
+<span class="lineNum">     166 </span>            : 
+<span class="lineNum">     167 </span>            : /* These are the sizes of the operand memory buffer in bytes which gets
+<span class="lineNum">     168 </span>            :    allocated each time more operands space is required.  The final value is
+<span class="lineNum">     169 </span>            :    the amount that is allocated every time after that.
+<span class="lineNum">     170 </span>            :    In 1k we can fit 25 use operands (or 63 def operands) on a host with
+<span class="lineNum">     171 </span>            :    8 byte pointers, that would be 10 statements each with 1 def and 2
+<span class="lineNum">     172 </span>            :    uses.  */
+<span class="lineNum">     173 </span>            : 
+<span class="lineNum">     174 </span>            : #define OP_SIZE_INIT    0
+<span class="lineNum">     175 </span>            : #define OP_SIZE_1       (1024 - sizeof (void *))
+<span class="lineNum">     176 </span>            : #define OP_SIZE_2       (1024 * 4 - sizeof (void *))
+<span class="lineNum">     177 </span>            : #define OP_SIZE_3       (1024 * 16 - sizeof (void *))
+<span class="lineNum">     178 </span>            : 
+<span class="lineNum">     179 </span>            : /* Initialize the operand cache routines.  */
+<a name="180"><span class="lineNum">     180 </span>            : </a>
+<span class="lineNum">     181 </span>            : void
+<span class="lineNum">     182 </span><span class="lineCov">    1979679 : init_ssa_operands (struct function *fn)</span>
+<span class="lineNum">     183 </span>            : {
+<span class="lineNum">     184 </span><span class="lineCov">    1979679 :   if (!n_initialized++)</span>
+<span class="lineNum">     185 </span>            :     {
+<span class="lineNum">     186 </span><span class="lineCov">     163484 :       build_uses.create (10);</span>
+<span class="lineNum">     187 </span><span class="lineCov">     163484 :       build_vuse = NULL_TREE;</span>
+<span class="lineNum">     188 </span><span class="lineCov">     163484 :       build_vdef = NULL_TREE;</span>
+<span class="lineNum">     189 </span><span class="lineCov">     163484 :       bitmap_obstack_initialize (&amp;operands_bitmap_obstack);</span>
+<span class="lineNum">     190 </span>            :     }
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span><span class="lineCov">    1979679 :   gcc_assert (gimple_ssa_operands (fn)-&gt;operand_memory == NULL);</span>
+<span class="lineNum">     193 </span><span class="lineCov">    3959358 :   gimple_ssa_operands (fn)-&gt;operand_memory_index</span>
+<span class="lineNum">     194 </span><span class="lineCov">    3959358 :      = gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size;</span>
+<span class="lineNum">     195 </span><span class="lineCov">    3959358 :   gimple_ssa_operands (fn)-&gt;ops_active = true;</span>
+<span class="lineNum">     196 </span><span class="lineCov">    3959358 :   gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size = OP_SIZE_INIT;</span>
+<span class="lineNum">     197 </span><span class="lineCov">    1979679 :   create_vop_var (fn);</span>
+<span class="lineNum">     198 </span><span class="lineCov">    1979679 : }</span>
+<span class="lineNum">     199 </span>            : 
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span>            : /* Dispose of anything required by the operand routines.  */
+<a name="202"><span class="lineNum">     202 </span>            : </a>
+<span class="lineNum">     203 </span>            : void
+<span class="lineNum">     204 </span><span class="lineCov">    1932859 : fini_ssa_operands (struct function *fn)</span>
+<span class="lineNum">     205 </span>            : {
+<span class="lineNum">     206 </span><span class="lineCov">    1932859 :   struct ssa_operand_memory_d *ptr;</span>
+<span class="lineNum">     207 </span>            : 
+<span class="lineNum">     208 </span><span class="lineCov">    1932859 :   if (!--n_initialized)</span>
+<span class="lineNum">     209 </span>            :     {
+<span class="lineNum">     210 </span><span class="lineCov">     155975 :       build_uses.release ();</span>
+<span class="lineNum">     211 </span><span class="lineCov">     155975 :       build_vdef = NULL_TREE;</span>
+<span class="lineNum">     212 </span><span class="lineCov">     155975 :       build_vuse = NULL_TREE;</span>
+<span class="lineNum">     213 </span>            :     }
+<span class="lineNum">     214 </span>            : 
+<span class="lineNum">     215 </span><span class="lineCov">    1932859 :   gimple_ssa_operands (fn)-&gt;free_uses = NULL;</span>
+<span class="lineNum">     216 </span>            : 
+<span class="lineNum">     217 </span><span class="lineCov">    4620158 :   while ((ptr = gimple_ssa_operands (fn)-&gt;operand_memory) != NULL)</span>
+<span class="lineNum">     218 </span>            :     {
+<span class="lineNum">     219 </span><span class="lineCov">    5374598 :       gimple_ssa_operands (fn)-&gt;operand_memory</span>
+<span class="lineNum">     220 </span><span class="lineCov">    5374598 :         = gimple_ssa_operands (fn)-&gt;operand_memory-&gt;next;</span>
+<span class="lineNum">     221 </span><span class="lineCov">    2687299 :       ggc_free (ptr);</span>
+<span class="lineNum">     222 </span>            :     }
+<span class="lineNum">     223 </span>            : 
+<span class="lineNum">     224 </span><span class="lineCov">    3865718 :   gimple_ssa_operands (fn)-&gt;ops_active = false;</span>
+<span class="lineNum">     225 </span>            : 
+<span class="lineNum">     226 </span><span class="lineCov">    1932859 :   if (!n_initialized)</span>
+<span class="lineNum">     227 </span><span class="lineCov">     155975 :     bitmap_obstack_release (&amp;operands_bitmap_obstack);</span>
+<span class="lineNum">     228 </span>            : 
+<span class="lineNum">     229 </span><span class="lineCov">    1932859 :   fn-&gt;gimple_df-&gt;vop = NULL_TREE;</span>
+<span class="lineNum">     230 </span><span class="lineCov">    1932859 : }</span>
+<span class="lineNum">     231 </span>            : 
+<span class="lineNum">     232 </span>            : 
+<span class="lineNum">     233 </span>            : /* Return memory for an operand of size SIZE.  */
+<a name="234"><span class="lineNum">     234 </span>            : </a>
+<span class="lineNum">     235 </span>            : static inline void *
+<span class="lineNum">     236 </span><span class="lineCov">  101722152 : ssa_operand_alloc (struct function *fn, unsigned size)</span>
+<span class="lineNum">     237 </span>            : {
+<span class="lineNum">     238 </span><span class="lineCov">  101722152 :   char *ptr;</span>
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span><span class="lineCov">  101722152 :   gcc_assert (size == sizeof (struct use_optype_d));</span>
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span><span class="lineCov">  305166456 :   if (gimple_ssa_operands (fn)-&gt;operand_memory_index + size</span>
+<span class="lineNum">     243 </span><span class="lineCov">  101722152 :       &gt;= gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size)</span>
+<span class="lineNum">     244 </span>            :     {
+<span class="lineNum">     245 </span><span class="lineCov">    2741007 :       struct ssa_operand_memory_d *ptr;</span>
+<span class="lineNum">     246 </span>            : 
+<span class="lineNum">     247 </span><span class="lineCov">    2741007 :       switch (gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size)</span>
+<span class="lineNum">     248 </span>            :         {
+<span class="lineNum">     249 </span><span class="lineCov">    1977333 :         case OP_SIZE_INIT:</span>
+<span class="lineNum">     250 </span><span class="lineCov">    3954666 :           gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size = OP_SIZE_1;</span>
+<span class="lineNum">     251 </span><span class="lineCov">    1977333 :           break;</span>
+<span class="lineNum">     252 </span><span class="lineCov">     548477 :         case OP_SIZE_1:</span>
+<span class="lineNum">     253 </span><span class="lineCov">    1096954 :           gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size = OP_SIZE_2;</span>
+<span class="lineNum">     254 </span><span class="lineCov">     548477 :           break;</span>
+<span class="lineNum">     255 </span><span class="lineCov">     215197 :         case OP_SIZE_2:</span>
+<span class="lineNum">     256 </span><span class="lineCov">     215197 :         case OP_SIZE_3:</span>
+<span class="lineNum">     257 </span><span class="lineCov">     430394 :           gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size = OP_SIZE_3;</span>
+<span class="lineNum">     258 </span><span class="lineCov">     215197 :           break;</span>
+<span class="lineNum">     259 </span><span class="lineNoCov">          0 :         default:</span>
+<span class="lineNum">     260 </span><span class="lineNoCov">          0 :           gcc_unreachable ();</span>
+<span class="lineNum">     261 </span>            :         }
+<span class="lineNum">     262 </span>            : 
+<span class="lineNum">     263 </span>            : 
+<span class="lineNum">     264 </span><span class="lineCov">    2741007 :       ptr = (ssa_operand_memory_d *) ggc_internal_alloc</span>
+<span class="lineNum">     265 </span><span class="lineCov">    2741007 :         (sizeof (void *) + gimple_ssa_operands (fn)-&gt;ssa_operand_mem_size);</span>
+<span class="lineNum">     266 </span>            : 
+<span class="lineNum">     267 </span><span class="lineCov">    5482014 :       ptr-&gt;next = gimple_ssa_operands (fn)-&gt;operand_memory;</span>
+<span class="lineNum">     268 </span><span class="lineCov">    5482014 :       gimple_ssa_operands (fn)-&gt;operand_memory = ptr;</span>
+<span class="lineNum">     269 </span><span class="lineCov">    2741007 :       gimple_ssa_operands (fn)-&gt;operand_memory_index = 0;</span>
+<span class="lineNum">     270 </span>            :     }
+<span class="lineNum">     271 </span>            : 
+<span class="lineNum">     272 </span><span class="lineCov">  305166456 :   ptr = &amp;(gimple_ssa_operands (fn)-&gt;operand_memory</span>
+<span class="lineNum">     273 </span><span class="lineCov">  203444304 :           -&gt;mem[gimple_ssa_operands (fn)-&gt;operand_memory_index]);</span>
+<span class="lineNum">     274 </span><span class="lineCov">  203444304 :   gimple_ssa_operands (fn)-&gt;operand_memory_index += size;</span>
+<span class="lineNum">     275 </span><span class="lineCov">  101722152 :   return ptr;</span>
+<span class="lineNum">     276 </span>            : }
+<span class="lineNum">     277 </span>            : 
+<span class="lineNum">     278 </span>            : 
+<span class="lineNum">     279 </span>            : /* Allocate a USE operand.  */
+<span class="lineNum">     280 </span>            : 
+<span class="lineNum">     281 </span>            : static inline struct use_optype_d *
+<span class="lineNum">     282 </span>            : alloc_use (struct function *fn)
+<span class="lineNum">     283 </span>            : {
+<span class="lineNum">     284 </span><span class="lineNoCov">          0 :   struct use_optype_d *ret;</span>
+<span class="lineNum">     285 </span><span class="lineNoCov">          0 :   if (gimple_ssa_operands (fn)-&gt;free_uses)</span>
+<span class="lineNum">     286 </span>            :     {
+<span class="lineNum">     287 </span><span class="lineNoCov">          0 :       ret = gimple_ssa_operands (fn)-&gt;free_uses;</span>
+<span class="lineNum">     288 </span><span class="lineNoCov">          0 :       gimple_ssa_operands (fn)-&gt;free_uses</span>
+<span class="lineNum">     289 </span><span class="lineNoCov">          0 :         = gimple_ssa_operands (fn)-&gt;free_uses-&gt;next;</span>
+<span class="lineNum">     290 </span>            :     }
+<span class="lineNum">     291 </span>            :   else
+<span class="lineNum">     292 </span><span class="lineNoCov">          0 :     ret = (struct use_optype_d *)</span>
+<span class="lineNum">     293 </span><span class="lineNoCov">          0 :           ssa_operand_alloc (fn, sizeof (struct use_optype_d));</span>
+<span class="lineNum">     294 </span><span class="lineNoCov">          0 :   return ret;</span>
+<span class="lineNum">     295 </span>            : }
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span>            : 
+<span class="lineNum">     298 </span>            : /* Adds OP to the list of uses of statement STMT after LAST.  */
+<a name="299"><span class="lineNum">     299 </span>            : </a>
+<span class="lineNum">     300 </span>            : static inline use_optype_p
+<span class="lineNum">     301 </span><span class="lineNoCov">          0 : add_use_op (struct function *fn, gimple *stmt, tree *op, use_optype_p last)</span>
+<span class="lineNum">     302 </span>            : {
+<span class="lineNum">     303 </span><span class="lineNoCov">          0 :   use_optype_p new_use;</span>
+<span class="lineNum">     304 </span>            : 
+<span class="lineNum">     305 </span><span class="lineNoCov">          0 :   new_use = alloc_use (fn);</span>
+<span class="lineNum">     306 </span><span class="lineNoCov">          0 :   USE_OP_PTR (new_use)-&gt;use = op;</span>
+<span class="lineNum">     307 </span><span class="lineNoCov">          0 :   link_imm_use_stmt (USE_OP_PTR (new_use), *op, stmt);</span>
+<span class="lineNum">     308 </span><span class="lineNoCov">          0 :   last-&gt;next = new_use;</span>
+<span class="lineNum">     309 </span><span class="lineNoCov">          0 :   new_use-&gt;next = NULL;</span>
+<span class="lineNum">     310 </span><span class="lineNoCov">          0 :   return new_use;</span>
+<span class="lineNum">     311 </span>            : }
+<span class="lineNum">     312 </span>            : 
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span>            : 
+<span class="lineNum">     315 </span>            : /* Takes elements from build_defs and turns them into def operands of STMT.
+<span class="lineNum">     316 </span>            :    TODO -- Make build_defs vec of tree *.  */
+<a name="317"><span class="lineNum">     317 </span>            : </a>
+<span class="lineNum">     318 </span>            : static inline void
+<span class="lineNum">     319 </span><span class="lineCov">  226552143 : finalize_ssa_defs (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     320 </span>            : {
+<span class="lineNum">     321 </span>            :   /* Pre-pend the vdef we may have built.  */
+<span class="lineNum">     322 </span><span class="lineCov">  226552143 :   if (build_vdef != NULL_TREE)</span>
+<span class="lineNum">     323 </span>            :     {
+<span class="lineNum">     324 </span><span class="lineCov">   36182889 :       tree oldvdef = gimple_vdef (stmt);</span>
+<span class="lineNum">     325 </span><span class="lineCov">   36182889 :       if (oldvdef</span>
+<span class="lineNum">     326 </span><span class="lineCov">   16810033 :           &amp;&amp; TREE_CODE (oldvdef) == SSA_NAME)</span>
+<span class="lineNum">     327 </span><span class="lineCov">   21760244 :         oldvdef = SSA_NAME_VAR (oldvdef);</span>
+<span class="lineNum">     328 </span><span class="lineCov">   36182889 :       if (oldvdef != build_vdef)</span>
+<span class="lineNum">     329 </span><span class="lineCov">   19372856 :         gimple_set_vdef (stmt, build_vdef);</span>
+<span class="lineNum">     330 </span>            :     }
+<span class="lineNum">     331 </span>            : 
+<span class="lineNum">     332 </span>            :   /* Clear and unlink a no longer necessary VDEF.  */
+<span class="lineNum">     333 </span><span class="lineCov">  226552143 :   if (build_vdef == NULL_TREE</span>
+<span class="lineNum">     334 </span><span class="lineCov">  297405520 :       &amp;&amp; gimple_vdef (stmt) != NULL_TREE)</span>
+<span class="lineNum">     335 </span>            :     {
+<span class="lineNum">     336 </span><span class="lineCov">    4936840 :       if (TREE_CODE (gimple_vdef (stmt)) == SSA_NAME)</span>
+<span class="lineNum">     337 </span>            :         {
+<span class="lineNum">     338 </span><span class="lineCov">    2424275 :           unlink_stmt_vdef (stmt);</span>
+<span class="lineNum">     339 </span><span class="lineCov">    4848550 :           release_ssa_name_fn (fn, gimple_vdef (stmt));</span>
+<span class="lineNum">     340 </span>            :         }
+<span class="lineNum">     341 </span><span class="lineCov">    2468420 :       gimple_set_vdef (stmt, NULL_TREE);</span>
+<span class="lineNum">     342 </span>            :     }
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            :   /* If we have a non-SSA_NAME VDEF, mark it for renaming.  */
+<span class="lineNum">     345 </span><span class="lineCov">  226552143 :   if (gimple_vdef (stmt)</span>
+<span class="lineNum">     346 </span><span class="lineCov">  107036266 :       &amp;&amp; TREE_CODE (gimple_vdef (stmt)) != SSA_NAME)</span>
+<span class="lineNum">     347 </span>            :     {
+<span class="lineNum">     348 </span><span class="lineCov">   25302767 :       fn-&gt;gimple_df-&gt;rename_vops = 1;</span>
+<span class="lineNum">     349 </span><span class="lineCov">   25302767 :       fn-&gt;gimple_df-&gt;ssa_renaming_needed = 1;</span>
+<span class="lineNum">     350 </span>            :     }
+<span class="lineNum">     351 </span><span class="lineCov">  226552143 : }</span>
+<span class="lineNum">     352 </span>            : 
+<span class="lineNum">     353 </span>            : 
+<span class="lineNum">     354 </span>            : /* Takes elements from build_uses and turns them into use operands of STMT.  */
+<a name="355"><span class="lineNum">     355 </span>            : </a>
+<span class="lineNum">     356 </span>            : static inline void
+<span class="lineNum">     357 </span><span class="lineCov">  226552143 : finalize_ssa_uses (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     358 </span>            : {
+<span class="lineNum">     359 </span><span class="lineCov">  226552143 :   unsigned new_i;</span>
+<span class="lineNum">     360 </span><span class="lineCov">  226552143 :   struct use_optype_d new_list;</span>
+<span class="lineNum">     361 </span><span class="lineCov">  226552143 :   use_optype_p old_ops, ptr, last;</span>
+<span class="lineNum">     362 </span>            : 
+<span class="lineNum">     363 </span>            :   /* Pre-pend the VUSE we may have built.  */
+<span class="lineNum">     364 </span><span class="lineCov">  226552143 :   if (build_vuse != NULL_TREE)</span>
+<span class="lineNum">     365 </span>            :     {
+<span class="lineNum">     366 </span><span class="lineCov">   57057433 :       tree oldvuse = gimple_vuse (stmt);</span>
+<span class="lineNum">     367 </span><span class="lineCov">   57057433 :       if (oldvuse</span>
+<span class="lineNum">     368 </span><span class="lineCov">   26678952 :           &amp;&amp; TREE_CODE (oldvuse) == SSA_NAME)</span>
+<span class="lineNum">     369 </span><span class="lineCov">   34274080 :         oldvuse = SSA_NAME_VAR (oldvuse);</span>
+<span class="lineNum">     370 </span><span class="lineCov">   57057433 :       if (oldvuse != (build_vuse != NULL_TREE</span>
+<span class="lineNum">     371 </span>            :                       ? build_vuse : build_vdef))
+<span class="lineNum">     372 </span><span class="lineCov">   30378481 :         gimple_set_vuse (stmt, NULL_TREE);</span>
+<span class="lineNum">     373 </span><span class="lineCov">  114114866 :       build_uses.safe_insert (0, gimple_vuse_ptr (stmt));</span>
+<span class="lineNum">     374 </span>            :     }
+<span class="lineNum">     375 </span>            : 
+<span class="lineNum">     376 </span><span class="lineCov">  226552143 :   new_list.next = NULL;</span>
+<span class="lineNum">     377 </span><span class="lineCov">  226552143 :   last = &amp;new_list;</span>
+<span class="lineNum">     378 </span>            : 
+<span class="lineNum">     379 </span><span class="lineCov">  226552143 :   old_ops = gimple_use_ops (stmt);</span>
+<span class="lineNum">     380 </span>            : 
+<span class="lineNum">     381 </span>            :   /* Clear a no longer necessary VUSE.  */
+<span class="lineNum">     382 </span><span class="lineCov">  226552143 :   if (build_vuse == NULL_TREE</span>
+<span class="lineNum">     383 </span><span class="lineCov">  276530976 :       &amp;&amp; gimple_vuse (stmt) != NULL_TREE)</span>
+<span class="lineNum">     384 </span><span class="lineCov">    4021908 :     gimple_set_vuse (stmt, NULL_TREE);</span>
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span>            :   /* If there is anything in the old list, free it.  */
+<span class="lineNum">     387 </span><span class="lineCov">  226552143 :   if (old_ops)</span>
+<span class="lineNum">     388 </span>            :     {
+<span class="lineNum">     389 </span><span class="lineCov">   94534770 :       for (ptr = old_ops; ptr-&gt;next; ptr = ptr-&gt;next)</span>
+<span class="lineNum">     390 </span><span class="lineCov">   28657945 :         delink_imm_use (USE_OP_PTR (ptr));</span>
+<span class="lineNum">     391 </span><span class="lineCov">   65876825 :       delink_imm_use (USE_OP_PTR (ptr));</span>
+<span class="lineNum">     392 </span><span class="lineCov">  131753650 :       ptr-&gt;next = gimple_ssa_operands (fn)-&gt;free_uses;</span>
+<span class="lineNum">     393 </span><span class="lineCov">   65876825 :       gimple_ssa_operands (fn)-&gt;free_uses = old_ops;</span>
+<span class="lineNum">     394 </span>            :     }
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            :   /* If we added a VUSE, make sure to set the operand if it is not already
+<span class="lineNum">     397 </span>            :      present and mark it for renaming.  */
+<span class="lineNum">     398 </span><span class="lineCov">  226552143 :   if (build_vuse != NULL_TREE</span>
+<span class="lineNum">     399 </span><span class="lineCov">  283609576 :       &amp;&amp; gimple_vuse (stmt) == NULL_TREE)</span>
+<span class="lineNum">     400 </span>            :     {
+<span class="lineNum">     401 </span><span class="lineCov">   60756962 :       gimple_set_vuse (stmt, gimple_vop (fn));</span>
+<span class="lineNum">     402 </span><span class="lineCov">   30378481 :       fn-&gt;gimple_df-&gt;rename_vops = 1;</span>
+<span class="lineNum">     403 </span><span class="lineCov">   30378481 :       fn-&gt;gimple_df-&gt;ssa_renaming_needed = 1;</span>
+<span class="lineNum">     404 </span>            :     }
+<span class="lineNum">     405 </span>            : 
+<span class="lineNum">     406 </span>            :   /* Now create nodes for all the new nodes.  */
+<span class="lineNum">     407 </span><span class="lineCov">  839649368 :   for (new_i = 0; new_i &lt; build_uses.length (); new_i++)</span>
+<span class="lineNum">     408 </span>            :     {
+<span class="lineNum">     409 </span><span class="lineCov">  193272541 :       tree *op = build_uses[new_i];</span>
+<span class="lineNum">     410 </span><span class="lineCov">  193272541 :       last = add_use_op (fn, stmt, op, last);</span>
+<span class="lineNum">     411 </span>            :     }
+<span class="lineNum">     412 </span>            : 
+<span class="lineNum">     413 </span>            :   /* Now set the stmt's operands.  */
+<span class="lineNum">     414 </span><span class="lineCov">  226552143 :   gimple_set_use_ops (stmt, new_list.next);</span>
+<span class="lineNum">     415 </span><span class="lineCov">  226552143 : }</span>
+<span class="lineNum">     416 </span>            : 
+<span class="lineNum">     417 </span>            : 
+<span class="lineNum">     418 </span>            : /* Clear the in_list bits and empty the build array for VDEFs and
+<span class="lineNum">     419 </span>            :    VUSEs.  */
+<span class="lineNum">     420 </span>            : 
+<span class="lineNum">     421 </span>            : static inline void
+<span class="lineNum">     422 </span>            : cleanup_build_arrays (void)
+<span class="lineNum">     423 </span>            : {
+<span class="lineNum">     424 </span><span class="lineCov"> 5853798846 :   build_vdef = NULL_TREE;</span>
+<span class="lineNum">     425 </span><span class="lineCov"> 5853798846 :   build_vuse = NULL_TREE;</span>
+<span class="lineNum">     426 </span><span class="lineCov"> 5853798846 :   build_uses.truncate (0);</span>
+<span class="lineNum">     427 </span>            : }
+<span class="lineNum">     428 </span>            : 
+<span class="lineNum">     429 </span>            : 
+<span class="lineNum">     430 </span>            : /* Finalize all the build vectors, fill the new ones into INFO.  */
+<a name="431"><span class="lineNum">     431 </span>            : </a>
+<span class="lineNum">     432 </span>            : static inline void
+<span class="lineNum">     433 </span><span class="lineCov">  226552143 : finalize_ssa_stmt_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     434 </span>            : {
+<span class="lineNum">     435 </span><span class="lineCov">  226552143 :   finalize_ssa_defs (fn, stmt);</span>
+<span class="lineNum">     436 </span><span class="lineCov">  226552143 :   finalize_ssa_uses (fn, stmt);</span>
+<span class="lineNum">     437 </span><span class="lineCov">  226552143 :   cleanup_build_arrays ();</span>
+<span class="lineNum">     438 </span><span class="lineCov">  226552143 : }</span>
+<span class="lineNum">     439 </span>            : 
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span>            : /* Start the process of building up operands vectors in INFO.  */
+<a name="442"><span class="lineNum">     442 </span>            : </a>
+<span class="lineNum">     443 </span>            : static inline void
+<span class="lineNum">     444 </span><span class="lineCov"> 5853798846 : start_ssa_stmt_operands (void)</span>
+<span class="lineNum">     445 </span>            : {
+<span class="lineNum">     446 </span><span class="lineCov"> 5853798846 :   gcc_assert (build_uses.length () == 0);</span>
+<span class="lineNum">     447 </span><span class="lineCov"> 5853798846 :   gcc_assert (build_vuse == NULL_TREE);</span>
+<span class="lineNum">     448 </span><span class="lineCov"> 5853798846 :   gcc_assert (build_vdef == NULL_TREE);</span>
+<span class="lineNum">     449 </span><span class="lineCov"> 5853798846 : }</span>
+<span class="lineNum">     450 </span>            : 
+<span class="lineNum">     451 </span>            : 
+<span class="lineNum">     452 </span>            : /* Add USE_P to the list of pointers to operands.  */
+<span class="lineNum">     453 </span>            : 
+<span class="lineNum">     454 </span>            : static inline void
+<span class="lineNum">     455 </span>            : append_use (tree *use_p)
+<span class="lineNum">     456 </span>            : {
+<span class="lineNum">     457 </span><span class="lineCov"> 2644532001 :   build_uses.safe_push (use_p);</span>
+<span class="lineNum">     458 </span>            : }
+<span class="lineNum">     459 </span>            : 
+<span class="lineNum">     460 </span>            : 
+<span class="lineNum">     461 </span>            : /* Add VAR to the set of variables that require a VDEF operator.  */
+<a name="462"><span class="lineNum">     462 </span>            : </a>
+<span class="lineNum">     463 </span>            : static inline void
+<span class="lineNum">     464 </span><span class="lineCov"> 1011481638 : append_vdef (tree var)</span>
+<span class="lineNum">     465 </span>            : {
+<span class="lineNum">     466 </span><span class="lineCov"> 1011481638 :   gcc_assert ((build_vdef == NULL_TREE</span>
+<span class="lineNum">     467 </span>            :                || build_vdef == var)
+<span class="lineNum">     468 </span>            :               &amp;&amp; (build_vuse == NULL_TREE
+<span class="lineNum">     469 </span>            :                   || build_vuse == var));
+<span class="lineNum">     470 </span>            : 
+<span class="lineNum">     471 </span><span class="lineCov"> 1011481638 :   build_vdef = var;</span>
+<span class="lineNum">     472 </span><span class="lineCov"> 1011481638 :   build_vuse = var;</span>
+<span class="lineNum">     473 </span><span class="lineCov"> 1011481638 : }</span>
+<span class="lineNum">     474 </span>            : 
+<span class="lineNum">     475 </span>            : 
+<span class="lineNum">     476 </span>            : /* Add VAR to the set of variables that require a VUSE operator.  */
+<a name="477"><span class="lineNum">     477 </span>            : </a>
+<span class="lineNum">     478 </span>            : static inline void
+<span class="lineNum">     479 </span><span class="lineCov">  624199816 : append_vuse (tree var)</span>
+<span class="lineNum">     480 </span>            : {
+<span class="lineNum">     481 </span><span class="lineCov">  624199816 :   gcc_assert (build_vuse == NULL_TREE</span>
+<span class="lineNum">     482 </span>            :               || build_vuse == var);
+<span class="lineNum">     483 </span>            : 
+<span class="lineNum">     484 </span><span class="lineCov">  624199816 :   build_vuse = var;</span>
+<span class="lineNum">     485 </span><span class="lineCov">  624199816 : }</span>
+<span class="lineNum">     486 </span>            : 
+<span class="lineNum">     487 </span>            : /* Add virtual operands for STMT.  FLAGS is as in get_expr_operands.  */
+<a name="488"><span class="lineNum">     488 </span>            : </a>
+<span class="lineNum">     489 </span>            : static void
+<span class="lineNum">     490 </span><span class="lineCov"> 1721437997 : add_virtual_operand (struct function *fn,</span>
+<span class="lineNum">     491 </span>            :                      gimple *stmt ATTRIBUTE_UNUSED, int flags)
+<span class="lineNum">     492 </span>            : {
+<span class="lineNum">     493 </span>            :   /* Add virtual operands to the stmt, unless the caller has specifically
+<span class="lineNum">     494 </span>            :      requested not to do that (used when adding operands inside an
+<span class="lineNum">     495 </span>            :      ADDR_EXPR expression).  */
+<span class="lineNum">     496 </span><span class="lineCov"> 1721437997 :   if (flags &amp; opf_no_vops)</span>
+<span class="lineNum">     497 </span>            :     return;
+<span class="lineNum">     498 </span>            : 
+<span class="lineNum">     499 </span><span class="lineCov"> 3084326428 :   gcc_assert (!is_gimple_debug (stmt));</span>
+<span class="lineNum">     500 </span>            : 
+<span class="lineNum">     501 </span><span class="lineCov"> 1542163214 :   if (flags &amp; opf_def)</span>
+<span class="lineNum">     502 </span><span class="lineCov"> 2022963276 :     append_vdef (gimple_vop (fn));</span>
+<span class="lineNum">     503 </span>            :   else
+<span class="lineNum">     504 </span><span class="lineCov"> 1061363152 :     append_vuse (gimple_vop (fn));</span>
+<span class="lineNum">     505 </span>            : }
+<span class="lineNum">     506 </span>            : 
+<span class="lineNum">     507 </span>            : 
+<span class="lineNum">     508 </span>            : /* Add *VAR_P to the appropriate operand array for statement STMT.
+<span class="lineNum">     509 </span>            :    FLAGS is as in get_expr_operands.  If *VAR_P is a GIMPLE register,
+<span class="lineNum">     510 </span>            :    it will be added to the statement's real operands, otherwise it is
+<span class="lineNum">     511 </span>            :    added to virtual operands.  */
+<a name="512"><span class="lineNum">     512 </span>            : </a>
+<span class="lineNum">     513 </span>            : static void
+<span class="lineNum">     514 </span><span class="lineCov"> 4526471150 : add_stmt_operand (struct function *fn, tree *var_p, gimple *stmt, int flags)</span>
+<span class="lineNum">     515 </span>            : {
+<span class="lineNum">     516 </span><span class="lineCov"> 4526471150 :   tree var = *var_p;</span>
+<span class="lineNum">     517 </span>            : 
+<span class="lineNum">     518 </span><span class="lineCov"> 4526471150 :   gcc_assert (SSA_VAR_P (*var_p) || TREE_CODE (*var_p) == STRING_CST);</span>
+<span class="lineNum">     519 </span>            : 
+<span class="lineNum">     520 </span><span class="lineCov"> 4526471150 :   if (is_gimple_reg (var))</span>
+<span class="lineNum">     521 </span>            :     {
+<span class="lineNum">     522 </span>            :       /* The variable is a GIMPLE register.  Add it to real operands.  */
+<span class="lineNum">     523 </span><span class="lineCov"> 3906793914 :       if (flags &amp; opf_def)</span>
+<span class="lineNum">     524 </span>            :         ;
+<span class="lineNum">     525 </span>            :       else
+<span class="lineNum">     526 </span><span class="lineCov"> 2644532001 :         append_use (var_p);</span>
+<span class="lineNum">     527 </span><span class="lineCov"> 3906793914 :       if (DECL_P (*var_p))</span>
+<span class="lineNum">     528 </span><span class="lineCov">   39102257 :         fn-&gt;gimple_df-&gt;ssa_renaming_needed = 1;</span>
+<span class="lineNum">     529 </span>            :     }
+<span class="lineNum">     530 </span>            :   else
+<span class="lineNum">     531 </span>            :     {
+<span class="lineNum">     532 </span>            :       /* Mark statements with volatile operands.  */
+<span class="lineNum">     533 </span><span class="lineCov">  619677236 :       if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     534 </span><span class="lineCov">  610786572 :           &amp;&amp; TREE_THIS_VOLATILE (var))</span>
+<span class="lineNum">     535 </span><span class="lineCov">   47937346 :         gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     536 </span>            : 
+<span class="lineNum">     537 </span>            :       /* The variable is a memory access.  Add virtual operands.  */
+<span class="lineNum">     538 </span><span class="lineCov">  619677236 :       add_virtual_operand (fn, stmt, flags);</span>
+<span class="lineNum">     539 </span>            :     }
+<span class="lineNum">     540 </span><span class="lineCov"> 4526471150 : }</span>
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span>            : /* Mark the base address of REF as having its address taken.
+<span class="lineNum">     543 </span>            :    REF may be a single variable whose address has been taken or any
+<span class="lineNum">     544 </span>            :    other valid GIMPLE memory reference (structure reference, array,
+<span class="lineNum">     545 </span>            :    etc).  */
+<a name="546"><span class="lineNum">     546 </span>            : </a>
+<span class="lineNum">     547 </span>            : static void
+<span class="lineNum">     548 </span><span class="lineCov">  751161099 : mark_address_taken (tree ref)</span>
+<span class="lineNum">     549 </span>            : {
+<span class="lineNum">     550 </span><span class="lineCov">  751161099 :   tree var;</span>
+<span class="lineNum">     551 </span>            : 
+<span class="lineNum">     552 </span>            :   /* Note that it is *NOT OKAY* to use the target of a COMPONENT_REF
+<span class="lineNum">     553 </span>            :      as the only thing we take the address of.  If VAR is a structure,
+<span class="lineNum">     554 </span>            :      taking the address of a field means that the whole structure may
+<span class="lineNum">     555 </span>            :      be referenced using pointer arithmetic.  See PR 21407 and the
+<span class="lineNum">     556 </span>            :      ensuing mailing list discussion.  */
+<span class="lineNum">     557 </span><span class="lineCov">  751161099 :   var = get_base_address (ref);</span>
+<span class="lineNum">     558 </span><span class="lineCov">  751161099 :   if (var)</span>
+<span class="lineNum">     559 </span>            :     {
+<span class="lineNum">     560 </span><span class="lineCov">  751161099 :       if (DECL_P (var))</span>
+<span class="lineNum">     561 </span><span class="lineCov">  650129625 :         TREE_ADDRESSABLE (var) = 1;</span>
+<span class="lineNum">     562 </span><span class="lineCov">  101031474 :       else if (TREE_CODE (var) == MEM_REF</span>
+<span class="lineNum">     563 </span><span class="lineCov">   33548366 :                &amp;&amp; TREE_CODE (TREE_OPERAND (var, 0)) == ADDR_EXPR</span>
+<span class="lineNum">     564 </span><span class="lineCov">  101031474 :                &amp;&amp; DECL_P (TREE_OPERAND (TREE_OPERAND (var, 0), 0)))</span>
+<span class="lineNum">     565 </span><span class="lineNoCov">          0 :         TREE_ADDRESSABLE (TREE_OPERAND (TREE_OPERAND (var, 0), 0)) = 1;</span>
+<span class="lineNum">     566 </span>            :     }
+<span class="lineNum">     567 </span><span class="lineCov">  751161099 : }</span>
+<span class="lineNum">     568 </span>            : 
+<span class="lineNum">     569 </span>            : 
+<span class="lineNum">     570 </span>            : /* A subroutine of get_expr_operands to handle MEM_REF.
+<span class="lineNum">     571 </span>            : 
+<span class="lineNum">     572 </span>            :    STMT is the statement being processed, EXPR is the MEM_REF
+<span class="lineNum">     573 </span>            :       that got us here.
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span>            :    FLAGS is as in get_expr_operands.  */
+<a name="576"><span class="lineNum">     576 </span>            : </a>
+<span class="lineNum">     577 </span>            : static void
+<span class="lineNum">     578 </span><span class="lineCov">  707995115 : get_mem_ref_operands (struct function *fn,</span>
+<span class="lineNum">     579 </span>            :                       gimple *stmt, tree expr, int flags)
+<span class="lineNum">     580 </span>            : {
+<span class="lineNum">     581 </span><span class="lineCov">  707995115 :   tree *pptr = &amp;TREE_OPERAND (expr, 0);</span>
+<span class="lineNum">     582 </span>            : 
+<span class="lineNum">     583 </span><span class="lineCov">  707995115 :   if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     584 </span><span class="lineCov">  537613597 :       &amp;&amp; TREE_THIS_VOLATILE (expr))</span>
+<span class="lineNum">     585 </span><span class="lineCov">    1434939 :     gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     586 </span>            : 
+<span class="lineNum">     587 </span>            :   /* Add the VOP.  */
+<span class="lineNum">     588 </span><span class="lineCov">  707995115 :   add_virtual_operand (fn, stmt, flags);</span>
+<span class="lineNum">     589 </span>            : 
+<span class="lineNum">     590 </span>            :   /* If requested, add a USE operand for the base pointer.  */
+<span class="lineNum">     591 </span><span class="lineCov"> 1415990230 :   get_expr_operands (fn, stmt, pptr,</span>
+<span class="lineNum">     592 </span>            :                      opf_non_addressable | opf_use
+<span class="lineNum">     593 </span><span class="lineCov">  707995115 :                      | (flags &amp; (opf_no_vops|opf_not_non_addressable)));</span>
+<span class="lineNum">     594 </span><span class="lineCov">  707995115 : }</span>
+<span class="lineNum">     595 </span>            : 
+<span class="lineNum">     596 </span>            : 
+<span class="lineNum">     597 </span>            : /* A subroutine of get_expr_operands to handle TARGET_MEM_REF.  */
+<a name="598"><span class="lineNum">     598 </span>            : </a>
+<span class="lineNum">     599 </span>            : static void
+<span class="lineNum">     600 </span><span class="lineCov">   13646428 : get_tmr_operands (struct function *fn, gimple *stmt, tree expr, int flags)</span>
+<span class="lineNum">     601 </span>            : {
+<span class="lineNum">     602 </span><span class="lineCov">   13646428 :   if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     603 </span><span class="lineCov">   13643827 :       &amp;&amp; TREE_THIS_VOLATILE (expr))</span>
+<span class="lineNum">     604 </span><span class="lineNoCov">          0 :     gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     605 </span>            : 
+<span class="lineNum">     606 </span>            :   /* First record the real operands.  */
+<span class="lineNum">     607 </span><span class="lineCov">   13646428 :   get_expr_operands (fn, stmt,</span>
+<span class="lineNum">     608 </span>            :                      &amp;TMR_BASE (expr), opf_use | (flags &amp; opf_no_vops));
+<span class="lineNum">     609 </span><span class="lineCov">   13646428 :   get_expr_operands (fn, stmt,</span>
+<span class="lineNum">     610 </span>            :                      &amp;TMR_INDEX (expr), opf_use | (flags &amp; opf_no_vops));
+<span class="lineNum">     611 </span><span class="lineCov">   13646428 :   get_expr_operands (fn, stmt,</span>
+<span class="lineNum">     612 </span>            :                      &amp;TMR_INDEX2 (expr), opf_use | (flags &amp; opf_no_vops));
+<span class="lineNum">     613 </span>            : 
+<span class="lineNum">     614 </span><span class="lineCov">   13646428 :   add_virtual_operand (fn, stmt, flags);</span>
+<span class="lineNum">     615 </span><span class="lineCov">   13646428 : }</span>
+<span class="lineNum">     616 </span>            : 
+<span class="lineNum">     617 </span>            : 
+<span class="lineNum">     618 </span>            : /* If STMT is a call that may clobber globals and other symbols that
+<span class="lineNum">     619 </span>            :    escape, add them to the VDEF/VUSE lists for it.  */
+<a name="620"><span class="lineNum">     620 </span>            : </a>
+<span class="lineNum">     621 </span>            : static void
+<span class="lineNum">     622 </span><span class="lineCov">  403149729 : maybe_add_call_vops (struct function *fn, gcall *stmt)</span>
+<span class="lineNum">     623 </span>            : {
+<span class="lineNum">     624 </span><span class="lineCov">  403149729 :   int call_flags = gimple_call_flags (stmt);</span>
+<span class="lineNum">     625 </span>            : 
+<span class="lineNum">     626 </span>            :   /* If aliases have been computed already, add VDEF or VUSE
+<span class="lineNum">     627 </span>            :      operands for all the symbols that have been found to be
+<span class="lineNum">     628 </span>            :      call-clobbered.  */
+<span class="lineNum">     629 </span><span class="lineCov">  403149729 :   if (!(call_flags &amp; ECF_NOVOPS))</span>
+<span class="lineNum">     630 </span>            :     {
+<span class="lineNum">     631 </span>            :       /* A 'pure' or a 'const' function never call-clobbers anything.  */
+<span class="lineNum">     632 </span><span class="lineCov">  402855370 :       if (!(call_flags &amp; (ECF_PURE | ECF_CONST)))</span>
+<span class="lineNum">     633 </span><span class="lineCov">  358245767 :         add_virtual_operand (fn, stmt, opf_def);</span>
+<span class="lineNum">     634 </span><span class="lineCov">   44609603 :       else if (!(call_flags &amp; ECF_CONST))</span>
+<span class="lineNum">     635 </span><span class="lineCov">   19278470 :         add_virtual_operand (fn, stmt, opf_use);</span>
+<span class="lineNum">     636 </span>            :     }
+<span class="lineNum">     637 </span><span class="lineCov">  403149729 : }</span>
+<span class="lineNum">     638 </span>            : 
+<span class="lineNum">     639 </span>            : 
+<span class="lineNum">     640 </span>            : /* Scan operands in the ASM_EXPR stmt referred to in INFO.  */
+<a name="641"><span class="lineNum">     641 </span>            : </a>
+<span class="lineNum">     642 </span>            : static void
+<span class="lineNum">     643 </span><span class="lineCov">    7867644 : get_asm_stmt_operands (struct function *fn, gasm *stmt)</span>
+<span class="lineNum">     644 </span>            : {
+<span class="lineNum">     645 </span><span class="lineCov">    7867644 :   size_t i, noutputs;</span>
+<span class="lineNum">     646 </span><span class="lineCov">    7867644 :   const char **oconstraints;</span>
+<span class="lineNum">     647 </span><span class="lineCov">    7867644 :   const char *constraint;</span>
+<span class="lineNum">     648 </span><span class="lineCov">    7867644 :   bool allows_mem, allows_reg, is_inout;</span>
+<span class="lineNum">     649 </span>            : 
+<span class="lineNum">     650 </span><span class="lineCov">    7867644 :   noutputs = gimple_asm_noutputs (stmt);</span>
+<span class="lineNum">     651 </span><span class="lineCov">    7867644 :   oconstraints = (const char **) alloca ((noutputs) * sizeof (const char *));</span>
+<span class="lineNum">     652 </span>            : 
+<span class="lineNum">     653 </span>            :   /* Gather all output operands.  */
+<span class="lineNum">     654 </span><span class="lineCov">   15870736 :   for (i = 0; i &lt; gimple_asm_noutputs (stmt); i++)</span>
+<span class="lineNum">     655 </span>            :     {
+<span class="lineNum">     656 </span><span class="lineCov">    8003092 :       tree link = gimple_asm_output_op (stmt, i);</span>
+<span class="lineNum">     657 </span><span class="lineCov">    8003092 :       constraint = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));</span>
+<span class="lineNum">     658 </span><span class="lineCov">    8003092 :       oconstraints[i] = constraint;</span>
+<span class="lineNum">     659 </span><span class="lineCov">    8003092 :       parse_output_constraint (&amp;constraint, i, 0, 0, &amp;allows_mem,</span>
+<span class="lineNum">     660 </span>            :                                &amp;allows_reg, &amp;is_inout);
+<span class="lineNum">     661 </span>            : 
+<span class="lineNum">     662 </span>            :       /* This should have been split in gimplify_asm_expr.  */
+<span class="lineNum">     663 </span><span class="lineCov">    8003092 :       gcc_assert (!allows_reg || !is_inout);</span>
+<span class="lineNum">     664 </span>            : 
+<span class="lineNum">     665 </span>            :       /* Memory operands are addressable.  Note that STMT needs the
+<span class="lineNum">     666 </span>            :          address of this operand.  */
+<span class="lineNum">     667 </span><span class="lineCov">    8003092 :       if (!allows_reg &amp;&amp; allows_mem)</span>
+<span class="lineNum">     668 </span><span class="lineCov">      78729 :         mark_address_taken (TREE_VALUE (link));</span>
+<span class="lineNum">     669 </span>            : 
+<span class="lineNum">     670 </span><span class="lineCov">   16006184 :       get_expr_operands (fn, stmt,</span>
+<span class="lineNum">     671 </span><span class="lineCov">    8003092 :                          &amp;TREE_VALUE (link), opf_def | opf_not_non_addressable);</span>
+<span class="lineNum">     672 </span>            :     }
+<span class="lineNum">     673 </span>            : 
+<span class="lineNum">     674 </span>            :   /* Gather all input operands.  */
+<span class="lineNum">     675 </span><span class="lineCov">   20278704 :   for (i = 0; i &lt; gimple_asm_ninputs (stmt); i++)</span>
+<span class="lineNum">     676 </span>            :     {
+<span class="lineNum">     677 </span><span class="lineCov">    4543416 :       tree link = gimple_asm_input_op (stmt, i);</span>
+<span class="lineNum">     678 </span><span class="lineCov">    4543416 :       constraint = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));</span>
+<span class="lineNum">     679 </span><span class="lineCov">    4543416 :       parse_input_constraint (&amp;constraint, 0, 0, noutputs, 0, oconstraints,</span>
+<span class="lineNum">     680 </span>            :                               &amp;allows_mem, &amp;allows_reg);
+<span class="lineNum">     681 </span>            : 
+<span class="lineNum">     682 </span>            :       /* Memory operands are addressable.  Note that STMT needs the
+<span class="lineNum">     683 </span>            :          address of this operand.  */
+<span class="lineNum">     684 </span><span class="lineCov">    4543416 :       if (!allows_reg &amp;&amp; allows_mem)</span>
+<span class="lineNum">     685 </span><span class="lineCov">     127603 :         mark_address_taken (TREE_VALUE (link));</span>
+<span class="lineNum">     686 </span>            : 
+<span class="lineNum">     687 </span><span class="lineCov">    4543416 :       get_expr_operands (fn, stmt, &amp;TREE_VALUE (link), opf_not_non_addressable);</span>
+<span class="lineNum">     688 </span>            :     }
+<span class="lineNum">     689 </span>            : 
+<span class="lineNum">     690 </span>            :   /* Clobber all memory and addressable symbols for asm (&quot;&quot; : : : &quot;memory&quot;);  */
+<span class="lineNum">     691 </span><span class="lineCov">    7867644 :   if (gimple_asm_clobbers_memory_p (stmt))</span>
+<span class="lineNum">     692 </span><span class="lineCov">    2577627 :     add_virtual_operand (fn, stmt, opf_def);</span>
+<span class="lineNum">     693 </span><span class="lineCov">    7867644 : }</span>
+<span class="lineNum">     694 </span>            : 
+<span class="lineNum">     695 </span>            : 
+<span class="lineNum">     696 </span>            : /* Recursively scan the expression pointed to by EXPR_P in statement
+<span class="lineNum">     697 </span>            :    STMT.  FLAGS is one of the OPF_* constants modifying how to
+<span class="lineNum">     698 </span>            :    interpret the operands found.  */
+<a name="699"><span class="lineNum">     699 </span>            : </a>
+<span class="lineNum">     700 </span>            : static void
+<span class="lineNum">     701 </span><span class="lineCov">11125903382 : get_expr_operands (struct function *fn, gimple *stmt, tree *expr_p, int flags)</span>
+<span class="lineNum">     702 </span>            : {
+<span class="lineNum">     703 </span><span class="lineCov">13575064825 :   enum tree_code code;</span>
+<span class="lineNum">     704 </span><span class="lineCov">13575064825 :   enum tree_code_class codeclass;</span>
+<span class="lineNum">     705 </span><span class="lineCov">13575064825 :   tree expr = *expr_p;</span>
+<span class="lineNum">     706 </span><span class="lineCov">13575064825 :   int uflags = opf_use;</span>
+<span class="lineNum">     707 </span>            : 
+<span class="lineNum">     708 </span><span class="lineCov">13575064825 :   if (expr == NULL)</span>
+<span class="lineNum">     709 </span>            :     return;
+<span class="lineNum">     710 </span>            : 
+<span class="lineNum">     711 </span><span class="lineCov">21994802896 :   if (is_gimple_debug (stmt))</span>
+<span class="lineNum">     712 </span><span class="lineCov"> 2513510400 :     uflags |= (flags &amp; opf_no_vops);</span>
+<span class="lineNum">     713 </span>            : 
+<span class="lineNum">     714 </span><span class="lineCov">10997401448 :   code = TREE_CODE (expr);</span>
+<span class="lineNum">     715 </span><span class="lineCov">10997401448 :   codeclass = TREE_CODE_CLASS (code);</span>
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span><span class="lineCov">10997401448 :   switch (code)</span>
+<span class="lineNum">     718 </span>            :     {
+<span class="lineNum">     719 </span><span class="lineCov"> 1351077286 :     case ADDR_EXPR:</span>
+<span class="lineNum">     720 </span>            :       /* Taking the address of a variable does not represent a
+<span class="lineNum">     721 </span>            :          reference to it, but the fact that the statement takes its
+<span class="lineNum">     722 </span>            :          address will be of interest to some passes (e.g. alias
+<span class="lineNum">     723 </span>            :          resolution).  */
+<span class="lineNum">     724 </span><span class="lineCov"> 1351077286 :       if ((!(flags &amp; opf_non_addressable)</span>
+<span class="lineNum">     725 </span><span class="lineCov"> 1351077286 :            || (flags &amp; opf_not_non_addressable))</span>
+<span class="lineNum">     726 </span><span class="lineCov"> 1351077286 :           &amp;&amp; !is_gimple_debug (stmt))</span>
+<span class="lineNum">     727 </span><span class="lineCov">  750954767 :         mark_address_taken (TREE_OPERAND (expr, 0));</span>
+<span class="lineNum">     728 </span>            : 
+<span class="lineNum">     729 </span>            :       /* Otherwise, there may be variables referenced inside but there
+<span class="lineNum">     730 </span>            :          should be no VUSEs created, since the referenced objects are
+<span class="lineNum">     731 </span>            :          not really accessed.  The only operands that we should find
+<span class="lineNum">     732 </span>            :          here are ARRAY_REF indices which will always be real operands
+<span class="lineNum">     733 </span>            :          (GIMPLE does not allow non-registers as array indices).  */
+<span class="lineNum">     734 </span><span class="lineCov"> 1351077286 :       flags |= opf_no_vops;</span>
+<span class="lineNum">     735 </span><span class="lineCov"> 1351077286 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0),</span>
+<span class="lineNum">     736 </span>            :                          flags | opf_not_non_addressable | opf_address_taken);
+<span class="lineNum">     737 </span><span class="lineCov"> 1351077286 :       return;</span>
+<span class="lineNum">     738 </span>            : 
+<span class="lineNum">     739 </span><span class="lineCov"> 5322137522 :     case SSA_NAME:</span>
+<span class="lineNum">     740 </span><span class="lineCov"> 5322137522 :     case VAR_DECL:</span>
+<span class="lineNum">     741 </span><span class="lineCov"> 5322137522 :     case PARM_DECL:</span>
+<span class="lineNum">     742 </span><span class="lineCov"> 5322137522 :     case RESULT_DECL:</span>
+<span class="lineNum">     743 </span><span class="lineCov"> 5322137522 :     case STRING_CST:</span>
+<span class="lineNum">     744 </span><span class="lineCov"> 5322137522 :       if (!(flags &amp; opf_address_taken))</span>
+<span class="lineNum">     745 </span><span class="lineCov"> 4526471150 :         add_stmt_operand (fn, expr_p, stmt, flags);</span>
+<span class="lineNum">     746 </span>            :       return;
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span><span class="lineCov">  734896995 :     case DEBUG_EXPR_DECL:</span>
+<span class="lineNum">     749 </span><span class="lineCov">  734896995 :       gcc_assert (gimple_debug_bind_p (stmt));</span>
+<span class="lineNum">     750 </span>            :       return;
+<span class="lineNum">     751 </span>            : 
+<span class="lineNum">     752 </span><span class="lineCov">  707995115 :     case MEM_REF:</span>
+<span class="lineNum">     753 </span><span class="lineCov">  707995115 :       get_mem_ref_operands (fn, stmt, expr, flags);</span>
+<span class="lineNum">     754 </span><span class="lineCov">  707995115 :       return;</span>
+<span class="lineNum">     755 </span>            : 
+<span class="lineNum">     756 </span><span class="lineCov">   13646428 :     case TARGET_MEM_REF:</span>
+<span class="lineNum">     757 </span><span class="lineCov">   13646428 :       get_tmr_operands (fn, stmt, expr, flags);</span>
+<span class="lineNum">     758 </span><span class="lineCov">   13646428 :       return;</span>
+<span class="lineNum">     759 </span>            : 
+<span class="lineNum">     760 </span><span class="lineCov"> 1044358101 :     case ARRAY_REF:</span>
+<span class="lineNum">     761 </span><span class="lineCov"> 1044358101 :     case ARRAY_RANGE_REF:</span>
+<span class="lineNum">     762 </span><span class="lineCov"> 1044358101 :     case COMPONENT_REF:</span>
+<span class="lineNum">     763 </span><span class="lineCov"> 1044358101 :     case REALPART_EXPR:</span>
+<span class="lineNum">     764 </span><span class="lineCov"> 1044358101 :     case IMAGPART_EXPR:</span>
+<span class="lineNum">     765 </span><span class="lineCov"> 1044358101 :       {</span>
+<span class="lineNum">     766 </span><span class="lineCov"> 1044358101 :         if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     767 </span><span class="lineCov">  712505028 :             &amp;&amp; TREE_THIS_VOLATILE (expr))</span>
+<span class="lineNum">     768 </span><span class="lineCov">    5011415 :           gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     769 </span>            : 
+<span class="lineNum">     770 </span><span class="lineCov"> 1044358101 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), flags);</span>
+<span class="lineNum">     771 </span>            : 
+<span class="lineNum">     772 </span><span class="lineCov"> 1044358101 :         if (code == COMPONENT_REF)</span>
+<span class="lineNum">     773 </span>            :           {
+<span class="lineNum">     774 </span><span class="lineCov">  855394628 :             if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     775 </span><span class="lineCov">  855394628 :                 &amp;&amp; TREE_THIS_VOLATILE (TREE_OPERAND (expr, 1)))</span>
+<span class="lineNum">     776 </span><span class="lineCov">     743514 :               gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     777 </span><span class="lineCov">  855394628 :             get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 2), uflags);</span>
+<span class="lineNum">     778 </span>            :           }
+<span class="lineNum">     779 </span><span class="lineCov">  188963473 :         else if (code == ARRAY_REF || code == ARRAY_RANGE_REF)</span>
+<span class="lineNum">     780 </span>            :           {
+<span class="lineNum">     781 </span><span class="lineCov">  170694974 :             get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 1), uflags);</span>
+<span class="lineNum">     782 </span><span class="lineCov">  170694974 :             get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 2), uflags);</span>
+<span class="lineNum">     783 </span><span class="lineCov">  170694974 :             get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 3), uflags);</span>
+<span class="lineNum">     784 </span>            :           }
+<span class="lineNum">     785 </span>            : 
+<span class="lineNum">     786 </span>            :         return;
+<span class="lineNum">     787 </span>            :       }
+<span class="lineNum">     788 </span>            : 
+<span class="lineNum">     789 </span><span class="lineCov">       7057 :     case WITH_SIZE_EXPR:</span>
+<span class="lineNum">     790 </span>            :       /* WITH_SIZE_EXPR is a pass-through reference to its first argument,
+<span class="lineNum">     791 </span>            :          and an rvalue reference to its second argument.  */
+<span class="lineNum">     792 </span><span class="lineCov">       7057 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 1), uflags);</span>
+<span class="lineNum">     793 </span><span class="lineCov">       7057 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), flags);</span>
+<span class="lineNum">     794 </span><span class="lineCov">       7057 :       return;</span>
+<span class="lineNum">     795 </span>            : 
+<span class="lineNum">     796 </span><span class="lineCov">       1847 :     case COND_EXPR:</span>
+<span class="lineNum">     797 </span><span class="lineCov">       1847 :     case VEC_COND_EXPR:</span>
+<span class="lineNum">     798 </span><span class="lineCov">       1847 :     case VEC_PERM_EXPR:</span>
+<span class="lineNum">     799 </span><span class="lineCov">       1847 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), uflags);</span>
+<span class="lineNum">     800 </span><span class="lineCov">       1847 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 1), uflags);</span>
+<span class="lineNum">     801 </span><span class="lineCov">       1847 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 2), uflags);</span>
+<span class="lineNum">     802 </span><span class="lineCov">       1847 :       return;</span>
+<span class="lineNum">     803 </span>            : 
+<span class="lineNum">     804 </span><span class="lineCov">  175976170 :     case CONSTRUCTOR:</span>
+<span class="lineNum">     805 </span><span class="lineCov">  175976170 :       {</span>
+<span class="lineNum">     806 </span>            :         /* General aggregate CONSTRUCTORs have been decomposed, but they
+<span class="lineNum">     807 </span>            :            are still in use as the COMPLEX_EXPR equivalent for vectors.  */
+<span class="lineNum">     808 </span><span class="lineCov">  175976170 :         constructor_elt *ce;</span>
+<span class="lineNum">     809 </span><span class="lineCov">  175976170 :         unsigned HOST_WIDE_INT idx;</span>
+<span class="lineNum">     810 </span>            : 
+<span class="lineNum">     811 </span>            :         /* A volatile constructor is actually TREE_CLOBBER_P, transfer
+<span class="lineNum">     812 </span>            :            the volatility to the statement, don't use TREE_CLOBBER_P for
+<span class="lineNum">     813 </span>            :            mirroring the other uses of THIS_VOLATILE in this file.  */
+<span class="lineNum">     814 </span><span class="lineCov">  175976170 :         if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     815 </span><span class="lineCov">  117278842 :             &amp;&amp; TREE_THIS_VOLATILE (expr))</span>
+<span class="lineNum">     816 </span><span class="lineCov">  107912661 :           gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     817 </span>            : 
+<span class="lineNum">     818 </span><span class="lineCov">    4327584 :         for (idx = 0;</span>
+<span class="lineNum">     819 </span><span class="lineCov">  180303754 :              vec_safe_iterate (CONSTRUCTOR_ELTS (expr), idx, &amp;ce);</span>
+<span class="lineNum">     820 </span>            :              idx++)
+<span class="lineNum">     821 </span><span class="lineCov">    4327584 :           get_expr_operands (fn, stmt, &amp;ce-&gt;value, uflags);</span>
+<span class="lineNum">     822 </span>            : 
+<span class="lineNum">     823 </span>            :         return;
+<span class="lineNum">     824 </span>            :       }
+<span class="lineNum">     825 </span>            : 
+<span class="lineNum">     826 </span><span class="lineCov">    3250715 :     case BIT_FIELD_REF:</span>
+<span class="lineNum">     827 </span><span class="lineCov">    3250715 :       if (!(flags &amp; opf_no_vops)</span>
+<span class="lineNum">     828 </span><span class="lineCov">    3243905 :           &amp;&amp; TREE_THIS_VOLATILE (expr))</span>
+<span class="lineNum">     829 </span><span class="lineCov">        725 :         gimple_set_has_volatile_ops (stmt, true);</span>
+<span class="lineNum">     830 </span>            :       /* FALLTHRU */
+<span class="lineNum">     831 </span>            : 
+<span class="lineNum">     832 </span><span class="lineCov">   35601453 :     case VIEW_CONVERT_EXPR:</span>
+<span class="lineNum">     833 </span><span class="lineCov">    3249990 :     do_unary:</span>
+<span class="lineNum">     834 </span><span class="lineCov">   35601453 :       get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), flags);</span>
+<span class="lineNum">     835 </span><span class="lineCov">   35601453 :       return;</span>
+<span class="lineNum">     836 </span>            : 
+<span class="lineNum">     837 </span><span class="lineCov">   36384198 :     case BIT_INSERT_EXPR:</span>
+<span class="lineNum">     838 </span><span class="lineCov">   36384198 :     case COMPOUND_EXPR:</span>
+<span class="lineNum">     839 </span><span class="lineCov">   36384198 :     case OBJ_TYPE_REF:</span>
+<span class="lineNum">     840 </span><span class="lineCov">   36384198 :     case ASSERT_EXPR:</span>
+<span class="lineNum">     841 </span><span class="lineCov">   72768396 :     do_binary:</span>
+<span class="lineNum">     842 </span><span class="lineCov">   36384198 :       {</span>
+<span class="lineNum">     843 </span><span class="lineCov">   36384198 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), flags);</span>
+<span class="lineNum">     844 </span><span class="lineCov">   36384198 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 1), flags);</span>
+<span class="lineNum">     845 </span><span class="lineCov">   36384198 :         return;</span>
+<span class="lineNum">     846 </span>            :       }
+<span class="lineNum">     847 </span>            : 
+<span class="lineNum">     848 </span><span class="lineNoCov">          0 :     case DOT_PROD_EXPR:</span>
+<span class="lineNum">     849 </span><span class="lineNoCov">          0 :     case SAD_EXPR:</span>
+<span class="lineNum">     850 </span><span class="lineNoCov">          0 :     case REALIGN_LOAD_EXPR:</span>
+<span class="lineNum">     851 </span><span class="lineNoCov">          0 :     case WIDEN_MULT_PLUS_EXPR:</span>
+<span class="lineNum">     852 </span><span class="lineNoCov">          0 :     case WIDEN_MULT_MINUS_EXPR:</span>
+<span class="lineNum">     853 </span><span class="lineNoCov">          0 :       {</span>
+<span class="lineNum">     854 </span><span class="lineNoCov">          0 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 0), flags);</span>
+<span class="lineNum">     855 </span><span class="lineNoCov">          0 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 1), flags);</span>
+<span class="lineNum">     856 </span><span class="lineNoCov">          0 :         get_expr_operands (fn, stmt, &amp;TREE_OPERAND (expr, 2), flags);</span>
+<span class="lineNum">     857 </span><span class="lineNoCov">          0 :         return;</span>
+<span class="lineNum">     858 </span>            :       }
+<span class="lineNum">     859 </span>            : 
+<span class="lineNum">     860 </span>            :     case FUNCTION_DECL:
+<span class="lineNum">     861 </span>            :     case LABEL_DECL:
+<span class="lineNum">     862 </span>            :     case CONST_DECL:
+<span class="lineNum">     863 </span>            :     case CASE_LABEL_EXPR:
+<span class="lineNum">     864 </span>            :       /* Expressions that make no memory references.  */
+<span class="lineNum">     865 </span>            :       return;
+<span class="lineNum">     866 </span>            : 
+<span class="lineNum">     867 </span><span class="lineCov"> 1146938364 :     default:</span>
+<span class="lineNum">     868 </span><span class="lineCov"> 1146938364 :       if (codeclass == tcc_unary)</span>
+<span class="lineNum">     869 </span>            :         goto do_unary;
+<span class="lineNum">     870 </span><span class="lineCov"> 1138660069 :       if (codeclass == tcc_binary || codeclass == tcc_comparison)</span>
+<span class="lineNum">     871 </span>            :         goto do_binary;
+<span class="lineNum">     872 </span><span class="lineCov"> 1110853871 :       if (codeclass == tcc_constant || codeclass == tcc_type)</span>
+<span class="lineNum">     873 </span>            :         return;
+<span class="lineNum">     874 </span>            :     }
+<span class="lineNum">     875 </span>            : 
+<span class="lineNum">     876 </span>            :   /* If we get here, something has gone wrong.  */
+<span class="lineNum">     877 </span><span class="lineNoCov">          0 :   if (flag_checking)</span>
+<span class="lineNum">     878 </span>            :     {
+<span class="lineNum">     879 </span><span class="lineNoCov">          0 :       fprintf (stderr, &quot;unhandled expression in get_expr_operands():\n&quot;);</span>
+<span class="lineNum">     880 </span><span class="lineNoCov">          0 :       debug_tree (expr);</span>
+<span class="lineNum">     881 </span><span class="lineNoCov">          0 :       fputs (&quot;\n&quot;, stderr);</span>
+<span class="lineNum">     882 </span><span class="lineNoCov">          0 :       gcc_unreachable ();</span>
+<span class="lineNum">     883 </span>            :     }
+<span class="lineNum">     884 </span>            : }
+<span class="lineNum">     885 </span>            : 
+<span class="lineNum">     886 </span>            : 
+<span class="lineNum">     887 </span>            : /* Parse STMT looking for operands.  When finished, the various
+<span class="lineNum">     888 </span>            :    build_* operand vectors will have potential operands in them.  */
+<a name="889"><span class="lineNum">     889 </span>            : </a>
+<span class="lineNum">     890 </span>            : static void
+<span class="lineNum">     891 </span><span class="lineCov"> 5853798846 : parse_ssa_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     892 </span>            : {
+<span class="lineNum">     893 </span><span class="lineCov"> 5853798846 :   enum gimple_code code = gimple_code (stmt);</span>
+<span class="lineNum">     894 </span><span class="lineCov"> 5853798846 :   size_t i, n, start = 0;</span>
+<span class="lineNum">     895 </span>            : 
+<span class="lineNum">     896 </span><span class="lineCov"> 5853798846 :   switch (code)</span>
+<span class="lineNum">     897 </span>            :     {
+<span class="lineNum">     898 </span><span class="lineCov">    7867644 :     case GIMPLE_ASM:</span>
+<span class="lineNum">     899 </span><span class="lineCov">    7867644 :       get_asm_stmt_operands (fn, as_a &lt;gasm *&gt; (stmt));</span>
+<span class="lineNum">     900 </span><span class="lineCov">    7867644 :       break;</span>
+<span class="lineNum">     901 </span>            : 
+<span class="lineNum">     902 </span><span class="lineCov">      17354 :     case GIMPLE_TRANSACTION:</span>
+<span class="lineNum">     903 </span>            :       /* The start of a transaction is a memory barrier.  */
+<span class="lineNum">     904 </span><span class="lineCov">      17354 :       add_virtual_operand (fn, stmt, opf_def | opf_use);</span>
+<span class="lineNum">     905 </span><span class="lineCov">      17354 :       break;</span>
+<span class="lineNum">     906 </span>            : 
+<span class="lineNum">     907 </span><span class="lineCov"> 3235935312 :     case GIMPLE_DEBUG:</span>
+<span class="lineNum">     908 </span><span class="lineCov"> 3235935312 :       if (gimple_debug_bind_p (stmt)</span>
+<span class="lineNum">     909 </span><span class="lineCov"> 3235935312 :           &amp;&amp; gimple_debug_bind_has_value_p (stmt))</span>
+<span class="lineNum">     910 </span><span class="lineCov"> 1723357884 :         get_expr_operands (fn, stmt, gimple_debug_bind_get_value_ptr (stmt),</span>
+<span class="lineNum">     911 </span>            :                            opf_use | opf_no_vops);
+<span class="lineNum">     912 </span>            :       break;
+<span class="lineNum">     913 </span>            : 
+<span class="lineNum">     914 </span><span class="lineCov">   93518240 :     case GIMPLE_RETURN:</span>
+<span class="lineNum">     915 </span><span class="lineCov">   93518240 :       append_vuse (gimple_vop (fn));</span>
+<span class="lineNum">     916 </span><span class="lineCov">   93518240 :       goto do_default;</span>
+<span class="lineNum">     917 </span>            : 
+<span class="lineNum">     918 </span><span class="lineCov">  403149729 :     case GIMPLE_CALL:</span>
+<span class="lineNum">     919 </span>            :       /* Add call-clobbered operands, if needed.  */
+<span class="lineNum">     920 </span><span class="lineCov">  403149729 :       maybe_add_call_vops (fn, as_a &lt;gcall *&gt; (stmt));</span>
+<span class="lineNum">     921 </span>            :       /* FALLTHRU */
+<span class="lineNum">     922 </span>            : 
+<span class="lineNum">     923 </span><span class="lineCov"> 2143654373 :     case GIMPLE_ASSIGN:</span>
+<span class="lineNum">     924 </span><span class="lineCov"> 2143654373 :       get_expr_operands (fn, stmt, gimple_op_ptr (stmt, 0), opf_def);</span>
+<span class="lineNum">     925 </span><span class="lineCov"> 2143654373 :       start = 1;</span>
+<span class="lineNum">     926 </span>            :       /* FALLTHRU */
+<span class="lineNum">     927 </span>            : 
+<span class="lineNum">     928 </span><span class="lineCov"> 2609978536 :     default:</span>
+<span class="lineNum">     929 </span><span class="lineCov"> 5219957072 :     do_default:</span>
+<span class="lineNum">     930 </span><span class="lineCov"> 2609978536 :       n = gimple_num_ops (stmt);</span>
+<span class="lineNum">     931 </span><span class="lineCov"> 7680918172 :       for (i = start; i &lt; n; i++)</span>
+<span class="lineNum">     932 </span><span class="lineCov"> 5070939636 :         get_expr_operands (fn, stmt, gimple_op_ptr (stmt, i), opf_use);</span>
+<span class="lineNum">     933 </span>            :       break;
+<span class="lineNum">     934 </span>            :     }
+<span class="lineNum">     935 </span><span class="lineCov"> 5853798846 : }</span>
+<span class="lineNum">     936 </span>            : 
+<span class="lineNum">     937 </span>            : 
+<span class="lineNum">     938 </span>            : /* Create an operands cache for STMT.  */
+<a name="939"><span class="lineNum">     939 </span>            : </a>
+<span class="lineNum">     940 </span>            : static void
+<span class="lineNum">     941 </span><span class="lineCov">  226552143 : build_ssa_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     942 </span>            : {
+<span class="lineNum">     943 </span>            :   /* Initially assume that the statement has no volatile operands.  */
+<span class="lineNum">     944 </span><span class="lineCov">  226552143 :   gimple_set_has_volatile_ops (stmt, false);</span>
+<span class="lineNum">     945 </span>            : 
+<span class="lineNum">     946 </span><span class="lineCov">  226552143 :   start_ssa_stmt_operands ();</span>
+<span class="lineNum">     947 </span><span class="lineCov">  226552143 :   parse_ssa_operands (fn, stmt);</span>
+<span class="lineNum">     948 </span><span class="lineCov">  226552143 :   finalize_ssa_stmt_operands (fn, stmt);</span>
+<span class="lineNum">     949 </span><span class="lineCov">  226552143 : }</span>
+<span class="lineNum">     950 </span>            : 
+<span class="lineNum">     951 </span>            : /* Verifies SSA statement operands.  */
+<a name="952"><span class="lineNum">     952 </span>            : </a>
+<span class="lineNum">     953 </span>            : DEBUG_FUNCTION bool
+<span class="lineNum">     954 </span><span class="lineCov"> 5627246703 : verify_ssa_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">     955 </span>            : {
+<span class="lineNum">     956 </span><span class="lineCov"> 5627246703 :   use_operand_p use_p;</span>
+<span class="lineNum">     957 </span><span class="lineCov"> 5627246703 :   def_operand_p def_p;</span>
+<span class="lineNum">     958 </span><span class="lineCov"> 5627246703 :   ssa_op_iter iter;</span>
+<span class="lineNum">     959 </span><span class="lineCov"> 5627246703 :   unsigned i;</span>
+<span class="lineNum">     960 </span><span class="lineCov"> 5627246703 :   tree def;</span>
+<span class="lineNum">     961 </span><span class="lineCov"> 5627246703 :   bool volatile_p = gimple_has_volatile_ops (stmt);</span>
+<span class="lineNum">     962 </span>            : 
+<span class="lineNum">     963 </span>            :   /* build_ssa_operands w/o finalizing them.  */
+<span class="lineNum">     964 </span><span class="lineCov"> 5627246703 :   gimple_set_has_volatile_ops (stmt, false);</span>
+<span class="lineNum">     965 </span><span class="lineCov"> 5627246703 :   start_ssa_stmt_operands ();</span>
+<span class="lineNum">     966 </span><span class="lineCov"> 5627246703 :   parse_ssa_operands (fn, stmt);</span>
+<span class="lineNum">     967 </span>            : 
+<span class="lineNum">     968 </span>            :   /* Now verify the built operands are the same as present in STMT.  */
+<span class="lineNum">     969 </span><span class="lineCov"> 5627246703 :   def = gimple_vdef (stmt);</span>
+<span class="lineNum">     970 </span><span class="lineCov"> 2138021345 :   if (def</span>
+<span class="lineNum">     971 </span><span class="lineCov">  949522399 :       &amp;&amp; TREE_CODE (def) == SSA_NAME)</span>
+<span class="lineNum">     972 </span><span class="lineCov"> 1899044798 :     def = SSA_NAME_VAR (def);</span>
+<span class="lineNum">     973 </span><span class="lineCov"> 5627246703 :   if (build_vdef != def)</span>
+<span class="lineNum">     974 </span>            :     {
+<span class="lineNum">     975 </span><span class="lineNoCov">          0 :       error (&quot;virtual definition of statement not up-to-date&quot;);</span>
+<span class="lineNum">     976 </span><span class="lineNoCov">          0 :       return true;</span>
+<span class="lineNum">     977 </span>            :     }
+<span class="lineNum">     978 </span><span class="lineCov"> 5627246703 :   if (gimple_vdef (stmt)</span>
+<span class="lineNum">     979 </span>            :       &amp;&amp; ((def_p = gimple_vdef_op (stmt)) == NULL_DEF_OPERAND_P
+<span class="lineNum">     980 </span>            :           || DEF_FROM_PTR (def_p) != gimple_vdef (stmt)))
+<span class="lineNum">     981 </span>            :     {
+<span class="lineNum">     982 </span>            :       error (&quot;virtual def operand missing for stmt&quot;);
+<span class="lineNum">     983 </span>            :       return true;
+<span class="lineNum">     984 </span>            :     }
+<span class="lineNum">     985 </span>            : 
+<span class="lineNum">     986 </span><span class="lineCov"> 5627246703 :   tree use = gimple_vuse (stmt);</span>
+<span class="lineNum">     987 </span><span class="lineCov"> 2138021345 :   if (use</span>
+<span class="lineNum">     988 </span><span class="lineCov"> 1448442405 :       &amp;&amp; TREE_CODE (use) == SSA_NAME)</span>
+<span class="lineNum">     989 </span><span class="lineCov"> 2896884810 :     use = SSA_NAME_VAR (use);</span>
+<span class="lineNum">     990 </span><span class="lineCov"> 5627246703 :   if (build_vuse != use)</span>
+<span class="lineNum">     991 </span>            :     {
+<span class="lineNum">     992 </span><span class="lineNoCov">          0 :       error (&quot;virtual use of statement not up-to-date&quot;);</span>
+<span class="lineNum">     993 </span><span class="lineNoCov">          0 :       return true;</span>
+<span class="lineNum">     994 </span>            :     }
+<span class="lineNum">     995 </span><span class="lineCov"> 5627246703 :   if (gimple_vuse (stmt)</span>
+<span class="lineNum">     996 </span><span class="lineCov"> 2138021345 :       &amp;&amp; ((use_p = gimple_vuse_op (stmt)) == NULL_USE_OPERAND_P</span>
+<span class="lineNum">     997 </span><span class="lineCov"> 4345327215 :           || USE_FROM_PTR (use_p) != gimple_vuse (stmt)))</span>
+<span class="lineNum">     998 </span>            :     {
+<span class="lineNum">     999 </span><span class="lineNoCov">          0 :       error (&quot;virtual use operand missing for stmt&quot;);</span>
+<span class="lineNum">    1000 </span><span class="lineNoCov">          0 :       return true;</span>
+<span class="lineNum">    1001 </span>            :     }
+<span class="lineNum">    1002 </span>            : 
+<span class="lineNum">    1003 </span><span class="lineCov"> 8135563596 :   FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)</span>
+<span class="lineNum">    1004 </span>            :     {
+<span class="lineNum">    1005 </span>            :       tree *op;
+<span class="lineNum">    1006 </span><span class="lineCov"> 3288183418 :       FOR_EACH_VEC_ELT (build_uses, i, op)</span>
+<span class="lineNum">    1007 </span>            :         {
+<span class="lineNum">    1008 </span><span class="lineCov"> 3288183418 :           if (use_p-&gt;use == op)</span>
+<span class="lineNum">    1009 </span>            :             {
+<span class="lineNum">    1010 </span><span class="lineCov"> 2508316893 :               build_uses[i] = NULL;</span>
+<span class="lineNum">    1011 </span><span class="lineCov"> 2508316893 :               break;</span>
+<span class="lineNum">    1012 </span>            :             }
+<span class="lineNum">    1013 </span>            :         }
+<span class="lineNum">    1014 </span><span class="lineCov"> 5016633786 :       if (i == build_uses.length ())</span>
+<span class="lineNum">    1015 </span>            :         {
+<span class="lineNum">    1016 </span><span class="lineNoCov">          0 :           error (&quot;excess use operand for stmt&quot;);</span>
+<span class="lineNum">    1017 </span><span class="lineNoCov">          0 :           debug_generic_expr (USE_FROM_PTR (use_p));</span>
+<span class="lineNum">    1018 </span><span class="lineNoCov">          0 :           return true;</span>
+<span class="lineNum">    1019 </span>            :         }
+<span class="lineNum">    1020 </span>            :     }
+<span class="lineNum">    1021 </span>            : 
+<span class="lineNum">    1022 </span>            :   tree *op;
+<span class="lineNum">    1023 </span><span class="lineCov"> 8135563596 :   FOR_EACH_VEC_ELT (build_uses, i, op)</span>
+<span class="lineNum">    1024 </span><span class="lineCov"> 2508316893 :     if (op != NULL)</span>
+<span class="lineNum">    1025 </span>            :       {
+<span class="lineNum">    1026 </span><span class="lineNoCov">          0 :         error (&quot;use operand missing for stmt&quot;);</span>
+<span class="lineNum">    1027 </span><span class="lineNoCov">          0 :         debug_generic_expr (*op);</span>
+<span class="lineNum">    1028 </span><span class="lineNoCov">          0 :         return true;</span>
+<span class="lineNum">    1029 </span>            :       }
+<span class="lineNum">    1030 </span>            : 
+<span class="lineNum">    1031 </span><span class="lineCov"> 7791901792 :   if (gimple_has_volatile_ops (stmt) != volatile_p)</span>
+<span class="lineNum">    1032 </span>            :     {
+<span class="lineNum">    1033 </span><span class="lineNoCov">          0 :       error (&quot;stmt volatile flag not up-to-date&quot;);</span>
+<span class="lineNum">    1034 </span><span class="lineNoCov">          0 :       return true;</span>
+<span class="lineNum">    1035 </span>            :     }
+<span class="lineNum">    1036 </span>            : 
+<span class="lineNum">    1037 </span><span class="lineCov"> 5627246703 :   cleanup_build_arrays ();</span>
+<span class="lineNum">    1038 </span><span class="lineCov"> 5627246703 :   return false;</span>
+<span class="lineNum">    1039 </span>            : }
+<span class="lineNum">    1040 </span>            : 
+<span class="lineNum">    1041 </span>            : 
+<span class="lineNum">    1042 </span>            : /* Releases the operands of STMT back to their freelists, and clears
+<span class="lineNum">    1043 </span>            :    the stmt operand lists.  */
+<a name="1044"><span class="lineNum">    1044 </span>            : </a>
+<span class="lineNum">    1045 </span>            : void
+<span class="lineNum">    1046 </span><span class="lineCov">     957640 : free_stmt_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">    1047 </span>            : {
+<span class="lineNum">    1048 </span><span class="lineCov">     957640 :   use_optype_p uses = gimple_use_ops (stmt), last_use;</span>
+<span class="lineNum">    1049 </span>            : 
+<span class="lineNum">    1050 </span><span class="lineCov">     952673 :   if (uses)</span>
+<span class="lineNum">    1051 </span>            :     {
+<span class="lineNum">    1052 </span><span class="lineCov">       7497 :       for (last_use = uses; last_use-&gt;next; last_use = last_use-&gt;next)</span>
+<span class="lineNum">    1053 </span><span class="lineCov">       2717 :         delink_imm_use (USE_OP_PTR (last_use));</span>
+<span class="lineNum">    1054 </span><span class="lineCov">       4780 :       delink_imm_use (USE_OP_PTR (last_use));</span>
+<span class="lineNum">    1055 </span><span class="lineCov">       9560 :       last_use-&gt;next = gimple_ssa_operands (fn)-&gt;free_uses;</span>
+<span class="lineNum">    1056 </span><span class="lineCov">       9560 :       gimple_ssa_operands (fn)-&gt;free_uses = uses;</span>
+<span class="lineNum">    1057 </span><span class="lineCov">       4780 :       gimple_set_use_ops (stmt, NULL);</span>
+<span class="lineNum">    1058 </span>            :     }
+<span class="lineNum">    1059 </span>            : 
+<span class="lineNum">    1060 </span><span class="lineCov">     957640 :   if (gimple_has_mem_ops (stmt))</span>
+<span class="lineNum">    1061 </span>            :     {
+<span class="lineNum">    1062 </span><span class="lineCov">     863638 :       gimple_set_vuse (stmt, NULL_TREE);</span>
+<span class="lineNum">    1063 </span><span class="lineCov">     863638 :       gimple_set_vdef (stmt, NULL_TREE);</span>
+<span class="lineNum">    1064 </span>            :     }
+<span class="lineNum">    1065 </span><span class="lineCov">     957640 : }</span>
+<span class="lineNum">    1066 </span>            : 
+<span class="lineNum">    1067 </span>            : 
+<span class="lineNum">    1068 </span>            : /* Get the operands of statement STMT.  */
+<a name="1069"><span class="lineNum">    1069 </span>            : </a>
+<span class="lineNum">    1070 </span>            : void
+<span class="lineNum">    1071 </span><span class="lineCov">  227541189 : update_stmt_operands (struct function *fn, gimple *stmt)</span>
+<span class="lineNum">    1072 </span>            : {
+<span class="lineNum">    1073 </span>            :   /* If update_stmt_operands is called before SSA is initialized, do
+<span class="lineNum">    1074 </span>            :      nothing.  */
+<span class="lineNum">    1075 </span><span class="lineCov">  227541189 :   if (!ssa_operands_active (fn))</span>
+<span class="lineNum">    1076 </span>            :     return;
+<span class="lineNum">    1077 </span>            : 
+<span class="lineNum">    1078 </span><span class="lineCov">  226552143 :   timevar_push (TV_TREE_OPS);</span>
+<span class="lineNum">    1079 </span>            : 
+<span class="lineNum">    1080 </span><span class="lineCov">  453104286 :   gcc_assert (gimple_modified_p (stmt));</span>
+<span class="lineNum">    1081 </span><span class="lineCov">  226552143 :   build_ssa_operands (fn, stmt);</span>
+<span class="lineNum">    1082 </span><span class="lineCov">  226552143 :   gimple_set_modified (stmt, false);</span>
+<span class="lineNum">    1083 </span>            : 
+<span class="lineNum">    1084 </span><span class="lineCov">  226552143 :   timevar_pop (TV_TREE_OPS);</span>
+<span class="lineNum">    1085 </span>            : }
+<span class="lineNum">    1086 </span>            : 
+<span class="lineNum">    1087 </span>            : 
+<span class="lineNum">    1088 </span>            : /* Swap operands EXP0 and EXP1 in statement STMT.  No attempt is done
+<span class="lineNum">    1089 </span>            :    to test the validity of the swap operation.  */
+<a name="1090"><span class="lineNum">    1090 </span>            : </a>
+<span class="lineNum">    1091 </span>            : void
+<span class="lineNum">    1092 </span><span class="lineCov">     206760 : swap_ssa_operands (gimple *stmt, tree *exp0, tree *exp1)</span>
+<span class="lineNum">    1093 </span>            : {
+<span class="lineNum">    1094 </span><span class="lineCov">     206760 :   tree op0, op1;</span>
+<span class="lineNum">    1095 </span><span class="lineCov">     206760 :   op0 = *exp0;</span>
+<span class="lineNum">    1096 </span><span class="lineCov">     206760 :   op1 = *exp1;</span>
+<span class="lineNum">    1097 </span>            : 
+<span class="lineNum">    1098 </span><span class="lineCov">     206760 :   if (op0 != op1)</span>
+<span class="lineNum">    1099 </span>            :     {
+<span class="lineNum">    1100 </span>            :       /* Attempt to preserve the relative positions of these two operands in
+<span class="lineNum">    1101 </span>            :          their * respective immediate use lists by adjusting their use pointer
+<span class="lineNum">    1102 </span>            :          to point to the new operand position.  */
+<span class="lineNum">    1103 </span><span class="lineCov">     206760 :       use_optype_p use0, use1, ptr;</span>
+<span class="lineNum">    1104 </span><span class="lineCov">     206760 :       use0 = use1 = NULL;</span>
+<span class="lineNum">    1105 </span>            : 
+<span class="lineNum">    1106 </span>            :       /* Find the 2 operands in the cache, if they are there.  */
+<span class="lineNum">    1107 </span><span class="lineCov">     413756 :       for (ptr = gimple_use_ops (stmt); ptr; ptr = ptr-&gt;next)</span>
+<span class="lineNum">    1108 </span><span class="lineCov">     206758 :         if (USE_OP_PTR (ptr)-&gt;use == exp0)</span>
+<span class="lineNum">    1109 </span>            :           {
+<span class="lineNum">    1110 </span>            :             use0 = ptr;
+<span class="lineNum">    1111 </span>            :             break;
+<span class="lineNum">    1112 </span>            :           }
+<span class="lineNum">    1113 </span>            : 
+<span class="lineNum">    1114 </span><span class="lineCov">     620144 :       for (ptr = gimple_use_ops (stmt); ptr; ptr = ptr-&gt;next)</span>
+<span class="lineNum">    1115 </span><span class="lineCov">     408062 :         if (USE_OP_PTR (ptr)-&gt;use == exp1)</span>
+<span class="lineNum">    1116 </span>            :           {
+<span class="lineNum">    1117 </span>            :             use1 = ptr;
+<span class="lineNum">    1118 </span>            :             break;
+<span class="lineNum">    1119 </span>            :           }
+<span class="lineNum">    1120 </span>            : 
+<span class="lineNum">    1121 </span>            :       /* And adjust their location to point to the new position of the
+<span class="lineNum">    1122 </span>            :          operand.  */
+<span class="lineNum">    1123 </span><span class="lineCov">     206760 :       if (use0)</span>
+<span class="lineNum">    1124 </span><span class="lineCov">     206522 :         USE_OP_PTR (use0)-&gt;use = exp1;</span>
+<span class="lineNum">    1125 </span><span class="lineCov">     206760 :       if (use1)</span>
+<span class="lineNum">    1126 </span><span class="lineCov">     201438 :         USE_OP_PTR (use1)-&gt;use = exp0;</span>
+<span class="lineNum">    1127 </span>            : 
+<span class="lineNum">    1128 </span>            :       /* Now swap the data.  */
+<span class="lineNum">    1129 </span><span class="lineCov">     206760 :       *exp0 = op1;</span>
+<span class="lineNum">    1130 </span><span class="lineCov">     206760 :       *exp1 = op0;</span>
+<span class="lineNum">    1131 </span>            :     }
+<span class="lineNum">    1132 </span><span class="lineCov">     206760 : }</span>
+<span class="lineNum">    1133 </span>            : 
+<span class="lineNum">    1134 </span>            : 
+<span class="lineNum">    1135 </span>            : /* Scan the immediate_use list for VAR making sure its linked properly.
+<span class="lineNum">    1136 </span>            :    Return TRUE if there is a problem and emit an error message to F.  */
+<a name="1137"><span class="lineNum">    1137 </span>            : </a>
+<span class="lineNum">    1138 </span>            : DEBUG_FUNCTION bool
+<span class="lineNum">    1139 </span><span class="lineCov"> 2978617371 : verify_imm_links (FILE *f, tree var)</span>
+<span class="lineNum">    1140 </span>            : {
+<span class="lineNum">    1141 </span><span class="lineCov"> 2978617371 :   use_operand_p ptr, prev, list;</span>
+<span class="lineNum">    1142 </span><span class="lineCov"> 2978617371 :   unsigned int count;</span>
+<span class="lineNum">    1143 </span>            : 
+<span class="lineNum">    1144 </span><span class="lineCov"> 2978617371 :   gcc_assert (TREE_CODE (var) == SSA_NAME);</span>
+<span class="lineNum">    1145 </span>            : 
+<span class="lineNum">    1146 </span><span class="lineCov"> 2978617371 :   list = &amp;(SSA_NAME_IMM_USE_NODE (var));</span>
+<span class="lineNum">    1147 </span><span class="lineCov"> 2978617371 :   gcc_assert (list-&gt;use == NULL);</span>
+<span class="lineNum">    1148 </span>            : 
+<span class="lineNum">    1149 </span><span class="lineCov"> 2978617371 :   if (list-&gt;prev == NULL)</span>
+<span class="lineNum">    1150 </span>            :     {
+<span class="lineNum">    1151 </span><span class="lineNoCov">          0 :       gcc_assert (list-&gt;next == NULL);</span>
+<span class="lineNum">    1152 </span>            :       return false;
+<span class="lineNum">    1153 </span>            :     }
+<span class="lineNum">    1154 </span>            : 
+<span class="lineNum">    1155 </span><span class="lineCov"> 2978617371 :   prev = list;</span>
+<span class="lineNum">    1156 </span><span class="lineCov"> 2978617371 :   count = 0;</span>
+<span class="lineNum">    1157 </span><span class="lineCov"> 8188471735 :   for (ptr = list-&gt;next; ptr != list; )</span>
+<span class="lineNum">    1158 </span>            :     {
+<span class="lineNum">    1159 </span><span class="lineCov"> 5209854364 :       if (prev != ptr-&gt;prev)</span>
+<span class="lineNum">    1160 </span>            :         {
+<span class="lineNum">    1161 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;prev != ptr-&gt;prev\n&quot;);</span>
+<span class="lineNum">    1162 </span><span class="lineNoCov">          0 :           goto error;</span>
+<span class="lineNum">    1163 </span>            :         }
+<span class="lineNum">    1164 </span>            : 
+<span class="lineNum">    1165 </span><span class="lineCov"> 5209854364 :       if (ptr-&gt;use == NULL)</span>
+<span class="lineNum">    1166 </span>            :         {
+<span class="lineNum">    1167 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;ptr-&gt;use == NULL\n&quot;);</span>
+<span class="lineNum">    1168 </span><span class="lineNoCov">          0 :           goto error; /* 2 roots, or SAFE guard node.  */</span>
+<span class="lineNum">    1169 </span>            :         }
+<span class="lineNum">    1170 </span><span class="lineCov"> 5209854364 :       else if (*(ptr-&gt;use) != var)</span>
+<span class="lineNum">    1171 </span>            :         {
+<span class="lineNum">    1172 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;*(ptr-&gt;use) != var\n&quot;);</span>
+<span class="lineNum">    1173 </span><span class="lineNoCov">          0 :           goto error;</span>
+<span class="lineNum">    1174 </span>            :         }
+<span class="lineNum">    1175 </span>            : 
+<span class="lineNum">    1176 </span><span class="lineCov"> 5209854364 :       prev = ptr;</span>
+<span class="lineNum">    1177 </span><span class="lineCov"> 5209854364 :       ptr = ptr-&gt;next;</span>
+<span class="lineNum">    1178 </span>            : 
+<span class="lineNum">    1179 </span><span class="lineCov"> 5209854364 :       count++;</span>
+<span class="lineNum">    1180 </span><span class="lineCov"> 5209854364 :       if (count == 0)</span>
+<span class="lineNum">    1181 </span>            :         {
+<span class="lineNum">    1182 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;number of immediate uses doesn't fit unsigned int\n&quot;);</span>
+<span class="lineNum">    1183 </span><span class="lineNoCov">          0 :           goto error;</span>
+<span class="lineNum">    1184 </span>            :         }
+<span class="lineNum">    1185 </span>            :     }
+<span class="lineNum">    1186 </span>            : 
+<span class="lineNum">    1187 </span>            :   /* Verify list in the other direction.  */
+<span class="lineNum">    1188 </span>            :   prev = list;
+<span class="lineNum">    1189 </span><span class="lineCov"> 8188471735 :   for (ptr = list-&gt;prev; ptr != list; )</span>
+<span class="lineNum">    1190 </span>            :     {
+<span class="lineNum">    1191 </span><span class="lineCov"> 5209854364 :       if (prev != ptr-&gt;next)</span>
+<span class="lineNum">    1192 </span>            :         {
+<span class="lineNum">    1193 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;prev != ptr-&gt;next\n&quot;);</span>
+<span class="lineNum">    1194 </span><span class="lineNoCov">          0 :           goto error;</span>
+<span class="lineNum">    1195 </span>            :         }
+<span class="lineNum">    1196 </span><span class="lineCov"> 5209854364 :       prev = ptr;</span>
+<span class="lineNum">    1197 </span><span class="lineCov"> 5209854364 :       ptr = ptr-&gt;prev;</span>
+<span class="lineNum">    1198 </span><span class="lineCov"> 5209854364 :       if (count == 0)</span>
+<span class="lineNum">    1199 </span>            :         {
+<span class="lineNum">    1200 </span><span class="lineNoCov">          0 :           fprintf (f, &quot;count-- &lt; 0\n&quot;);</span>
+<span class="lineNum">    1201 </span><span class="lineNoCov">          0 :           goto error;</span>
+<span class="lineNum">    1202 </span>            :         }
+<span class="lineNum">    1203 </span><span class="lineCov"> 5209854364 :       count--;</span>
+<span class="lineNum">    1204 </span>            :     }
+<span class="lineNum">    1205 </span>            : 
+<span class="lineNum">    1206 </span><span class="lineCov"> 2978617371 :   if (count != 0)</span>
+<span class="lineNum">    1207 </span>            :     {
+<span class="lineNum">    1208 </span><span class="lineNoCov">          0 :       fprintf (f, &quot;count != 0\n&quot;);</span>
+<span class="lineNum">    1209 </span><span class="lineNoCov">          0 :       goto error;</span>
+<span class="lineNum">    1210 </span>            :     }
+<span class="lineNum">    1211 </span>            : 
+<span class="lineNum">    1212 </span>            :   return false;
+<span class="lineNum">    1213 </span>            : 
+<span class="lineNum">    1214 </span><span class="lineNoCov">          0 :  error:</span>
+<span class="lineNum">    1215 </span><span class="lineNoCov">          0 :   if (ptr-&gt;loc.stmt &amp;&amp; gimple_modified_p (ptr-&gt;loc.stmt))</span>
+<span class="lineNum">    1216 </span>            :     {
+<span class="lineNum">    1217 </span><span class="lineNoCov">          0 :       fprintf (f, &quot; STMT MODIFIED. - &lt;%p&gt; &quot;, (void *)ptr-&gt;loc.stmt);</span>
+<span class="lineNum">    1218 </span><span class="lineNoCov">          0 :       print_gimple_stmt (f, ptr-&gt;loc.stmt, 0, TDF_SLIM);</span>
+<span class="lineNum">    1219 </span>            :     }
+<span class="lineNum">    1220 </span><span class="lineNoCov">          0 :   fprintf (f, &quot; IMM ERROR : (use_p : tree - %p:%p)&quot;, (void *)ptr,</span>
+<span class="lineNum">    1221 </span><span class="lineNoCov">          0 :            (void *)ptr-&gt;use);</span>
+<span class="lineNum">    1222 </span><span class="lineNoCov">          0 :   print_generic_expr (f, USE_FROM_PTR (ptr), TDF_SLIM);</span>
+<span class="lineNum">    1223 </span><span class="lineNoCov">          0 :   fprintf (f, &quot;\n&quot;);</span>
+<span class="lineNum">    1224 </span><span class="lineNoCov">          0 :   return true;</span>
+<span class="lineNum">    1225 </span>            : }
+<span class="lineNum">    1226 </span>            : 
+<span class="lineNum">    1227 </span>            : 
+<span class="lineNum">    1228 </span>            : /* Dump all the immediate uses to FILE.  */
+<a name="1229"><span class="lineNum">    1229 </span>            : </a>
+<span class="lineNum">    1230 </span>            : void
+<span class="lineNum">    1231 </span><span class="lineCov">       1179 : dump_immediate_uses_for (FILE *file, tree var)</span>
+<span class="lineNum">    1232 </span>            : {
+<span class="lineNum">    1233 </span><span class="lineCov">       1179 :   imm_use_iterator iter;</span>
+<span class="lineNum">    1234 </span><span class="lineCov">       1179 :   use_operand_p use_p;</span>
+<span class="lineNum">    1235 </span>            : 
+<span class="lineNum">    1236 </span><span class="lineCov">       1179 :   gcc_assert (var &amp;&amp; TREE_CODE (var) == SSA_NAME);</span>
+<span class="lineNum">    1237 </span>            : 
+<span class="lineNum">    1238 </span><span class="lineCov">       1179 :   print_generic_expr (file, var, TDF_SLIM);</span>
+<span class="lineNum">    1239 </span><span class="lineCov">       1179 :   fprintf (file, &quot; : --&gt;&quot;);</span>
+<span class="lineNum">    1240 </span><span class="lineCov">       1179 :   if (has_zero_uses (var))</span>
+<span class="lineNum">    1241 </span><span class="lineCov">         80 :     fprintf (file, &quot; no uses.\n&quot;);</span>
+<span class="lineNum">    1242 </span>            :   else
+<span class="lineNum">    1243 </span><span class="lineCov">       1099 :     if (has_single_use (var))</span>
+<span class="lineNum">    1244 </span><span class="lineCov">        812 :       fprintf (file, &quot; single use.\n&quot;);</span>
+<span class="lineNum">    1245 </span>            :     else
+<span class="lineNum">    1246 </span><span class="lineCov">        287 :       fprintf (file, &quot;%d uses.\n&quot;, num_imm_uses (var));</span>
+<span class="lineNum">    1247 </span>            : 
+<span class="lineNum">    1248 </span><span class="lineCov">       2991 :   FOR_EACH_IMM_USE_FAST (use_p, iter, var)</span>
+<span class="lineNum">    1249 </span>            :     {
+<span class="lineNum">    1250 </span><span class="lineCov">       1812 :       if (use_p-&gt;loc.stmt == NULL &amp;&amp; use_p-&gt;use == NULL)</span>
+<span class="lineNum">    1251 </span><span class="lineNoCov">          0 :         fprintf (file, &quot;***end of stmt iterator marker***\n&quot;);</span>
+<span class="lineNum">    1252 </span>            :       else
+<span class="lineNum">    1253 </span><span class="lineCov">       3624 :         if (!is_gimple_reg (USE_FROM_PTR (use_p)))</span>
+<span class="lineNum">    1254 </span><span class="lineCov">        828 :           print_gimple_stmt (file, USE_STMT (use_p), 0, TDF_VOPS|TDF_MEMSYMS);</span>
+<span class="lineNum">    1255 </span>            :         else
+<span class="lineNum">    1256 </span><span class="lineCov">       1398 :           print_gimple_stmt (file, USE_STMT (use_p), 0, TDF_SLIM);</span>
+<span class="lineNum">    1257 </span>            :     }
+<span class="lineNum">    1258 </span><span class="lineCov">       1179 :   fprintf (file, &quot;\n&quot;);</span>
+<span class="lineNum">    1259 </span><span class="lineCov">       1179 : }</span>
+<span class="lineNum">    1260 </span>            : 
+<span class="lineNum">    1261 </span>            : 
+<span class="lineNum">    1262 </span>            : /* Dump all the immediate uses to FILE.  */
+<a name="1263"><span class="lineNum">    1263 </span>            : </a>
+<span class="lineNum">    1264 </span>            : void
+<span class="lineNum">    1265 </span><span class="lineCov">         47 : dump_immediate_uses (FILE *file)</span>
+<span class="lineNum">    1266 </span>            : {
+<span class="lineNum">    1267 </span><span class="lineCov">         47 :   tree var;</span>
+<span class="lineNum">    1268 </span><span class="lineCov">         47 :   unsigned int x;</span>
+<span class="lineNum">    1269 </span>            : 
+<span class="lineNum">    1270 </span><span class="lineCov">         47 :   fprintf (file, &quot;Immediate_uses: \n\n&quot;);</span>
+<span class="lineNum">    1271 </span><span class="lineCov">       1540 :   FOR_EACH_SSA_NAME (x, var, cfun)</span>
+<span class="lineNum">    1272 </span>            :     {
+<span class="lineNum">    1273 </span><span class="lineCov">       1179 :       dump_immediate_uses_for (file, var);</span>
+<span class="lineNum">    1274 </span>            :     }
+<span class="lineNum">    1275 </span><span class="lineCov">         47 : }</span>
+<span class="lineNum">    1276 </span>            : 
+<span class="lineNum">    1277 </span>            : 
+<span class="lineNum">    1278 </span>            : /* Dump def-use edges on stderr.  */
+<a name="1279"><span class="lineNum">    1279 </span>            : </a>
+<span class="lineNum">    1280 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1281 </span><span class="lineNoCov">          0 : debug_immediate_uses (void)</span>
+<span class="lineNum">    1282 </span>            : {
+<span class="lineNum">    1283 </span><span class="lineNoCov">          0 :   dump_immediate_uses (stderr);</span>
+<span class="lineNum">    1284 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1285 </span>            : 
+<span class="lineNum">    1286 </span>            : 
+<span class="lineNum">    1287 </span>            : /* Dump def-use edges on stderr.  */
+<a name="1288"><span class="lineNum">    1288 </span>            : </a>
+<span class="lineNum">    1289 </span>            : DEBUG_FUNCTION void
+<span class="lineNum">    1290 </span><span class="lineNoCov">          0 : debug_immediate_uses_for (tree var)</span>
+<span class="lineNum">    1291 </span>            : {
+<span class="lineNum">    1292 </span><span class="lineNoCov">          0 :   dump_immediate_uses_for (stderr, var);</span>
+<span class="lineNum">    1293 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">    1294 </span>            : 
+<span class="lineNum">    1295 </span>            : 
+<span class="lineNum">    1296 </span>            : /* Unlink STMTs virtual definition from the IL by propagating its use.  */
+<a name="1297"><span class="lineNum">    1297 </span>            : </a>
+<span class="lineNum">    1298 </span>            : void
+<span class="lineNum">    1299 </span><span class="lineCov">   24960607 : unlink_stmt_vdef (gimple *stmt)</span>
+<span class="lineNum">    1300 </span>            : {
+<span class="lineNum">    1301 </span><span class="lineCov">   24960607 :   use_operand_p use_p;</span>
+<span class="lineNum">    1302 </span><span class="lineCov">   24960607 :   imm_use_iterator iter;</span>
+<span class="lineNum">    1303 </span><span class="lineCov">   24960607 :   gimple *use_stmt;</span>
+<span class="lineNum">    1304 </span><span class="lineCov">   24960607 :   tree vdef = gimple_vdef (stmt);</span>
+<span class="lineNum">    1305 </span><span class="lineCov">   24960607 :   tree vuse = gimple_vuse (stmt);</span>
+<span class="lineNum">    1306 </span>            : 
+<span class="lineNum">    1307 </span><span class="lineCov">   24960607 :   if (!vdef</span>
+<span class="lineNum">    1308 </span><span class="lineCov">    6576813 :       || TREE_CODE (vdef) != SSA_NAME)</span>
+<span class="lineNum">    1309 </span><span class="lineCov">   18547364 :     return;</span>
+<span class="lineNum">    1310 </span>            : 
+<span class="lineNum">    1311 </span><span class="lineCov">   15794515 :   FOR_EACH_IMM_USE_STMT (use_stmt, iter, vdef)</span>
+<span class="lineNum">    1312 </span>            :     {
+<span class="lineNum">    1313 </span><span class="lineCov">   56694622 :       FOR_EACH_IMM_USE_ON_STMT (use_p, iter)</span>
+<span class="lineNum">    1314 </span><span class="lineCov">    9584767 :         SET_USE (use_p, vuse);</span>
+<span class="lineNum">    1315 </span>            :     }
+<span class="lineNum">    1316 </span>            : 
+<span class="lineNum">    1317 </span><span class="lineCov">    6413243 :   if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (vdef))</span>
+<span class="lineNum">    1318 </span><span class="lineCov">        506 :     SSA_NAME_OCCURS_IN_ABNORMAL_PHI (vuse) = 1;</span>
+<span class="lineNum">    1319 </span>            : }
+<span class="lineNum">    1320 </span>            : 
+<span class="lineNum">    1321 </span>            : /* Return true if the var whose chain of uses starts at PTR has a
+<span class="lineNum">    1322 </span>            :    single nondebug use.  Set USE_P and STMT to that single nondebug
+<a name="1323"><span class="lineNum">    1323 </span>            :    use, if so, or to NULL otherwise.  */</a>
+<span class="lineNum">    1324 </span>            : bool
+<span class="lineNum">    1325 </span><span class="lineCov">   10617596 : single_imm_use_1 (const ssa_use_operand_t *head,</span>
+<span class="lineNum">    1326 </span>            :                   use_operand_p *use_p, gimple **stmt)
+<span class="lineNum">    1327 </span>            : {
+<span class="lineNum">    1328 </span><span class="lineCov">   10617596 :   ssa_use_operand_t *ptr, *single_use = 0;</span>
+<span class="lineNum">    1329 </span>            : 
+<span class="lineNum">    1330 </span><span class="lineCov">   24928053 :   for (ptr = head-&gt;next; ptr != head; ptr = ptr-&gt;next)</span>
+<span class="lineNum">    1331 </span><span class="lineCov">   22773550 :     if (USE_STMT(ptr) &amp;&amp; !is_gimple_debug (USE_STMT (ptr)))</span>
+<span class="lineNum">    1332 </span>            :       {
+<span class="lineNum">    1333 </span><span class="lineCov">   19078890 :         if (single_use)</span>
+<span class="lineNum">    1334 </span>            :           {
+<span class="lineNum">    1335 </span>            :             single_use = NULL;
+<span class="lineNum">    1336 </span>            :             break;
+<span class="lineNum">    1337 </span>            :           }
+<span class="lineNum">    1338 </span>            :         single_use = ptr;
+<span class="lineNum">    1339 </span>            :       }
+<span class="lineNum">    1340 </span>            : 
+<span class="lineNum">    1341 </span><span class="lineCov">   10617596 :   if (use_p)</span>
+<span class="lineNum">    1342 </span><span class="lineCov">   10617596 :     *use_p = single_use;</span>
+<span class="lineNum">    1343 </span>            : 
+<span class="lineNum">    1344 </span><span class="lineCov">   10617596 :   if (stmt)</span>
+<span class="lineNum">    1345 </span><span class="lineCov">   10617596 :     *stmt = single_use ? single_use-&gt;loc.stmt : NULL;</span>
+<span class="lineNum">    1346 </span>            : 
+<span class="lineNum">    1347 </span><span class="lineCov">   10617596 :   return single_use;</span>
+<span class="lineNum">    1348 </span>            : }
+<span class="lineNum">    1349 </span>            : 
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

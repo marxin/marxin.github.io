@@ -1,0 +1,835 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/combine-stack-adj.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - combine-stack-adj.c<span style="font-size: 80%;"> (source / <a href="combine-stack-adj.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">241</td>
+            <td class="headerCovTableEntry">262</td>
+            <td class="headerCovTableEntryHi">92.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntryMed">83.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Combine stack adjustments.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 1987-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : This file is part of GCC.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       7 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       8 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">       9 </span>            : version.
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      12 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      13 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      14 </span>            : for more details.
+<span class="lineNum">      15 </span>            : 
+<span class="lineNum">      16 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      17 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      18 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      19 </span>            : 
+<span class="lineNum">      20 </span>            : /* Track stack adjustments and stack memory references.  Attempt to
+<span class="lineNum">      21 </span>            :    reduce the number of stack adjustments by back-propagating across
+<span class="lineNum">      22 </span>            :    the memory references.
+<span class="lineNum">      23 </span>            : 
+<span class="lineNum">      24 </span>            :    This is intended primarily for use with targets that do not define
+<span class="lineNum">      25 </span>            :    ACCUMULATE_OUTGOING_ARGS.  It is of significantly more value to
+<span class="lineNum">      26 </span>            :    targets that define PREFERRED_STACK_BOUNDARY more aligned than
+<span class="lineNum">      27 </span>            :    STACK_BOUNDARY (e.g. x86), or if not all registers can be pushed
+<span class="lineNum">      28 </span>            :    (e.g. x86 fp regs) which would ordinarily have to be implemented
+<span class="lineNum">      29 </span>            :    as a sub/mov pair due to restrictions in calls.c.
+<span class="lineNum">      30 </span>            : 
+<span class="lineNum">      31 </span>            :    Propagation stops when any of the insns that need adjusting are
+<span class="lineNum">      32 </span>            :    (a) no longer valid because we've exceeded their range, (b) a
+<span class="lineNum">      33 </span>            :    non-trivial push instruction, or (c) a call instruction.
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            :    Restriction B is based on the assumption that push instructions
+<span class="lineNum">      36 </span>            :    are smaller or faster.  If a port really wants to remove all
+<span class="lineNum">      37 </span>            :    pushes, it should have defined ACCUMULATE_OUTGOING_ARGS.  The
+<span class="lineNum">      38 </span>            :    one exception that is made is for an add immediately followed
+<span class="lineNum">      39 </span>            :    by a push.  */
+<span class="lineNum">      40 </span>            : 
+<span class="lineNum">      41 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      42 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      43 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      44 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      45 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      46 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      47 </span>            : #include &quot;insn-config.h&quot;
+<span class="lineNum">      48 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      49 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      50 </span>            : #include &quot;recog.h&quot;
+<span class="lineNum">      51 </span>            : #include &quot;cfgrtl.h&quot;
+<span class="lineNum">      52 </span>            : #include &quot;tree-pass.h&quot;
+<span class="lineNum">      53 </span>            : #include &quot;rtl-iter.h&quot;
+<span class="lineNum">      54 </span>            : 
+<span class="lineNum">      55 </span>            : 
+<span class="lineNum">      56 </span>            : /* This structure records two kinds of stack references between stack
+<span class="lineNum">      57 </span>            :    adjusting instructions: stack references in memory addresses for
+<span class="lineNum">      58 </span>            :    regular insns and all stack references for debug insns.  */
+<span class="lineNum">      59 </span>            : 
+<span class="lineNum">      60 </span>            : struct csa_reflist
+<span class="lineNum">      61 </span>            : {
+<span class="lineNum">      62 </span>            :   HOST_WIDE_INT sp_offset;
+<span class="lineNum">      63 </span>            :   rtx_insn *insn;
+<span class="lineNum">      64 </span>            :   rtx *ref;
+<span class="lineNum">      65 </span>            :   struct csa_reflist *next;
+<span class="lineNum">      66 </span>            : };
+<span class="lineNum">      67 </span>            : 
+<span class="lineNum">      68 </span>            : static int stack_memref_p (rtx);
+<span class="lineNum">      69 </span>            : static rtx single_set_for_csa (rtx_insn *);
+<span class="lineNum">      70 </span>            : static void free_csa_reflist (struct csa_reflist *);
+<span class="lineNum">      71 </span>            : static struct csa_reflist *record_one_stack_ref (rtx_insn *, rtx *,
+<span class="lineNum">      72 </span>            :                                                  struct csa_reflist *);
+<span class="lineNum">      73 </span>            : static int try_apply_stack_adjustment (rtx_insn *, struct csa_reflist *,
+<span class="lineNum">      74 </span>            :                                        HOST_WIDE_INT, HOST_WIDE_INT);
+<span class="lineNum">      75 </span>            : static void combine_stack_adjustments_for_block (basic_block);
+<span class="lineNum">      76 </span>            : 
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            : /* Main entry point for stack adjustment combination.  */
+<a name="79"><span class="lineNum">      79 </span>            : </a>
+<span class="lineNum">      80 </span>            : static void
+<span class="lineNum">      81 </span><span class="lineCov">     622498 : combine_stack_adjustments (void)</span>
+<span class="lineNum">      82 </span>            : {
+<span class="lineNum">      83 </span><span class="lineCov">     622498 :   basic_block bb;</span>
+<span class="lineNum">      84 </span>            : 
+<span class="lineNum">      85 </span><span class="lineCov">    6967370 :   FOR_EACH_BB_FN (bb, cfun)</span>
+<span class="lineNum">      86 </span><span class="lineCov">    6344872 :     combine_stack_adjustments_for_block (bb);</span>
+<span class="lineNum">      87 </span><span class="lineCov">     622498 : }</span>
+<span class="lineNum">      88 </span>            : 
+<span class="lineNum">      89 </span>            : /* Recognize a MEM of the form (sp) or (plus sp const).  */
+<a name="90"><span class="lineNum">      90 </span>            : </a>
+<span class="lineNum">      91 </span>            : static int
+<span class="lineNum">      92 </span><span class="lineNoCov">          0 : stack_memref_p (rtx x)</span>
+<span class="lineNum">      93 </span>            : {
+<span class="lineNum">      94 </span><span class="lineNoCov">          0 :   if (!MEM_P (x))</span>
+<span class="lineNum">      95 </span>            :     return 0;
+<span class="lineNum">      96 </span><span class="lineCov">    1148641 :   x = XEXP (x, 0);</span>
+<span class="lineNum">      97 </span>            : 
+<span class="lineNum">      98 </span><span class="lineCov">    1148641 :   if (x == stack_pointer_rtx)</span>
+<span class="lineNum">      99 </span>            :     return 1;
+<span class="lineNum">     100 </span><span class="lineCov">    1083698 :   if (GET_CODE (x) == PLUS</span>
+<span class="lineNum">     101 </span><span class="lineCov">     462879 :       &amp;&amp; XEXP (x, 0) == stack_pointer_rtx</span>
+<span class="lineNum">     102 </span><span class="lineCov">     462683 :       &amp;&amp; CONST_INT_P (XEXP (x, 1)))</span>
+<span class="lineNum">     103 </span><span class="lineNoCov">          0 :     return 1;</span>
+<span class="lineNum">     104 </span>            : 
+<span class="lineNum">     105 </span>            :   return 0;
+<span class="lineNum">     106 </span>            : }
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            : /* Recognize either normal single_set or the hack in i386.md for
+<span class="lineNum">     109 </span>            :    tying fp and sp adjustments.  */
+<a name="110"><span class="lineNum">     110 </span>            : </a>
+<span class="lineNum">     111 </span>            : static rtx
+<span class="lineNum">     112 </span><span class="lineCov">   64509415 : single_set_for_csa (rtx_insn *insn)</span>
+<span class="lineNum">     113 </span>            : {
+<span class="lineNum">     114 </span><span class="lineCov">   64509415 :   int i;</span>
+<span class="lineNum">     115 </span><span class="lineCov">   64509415 :   rtx tmp = single_set (insn);</span>
+<span class="lineNum">     116 </span><span class="lineCov">   64509415 :   if (tmp)</span>
+<span class="lineNum">     117 </span>            :     return tmp;
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span><span class="lineCov">   30437860 :   if (!NONJUMP_INSN_P (insn)</span>
+<span class="lineNum">     120 </span><span class="lineCov">   30437860 :       || GET_CODE (PATTERN (insn)) != PARALLEL)</span>
+<span class="lineNum">     121 </span>            :     return NULL_RTX;
+<span class="lineNum">     122 </span>            : 
+<span class="lineNum">     123 </span><span class="lineCov">     207748 :   tmp = PATTERN (insn);</span>
+<span class="lineNum">     124 </span><span class="lineCov">     207748 :   if (GET_CODE (XVECEXP (tmp, 0, 0)) != SET)</span>
+<span class="lineNum">     125 </span>            :     return NULL_RTX;
+<span class="lineNum">     126 </span>            : 
+<span class="lineNum">     127 </span><span class="lineCov">     149423 :   for (i = 1; i &lt; XVECLEN (tmp, 0); ++i)</span>
+<span class="lineNum">     128 </span>            :     {
+<span class="lineNum">     129 </span><span class="lineCov">     149423 :       rtx this_rtx = XVECEXP (tmp, 0, i);</span>
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span>            :       /* The special case is allowing a no-op set.  */
+<span class="lineNum">     132 </span><span class="lineCov">     149423 :       if (GET_CODE (this_rtx) == SET</span>
+<span class="lineNum">     133 </span><span class="lineCov">     149084 :           &amp;&amp; SET_SRC (this_rtx) == SET_DEST (this_rtx))</span>
+<span class="lineNum">     134 </span>            :         ;
+<span class="lineNum">     135 </span><span class="lineCov">     298846 :       else if (GET_CODE (this_rtx) != CLOBBER</span>
+<span class="lineNum">     136 </span>            :                &amp;&amp; GET_CODE (this_rtx) != CLOBBER_HIGH
+<span class="lineNum">     137 </span><span class="lineCov">     149423 :                &amp;&amp; GET_CODE (this_rtx) != USE)</span>
+<span class="lineNum">     138 </span>            :         return NULL_RTX;
+<span class="lineNum">     139 </span>            :     }
+<span class="lineNum">     140 </span>            : 
+<span class="lineNum">     141 </span>            :   return XVECEXP (tmp, 0, 0);
+<span class="lineNum">     142 </span>            : }
+<span class="lineNum">     143 </span>            : 
+<span class="lineNum">     144 </span>            : /* Free the list of csa_reflist nodes.  */
+<a name="145"><span class="lineNum">     145 </span>            : </a>
+<span class="lineNum">     146 </span>            : static void
+<span class="lineNum">     147 </span><span class="lineNoCov">          0 : free_csa_reflist (struct csa_reflist *reflist)</span>
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span><span class="lineCov">    1692844 :   struct csa_reflist *next;</span>
+<span class="lineNum">     150 </span><span class="lineCov">    1692844 :   for (; reflist ; reflist = next)</span>
+<span class="lineNum">     151 </span>            :     {
+<span class="lineNum">     152 </span><span class="lineCov">     564456 :       next = reflist-&gt;next;</span>
+<span class="lineNum">     153 </span><span class="lineCov">     564456 :       free (reflist);</span>
+<span class="lineNum">     154 </span>            :     }
+<span class="lineNum">     155 </span><span class="lineNoCov">          0 : }</span>
+<span class="lineNum">     156 </span>            : 
+<span class="lineNum">     157 </span>            : /* Create a new csa_reflist node from the given stack reference.
+<span class="lineNum">     158 </span>            :    It is already known that the reference is either a MEM satisfying the
+<span class="lineNum">     159 </span>            :    predicate stack_memref_p or a REG representing the stack pointer.  */
+<a name="160"><span class="lineNum">     160 </span>            : </a>
+<span class="lineNum">     161 </span>            : static struct csa_reflist *
+<span class="lineNum">     162 </span><span class="lineCov">     564456 : record_one_stack_ref (rtx_insn *insn, rtx *ref, struct csa_reflist *next_reflist)</span>
+<span class="lineNum">     163 </span>            : {
+<span class="lineNum">     164 </span><span class="lineCov">     564456 :   struct csa_reflist *ml;</span>
+<span class="lineNum">     165 </span>            : 
+<span class="lineNum">     166 </span><span class="lineCov">     564456 :   ml = XNEW (struct csa_reflist);</span>
+<span class="lineNum">     167 </span>            : 
+<span class="lineNum">     168 </span><span class="lineCov">     564456 :   if (REG_P (*ref) || XEXP (*ref, 0) == stack_pointer_rtx)</span>
+<span class="lineNum">     169 </span><span class="lineCov">     101786 :     ml-&gt;sp_offset = 0;</span>
+<span class="lineNum">     170 </span>            :   else
+<span class="lineNum">     171 </span><span class="lineCov">     462670 :     ml-&gt;sp_offset = INTVAL (XEXP (XEXP (*ref, 0), 1));</span>
+<span class="lineNum">     172 </span>            : 
+<span class="lineNum">     173 </span><span class="lineCov">     564456 :   ml-&gt;insn = insn;</span>
+<span class="lineNum">     174 </span><span class="lineCov">     564456 :   ml-&gt;ref = ref;</span>
+<span class="lineNum">     175 </span><span class="lineCov">     564456 :   ml-&gt;next = next_reflist;</span>
+<span class="lineNum">     176 </span>            : 
+<span class="lineNum">     177 </span><span class="lineCov">     564456 :   return ml;</span>
+<span class="lineNum">     178 </span>            : }
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span>            : /* We only know how to adjust the CFA; no other frame-related changes
+<span class="lineNum">     181 </span>            :    may appear in any insn to be deleted.  */
+<a name="182"><span class="lineNum">     182 </span>            : </a>
+<span class="lineNum">     183 </span>            : static bool
+<span class="lineNum">     184 </span><span class="lineCov">     293742 : no_unhandled_cfa (rtx_insn *insn)</span>
+<span class="lineNum">     185 </span>            : {
+<span class="lineNum">     186 </span><span class="lineCov">     293742 :   if (!RTX_FRAME_RELATED_P (insn))</span>
+<span class="lineNum">     187 </span>            :     return true;
+<span class="lineNum">     188 </span>            : 
+<span class="lineNum">     189 </span>            :   /* No CFA notes at all is a legacy interpretation like
+<span class="lineNum">     190 </span>            :      FRAME_RELATED_EXPR, and is context sensitive within
+<span class="lineNum">     191 </span>            :      the prologue state machine.  We can't handle that here.  */
+<span class="lineNum">     192 </span><span class="lineCov">          1 :   bool has_cfa_adjust = false;</span>
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span><span class="lineCov">          3 :   for (rtx link = REG_NOTES (insn); link; link = XEXP (link, 1))</span>
+<span class="lineNum">     195 </span><span class="lineCov">          2 :     switch (REG_NOTE_KIND (link))</span>
+<span class="lineNum">     196 </span>            :       {
+<span class="lineNum">     197 </span>            :       default:
+<span class="lineNum">     198 </span>            :         break;
+<span class="lineNum">     199 </span>            :       case REG_CFA_ADJUST_CFA:
+<span class="lineNum">     200 </span>            :         has_cfa_adjust = true;
+<span class="lineNum">     201 </span>            :         break;
+<span class="lineNum">     202 </span>            : 
+<span class="lineNum">     203 </span>            :       case REG_FRAME_RELATED_EXPR:
+<span class="lineNum">     204 </span>            :       case REG_CFA_DEF_CFA:
+<span class="lineNum">     205 </span>            :       case REG_CFA_OFFSET:
+<span class="lineNum">     206 </span>            :       case REG_CFA_REGISTER:
+<span class="lineNum">     207 </span>            :       case REG_CFA_EXPRESSION:
+<span class="lineNum">     208 </span>            :       case REG_CFA_RESTORE:
+<span class="lineNum">     209 </span>            :       case REG_CFA_SET_VDRAP:
+<span class="lineNum">     210 </span>            :       case REG_CFA_WINDOW_SAVE:
+<span class="lineNum">     211 </span>            :       case REG_CFA_FLUSH_QUEUE:
+<span class="lineNum">     212 </span>            :       case REG_CFA_TOGGLE_RA_MANGLE:
+<span class="lineNum">     213 </span>            :         return false;
+<span class="lineNum">     214 </span>            :       }
+<span class="lineNum">     215 </span>            : 
+<span class="lineNum">     216 </span>            :   return has_cfa_adjust;
+<span class="lineNum">     217 </span>            : }
+<span class="lineNum">     218 </span>            : 
+<span class="lineNum">     219 </span>            : /* Attempt to apply ADJUST to the stack adjusting insn INSN, as well
+<span class="lineNum">     220 </span>            :    as each of the memories and stack references in REFLIST.  Return true
+<span class="lineNum">     221 </span>            :    on success.  */
+<a name="222"><span class="lineNum">     222 </span>            : </a>
+<span class="lineNum">     223 </span>            : static int
+<span class="lineNum">     224 </span><span class="lineCov">     352128 : try_apply_stack_adjustment (rtx_insn *insn, struct csa_reflist *reflist,</span>
+<span class="lineNum">     225 </span>            :                             HOST_WIDE_INT new_adjust, HOST_WIDE_INT delta)
+<span class="lineNum">     226 </span>            : {
+<span class="lineNum">     227 </span><span class="lineCov">     352128 :   struct csa_reflist *ml;</span>
+<span class="lineNum">     228 </span><span class="lineCov">     352128 :   rtx set;</span>
+<span class="lineNum">     229 </span>            : 
+<span class="lineNum">     230 </span><span class="lineCov">     352128 :   set = single_set_for_csa (insn);</span>
+<span class="lineNum">     231 </span><span class="lineCov">     352128 :   if (MEM_P (SET_DEST (set)))</span>
+<span class="lineNum">     232 </span><span class="lineCov">      58386 :     validate_change (insn, &amp;SET_DEST (set),</span>
+<span class="lineNum">     233 </span>            :                      replace_equiv_address (SET_DEST (set), stack_pointer_rtx),
+<span class="lineNum">     234 </span>            :                      1);
+<span class="lineNum">     235 </span>            :   else
+<span class="lineNum">     236 </span><span class="lineCov">     293742 :     validate_change (insn, &amp;XEXP (SET_SRC (set), 1), GEN_INT (new_adjust), 1);</span>
+<span class="lineNum">     237 </span>            : 
+<span class="lineNum">     238 </span><span class="lineCov">     512966 :   for (ml = reflist; ml ; ml = ml-&gt;next)</span>
+<span class="lineNum">     239 </span>            :     {
+<span class="lineNum">     240 </span><span class="lineCov">     160838 :       rtx new_addr = plus_constant (Pmode, stack_pointer_rtx,</span>
+<span class="lineNum">     241 </span><span class="lineCov">     160838 :                                     ml-&gt;sp_offset - delta);</span>
+<span class="lineNum">     242 </span><span class="lineCov">     160838 :       rtx new_val;</span>
+<span class="lineNum">     243 </span>            : 
+<span class="lineNum">     244 </span><span class="lineCov">     160838 :       if (MEM_P (*ml-&gt;ref))</span>
+<span class="lineNum">     245 </span><span class="lineCov">     160572 :         new_val = replace_equiv_address_nv (*ml-&gt;ref, new_addr);</span>
+<span class="lineNum">     246 </span><span class="lineCov">        266 :       else if (GET_MODE (*ml-&gt;ref) == GET_MODE (stack_pointer_rtx))</span>
+<span class="lineNum">     247 </span>            :         new_val = new_addr;
+<span class="lineNum">     248 </span>            :       else
+<span class="lineNum">     249 </span><span class="lineNoCov">          0 :         new_val = lowpart_subreg (GET_MODE (*ml-&gt;ref), new_addr,</span>
+<span class="lineNum">     250 </span><span class="lineNoCov">          0 :                                   GET_MODE (new_addr));</span>
+<span class="lineNum">     251 </span><span class="lineCov">     160838 :       validate_change (ml-&gt;insn, ml-&gt;ref, new_val, 1);</span>
+<span class="lineNum">     252 </span>            :     }
+<span class="lineNum">     253 </span>            : 
+<span class="lineNum">     254 </span><span class="lineCov">     352128 :   if (apply_change_group ())</span>
+<span class="lineNum">     255 </span>            :     {
+<span class="lineNum">     256 </span>            :       /* Succeeded.  Update our knowledge of the stack references.  */
+<span class="lineNum">     257 </span><span class="lineCov">     509981 :       for (ml = reflist; ml ; ml = ml-&gt;next)</span>
+<span class="lineNum">     258 </span><span class="lineCov">     160767 :         ml-&gt;sp_offset -= delta;</span>
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span>            :       return 1;
+<span class="lineNum">     261 </span>            :     }
+<span class="lineNum">     262 </span>            :   else
+<span class="lineNum">     263 </span>            :     return 0;
+<span class="lineNum">     264 </span>            : }
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span>            : /* For non-debug insns, record all stack memory references in INSN
+<span class="lineNum">     267 </span>            :    and return true if there were no other (unrecorded) references to the
+<span class="lineNum">     268 </span>            :    stack pointer.  For debug insns, record all stack references regardless
+<span class="lineNum">     269 </span>            :    of context and unconditionally return true.  */
+<a name="270"><span class="lineNum">     270 </span>            : </a>
+<span class="lineNum">     271 </span>            : static bool
+<span class="lineNum">     272 </span><span class="lineCov">    4788647 : record_stack_refs (rtx_insn *insn, struct csa_reflist **reflist)</span>
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span><span class="lineCov">    9577294 :   subrtx_ptr_iterator::array_type array;</span>
+<span class="lineNum">     275 </span><span class="lineCov">   23630694 :   FOR_EACH_SUBRTX_PTR (iter, array, &amp;PATTERN (insn), NONCONST)</span>
+<span class="lineNum">     276 </span>            :     {
+<span class="lineNum">     277 </span><span class="lineCov">   14801599 :       rtx *loc = *iter;</span>
+<span class="lineNum">     278 </span><span class="lineCov">   14801599 :       rtx x = *loc;</span>
+<span class="lineNum">     279 </span><span class="lineCov">   14801599 :       switch (GET_CODE (x))</span>
+<span class="lineNum">     280 </span>            :         {
+<span class="lineNum">     281 </span><span class="lineCov">    1754534 :         case MEM:</span>
+<span class="lineNum">     282 </span><span class="lineCov">    1754534 :           if (!reg_mentioned_p (stack_pointer_rtx, x))</span>
+<span class="lineNum">     283 </span><span class="lineCov">     605893 :             iter.skip_subrtxes ();</span>
+<span class="lineNum">     284 </span>            :           /* We are not able to handle correctly all possible memrefs
+<span class="lineNum">     285 </span>            :              containing stack pointer, so this check is necessary.  */
+<span class="lineNum">     286 </span><span class="lineCov">    1148641 :           else if (stack_memref_p (x))</span>
+<span class="lineNum">     287 </span>            :             {
+<span class="lineNum">     288 </span><span class="lineCov">     527613 :               *reflist = record_one_stack_ref (insn, loc, *reflist);</span>
+<span class="lineNum">     289 </span><span class="lineCov">     527613 :               iter.skip_subrtxes ();</span>
+<span class="lineNum">     290 </span>            :             }
+<span class="lineNum">     291 </span>            :           /* Try harder for DEBUG_INSNs, handle e.g.
+<span class="lineNum">     292 </span>            :              (mem (mem (sp + 16) + 4).  */
+<span class="lineNum">     293 </span><span class="lineCov">     621028 :           else if (!DEBUG_INSN_P (insn))</span>
+<span class="lineNum">     294 </span><span class="lineCov">     748199 :             return false;</span>
+<span class="lineNum">     295 </span>            :           break;
+<span class="lineNum">     296 </span>            : 
+<span class="lineNum">     297 </span><span class="lineCov">    3559775 :         case REG:</span>
+<span class="lineNum">     298 </span>            :           /* ??? We want be able to handle non-memory stack pointer
+<span class="lineNum">     299 </span>            :              references later.  For now just discard all insns referring to
+<span class="lineNum">     300 </span>            :              stack pointer outside mem expressions.  We would probably
+<span class="lineNum">     301 </span>            :              want to teach validate_replace to simplify expressions first.
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span>            :              We can't just compare with STACK_POINTER_RTX because the
+<span class="lineNum">     304 </span>            :              reference to the stack pointer might be in some other mode.
+<span class="lineNum">     305 </span>            :              In particular, an explicit clobber in an asm statement will
+<span class="lineNum">     306 </span>            :              result in a QImode clobber.
+<span class="lineNum">     307 </span>            : 
+<span class="lineNum">     308 </span>            :              In DEBUG_INSNs, we want to replace all occurrences, otherwise
+<span class="lineNum">     309 </span>            :              they will cause -fcompare-debug failures.  */
+<span class="lineNum">     310 </span><span class="lineCov">    7119550 :           if (REGNO (x) == STACK_POINTER_REGNUM)</span>
+<span class="lineNum">     311 </span>            :             {
+<span class="lineNum">     312 </span><span class="lineCov">     164202 :               if (!DEBUG_INSN_P (insn))</span>
+<span class="lineNum">     313 </span>            :                 return false;
+<span class="lineNum">     314 </span><span class="lineCov">      36843 :               *reflist = record_one_stack_ref (insn, loc, *reflist);</span>
+<span class="lineNum">     315 </span>            :             }
+<span class="lineNum">     316 </span>            :           break;
+<span class="lineNum">     317 </span>            : 
+<span class="lineNum">     318 </span>            :         default:
+<span class="lineNum">     319 </span>            :           break;
+<span class="lineNum">     320 </span>            :         }
+<span class="lineNum">     321 </span>            :     }
+<span class="lineNum">     322 </span><span class="lineCov">    4040448 :   return true;</span>
+<span class="lineNum">     323 </span>            : }
+<span class="lineNum">     324 </span>            : 
+<span class="lineNum">     325 </span>            : /* If INSN has a REG_ARGS_SIZE note, move it to LAST.
+<span class="lineNum">     326 </span>            :    AFTER is true iff LAST follows INSN in the instruction stream.  */
+<a name="327"><span class="lineNum">     327 </span>            : </a>
+<span class="lineNum">     328 </span>            : static void
+<span class="lineNum">     329 </span><span class="lineCov">     349214 : maybe_move_args_size_note (rtx_insn *last, rtx_insn *insn, bool after)</span>
+<span class="lineNum">     330 </span>            : {
+<span class="lineNum">     331 </span><span class="lineCov">     349214 :   rtx note, last_note;</span>
+<span class="lineNum">     332 </span>            : 
+<span class="lineNum">     333 </span><span class="lineCov">     349214 :   note = find_reg_note (insn, REG_ARGS_SIZE, NULL_RTX);</span>
+<span class="lineNum">     334 </span><span class="lineCov">     349214 :   if (note == NULL)</span>
+<span class="lineNum">     335 </span>            :     return;
+<span class="lineNum">     336 </span>            : 
+<span class="lineNum">     337 </span><span class="lineCov">     348303 :   last_note = find_reg_note (last, REG_ARGS_SIZE, NULL_RTX);</span>
+<span class="lineNum">     338 </span><span class="lineCov">     348303 :   if (last_note)</span>
+<span class="lineNum">     339 </span>            :     {
+<span class="lineNum">     340 </span>            :       /* The ARGS_SIZE notes are *not* cumulative.  They represent an
+<span class="lineNum">     341 </span>            :          absolute value, and the &quot;most recent&quot; note wins.  */
+<span class="lineNum">     342 </span><span class="lineCov">     264411 :       if (!after)</span>
+<span class="lineNum">     343 </span><span class="lineCov">     208644 :         XEXP (last_note, 0) = XEXP (note, 0);</span>
+<span class="lineNum">     344 </span>            :     }
+<span class="lineNum">     345 </span>            :   else
+<span class="lineNum">     346 </span><span class="lineCov">      83892 :     add_reg_note (last, REG_ARGS_SIZE, XEXP (note, 0));</span>
+<span class="lineNum">     347 </span>            : }
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span>            : /* Merge any REG_CFA_ADJUST_CFA note from SRC into DST.
+<span class="lineNum">     350 </span>            :    AFTER is true iff DST follows SRC in the instruction stream.  */
+<a name="351"><span class="lineNum">     351 </span>            : </a>
+<span class="lineNum">     352 </span>            : static void
+<span class="lineNum">     353 </span><span class="lineCov">     293742 : maybe_merge_cfa_adjust (rtx_insn *dst, rtx_insn *src, bool after)</span>
+<span class="lineNum">     354 </span>            : {
+<span class="lineNum">     355 </span><span class="lineCov">     293742 :   rtx snote = NULL, dnote = NULL;</span>
+<span class="lineNum">     356 </span><span class="lineCov">     293742 :   rtx sexp, dexp;</span>
+<span class="lineNum">     357 </span><span class="lineCov">     293742 :   rtx exp1, exp2;</span>
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span><span class="lineCov">     293742 :   if (RTX_FRAME_RELATED_P (src))</span>
+<span class="lineNum">     360 </span><span class="lineCov">          1 :     snote = find_reg_note (src, REG_CFA_ADJUST_CFA, NULL_RTX);</span>
+<span class="lineNum">     361 </span><span class="lineCov">          1 :   if (snote == NULL)</span>
+<span class="lineNum">     362 </span><span class="lineCov">     293741 :     return;</span>
+<span class="lineNum">     363 </span><span class="lineCov">          1 :   sexp = XEXP (snote, 0);</span>
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span><span class="lineCov">          1 :   if (RTX_FRAME_RELATED_P (dst))</span>
+<span class="lineNum">     366 </span><span class="lineCov">          1 :     dnote = find_reg_note (dst, REG_CFA_ADJUST_CFA, NULL_RTX);</span>
+<span class="lineNum">     367 </span><span class="lineCov">          1 :   if (dnote == NULL)</span>
+<span class="lineNum">     368 </span>            :     {
+<span class="lineNum">     369 </span><span class="lineNoCov">          0 :       add_reg_note (dst, REG_CFA_ADJUST_CFA, sexp);</span>
+<span class="lineNum">     370 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">     371 </span>            :     }
+<span class="lineNum">     372 </span><span class="lineCov">          1 :   dexp = XEXP (dnote, 0);</span>
+<span class="lineNum">     373 </span>            : 
+<span class="lineNum">     374 </span><span class="lineCov">          1 :   gcc_assert (GET_CODE (sexp) == SET);</span>
+<span class="lineNum">     375 </span><span class="lineCov">          1 :   gcc_assert (GET_CODE (dexp) == SET);</span>
+<span class="lineNum">     376 </span>            : 
+<span class="lineNum">     377 </span><span class="lineCov">          1 :   if (after)</span>
+<span class="lineNum">     378 </span>            :     exp1 = dexp, exp2 = sexp;
+<span class="lineNum">     379 </span>            :   else
+<span class="lineNum">     380 </span><span class="lineNoCov">          0 :     exp1 = sexp, exp2 = dexp;</span>
+<span class="lineNum">     381 </span>            : 
+<span class="lineNum">     382 </span><span class="lineCov">          1 :   SET_SRC (exp1) = simplify_replace_rtx (SET_SRC (exp1), SET_DEST (exp2),</span>
+<span class="lineNum">     383 </span>            :                                          SET_SRC (exp2));
+<span class="lineNum">     384 </span><span class="lineCov">          1 :   XEXP (dnote, 0) = exp1;</span>
+<span class="lineNum">     385 </span>            : }
+<span class="lineNum">     386 </span>            : 
+<span class="lineNum">     387 </span>            : /* Return the next (or previous) active insn within BB.  */
+<a name="388"><span class="lineNum">     388 </span>            : </a>
+<span class="lineNum">     389 </span>            : static rtx_insn *
+<span class="lineNum">     390 </span><span class="lineCov">       3428 : prev_active_insn_bb (basic_block bb, rtx_insn *insn)</span>
+<span class="lineNum">     391 </span>            : {
+<span class="lineNum">     392 </span><span class="lineCov">       8308 :   for (insn = PREV_INSN (insn);</span>
+<span class="lineNum">     393 </span><span class="lineCov">       4880 :        insn != PREV_INSN (BB_HEAD (bb));</span>
+<span class="lineNum">     394 </span><span class="lineCov">       2904 :        insn = PREV_INSN (insn))</span>
+<span class="lineNum">     395 </span><span class="lineCov">       4804 :     if (active_insn_p (insn))</span>
+<span class="lineNum">     396 </span><span class="lineCov">       3352 :       return insn;</span>
+<span class="lineNum">     397 </span>            :   return NULL;
+<span class="lineNum">     398 </span>            : }
+<a name="399"><span class="lineNum">     399 </span>            : </a>
+<span class="lineNum">     400 </span>            : static rtx_insn *
+<span class="lineNum">     401 </span><span class="lineCov">      54686 : next_active_insn_bb (basic_block bb, rtx_insn *insn)</span>
+<span class="lineNum">     402 </span>            : {
+<span class="lineNum">     403 </span><span class="lineCov">     126918 :   for (insn = NEXT_INSN (insn);</span>
+<span class="lineNum">     404 </span><span class="lineCov">      72232 :        insn != NEXT_INSN (BB_END (bb));</span>
+<span class="lineNum">     405 </span><span class="lineCov">      35092 :        insn = NEXT_INSN (insn))</span>
+<span class="lineNum">     406 </span><span class="lineCov">      72232 :     if (active_insn_p (insn))</span>
+<span class="lineNum">     407 </span><span class="lineCov">      54686 :       return insn;</span>
+<span class="lineNum">     408 </span>            :   return NULL;
+<span class="lineNum">     409 </span>            : }
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            : /* If INSN has a REG_ARGS_SIZE note, if possible move it to PREV.  Otherwise
+<span class="lineNum">     412 </span>            :    search for a nearby candidate within BB where we can stick the note.  */
+<a name="413"><span class="lineNum">     413 </span>            : </a>
+<span class="lineNum">     414 </span>            : static void
+<span class="lineNum">     415 </span><span class="lineCov">      13637 : force_move_args_size_note (basic_block bb, rtx_insn *prev, rtx_insn *insn)</span>
+<span class="lineNum">     416 </span>            : {
+<span class="lineNum">     417 </span><span class="lineCov">      13637 :   rtx note;</span>
+<span class="lineNum">     418 </span><span class="lineCov">      13637 :   rtx_insn *test, *next_candidate, *prev_candidate;</span>
+<span class="lineNum">     419 </span>            : 
+<span class="lineNum">     420 </span>            :   /* If PREV exists, tail-call to the logic in the other function.  */
+<span class="lineNum">     421 </span><span class="lineCov">      13637 :   if (prev)</span>
+<span class="lineNum">     422 </span>            :     {
+<span class="lineNum">     423 </span><span class="lineNoCov">          0 :       maybe_move_args_size_note (prev, insn, false);</span>
+<span class="lineNum">     424 </span><span class="lineNoCov">          0 :       return;</span>
+<span class="lineNum">     425 </span>            :     }
+<span class="lineNum">     426 </span>            : 
+<span class="lineNum">     427 </span>            :   /* First, make sure there's anything that needs doing.  */
+<span class="lineNum">     428 </span><span class="lineCov">      13637 :   note = find_reg_note (insn, REG_ARGS_SIZE, NULL_RTX);</span>
+<span class="lineNum">     429 </span><span class="lineCov">      13637 :   if (note == NULL)</span>
+<span class="lineNum">     430 </span>            :     return;
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span>            :   /* We need to find a spot between the previous and next exception points
+<span class="lineNum">     433 </span>            :      where we can place the note and &quot;properly&quot; deallocate the arguments.  */
+<span class="lineNum">     434 </span>            :   next_candidate = prev_candidate = NULL;
+<span class="lineNum">     435 </span>            : 
+<span class="lineNum">     436 </span>            :   /* It is often the case that we have insns in the order:
+<span class="lineNum">     437 </span>            :         call
+<span class="lineNum">     438 </span>            :         add sp (previous deallocation)
+<span class="lineNum">     439 </span>            :         sub sp (align for next arglist)
+<span class="lineNum">     440 </span>            :         push arg
+<span class="lineNum">     441 </span>            :      and the add/sub cancel.  Therefore we begin by searching forward.  */
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span>            :   test = insn;
+<span class="lineNum">     444 </span><span class="lineCov">      54686 :   while ((test = next_active_insn_bb (bb, test)) != NULL)</span>
+<span class="lineNum">     445 </span>            :     {
+<span class="lineNum">     446 </span>            :       /* Found an existing note: nothing to do.  */
+<span class="lineNum">     447 </span><span class="lineCov">      54686 :       if (find_reg_note (test, REG_ARGS_SIZE, NULL_RTX))</span>
+<span class="lineNum">     448 </span>            :         return;
+<span class="lineNum">     449 </span>            :       /* Found something that affects unwinding.  Stop searching.  */
+<span class="lineNum">     450 </span><span class="lineCov">      42076 :       if (CALL_P (test) || !insn_nothrow_p (test))</span>
+<span class="lineNum">     451 </span>            :         break;
+<span class="lineNum">     452 </span><span class="lineCov">      41049 :       if (next_candidate == NULL)</span>
+<span class="lineNum">     453 </span><span class="lineCov">       7967 :         next_candidate = test;</span>
+<span class="lineNum">     454 </span>            :     }
+<span class="lineNum">     455 </span>            : 
+<span class="lineNum">     456 </span><span class="lineCov">       1027 :   test = insn;</span>
+<span class="lineNum">     457 </span><span class="lineCov">       3428 :   while ((test = prev_active_insn_bb (bb, test)) != NULL)</span>
+<span class="lineNum">     458 </span>            :     {
+<span class="lineNum">     459 </span><span class="lineCov">       3352 :       rtx tnote;</span>
+<span class="lineNum">     460 </span>            :       /* Found a place that seems logical to adjust the stack.  */
+<span class="lineNum">     461 </span><span class="lineCov">       3352 :       tnote = find_reg_note (test, REG_ARGS_SIZE, NULL_RTX);</span>
+<span class="lineNum">     462 </span><span class="lineCov">       3352 :       if (tnote)</span>
+<span class="lineNum">     463 </span>            :         {
+<span class="lineNum">     464 </span><span class="lineCov">         40 :           XEXP (tnote, 0) = XEXP (note, 0);</span>
+<span class="lineNum">     465 </span><span class="lineCov">         40 :           return;</span>
+<span class="lineNum">     466 </span>            :         }
+<span class="lineNum">     467 </span><span class="lineCov">       3312 :       if (prev_candidate == NULL)</span>
+<span class="lineNum">     468 </span><span class="lineCov">        962 :         prev_candidate = test;</span>
+<span class="lineNum">     469 </span>            :       /* Found something that affects unwinding.  Stop searching.  */
+<span class="lineNum">     470 </span><span class="lineCov">       3312 :       if (CALL_P (test) || !insn_nothrow_p (test))</span>
+<span class="lineNum">     471 </span>            :         break;
+<span class="lineNum">     472 </span>            :     }
+<span class="lineNum">     473 </span>            : 
+<span class="lineNum">     474 </span><span class="lineCov">        987 :   if (prev_candidate)</span>
+<span class="lineNum">     475 </span>            :     test = prev_candidate;
+<span class="lineNum">     476 </span><span class="lineCov">         29 :   else if (next_candidate)</span>
+<span class="lineNum">     477 </span>            :     test = next_candidate;
+<span class="lineNum">     478 </span>            :   else
+<span class="lineNum">     479 </span>            :     {
+<span class="lineNum">     480 </span>            :       /* ??? We *must* have a place, lest we ICE on the lost adjustment.
+<span class="lineNum">     481 </span>            :          Options are: dummy clobber insn, nop, or prevent the removal of
+<span class="lineNum">     482 </span>            :          the sp += 0 insn.  */
+<span class="lineNum">     483 </span>            :       /* TODO: Find another way to indicate to the dwarf2 code that we
+<span class="lineNum">     484 </span>            :          have not in fact lost an adjustment.  */
+<span class="lineNum">     485 </span><span class="lineNoCov">          0 :       test = emit_insn_before (gen_rtx_CLOBBER (VOIDmode, const0_rtx), insn);</span>
+<span class="lineNum">     486 </span>            :     }
+<span class="lineNum">     487 </span><span class="lineCov">        987 :   add_reg_note (test, REG_ARGS_SIZE, XEXP (note, 0));</span>
+<span class="lineNum">     488 </span>            : }
+<span class="lineNum">     489 </span>            : 
+<span class="lineNum">     490 </span>            : /* Subroutine of combine_stack_adjustments, called for each basic block.  */
+<a name="491"><span class="lineNum">     491 </span>            : </a>
+<span class="lineNum">     492 </span>            : static void
+<span class="lineNum">     493 </span><span class="lineCov">    6344872 : combine_stack_adjustments_for_block (basic_block bb)</span>
+<span class="lineNum">     494 </span>            : {
+<span class="lineNum">     495 </span><span class="lineCov">    6344872 :   HOST_WIDE_INT last_sp_adjust = 0;</span>
+<span class="lineNum">     496 </span><span class="lineCov">    6344872 :   rtx_insn *last_sp_set = NULL;</span>
+<span class="lineNum">     497 </span><span class="lineCov">    6344872 :   rtx_insn *last2_sp_set = NULL;</span>
+<span class="lineNum">     498 </span><span class="lineCov">    6344872 :   struct csa_reflist *reflist = NULL;</span>
+<span class="lineNum">     499 </span><span class="lineCov">    6344872 :   rtx_insn *insn, *next;</span>
+<span class="lineNum">     500 </span><span class="lineCov">    6344872 :   rtx set;</span>
+<span class="lineNum">     501 </span><span class="lineCov">    6344872 :   bool end_of_block = false;</span>
+<span class="lineNum">     502 </span>            : 
+<span class="lineNum">     503 </span><span class="lineCov">   84795829 :   for (insn = BB_HEAD (bb); !end_of_block ; insn = next)</span>
+<span class="lineNum">     504 </span>            :     {
+<span class="lineNum">     505 </span><span class="lineCov">   78450957 :       end_of_block = insn == BB_END (bb);</span>
+<span class="lineNum">     506 </span><span class="lineCov">   78450957 :       next = NEXT_INSN (insn);</span>
+<span class="lineNum">     507 </span>            : 
+<span class="lineNum">     508 </span><span class="lineCov">   78450957 :       if (! INSN_P (insn))</span>
+<span class="lineNum">     509 </span>            :         continue;
+<span class="lineNum">     510 </span>            : 
+<span class="lineNum">     511 </span><span class="lineCov">   64157287 :       set = single_set_for_csa (insn);</span>
+<span class="lineNum">     512 </span><span class="lineCov">   64157287 :       if (set &amp;&amp; find_reg_note (insn, REG_STACK_CHECK, NULL_RTX))</span>
+<span class="lineNum">     513 </span>            :         set = NULL_RTX;
+<span class="lineNum">     514 </span><span class="lineCov">   64157271 :       if (set)</span>
+<span class="lineNum">     515 </span>            :         {
+<span class="lineNum">     516 </span><span class="lineCov">   33719411 :           rtx dest = SET_DEST (set);</span>
+<span class="lineNum">     517 </span><span class="lineCov">   33719411 :           rtx src = SET_SRC (set);</span>
+<span class="lineNum">     518 </span>            : 
+<span class="lineNum">     519 </span>            :           /* Find constant additions to the stack pointer.  */
+<span class="lineNum">     520 </span><span class="lineCov">   33719411 :           if (dest == stack_pointer_rtx</span>
+<span class="lineNum">     521 </span><span class="lineCov">    1859787 :               &amp;&amp; GET_CODE (src) == PLUS</span>
+<span class="lineNum">     522 </span><span class="lineCov">    1844599 :               &amp;&amp; XEXP (src, 0) == stack_pointer_rtx</span>
+<span class="lineNum">     523 </span><span class="lineCov">    1826147 :               &amp;&amp; CONST_INT_P (XEXP (src, 1)))</span>
+<span class="lineNum">     524 </span>            :             {
+<span class="lineNum">     525 </span><span class="lineCov">    1826026 :               HOST_WIDE_INT this_adjust = INTVAL (XEXP (src, 1));</span>
+<span class="lineNum">     526 </span>            : 
+<span class="lineNum">     527 </span>            :               /* If we've not seen an adjustment previously, record
+<span class="lineNum">     528 </span>            :                  it now and continue.  */
+<span class="lineNum">     529 </span><span class="lineCov">    1826026 :               if (! last_sp_set)</span>
+<span class="lineNum">     530 </span>            :                 {
+<span class="lineNum">     531 </span>            :                   last_sp_set = insn;
+<span class="lineNum">     532 </span>            :                   last_sp_adjust = this_adjust;
+<span class="lineNum">     533 </span>            :                   continue;
+<span class="lineNum">     534 </span>            :                 }
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span>            :               /* If not all recorded refs can be adjusted, or the
+<span class="lineNum">     537 </span>            :                  adjustment is now too large for a constant addition,
+<span class="lineNum">     538 </span>            :                  we cannot merge the two stack adjustments.
+<span class="lineNum">     539 </span>            : 
+<span class="lineNum">     540 </span>            :                  Also we need to be careful to not move stack pointer
+<span class="lineNum">     541 </span>            :                  such that we create stack accesses outside the allocated
+<span class="lineNum">     542 </span>            :                  area.  We can combine an allocation into the first insn,
+<span class="lineNum">     543 </span>            :                  or a deallocation into the second insn.  We can not
+<span class="lineNum">     544 </span>            :                  combine an allocation followed by a deallocation.
+<span class="lineNum">     545 </span>            : 
+<span class="lineNum">     546 </span>            :                  The only somewhat frequent occurrence of the later is when
+<span class="lineNum">     547 </span>            :                  a function allocates a stack frame but does not use it.
+<span class="lineNum">     548 </span>            :                  For this case, we would need to analyze rtl stream to be
+<span class="lineNum">     549 </span>            :                  sure that allocated area is really unused.  This means not
+<span class="lineNum">     550 </span>            :                  only checking the memory references, but also all registers
+<span class="lineNum">     551 </span>            :                  or global memory references possibly containing a stack
+<span class="lineNum">     552 </span>            :                  frame address.
+<span class="lineNum">     553 </span>            : 
+<span class="lineNum">     554 </span>            :                  Perhaps the best way to address this problem is to teach
+<span class="lineNum">     555 </span>            :                  gcc not to allocate stack for objects never used.  */
+<span class="lineNum">     556 </span>            : 
+<span class="lineNum">     557 </span>            :               /* Combine an allocation into the first instruction.  */
+<span class="lineNum">     558 </span><span class="lineCov">     293979 :               if (STACK_GROWS_DOWNWARD ? this_adjust &lt;= 0 : this_adjust &gt;= 0)</span>
+<span class="lineNum">     559 </span>            :                 {
+<span class="lineNum">     560 </span><span class="lineCov">     249177 :                   if (no_unhandled_cfa (insn)</span>
+<span class="lineNum">     561 </span><span class="lineCov">     249177 :                       &amp;&amp; try_apply_stack_adjustment (last_sp_set, reflist,</span>
+<span class="lineNum">     562 </span>            :                                                      last_sp_adjust
+<span class="lineNum">     563 </span>            :                                                      + this_adjust,
+<span class="lineNum">     564 </span>            :                                                      this_adjust))
+<span class="lineNum">     565 </span>            :                     {
+<span class="lineNum">     566 </span>            :                       /* It worked!  */
+<span class="lineNum">     567 </span><span class="lineCov">     249177 :                       maybe_move_args_size_note (last_sp_set, insn, false);</span>
+<span class="lineNum">     568 </span><span class="lineCov">     249177 :                       maybe_merge_cfa_adjust (last_sp_set, insn, false);</span>
+<span class="lineNum">     569 </span><span class="lineCov">     249177 :                       delete_insn (insn);</span>
+<span class="lineNum">     570 </span><span class="lineCov">     249177 :                       last_sp_adjust += this_adjust;</span>
+<span class="lineNum">     571 </span><span class="lineCov">     249177 :                       continue;</span>
+<span class="lineNum">     572 </span>            :                     }
+<span class="lineNum">     573 </span>            :                 }
+<span class="lineNum">     574 </span>            : 
+<span class="lineNum">     575 </span>            :               /* Otherwise we have a deallocation.  Do not combine with
+<span class="lineNum">     576 </span>            :                  a previous allocation.  Combine into the second insn.  */
+<span class="lineNum">     577 </span><span class="lineCov">      44802 :               else if (STACK_GROWS_DOWNWARD</span>
+<span class="lineNum">     578 </span>            :                        ? last_sp_adjust &gt;= 0 : last_sp_adjust &lt;= 0)
+<span class="lineNum">     579 </span>            :                 {
+<span class="lineNum">     580 </span><span class="lineCov">      44565 :                   if (no_unhandled_cfa (last_sp_set)</span>
+<span class="lineNum">     581 </span><span class="lineCov">      44565 :                       &amp;&amp; try_apply_stack_adjustment (insn, reflist,</span>
+<span class="lineNum">     582 </span>            :                                                      last_sp_adjust
+<span class="lineNum">     583 </span>            :                                                      + this_adjust,
+<span class="lineNum">     584 </span>            :                                                      -last_sp_adjust))
+<span class="lineNum">     585 </span>            :                     {
+<span class="lineNum">     586 </span>            :                       /* It worked!  */
+<span class="lineNum">     587 </span><span class="lineCov">      44565 :                       maybe_move_args_size_note (insn, last_sp_set, true);</span>
+<span class="lineNum">     588 </span><span class="lineCov">      44565 :                       maybe_merge_cfa_adjust (insn, last_sp_set, true);</span>
+<span class="lineNum">     589 </span><span class="lineCov">      44565 :                       delete_insn (last_sp_set);</span>
+<span class="lineNum">     590 </span><span class="lineCov">      44565 :                       last_sp_set = insn;</span>
+<span class="lineNum">     591 </span><span class="lineCov">      44565 :                       last_sp_adjust += this_adjust;</span>
+<span class="lineNum">     592 </span><span class="lineCov">      44565 :                       free_csa_reflist (reflist);</span>
+<span class="lineNum">     593 </span><span class="lineCov">      44565 :                       reflist = NULL;</span>
+<span class="lineNum">     594 </span><span class="lineCov">      44565 :                       continue;</span>
+<span class="lineNum">     595 </span>            :                     }
+<span class="lineNum">     596 </span>            :                 }
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            :               /* Combination failed.  Restart processing from here.  If
+<span class="lineNum">     599 </span>            :                  deallocation+allocation conspired to cancel, we can
+<span class="lineNum">     600 </span>            :                  delete the old deallocation insn.  */
+<span class="lineNum">     601 </span><span class="lineCov">        237 :               if (last_sp_set)</span>
+<span class="lineNum">     602 </span>            :                 {
+<span class="lineNum">     603 </span><span class="lineCov">        237 :                   if (last_sp_adjust == 0 &amp;&amp; no_unhandled_cfa (last_sp_set))</span>
+<span class="lineNum">     604 </span>            :                     {
+<span class="lineNum">     605 </span><span class="lineNoCov">          0 :                       maybe_move_args_size_note (insn, last_sp_set, true);</span>
+<span class="lineNum">     606 </span><span class="lineNoCov">          0 :                       maybe_merge_cfa_adjust (insn, last_sp_set, true);</span>
+<span class="lineNum">     607 </span><span class="lineNoCov">          0 :                       delete_insn (last_sp_set);</span>
+<span class="lineNum">     608 </span>            :                     }
+<span class="lineNum">     609 </span>            :                   else
+<span class="lineNum">     610 </span>            :                     last2_sp_set = last_sp_set;
+<span class="lineNum">     611 </span>            :                 }
+<span class="lineNum">     612 </span><span class="lineCov">        237 :               free_csa_reflist (reflist);</span>
+<span class="lineNum">     613 </span><span class="lineCov">        237 :               reflist = NULL;</span>
+<span class="lineNum">     614 </span><span class="lineCov">        237 :               last_sp_set = insn;</span>
+<span class="lineNum">     615 </span><span class="lineCov">        237 :               last_sp_adjust = this_adjust;</span>
+<span class="lineNum">     616 </span><span class="lineCov">        237 :               continue;</span>
+<span class="lineNum">     617 </span>            :             }
+<span class="lineNum">     618 </span>            : 
+<span class="lineNum">     619 </span>            :           /* Find a store with pre-(dec|inc)rement or pre-modify of exactly
+<span class="lineNum">     620 </span>            :              the previous adjustment and turn it into a simple store.  This
+<span class="lineNum">     621 </span>            :              is equivalent to anticipating the stack adjustment so this must
+<span class="lineNum">     622 </span>            :              be an allocation.  */
+<span class="lineNum">     623 </span><span class="lineCov">   31893385 :           if (MEM_P (dest)</span>
+<span class="lineNum">     624 </span><span class="lineCov">    7916827 :               &amp;&amp; ((STACK_GROWS_DOWNWARD</span>
+<span class="lineNum">     625 </span><span class="lineCov">   10466761 :                    ? (GET_CODE (XEXP (dest, 0)) == PRE_DEC</span>
+<span class="lineNum">     626 </span><span class="lineCov">    5099868 :                       &amp;&amp; known_eq (last_sp_adjust,</span>
+<span class="lineNum">     627 </span>            :                                    GET_MODE_SIZE (GET_MODE (dest))))
+<span class="lineNum">     628 </span>            :                    : (GET_CODE (XEXP (dest, 0)) == PRE_INC
+<span class="lineNum">     629 </span>            :                       &amp;&amp; known_eq (-last_sp_adjust,
+<span class="lineNum">     630 </span>            :                                    GET_MODE_SIZE (GET_MODE (dest)))))
+<span class="lineNum">     631 </span><span class="lineCov">    7857563 :                   || ((STACK_GROWS_DOWNWARD</span>
+<span class="lineNum">     632 </span>            :                        ? last_sp_adjust &gt;= 0 : last_sp_adjust &lt;= 0)
+<span class="lineNum">     633 </span><span class="lineCov">    7117063 :                       &amp;&amp; GET_CODE (XEXP (dest, 0)) == PRE_MODIFY</span>
+<span class="lineNum">     634 </span><span class="lineCov">      39972 :                       &amp;&amp; GET_CODE (XEXP (XEXP (dest, 0), 1)) == PLUS</span>
+<span class="lineNum">     635 </span><span class="lineCov">      39972 :                       &amp;&amp; XEXP (XEXP (XEXP (dest, 0), 1), 0)</span>
+<span class="lineNum">     636 </span>            :                          == stack_pointer_rtx
+<span class="lineNum">     637 </span><span class="lineCov">      39972 :                       &amp;&amp; GET_CODE (XEXP (XEXP (XEXP (dest, 0), 1), 1))</span>
+<span class="lineNum">     638 </span>            :                          == CONST_INT
+<span class="lineNum">     639 </span><span class="lineCov">      79944 :                       &amp;&amp; INTVAL (XEXP (XEXP (XEXP (dest, 0), 1), 1))</span>
+<span class="lineNum">     640 </span><span class="lineCov">      39972 :                          == -last_sp_adjust))</span>
+<span class="lineNum">     641 </span><span class="lineCov">      61297 :               &amp;&amp; XEXP (XEXP (dest, 0), 0) == stack_pointer_rtx</span>
+<span class="lineNum">     642 </span><span class="lineCov">      61297 :               &amp;&amp; !reg_mentioned_p (stack_pointer_rtx, src)</span>
+<span class="lineNum">     643 </span><span class="lineCov">      58386 :               &amp;&amp; memory_address_p (GET_MODE (dest), stack_pointer_rtx)</span>
+<span class="lineNum">     644 </span><span class="lineCov">   31951771 :               &amp;&amp; try_apply_stack_adjustment (insn, reflist, 0,</span>
+<span class="lineNum">     645 </span>            :                                              -last_sp_adjust))
+<span class="lineNum">     646 </span>            :             {
+<span class="lineNum">     647 </span><span class="lineCov">      55472 :               if (last2_sp_set)</span>
+<span class="lineNum">     648 </span><span class="lineNoCov">          0 :                 maybe_move_args_size_note (last2_sp_set, last_sp_set, false);</span>
+<span class="lineNum">     649 </span>            :               else
+<span class="lineNum">     650 </span><span class="lineCov">      55472 :                 maybe_move_args_size_note (insn, last_sp_set, true);</span>
+<span class="lineNum">     651 </span><span class="lineCov">      55472 :               delete_insn (last_sp_set);</span>
+<span class="lineNum">     652 </span><span class="lineCov">      55472 :               free_csa_reflist (reflist);</span>
+<span class="lineNum">     653 </span><span class="lineCov">      55472 :               reflist = NULL;</span>
+<span class="lineNum">     654 </span><span class="lineCov">      55472 :               last_sp_set = NULL;</span>
+<span class="lineNum">     655 </span><span class="lineCov">      55472 :               last_sp_adjust = 0;</span>
+<span class="lineNum">     656 </span><span class="lineCov">      55472 :               continue;</span>
+<span class="lineNum">     657 </span>            :             }
+<span class="lineNum">     658 </span>            :         }
+<span class="lineNum">     659 </span>            : 
+<span class="lineNum">     660 </span><span class="lineCov">   59235426 :       if (!CALL_P (insn) &amp;&amp; last_sp_set</span>
+<span class="lineNum">     661 </span><span class="lineCov">   67064436 :           &amp;&amp; record_stack_refs (insn, &amp;reflist))</span>
+<span class="lineNum">     662 </span>            :         continue;
+<span class="lineNum">     663 </span>            : 
+<span class="lineNum">     664 </span>            :       /* Otherwise, we were not able to process the instruction.
+<span class="lineNum">     665 </span>            :          Do not continue collecting data across such a one.  */
+<span class="lineNum">     666 </span><span class="lineCov">   58235341 :       if (last_sp_set</span>
+<span class="lineNum">     667 </span><span class="lineCov">   58235341 :           &amp;&amp; (CALL_P (insn)</span>
+<span class="lineNum">     668 </span><span class="lineCov">    1496398 :               || reg_mentioned_p (stack_pointer_rtx, PATTERN (insn))))</span>
+<span class="lineNum">     669 </span>            :         {
+<span class="lineNum">     670 </span><span class="lineCov">     954333 :           if (last_sp_set &amp;&amp; last_sp_adjust == 0)</span>
+<span class="lineNum">     671 </span>            :             {
+<span class="lineNum">     672 </span><span class="lineCov">      13637 :               force_move_args_size_note (bb, last2_sp_set, last_sp_set);</span>
+<span class="lineNum">     673 </span><span class="lineCov">      13637 :               delete_insn (last_sp_set);</span>
+<span class="lineNum">     674 </span>            :             }
+<span class="lineNum">     675 </span><span class="lineCov">     954333 :           free_csa_reflist (reflist);</span>
+<span class="lineNum">     676 </span><span class="lineCov">     954333 :           reflist = NULL;</span>
+<span class="lineNum">     677 </span><span class="lineCov">     954333 :           last2_sp_set = NULL;</span>
+<span class="lineNum">     678 </span><span class="lineCov">     954333 :           last_sp_set = NULL;</span>
+<span class="lineNum">     679 </span><span class="lineCov">     954333 :           last_sp_adjust = 0;</span>
+<span class="lineNum">     680 </span>            :         }
+<span class="lineNum">     681 </span>            :     }
+<span class="lineNum">     682 </span>            : 
+<span class="lineNum">     683 </span><span class="lineCov">    6344872 :   if (last_sp_set &amp;&amp; last_sp_adjust == 0)</span>
+<span class="lineNum">     684 </span>            :     {
+<span class="lineNum">     685 </span><span class="lineNoCov">          0 :       force_move_args_size_note (bb, last2_sp_set, last_sp_set);</span>
+<span class="lineNum">     686 </span><span class="lineNoCov">          0 :       delete_insn (last_sp_set);</span>
+<span class="lineNum">     687 </span>            :     }
+<span class="lineNum">     688 </span>            : 
+<span class="lineNum">     689 </span><span class="lineCov">    6344872 :   if (reflist)</span>
+<span class="lineNum">     690 </span>            :     free_csa_reflist (reflist);
+<span class="lineNum">     691 </span><span class="lineCov">    6344872 : }</span>
+<a name="692"><span class="lineNum">     692 </span>            : </a>
+<span class="lineNum">     693 </span>            : static unsigned int
+<span class="lineNum">     694 </span><span class="lineNoCov">          0 : rest_of_handle_stack_adjustments (void)</span>
+<span class="lineNum">     695 </span>            : {
+<span class="lineNum">     696 </span><span class="lineNoCov">          0 :   df_note_add_problem ();</span>
+<span class="lineNum">     697 </span><span class="lineCov">     622498 :   df_analyze ();</span>
+<span class="lineNum">     698 </span><span class="lineCov">     622498 :   combine_stack_adjustments ();</span>
+<span class="lineNum">     699 </span><span class="lineCov">     622498 :   return 0;</span>
+<span class="lineNum">     700 </span>            : }
+<span class="lineNum">     701 </span>            : 
+<span class="lineNum">     702 </span>            : namespace {
+<span class="lineNum">     703 </span>            : 
+<span class="lineNum">     704 </span>            : const pass_data pass_data_stack_adjustments =
+<span class="lineNum">     705 </span>            : {
+<span class="lineNum">     706 </span>            :   RTL_PASS, /* type */
+<span class="lineNum">     707 </span>            :   &quot;csa&quot;, /* name */
+<span class="lineNum">     708 </span>            :   OPTGROUP_NONE, /* optinfo_flags */
+<span class="lineNum">     709 </span>            :   TV_COMBINE_STACK_ADJUST, /* tv_id */
+<span class="lineNum">     710 </span>            :   0, /* properties_required */
+<span class="lineNum">     711 </span>            :   0, /* properties_provided */
+<span class="lineNum">     712 </span>            :   0, /* properties_destroyed */
+<span class="lineNum">     713 </span>            :   0, /* todo_flags_start */
+<span class="lineNum">     714 </span>            :   TODO_df_finish, /* todo_flags_finish */
+<span class="lineNum">     715 </span>            : };
+<span class="lineNum">     716 </span>            : 
+<span class="lineNum">     717 </span>            : class pass_stack_adjustments : public rtl_opt_pass
+<span class="lineNum">     718 </span>            : {
+<span class="lineNum">     719 </span>            : public:
+<span class="lineNum">     720 </span>            :   pass_stack_adjustments (gcc::context *ctxt)
+<span class="lineNum">     721 </span><span class="lineCov">     340624 :     : rtl_opt_pass (pass_data_stack_adjustments, ctxt)</span>
+<span class="lineNum">     722 </span>            :   {}
+<span class="lineNum">     723 </span>            : 
+<a name="724"><span class="lineNum">     724 </span>            :   /* opt_pass methods: */</a>
+<span class="lineNum">     725 </span>            :   virtual bool gate (function *);
+<span class="lineNum">     726 </span><span class="lineCov">     622498 :   virtual unsigned int execute (function *)</span>
+<span class="lineNum">     727 </span>            :     {
+<span class="lineNum">     728 </span><span class="lineCov">     622498 :       return rest_of_handle_stack_adjustments ();</span>
+<span class="lineNum">     729 </span>            :     }
+<span class="lineNum">     730 </span>            : 
+<span class="lineNum">     731 </span>            : }; // class pass_stack_adjustments
+<a name="732"><span class="lineNum">     732 </span>            : </a>
+<span class="lineNum">     733 </span>            : bool
+<span class="lineNum">     734 </span><span class="lineCov">     832594 : pass_stack_adjustments::gate (function *)</span>
+<span class="lineNum">     735 </span>            : {
+<span class="lineNum">     736 </span>            :   /* This is kind of a heuristic.  We need to run combine_stack_adjustments
+<span class="lineNum">     737 </span>            :      even for machines with possibly nonzero TARGET_RETURN_POPS_ARGS
+<span class="lineNum">     738 </span>            :      and ACCUMULATE_OUTGOING_ARGS.  We expect that only ports having
+<span class="lineNum">     739 </span>            :      push instructions will have popping returns.  */
+<span class="lineNum">     740 </span>            : #ifndef PUSH_ROUNDING
+<span class="lineNum">     741 </span>            :   if (ACCUMULATE_OUTGOING_ARGS)
+<span class="lineNum">     742 </span>            :     return false;
+<span class="lineNum">     743 </span>            : #endif
+<span class="lineNum">     744 </span><span class="lineCov">     832594 :   return flag_combine_stack_adjustments;</span>
+<span class="lineNum">     745 </span>            : }
+<span class="lineNum">     746 </span>            : 
+<span class="lineNum">     747 </span>            : } // anon namespace
+<a name="748"><span class="lineNum">     748 </span>            : </a>
+<span class="lineNum">     749 </span>            : rtl_opt_pass *
+<span class="lineNum">     750 </span><span class="lineCov">     170312 : make_pass_stack_adjustments (gcc::context *ctxt)</span>
+<span class="lineNum">     751 </span>            : {
+<span class="lineNum">     752 </span><span class="lineCov">     170312 :   return new pass_stack_adjustments (ctxt);</span>
+<span class="lineNum">     753 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

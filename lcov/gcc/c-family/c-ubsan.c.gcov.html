@@ -1,0 +1,588 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/c-family/c-ubsan.c</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">gcc/c-family</a> - c-ubsan.c<span style="font-size: 80%;"> (source / <a href="c-ubsan.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">233</td>
+            <td class="headerCovTableEntry">239</td>
+            <td class="headerCovTableEntryHi">97.5 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntryHi">100.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* UndefinedBehaviorSanitizer, undefined behavior detector.</a>
+<span class="lineNum">       2 </span>            :    Copyright (C) 2013-2018 Free Software Foundation, Inc.
+<span class="lineNum">       3 </span>            :    Contributed by Marek Polacek &lt;polacek@redhat.com&gt;
+<span class="lineNum">       4 </span>            : 
+<span class="lineNum">       5 </span>            : This file is part of GCC.
+<span class="lineNum">       6 </span>            : 
+<span class="lineNum">       7 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       8 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">       9 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      10 </span>            : version.
+<span class="lineNum">      11 </span>            : 
+<span class="lineNum">      12 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      13 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      14 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      15 </span>            : for more details.
+<span class="lineNum">      16 </span>            : 
+<span class="lineNum">      17 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      18 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      19 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      22 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;tm.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;c-family/c-common.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;ubsan.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;c-family/c-ubsan.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;stor-layout.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;builtins.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;gimplify.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;stringpool.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;attribs.h&quot;
+<span class="lineNum">      33 </span>            : #include &quot;asan.h&quot;
+<span class="lineNum">      34 </span>            : 
+<span class="lineNum">      35 </span>            : /* Instrument division by zero and INT_MIN / -1.  If not instrumenting,
+<span class="lineNum">      36 </span>            :    return NULL_TREE.  */
+<span class="lineNum">      37 </span>            : 
+<span class="lineNum">      38 </span>            : tree
+<span class="lineNum">      39 </span><span class="lineCov">       1117 : ubsan_instrument_division (location_t loc, tree op0, tree op1)</span>
+<span class="lineNum">      40 </span>            : {
+<span class="lineNum">      41 </span><span class="lineCov">       1117 :   tree t, tt;</span>
+<span class="lineNum">      42 </span><span class="lineCov">       1117 :   tree type = TREE_TYPE (op0);</span>
+<span class="lineNum">      43 </span>            : 
+<span class="lineNum">      44 </span>            :   /* At this point both operands should have the same type,
+<span class="lineNum">      45 </span>            :      because they are already converted to RESULT_TYPE.
+<span class="lineNum">      46 </span>            :      Use TYPE_MAIN_VARIANT since typedefs can confuse us.  */
+<span class="lineNum">      47 </span><span class="lineCov">       2234 :   gcc_assert (TYPE_MAIN_VARIANT (TREE_TYPE (op0))</span>
+<span class="lineNum">      48 </span>            :               == TYPE_MAIN_VARIANT (TREE_TYPE (op1)));
+<span class="lineNum">      49 </span>            : 
+<span class="lineNum">      50 </span><span class="lineCov">       1117 :   op0 = unshare_expr (op0);</span>
+<span class="lineNum">      51 </span><span class="lineCov">       1117 :   op1 = unshare_expr (op1);</span>
+<span class="lineNum">      52 </span>            : 
+<span class="lineNum">      53 </span><span class="lineCov">       1117 :   if (TREE_CODE (type) == INTEGER_TYPE</span>
+<span class="lineNum">      54 </span><span class="lineCov">       1117 :       &amp;&amp; sanitize_flags_p (SANITIZE_DIVIDE))</span>
+<span class="lineNum">      55 </span><span class="lineCov">       1938 :     t = fold_build2 (EQ_EXPR, boolean_type_node,</span>
+<span class="lineNum">      56 </span>            :                      op1, build_int_cst (type, 0));
+<span class="lineNum">      57 </span><span class="lineCov">        148 :   else if (TREE_CODE (type) == REAL_TYPE</span>
+<span class="lineNum">      58 </span><span class="lineCov">        148 :            &amp;&amp; sanitize_flags_p (SANITIZE_FLOAT_DIVIDE))</span>
+<span class="lineNum">      59 </span><span class="lineCov">         98 :     t = fold_build2 (EQ_EXPR, boolean_type_node,</span>
+<span class="lineNum">      60 </span>            :                      op1, build_real (type, dconst0));
+<span class="lineNum">      61 </span>            :   else
+<span class="lineNum">      62 </span><span class="lineCov">         50 :     return NULL_TREE;</span>
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            :   /* We check INT_MIN / -1 only for signed types.  */
+<span class="lineNum">      65 </span><span class="lineCov">       1067 :   if (TREE_CODE (type) == INTEGER_TYPE</span>
+<span class="lineNum">      66 </span><span class="lineCov">        969 :       &amp;&amp; sanitize_flags_p (SANITIZE_DIVIDE)</span>
+<span class="lineNum">      67 </span><span class="lineCov">       2036 :       &amp;&amp; !TYPE_UNSIGNED (type))</span>
+<span class="lineNum">      68 </span>            :     {
+<span class="lineNum">      69 </span><span class="lineCov">        762 :       tree x;</span>
+<span class="lineNum">      70 </span><span class="lineCov">       1524 :       tt = fold_build2 (EQ_EXPR, boolean_type_node, unshare_expr (op1),</span>
+<span class="lineNum">      71 </span>            :                         build_int_cst (type, -1));
+<span class="lineNum">      72 </span><span class="lineCov">        762 :       x = fold_build2 (EQ_EXPR, boolean_type_node, op0,</span>
+<span class="lineNum">      73 </span>            :                        TYPE_MIN_VALUE (type));
+<span class="lineNum">      74 </span><span class="lineCov">        762 :       x = fold_build2 (TRUTH_AND_EXPR, boolean_type_node, x, tt);</span>
+<span class="lineNum">      75 </span><span class="lineCov">        762 :       t = fold_build2 (TRUTH_OR_EXPR, boolean_type_node, t, x);</span>
+<span class="lineNum">      76 </span>            :     }
+<span class="lineNum">      77 </span>            : 
+<span class="lineNum">      78 </span>            :   /* If the condition was folded to 0, no need to instrument
+<span class="lineNum">      79 </span>            :      this expression.  */
+<span class="lineNum">      80 </span><span class="lineCov">       1067 :   if (integer_zerop (t))</span>
+<span class="lineNum">      81 </span>            :     return NULL_TREE;
+<span class="lineNum">      82 </span>            : 
+<span class="lineNum">      83 </span>            :   /* In case we have a SAVE_EXPR in a conditional context, we need to
+<span class="lineNum">      84 </span>            :      make sure it gets evaluated before the condition.  */
+<span class="lineNum">      85 </span><span class="lineCov">        805 :   t = fold_build2 (COMPOUND_EXPR, TREE_TYPE (t), unshare_expr (op0), t);</span>
+<span class="lineNum">      86 </span><span class="lineCov">        805 :   t = fold_build2 (COMPOUND_EXPR, TREE_TYPE (t), unshare_expr (op1), t);</span>
+<span class="lineNum">      87 </span><span class="lineCov">        805 :   if (flag_sanitize_undefined_trap_on_error)</span>
+<span class="lineNum">      88 </span><span class="lineCov">         28 :     tt = build_call_expr_loc (loc, builtin_decl_explicit (BUILT_IN_TRAP), 0);</span>
+<span class="lineNum">      89 </span>            :   else
+<span class="lineNum">      90 </span>            :     {
+<span class="lineNum">      91 </span><span class="lineCov">        791 :       tree data = ubsan_create_data (&quot;__ubsan_overflow_data&quot;, 1, &amp;loc,</span>
+<span class="lineNum">      92 </span>            :                                      ubsan_type_descriptor (type), NULL_TREE,
+<span class="lineNum">      93 </span>            :                                      NULL_TREE);
+<span class="lineNum">      94 </span><span class="lineCov">        791 :       data = build_fold_addr_expr_loc (loc, data);</span>
+<span class="lineNum">      95 </span><span class="lineCov">       1582 :       enum built_in_function bcode</span>
+<span class="lineNum">      96 </span><span class="lineCov">        791 :         = (flag_sanitize_recover &amp; SANITIZE_DIVIDE)</span>
+<span class="lineNum">      97 </span><span class="lineCov">        791 :           ? BUILT_IN_UBSAN_HANDLE_DIVREM_OVERFLOW</span>
+<span class="lineNum">      98 </span>            :           : BUILT_IN_UBSAN_HANDLE_DIVREM_OVERFLOW_ABORT;
+<span class="lineNum">      99 </span><span class="lineCov">        791 :       tt = builtin_decl_explicit (bcode);</span>
+<span class="lineNum">     100 </span><span class="lineCov">        791 :       op0 = unshare_expr (op0);</span>
+<span class="lineNum">     101 </span><span class="lineCov">        791 :       op1 = unshare_expr (op1);</span>
+<span class="lineNum">     102 </span><span class="lineCov">        791 :       tt = build_call_expr_loc (loc, tt, 3, data, ubsan_encode_value (op0),</span>
+<span class="lineNum">     103 </span>            :                                 ubsan_encode_value (op1));
+<span class="lineNum">     104 </span>            :     }
+<span class="lineNum">     105 </span><span class="lineCov">        805 :   t = fold_build3 (COND_EXPR, void_type_node, t, tt, void_node);</span>
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span><span class="lineCov">        805 :   return t;</span>
+<span class="lineNum">     108 </span>            : }
+<span class="lineNum">     109 </span>            : 
+<span class="lineNum">     110 </span>            : /* Instrument left and right shifts.  */
+<span class="lineNum">     111 </span>            : 
+<span class="lineNum">     112 </span>            : tree
+<span class="lineNum">     113 </span><span class="lineCov">       1843 : ubsan_instrument_shift (location_t loc, enum tree_code code,</span>
+<span class="lineNum">     114 </span>            :                         tree op0, tree op1)
+<span class="lineNum">     115 </span>            : {
+<span class="lineNum">     116 </span><span class="lineCov">       1843 :   tree t, tt = NULL_TREE;</span>
+<span class="lineNum">     117 </span><span class="lineCov">       1843 :   tree type0 = TREE_TYPE (op0);</span>
+<span class="lineNum">     118 </span><span class="lineCov">       1843 :   tree type1 = TREE_TYPE (op1);</span>
+<span class="lineNum">     119 </span><span class="lineCov">       1843 :   if (!INTEGRAL_TYPE_P (type0))</span>
+<span class="lineNum">     120 </span>            :     return NULL_TREE;
+<span class="lineNum">     121 </span>            : 
+<span class="lineNum">     122 </span><span class="lineCov">       1829 :   tree op1_utype = unsigned_type_for (type1);</span>
+<span class="lineNum">     123 </span><span class="lineCov">       1829 :   HOST_WIDE_INT op0_prec = TYPE_PRECISION (type0);</span>
+<span class="lineNum">     124 </span><span class="lineCov">       3658 :   tree uprecm1 = build_int_cst (op1_utype, op0_prec - 1);</span>
+<span class="lineNum">     125 </span>            : 
+<span class="lineNum">     126 </span><span class="lineCov">       1829 :   op0 = unshare_expr (op0);</span>
+<span class="lineNum">     127 </span><span class="lineCov">       1829 :   op1 = unshare_expr (op1);</span>
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span><span class="lineCov">       1829 :   t = fold_convert_loc (loc, op1_utype, op1);</span>
+<span class="lineNum">     130 </span><span class="lineCov">       1829 :   t = fold_build2 (GT_EXPR, boolean_type_node, t, uprecm1);</span>
+<span class="lineNum">     131 </span>            : 
+<span class="lineNum">     132 </span>            :   /* If this is not a signed operation, don't perform overflow checks.
+<span class="lineNum">     133 </span>            :      Also punt on bit-fields.  */
+<span class="lineNum">     134 </span><span class="lineCov">       3173 :   if (TYPE_OVERFLOW_WRAPS (type0)</span>
+<span class="lineNum">     135 </span><span class="lineCov">       3990 :       || maybe_ne (GET_MODE_BITSIZE (TYPE_MODE (type0)),</span>
+<span class="lineNum">     136 </span><span class="lineCov">       3159 :                    TYPE_PRECISION (type0))</span>
+<span class="lineNum">     137 </span><span class="lineCov">       3159 :       || !sanitize_flags_p (SANITIZE_SHIFT_BASE))</span>
+<span class="lineNum">     138 </span>            :     ;
+<span class="lineNum">     139 </span>            : 
+<span class="lineNum">     140 </span>            :   /* For signed x &lt;&lt; y, in C99/C11, the following:
+<span class="lineNum">     141 </span>            :      (unsigned) x &gt;&gt; (uprecm1 - y)
+<span class="lineNum">     142 </span>            :      if non-zero, is undefined.  */
+<span class="lineNum">     143 </span><span class="lineCov">       1290 :   else if (code == LSHIFT_EXPR &amp;&amp; flag_isoc99 &amp;&amp; cxx_dialect &lt; cxx11)</span>
+<span class="lineNum">     144 </span>            :     {
+<span class="lineNum">     145 </span><span class="lineCov">        557 :       tree x = fold_build2 (MINUS_EXPR, op1_utype, uprecm1,</span>
+<span class="lineNum">     146 </span>            :                             fold_convert (op1_utype, unshare_expr (op1)));
+<span class="lineNum">     147 </span><span class="lineCov">        557 :       tt = fold_convert_loc (loc, unsigned_type_for (type0), op0);</span>
+<span class="lineNum">     148 </span><span class="lineCov">        557 :       tt = fold_build2 (RSHIFT_EXPR, TREE_TYPE (tt), tt, x);</span>
+<span class="lineNum">     149 </span><span class="lineCov">       1114 :       tt = fold_build2 (NE_EXPR, boolean_type_node, tt,</span>
+<span class="lineNum">     150 </span><span class="lineCov">        557 :                         build_int_cst (TREE_TYPE (tt), 0));</span>
+<span class="lineNum">     151 </span>            :     }
+<span class="lineNum">     152 </span>            : 
+<span class="lineNum">     153 </span>            :   /* For signed x &lt;&lt; y, in C++11 and later, the following:
+<span class="lineNum">     154 </span>            :      x &lt; 0 || ((unsigned) x &gt;&gt; (uprecm1 - y))
+<span class="lineNum">     155 </span>            :      if &gt; 1, is undefined.  */
+<span class="lineNum">     156 </span><span class="lineCov">        733 :   else if (code == LSHIFT_EXPR &amp;&amp; cxx_dialect &gt;= cxx11)</span>
+<span class="lineNum">     157 </span>            :     {
+<span class="lineNum">     158 </span><span class="lineCov">        443 :       tree x = fold_build2 (MINUS_EXPR, op1_utype, uprecm1,</span>
+<span class="lineNum">     159 </span>            :                             fold_convert (op1_utype, unshare_expr (op1)));
+<span class="lineNum">     160 </span><span class="lineCov">        443 :       tt = fold_convert_loc (loc, unsigned_type_for (type0),</span>
+<span class="lineNum">     161 </span>            :                              unshare_expr (op0));
+<span class="lineNum">     162 </span><span class="lineCov">        443 :       tt = fold_build2 (RSHIFT_EXPR, TREE_TYPE (tt), tt, x);</span>
+<span class="lineNum">     163 </span><span class="lineCov">        886 :       tt = fold_build2 (GT_EXPR, boolean_type_node, tt,</span>
+<span class="lineNum">     164 </span>            :                         build_int_cst (TREE_TYPE (tt), 1));
+<span class="lineNum">     165 </span><span class="lineCov">        886 :       x = fold_build2 (LT_EXPR, boolean_type_node, unshare_expr (op0),</span>
+<span class="lineNum">     166 </span>            :                        build_int_cst (type0, 0));
+<span class="lineNum">     167 </span><span class="lineCov">        443 :       tt = fold_build2 (TRUTH_OR_EXPR, boolean_type_node, x, tt);</span>
+<span class="lineNum">     168 </span>            :     }
+<span class="lineNum">     169 </span>            : 
+<span class="lineNum">     170 </span>            :   /* If the condition was folded to 0, no need to instrument
+<span class="lineNum">     171 </span>            :      this expression.  */
+<span class="lineNum">     172 </span><span class="lineCov">       1829 :   if (integer_zerop (t) &amp;&amp; (tt == NULL_TREE || integer_zerop (tt)))</span>
+<span class="lineNum">     173 </span><span class="lineCov">        694 :     return NULL_TREE;</span>
+<span class="lineNum">     174 </span>            : 
+<span class="lineNum">     175 </span>            :   /* In case we have a SAVE_EXPR in a conditional context, we need to
+<span class="lineNum">     176 </span>            :      make sure it gets evaluated before the condition.  */
+<span class="lineNum">     177 </span><span class="lineCov">       1135 :   t = fold_build2 (COMPOUND_EXPR, TREE_TYPE (t), unshare_expr (op0), t);</span>
+<span class="lineNum">     178 </span><span class="lineCov">       1135 :   t = fold_build2 (COMPOUND_EXPR, TREE_TYPE (t), unshare_expr (op1), t);</span>
+<span class="lineNum">     179 </span>            : 
+<span class="lineNum">     180 </span><span class="lineCov">       1135 :   enum sanitize_code recover_kind = SANITIZE_SHIFT_EXPONENT;</span>
+<span class="lineNum">     181 </span><span class="lineCov">       1135 :   tree else_t = void_node;</span>
+<span class="lineNum">     182 </span><span class="lineCov">       1135 :   if (tt)</span>
+<span class="lineNum">     183 </span>            :     {
+<span class="lineNum">     184 </span><span class="lineCov">        804 :       if (!sanitize_flags_p (SANITIZE_SHIFT_EXPONENT))</span>
+<span class="lineNum">     185 </span>            :         {
+<span class="lineNum">     186 </span><span class="lineCov">         28 :           t = fold_build1 (TRUTH_NOT_EXPR, boolean_type_node, t);</span>
+<span class="lineNum">     187 </span><span class="lineCov">         28 :           t = fold_build2 (TRUTH_AND_EXPR, boolean_type_node, t, tt);</span>
+<span class="lineNum">     188 </span><span class="lineCov">         28 :           recover_kind = SANITIZE_SHIFT_BASE;</span>
+<span class="lineNum">     189 </span>            :         }
+<span class="lineNum">     190 </span>            :       else
+<span class="lineNum">     191 </span>            :         {
+<span class="lineNum">     192 </span><span class="lineCov">        776 :           if (flag_sanitize_undefined_trap_on_error</span>
+<span class="lineNum">     193 </span><span class="lineCov">       1552 :               || ((!(flag_sanitize_recover &amp; SANITIZE_SHIFT_EXPONENT))</span>
+<span class="lineNum">     194 </span><span class="lineCov">        776 :                   == (!(flag_sanitize_recover &amp; SANITIZE_SHIFT_BASE))))</span>
+<span class="lineNum">     195 </span><span class="lineCov">        709 :             t = fold_build2 (TRUTH_OR_EXPR, boolean_type_node, t, tt);</span>
+<span class="lineNum">     196 </span>            :           else
+<span class="lineNum">     197 </span>            :             else_t = tt;
+<span class="lineNum">     198 </span>            :         }
+<span class="lineNum">     199 </span>            :     }
+<span class="lineNum">     200 </span>            : 
+<span class="lineNum">     201 </span><span class="lineCov">       1135 :   if (flag_sanitize_undefined_trap_on_error)</span>
+<span class="lineNum">     202 </span><span class="lineNoCov">          0 :     tt = build_call_expr_loc (loc, builtin_decl_explicit (BUILT_IN_TRAP), 0);</span>
+<span class="lineNum">     203 </span>            :   else
+<span class="lineNum">     204 </span>            :     {
+<span class="lineNum">     205 </span><span class="lineCov">       1135 :       tree data = ubsan_create_data (&quot;__ubsan_shift_data&quot;, 1, &amp;loc,</span>
+<span class="lineNum">     206 </span>            :                                      ubsan_type_descriptor (type0),
+<span class="lineNum">     207 </span>            :                                      ubsan_type_descriptor (type1), NULL_TREE,
+<span class="lineNum">     208 </span>            :                                      NULL_TREE);
+<span class="lineNum">     209 </span><span class="lineCov">       1135 :       data = build_fold_addr_expr_loc (loc, data);</span>
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span><span class="lineCov">       2270 :       enum built_in_function bcode</span>
+<span class="lineNum">     212 </span><span class="lineCov">       1135 :         = (flag_sanitize_recover &amp; recover_kind)</span>
+<span class="lineNum">     213 </span><span class="lineCov">       1135 :           ? BUILT_IN_UBSAN_HANDLE_SHIFT_OUT_OF_BOUNDS</span>
+<span class="lineNum">     214 </span>            :           : BUILT_IN_UBSAN_HANDLE_SHIFT_OUT_OF_BOUNDS_ABORT;
+<span class="lineNum">     215 </span><span class="lineCov">       1135 :       tt = builtin_decl_explicit (bcode);</span>
+<span class="lineNum">     216 </span><span class="lineCov">       1135 :       op0 = unshare_expr (op0);</span>
+<span class="lineNum">     217 </span><span class="lineCov">       1135 :       op1 = unshare_expr (op1);</span>
+<span class="lineNum">     218 </span><span class="lineCov">       1135 :       tt = build_call_expr_loc (loc, tt, 3, data, ubsan_encode_value (op0),</span>
+<span class="lineNum">     219 </span>            :                                 ubsan_encode_value (op1));
+<span class="lineNum">     220 </span><span class="lineCov">       1135 :       if (else_t != void_node)</span>
+<span class="lineNum">     221 </span>            :         {
+<span class="lineNum">     222 </span><span class="lineCov">        134 :           bcode = (flag_sanitize_recover &amp; SANITIZE_SHIFT_BASE)</span>
+<span class="lineNum">     223 </span><span class="lineCov">         67 :                   ? BUILT_IN_UBSAN_HANDLE_SHIFT_OUT_OF_BOUNDS</span>
+<span class="lineNum">     224 </span>            :                   : BUILT_IN_UBSAN_HANDLE_SHIFT_OUT_OF_BOUNDS_ABORT;
+<span class="lineNum">     225 </span><span class="lineCov">         67 :           tree else_tt = builtin_decl_explicit (bcode);</span>
+<span class="lineNum">     226 </span><span class="lineCov">         67 :           op0 = unshare_expr (op0);</span>
+<span class="lineNum">     227 </span><span class="lineCov">         67 :           op1 = unshare_expr (op1);</span>
+<span class="lineNum">     228 </span><span class="lineCov">         67 :           else_tt = build_call_expr_loc (loc, else_tt, 3, data,</span>
+<span class="lineNum">     229 </span>            :                                          ubsan_encode_value (op0),
+<span class="lineNum">     230 </span>            :                                          ubsan_encode_value (op1));
+<span class="lineNum">     231 </span><span class="lineCov">         67 :           else_t = fold_build3 (COND_EXPR, void_type_node, else_t,</span>
+<span class="lineNum">     232 </span>            :                                 else_tt, void_node);
+<span class="lineNum">     233 </span>            :         }
+<span class="lineNum">     234 </span>            :     }
+<span class="lineNum">     235 </span><span class="lineCov">       1135 :   t = fold_build3 (COND_EXPR, void_type_node, t, tt, else_t);</span>
+<span class="lineNum">     236 </span>            : 
+<span class="lineNum">     237 </span><span class="lineCov">       1135 :   return t;</span>
+<span class="lineNum">     238 </span>            : }
+<span class="lineNum">     239 </span>            : 
+<span class="lineNum">     240 </span>            : /* Instrument variable length array bound.  */
+<span class="lineNum">     241 </span>            : 
+<span class="lineNum">     242 </span>            : tree
+<span class="lineNum">     243 </span><span class="lineCov">        288 : ubsan_instrument_vla (location_t loc, tree size)</span>
+<span class="lineNum">     244 </span>            : {
+<span class="lineNum">     245 </span><span class="lineCov">        288 :   tree type = TREE_TYPE (size);</span>
+<span class="lineNum">     246 </span><span class="lineCov">        288 :   tree t, tt;</span>
+<span class="lineNum">     247 </span>            : 
+<span class="lineNum">     248 </span><span class="lineCov">        576 :   t = fold_build2 (LE_EXPR, boolean_type_node, size, build_int_cst (type, 0));</span>
+<span class="lineNum">     249 </span><span class="lineCov">        288 :   if (flag_sanitize_undefined_trap_on_error)</span>
+<span class="lineNum">     250 </span><span class="lineNoCov">          0 :     tt = build_call_expr_loc (loc, builtin_decl_explicit (BUILT_IN_TRAP), 0);</span>
+<span class="lineNum">     251 </span>            :   else
+<span class="lineNum">     252 </span>            :     {
+<span class="lineNum">     253 </span><span class="lineCov">        288 :       tree data = ubsan_create_data (&quot;__ubsan_vla_data&quot;, 1, &amp;loc,</span>
+<span class="lineNum">     254 </span>            :                                      ubsan_type_descriptor (type), NULL_TREE,
+<span class="lineNum">     255 </span>            :                                      NULL_TREE);
+<span class="lineNum">     256 </span><span class="lineCov">        288 :       data = build_fold_addr_expr_loc (loc, data);</span>
+<span class="lineNum">     257 </span><span class="lineCov">        576 :       enum built_in_function bcode</span>
+<span class="lineNum">     258 </span><span class="lineCov">        288 :         = (flag_sanitize_recover &amp; SANITIZE_VLA)</span>
+<span class="lineNum">     259 </span><span class="lineCov">        288 :           ? BUILT_IN_UBSAN_HANDLE_VLA_BOUND_NOT_POSITIVE</span>
+<span class="lineNum">     260 </span>            :           : BUILT_IN_UBSAN_HANDLE_VLA_BOUND_NOT_POSITIVE_ABORT;
+<span class="lineNum">     261 </span><span class="lineCov">        288 :       tt = builtin_decl_explicit (bcode);</span>
+<span class="lineNum">     262 </span><span class="lineCov">        288 :       tt = build_call_expr_loc (loc, tt, 2, data, ubsan_encode_value (size));</span>
+<span class="lineNum">     263 </span>            :     }
+<span class="lineNum">     264 </span><span class="lineCov">        288 :   t = fold_build3 (COND_EXPR, void_type_node, t, tt, void_node);</span>
+<span class="lineNum">     265 </span>            : 
+<span class="lineNum">     266 </span><span class="lineCov">        288 :   return t;</span>
+<span class="lineNum">     267 </span>            : }
+<span class="lineNum">     268 </span>            : 
+<span class="lineNum">     269 </span>            : /* Instrument missing return in C++ functions returning non-void.  */
+<span class="lineNum">     270 </span>            : 
+<span class="lineNum">     271 </span>            : tree
+<span class="lineNum">     272 </span><span class="lineCov">        100 : ubsan_instrument_return (location_t loc)</span>
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span><span class="lineCov">        100 :   if (flag_sanitize_undefined_trap_on_error)</span>
+<span class="lineNum">     275 </span><span class="lineNoCov">          0 :     return build_call_expr_loc (loc, builtin_decl_explicit (BUILT_IN_TRAP), 0);</span>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">        100 :   tree data = ubsan_create_data (&quot;__ubsan_missing_return_data&quot;, 1, &amp;loc,</span>
+<span class="lineNum">     278 </span>            :                                  NULL_TREE, NULL_TREE);
+<span class="lineNum">     279 </span><span class="lineCov">        100 :   tree t = builtin_decl_explicit (BUILT_IN_UBSAN_HANDLE_MISSING_RETURN);</span>
+<span class="lineNum">     280 </span><span class="lineCov">        100 :   return build_call_expr_loc (loc, t, 1, build_fold_addr_expr_loc (loc, data));</span>
+<span class="lineNum">     281 </span>            : }
+<span class="lineNum">     282 </span>            : 
+<span class="lineNum">     283 </span>            : /* Instrument array bounds for ARRAY_REFs.  We create special builtin,
+<span class="lineNum">     284 </span>            :    that gets expanded in the sanopt pass, and make an array dimension
+<span class="lineNum">     285 </span>            :    of it.  ARRAY is the array, *INDEX is an index to the array.
+<span class="lineNum">     286 </span>            :    Return NULL_TREE if no instrumentation is emitted.
+<span class="lineNum">     287 </span>            :    IGNORE_OFF_BY_ONE is true if the ARRAY_REF is inside a ADDR_EXPR.  */
+<span class="lineNum">     288 </span>            : 
+<span class="lineNum">     289 </span>            : tree
+<span class="lineNum">     290 </span><span class="lineCov">       3055 : ubsan_instrument_bounds (location_t loc, tree array, tree *index,</span>
+<span class="lineNum">     291 </span>            :                          bool ignore_off_by_one)
+<span class="lineNum">     292 </span>            : {
+<span class="lineNum">     293 </span><span class="lineCov">       3055 :   tree type = TREE_TYPE (array);</span>
+<span class="lineNum">     294 </span><span class="lineCov">       3055 :   tree domain = TYPE_DOMAIN (type);</span>
+<span class="lineNum">     295 </span>            : 
+<span class="lineNum">     296 </span><span class="lineCov">       3055 :   if (domain == NULL_TREE || TYPE_MAX_VALUE (domain) == NULL_TREE)</span>
+<span class="lineNum">     297 </span>            :     return NULL_TREE;
+<span class="lineNum">     298 </span>            : 
+<span class="lineNum">     299 </span><span class="lineCov">       2993 :   tree bound = TYPE_MAX_VALUE (domain);</span>
+<span class="lineNum">     300 </span><span class="lineCov">       2993 :   if (ignore_off_by_one)</span>
+<span class="lineNum">     301 </span><span class="lineCov">        636 :     bound = fold_build2 (PLUS_EXPR, TREE_TYPE (bound), bound,</span>
+<span class="lineNum">     302 </span>            :                          build_int_cst (TREE_TYPE (bound), 1));
+<span class="lineNum">     303 </span>            : 
+<span class="lineNum">     304 </span>            :   /* Detect flexible array members and suchlike, unless
+<span class="lineNum">     305 </span>            :      -fsanitize=bounds-strict.  */
+<span class="lineNum">     306 </span><span class="lineCov">       2993 :   tree base = get_base_address (array);</span>
+<span class="lineNum">     307 </span><span class="lineCov">       2993 :   if (!sanitize_flags_p (SANITIZE_BOUNDS_STRICT)</span>
+<span class="lineNum">     308 </span><span class="lineCov">       2979 :       &amp;&amp; TREE_CODE (array) == COMPONENT_REF</span>
+<span class="lineNum">     309 </span><span class="lineCov">       3698 :       &amp;&amp; base &amp;&amp; (INDIRECT_REF_P (base) || TREE_CODE (base) == MEM_REF))</span>
+<span class="lineNum">     310 </span>            :     {
+<span class="lineNum">     311 </span>            :       tree next = NULL_TREE;
+<span class="lineNum">     312 </span>            :       tree cref = array;
+<span class="lineNum">     313 </span>            : 
+<span class="lineNum">     314 </span>            :       /* Walk all structs/unions.  */
+<span class="lineNum">     315 </span><span class="lineCov">        545 :       while (TREE_CODE (cref) == COMPONENT_REF)</span>
+<span class="lineNum">     316 </span>            :         {
+<span class="lineNum">     317 </span><span class="lineCov">        384 :           if (TREE_CODE (TREE_TYPE (TREE_OPERAND (cref, 0))) == RECORD_TYPE)</span>
+<span class="lineNum">     318 </span><span class="lineCov">        384 :             for (next = DECL_CHAIN (TREE_OPERAND (cref, 1));</span>
+<span class="lineNum">     319 </span><span class="lineCov">        524 :                  next &amp;&amp; TREE_CODE (next) != FIELD_DECL;</span>
+<span class="lineNum">     320 </span><span class="lineCov">        140 :                  next = DECL_CHAIN (next))</span>
+<span class="lineNum">     321 </span>            :               ;
+<span class="lineNum">     322 </span><span class="lineCov">        384 :           if (next)</span>
+<span class="lineNum">     323 </span>            :             /* Not a last element.  Instrument it.  */
+<span class="lineNum">     324 </span>            :             break;
+<span class="lineNum">     325 </span>            :           /* Ok, this is the last field of the structure/union.  But the
+<span class="lineNum">     326 </span>            :              aggregate containing the field must be the last field too,
+<span class="lineNum">     327 </span>            :              recursively.  */
+<span class="lineNum">     328 </span><span class="lineCov">        257 :           cref = TREE_OPERAND (cref, 0);</span>
+<span class="lineNum">     329 </span>            :         }
+<span class="lineNum">     330 </span><span class="lineCov">        288 :       if (!next)</span>
+<span class="lineNum">     331 </span>            :         /* Don't instrument this flexible array member-like array in non-strict
+<span class="lineNum">     332 </span>            :            -fsanitize=bounds mode.  */
+<span class="lineNum">     333 </span>            :         return NULL_TREE;
+<span class="lineNum">     334 </span>            :     }
+<span class="lineNum">     335 </span>            : 
+<span class="lineNum">     336 </span>            :   /* Don't emit instrumentation in the most common cases.  */
+<span class="lineNum">     337 </span><span class="lineCov">       2832 :   tree idx = NULL_TREE;</span>
+<span class="lineNum">     338 </span><span class="lineCov">       2832 :   if (TREE_CODE (*index) == INTEGER_CST)</span>
+<span class="lineNum">     339 </span>            :     idx = *index;
+<span class="lineNum">     340 </span><span class="lineCov">        633 :   else if (TREE_CODE (*index) == BIT_AND_EXPR</span>
+<span class="lineNum">     341 </span><span class="lineCov">        633 :            &amp;&amp; TREE_CODE (TREE_OPERAND (*index, 1)) == INTEGER_CST)</span>
+<span class="lineNum">     342 </span><span class="lineCov">         24 :     idx = TREE_OPERAND (*index, 1);</span>
+<span class="lineNum">     343 </span><span class="lineCov">       2223 :   if (idx</span>
+<span class="lineNum">     344 </span><span class="lineCov">       2223 :       &amp;&amp; TREE_CODE (bound) == INTEGER_CST</span>
+<span class="lineNum">     345 </span><span class="lineCov">       1886 :       &amp;&amp; tree_int_cst_sgn (idx) &gt;= 0</span>
+<span class="lineNum">     346 </span><span class="lineCov">       4077 :       &amp;&amp; tree_int_cst_le (idx, bound))</span>
+<span class="lineNum">     347 </span>            :     return NULL_TREE;
+<span class="lineNum">     348 </span>            : 
+<span class="lineNum">     349 </span><span class="lineCov">       1375 :   *index = save_expr (*index);</span>
+<span class="lineNum">     350 </span>            :   /* Create a &quot;(T *) 0&quot; tree node to describe the array type.  */
+<span class="lineNum">     351 </span><span class="lineCov">       2750 :   tree zero_with_type = build_int_cst (build_pointer_type (type), 0);</span>
+<span class="lineNum">     352 </span><span class="lineCov">       1375 :   return build_call_expr_internal_loc (loc, IFN_UBSAN_BOUNDS,</span>
+<span class="lineNum">     353 </span>            :                                        void_type_node, 3, zero_with_type,
+<span class="lineNum">     354 </span><span class="lineCov">       1375 :                                        *index, bound);</span>
+<span class="lineNum">     355 </span>            : }
+<span class="lineNum">     356 </span>            : 
+<span class="lineNum">     357 </span>            : /* Return true iff T is an array that was instrumented by SANITIZE_BOUNDS.  */
+<span class="lineNum">     358 </span>            : 
+<span class="lineNum">     359 </span>            : bool
+<span class="lineNum">     360 </span><span class="lineCov">       3062 : ubsan_array_ref_instrumented_p (const_tree t)</span>
+<span class="lineNum">     361 </span>            : {
+<span class="lineNum">     362 </span><span class="lineCov">       3062 :   if (TREE_CODE (t) != ARRAY_REF)</span>
+<span class="lineNum">     363 </span>            :     return false;
+<span class="lineNum">     364 </span>            : 
+<span class="lineNum">     365 </span><span class="lineCov">       3062 :   tree op1 = TREE_OPERAND (t, 1);</span>
+<span class="lineNum">     366 </span><span class="lineCov">       3062 :   return TREE_CODE (op1) == COMPOUND_EXPR</span>
+<span class="lineNum">     367 </span><span class="lineNoCov">          0 :          &amp;&amp; TREE_CODE (TREE_OPERAND (op1, 0)) == CALL_EXPR</span>
+<span class="lineNum">     368 </span><span class="lineNoCov">          0 :          &amp;&amp; CALL_EXPR_FN (TREE_OPERAND (op1, 0)) == NULL_TREE</span>
+<span class="lineNum">     369 </span><span class="lineCov">       3062 :          &amp;&amp; CALL_EXPR_IFN (TREE_OPERAND (op1, 0)) == IFN_UBSAN_BOUNDS;</span>
+<span class="lineNum">     370 </span>            : }
+<span class="lineNum">     371 </span>            : 
+<span class="lineNum">     372 </span>            : /* Instrument an ARRAY_REF, if it hasn't already been instrumented.
+<span class="lineNum">     373 </span>            :    IGNORE_OFF_BY_ONE is true if the ARRAY_REF is inside a ADDR_EXPR.  */
+<span class="lineNum">     374 </span>            : 
+<span class="lineNum">     375 </span>            : void
+<span class="lineNum">     376 </span><span class="lineCov">       3062 : ubsan_maybe_instrument_array_ref (tree *expr_p, bool ignore_off_by_one)</span>
+<span class="lineNum">     377 </span>            : {
+<span class="lineNum">     378 </span><span class="lineCov">       3062 :   if (!ubsan_array_ref_instrumented_p (*expr_p)</span>
+<span class="lineNum">     379 </span><span class="lineCov">       3062 :       &amp;&amp; sanitize_flags_p (SANITIZE_BOUNDS | SANITIZE_BOUNDS_STRICT)</span>
+<span class="lineNum">     380 </span><span class="lineCov">       6110 :       &amp;&amp; current_function_decl != NULL_TREE)</span>
+<span class="lineNum">     381 </span>            :     {
+<span class="lineNum">     382 </span><span class="lineCov">       3048 :       tree op0 = TREE_OPERAND (*expr_p, 0);</span>
+<span class="lineNum">     383 </span><span class="lineCov">       3048 :       tree op1 = TREE_OPERAND (*expr_p, 1);</span>
+<span class="lineNum">     384 </span><span class="lineCov">       3048 :       tree e = ubsan_instrument_bounds (EXPR_LOCATION (*expr_p), op0, &amp;op1,</span>
+<span class="lineNum">     385 </span>            :                                         ignore_off_by_one);
+<span class="lineNum">     386 </span><span class="lineCov">       3048 :       if (e != NULL_TREE)</span>
+<span class="lineNum">     387 </span>            :         {
+<span class="lineNum">     388 </span><span class="lineCov">       1368 :           tree t = copy_node (*expr_p);</span>
+<span class="lineNum">     389 </span><span class="lineCov">       1368 :           TREE_OPERAND (t, 1) = build2 (COMPOUND_EXPR, TREE_TYPE (op1),</span>
+<span class="lineNum">     390 </span>            :                                         e, op1);
+<span class="lineNum">     391 </span><span class="lineCov">       1368 :           *expr_p = t;</span>
+<span class="lineNum">     392 </span>            :         }
+<span class="lineNum">     393 </span>            :     }
+<span class="lineNum">     394 </span><span class="lineCov">       3062 : }</span>
+<span class="lineNum">     395 </span>            : 
+<span class="lineNum">     396 </span>            : static tree
+<span class="lineNum">     397 </span><span class="lineCov">       2628 : ubsan_maybe_instrument_reference_or_call (location_t loc, tree op, tree ptype,</span>
+<span class="lineNum">     398 </span>            :                                           enum ubsan_null_ckind ckind)
+<span class="lineNum">     399 </span>            : {
+<span class="lineNum">     400 </span><span class="lineCov">       2628 :   if (!sanitize_flags_p (SANITIZE_ALIGNMENT | SANITIZE_NULL)</span>
+<span class="lineNum">     401 </span><span class="lineCov">       2628 :       || current_function_decl == NULL_TREE)</span>
+<span class="lineNum">     402 </span>            :     return NULL_TREE;
+<span class="lineNum">     403 </span>            : 
+<span class="lineNum">     404 </span><span class="lineCov">       2628 :   tree type = TREE_TYPE (ptype);</span>
+<span class="lineNum">     405 </span><span class="lineCov">       2628 :   tree orig_op = op;</span>
+<span class="lineNum">     406 </span><span class="lineCov">       2628 :   bool instrument = false;</span>
+<span class="lineNum">     407 </span><span class="lineCov">       2628 :   unsigned int mina = 0;</span>
+<span class="lineNum">     408 </span>            : 
+<span class="lineNum">     409 </span><span class="lineCov">       2628 :   if (sanitize_flags_p (SANITIZE_ALIGNMENT))</span>
+<span class="lineNum">     410 </span>            :     {
+<span class="lineNum">     411 </span><span class="lineCov">       1776 :       mina = min_align_of_type (type);</span>
+<span class="lineNum">     412 </span><span class="lineCov">       1776 :       if (mina &lt;= 1)</span>
+<span class="lineNum">     413 </span><span class="lineCov">        709 :         mina = 0;</span>
+<span class="lineNum">     414 </span>            :     }
+<span class="lineNum">     415 </span><span class="lineCov">       4864 :   while ((TREE_CODE (op) == NOP_EXPR</span>
+<span class="lineNum">     416 </span><span class="lineCov">       3746 :           || TREE_CODE (op) == NON_LVALUE_EXPR)</span>
+<span class="lineNum">     417 </span><span class="lineCov">       3746 :          &amp;&amp; TREE_CODE (TREE_TYPE (op)) == POINTER_TYPE)</span>
+<span class="lineNum">     418 </span><span class="lineCov">       1118 :     op = TREE_OPERAND (op, 0);</span>
+<span class="lineNum">     419 </span><span class="lineCov">       2628 :   if (TREE_CODE (op) == NOP_EXPR</span>
+<span class="lineNum">     420 </span><span class="lineCov">       2628 :       &amp;&amp; TREE_CODE (TREE_TYPE (op)) == REFERENCE_TYPE)</span>
+<span class="lineNum">     421 </span>            :     {
+<span class="lineNum">     422 </span><span class="lineNoCov">          0 :       if (mina &amp;&amp; mina &gt; min_align_of_type (TREE_TYPE (TREE_TYPE (op))))</span>
+<span class="lineNum">     423 </span>            :         instrument = true;
+<span class="lineNum">     424 </span>            :     }
+<span class="lineNum">     425 </span>            :   else
+<span class="lineNum">     426 </span>            :     {
+<span class="lineNum">     427 </span><span class="lineCov">       2628 :       if (sanitize_flags_p (SANITIZE_NULL) &amp;&amp; TREE_CODE (op) == ADDR_EXPR)</span>
+<span class="lineNum">     428 </span>            :         {
+<span class="lineNum">     429 </span><span class="lineCov">        930 :           bool strict_overflow_p = false;</span>
+<span class="lineNum">     430 </span>            :           /* tree_single_nonzero_warnv_p will not return true for non-weak
+<span class="lineNum">     431 </span>            :              non-automatic decls with -fno-delete-null-pointer-checks,
+<span class="lineNum">     432 </span>            :              which is disabled during -fsanitize=null.  We don't want to
+<span class="lineNum">     433 </span>            :              instrument those, just weak vars though.  */
+<span class="lineNum">     434 </span><span class="lineCov">        930 :           int save_flag_delete_null_pointer_checks</span>
+<span class="lineNum">     435 </span>            :             = flag_delete_null_pointer_checks;
+<span class="lineNum">     436 </span><span class="lineCov">        930 :           flag_delete_null_pointer_checks = 1;</span>
+<span class="lineNum">     437 </span><span class="lineCov">        930 :           if (!tree_single_nonzero_warnv_p (op, &amp;strict_overflow_p)</span>
+<span class="lineNum">     438 </span><span class="lineCov">        930 :               || strict_overflow_p)</span>
+<span class="lineNum">     439 </span>            :             instrument = true;
+<span class="lineNum">     440 </span><span class="lineCov">        930 :           flag_delete_null_pointer_checks</span>
+<span class="lineNum">     441 </span><span class="lineCov">        930 :             = save_flag_delete_null_pointer_checks;</span>
+<span class="lineNum">     442 </span>            :         }
+<span class="lineNum">     443 </span><span class="lineCov">       1698 :       else if (sanitize_flags_p (SANITIZE_NULL))</span>
+<span class="lineNum">     444 </span><span class="lineCov">       1257 :         instrument = true;</span>
+<span class="lineNum">     445 </span><span class="lineCov">       2628 :       if (mina &amp;&amp; mina &gt; 1)</span>
+<span class="lineNum">     446 </span>            :         {
+<span class="lineNum">     447 </span><span class="lineCov">       1137 :           if (!POINTER_TYPE_P (TREE_TYPE (op))</span>
+<span class="lineNum">     448 </span><span class="lineCov">       1102 :               || mina &gt; get_pointer_alignment (op) / BITS_PER_UNIT)</span>
+<span class="lineNum">     449 </span>            :             instrument = true;
+<span class="lineNum">     450 </span>            :         }
+<span class="lineNum">     451 </span>            :     }
+<span class="lineNum">     452 </span><span class="lineCov">       1696 :   if (!instrument)</span>
+<span class="lineNum">     453 </span><span class="lineCov">        580 :     return NULL_TREE;</span>
+<span class="lineNum">     454 </span><span class="lineCov">       2048 :   op = save_expr (orig_op);</span>
+<span class="lineNum">     455 </span><span class="lineCov">       2048 :   gcc_assert (POINTER_TYPE_P (ptype));</span>
+<span class="lineNum">     456 </span><span class="lineCov">       2048 :   if (TREE_CODE (ptype) == REFERENCE_TYPE)</span>
+<span class="lineNum">     457 </span><span class="lineCov">        804 :     ptype = build_pointer_type (TREE_TYPE (ptype));</span>
+<span class="lineNum">     458 </span><span class="lineCov">       4096 :   tree kind = build_int_cst (ptype, ckind);</span>
+<span class="lineNum">     459 </span><span class="lineCov">       4096 :   tree align = build_int_cst (pointer_sized_int_node, mina);</span>
+<span class="lineNum">     460 </span><span class="lineCov">       2048 :   tree call</span>
+<span class="lineNum">     461 </span><span class="lineCov">       2048 :     = build_call_expr_internal_loc (loc, IFN_UBSAN_NULL, void_type_node,</span>
+<span class="lineNum">     462 </span><span class="lineCov">       2048 :                                     3, op, kind, align);</span>
+<span class="lineNum">     463 </span><span class="lineCov">       2048 :   TREE_SIDE_EFFECTS (call) = 1;</span>
+<span class="lineNum">     464 </span><span class="lineCov">       2048 :   return fold_build2 (COMPOUND_EXPR, TREE_TYPE (op), call, op);</span>
+<span class="lineNum">     465 </span>            : }
+<span class="lineNum">     466 </span>            : 
+<span class="lineNum">     467 </span>            : /* Instrument a NOP_EXPR to REFERENCE_TYPE or INTEGER_CST with REFERENCE_TYPE
+<span class="lineNum">     468 </span>            :    type if needed.  */
+<span class="lineNum">     469 </span>            : 
+<span class="lineNum">     470 </span>            : void
+<span class="lineNum">     471 </span><span class="lineCov">        867 : ubsan_maybe_instrument_reference (tree *stmt_p)</span>
+<span class="lineNum">     472 </span>            : {
+<span class="lineNum">     473 </span><span class="lineCov">        867 :   tree stmt = *stmt_p;</span>
+<span class="lineNum">     474 </span><span class="lineCov">        867 :   tree op = stmt;</span>
+<span class="lineNum">     475 </span><span class="lineCov">        867 :   if (TREE_CODE (stmt) == NOP_EXPR)</span>
+<span class="lineNum">     476 </span><span class="lineCov">        846 :     op = TREE_OPERAND (stmt, 0);</span>
+<span class="lineNum">     477 </span><span class="lineCov">        867 :   op = ubsan_maybe_instrument_reference_or_call (EXPR_LOCATION (stmt), op,</span>
+<span class="lineNum">     478 </span><span class="lineCov">        867 :                                                  TREE_TYPE (stmt),</span>
+<span class="lineNum">     479 </span>            :                                                  UBSAN_REF_BINDING);
+<span class="lineNum">     480 </span><span class="lineCov">        867 :   if (op)</span>
+<span class="lineNum">     481 </span>            :     {
+<span class="lineNum">     482 </span><span class="lineCov">        804 :       if (TREE_CODE (stmt) == NOP_EXPR) </span>
+<span class="lineNum">     483 </span><span class="lineCov">        783 :         TREE_OPERAND (stmt, 0) = op;</span>
+<span class="lineNum">     484 </span>            :       else
+<span class="lineNum">     485 </span><span class="lineCov">         21 :         *stmt_p = op;</span>
+<span class="lineNum">     486 </span>            :     }
+<span class="lineNum">     487 </span><span class="lineCov">        867 : }</span>
+<span class="lineNum">     488 </span>            : 
+<span class="lineNum">     489 </span>            : /* Instrument a CALL_EXPR to a method if needed.  */
+<span class="lineNum">     490 </span>            : 
+<span class="lineNum">     491 </span>            : void
+<span class="lineNum">     492 </span><span class="lineCov">       1761 : ubsan_maybe_instrument_member_call (tree stmt, bool is_ctor)</span>
+<span class="lineNum">     493 </span>            : {
+<span class="lineNum">     494 </span><span class="lineCov">       1761 :   if (call_expr_nargs (stmt) == 0)</span>
+<span class="lineNum">     495 </span>            :     return;
+<span class="lineNum">     496 </span><span class="lineCov">       1761 :   tree op = CALL_EXPR_ARG (stmt, 0);</span>
+<span class="lineNum">     497 </span><span class="lineCov">       1761 :   if (op == error_mark_node</span>
+<span class="lineNum">     498 </span><span class="lineCov">       1761 :       || !POINTER_TYPE_P (TREE_TYPE (op)))</span>
+<span class="lineNum">     499 </span>            :     return;
+<span class="lineNum">     500 </span><span class="lineCov">       1761 :   op = ubsan_maybe_instrument_reference_or_call (EXPR_LOCATION (stmt), op,</span>
+<span class="lineNum">     501 </span><span class="lineCov">       3522 :                                                  TREE_TYPE (op),</span>
+<span class="lineNum">     502 </span>            :                                                  is_ctor ? UBSAN_CTOR_CALL
+<span class="lineNum">     503 </span>            :                                                  : UBSAN_MEMBER_CALL);
+<span class="lineNum">     504 </span><span class="lineCov">       1761 :   if (op)</span>
+<span class="lineNum">     505 </span><span class="lineCov">       1244 :     CALL_EXPR_ARG (stmt, 0) = op;</span>
+<span class="lineNum">     506 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>

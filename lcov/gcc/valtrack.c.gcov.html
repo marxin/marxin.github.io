@@ -1,0 +1,871 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - gcc.info - gcc/valtrack.c</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title">LCOV - code coverage report</td></tr>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">gcc</a> - valtrack.c<span style="font-size: 80%;"> (source / <a href="valtrack.c.func-sort-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">gcc.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">297</td>
+            <td class="headerCovTableEntry">315</td>
+            <td class="headerCovTableEntryHi">94.3 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-09-22 10:58:49</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntryHi">93.8 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<a name="1"><span class="lineNum">       1 </span>            : /* Infrastructure for tracking user variable locations and values</a>
+<span class="lineNum">       2 </span>            :    throughout compilation.
+<span class="lineNum">       3 </span>            :    Copyright (C) 2010-2018 Free Software Foundation, Inc.
+<span class="lineNum">       4 </span>            :    Contributed by Alexandre Oliva &lt;aoliva@redhat.com&gt;.
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : This file is part of GCC.
+<span class="lineNum">       7 </span>            : 
+<span class="lineNum">       8 </span>            : GCC is free software; you can redistribute it and/or modify it under
+<span class="lineNum">       9 </span>            : the terms of the GNU General Public License as published by the Free
+<span class="lineNum">      10 </span>            : Software Foundation; either version 3, or (at your option) any later
+<span class="lineNum">      11 </span>            : version.
+<span class="lineNum">      12 </span>            : 
+<span class="lineNum">      13 </span>            : GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+<span class="lineNum">      14 </span>            : WARRANTY; without even the implied warranty of MERCHANTABILITY or
+<span class="lineNum">      15 </span>            : FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+<span class="lineNum">      16 </span>            : for more details.
+<span class="lineNum">      17 </span>            : 
+<span class="lineNum">      18 </span>            : You should have received a copy of the GNU General Public License
+<span class="lineNum">      19 </span>            : along with GCC; see the file COPYING3.  If not see
+<span class="lineNum">      20 </span>            : &lt;http://www.gnu.org/licenses/&gt;.  */
+<span class="lineNum">      21 </span>            : 
+<span class="lineNum">      22 </span>            : #include &quot;config.h&quot;
+<span class="lineNum">      23 </span>            : #include &quot;system.h&quot;
+<span class="lineNum">      24 </span>            : #include &quot;coretypes.h&quot;
+<span class="lineNum">      25 </span>            : #include &quot;backend.h&quot;
+<span class="lineNum">      26 </span>            : #include &quot;rtl.h&quot;
+<span class="lineNum">      27 </span>            : #include &quot;df.h&quot;
+<span class="lineNum">      28 </span>            : #include &quot;valtrack.h&quot;
+<span class="lineNum">      29 </span>            : #include &quot;regs.h&quot;
+<span class="lineNum">      30 </span>            : #include &quot;memmodel.h&quot;
+<span class="lineNum">      31 </span>            : #include &quot;emit-rtl.h&quot;
+<span class="lineNum">      32 </span>            : #include &quot;rtl-iter.h&quot;
+<span class="lineNum">      33 </span>            : 
+<span class="lineNum">      34 </span>            : /* gen_lowpart_no_emit hook implementation for DEBUG_INSNs.  In DEBUG_INSNs,
+<span class="lineNum">      35 </span>            :    all lowpart SUBREGs are valid, despite what the machine requires for
+<span class="lineNum">      36 </span>            :    instructions.  */
+<a name="37"><span class="lineNum">      37 </span>            : </a>
+<span class="lineNum">      38 </span>            : static rtx
+<span class="lineNum">      39 </span><span class="lineCov">         76 : gen_lowpart_for_debug (machine_mode mode, rtx x)</span>
+<span class="lineNum">      40 </span>            : {
+<span class="lineNum">      41 </span><span class="lineCov">         76 :   rtx result = gen_lowpart_if_possible (mode, x);</span>
+<span class="lineNum">      42 </span><span class="lineCov">         76 :   if (result)</span>
+<span class="lineNum">      43 </span>            :     return result;
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span><span class="lineNoCov">          0 :   if (GET_MODE (x) != VOIDmode)</span>
+<span class="lineNum">      46 </span><span class="lineNoCov">          0 :     return gen_rtx_raw_SUBREG (mode, x,</span>
+<span class="lineNum">      47 </span>            :                                subreg_lowpart_offset (mode, GET_MODE (x)));
+<span class="lineNum">      48 </span>            : 
+<span class="lineNum">      49 </span>            :   return NULL_RTX;
+<span class="lineNum">      50 </span>            : }
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            : /* Replace auto-increment addressing modes with explicit operations to access
+<span class="lineNum">      53 </span>            :    the same addresses without modifying the corresponding registers.  */
+<a name="54"><span class="lineNum">      54 </span>            : </a>
+<span class="lineNum">      55 </span>            : static rtx
+<span class="lineNum">      56 </span><span class="lineNoCov">          0 : cleanup_auto_inc_dec (rtx src, machine_mode mem_mode ATTRIBUTE_UNUSED)</span>
+<span class="lineNum">      57 </span>            : {
+<span class="lineNum">      58 </span><span class="lineCov">     190866 :   rtx x = src;</span>
+<span class="lineNum">      59 </span><span class="lineCov">     190866 :   if (!AUTO_INC_DEC)</span>
+<span class="lineNum">      60 </span><span class="lineNoCov">          0 :     return copy_rtx (x);</span>
+<span class="lineNum">      61 </span>            : 
+<span class="lineNum">      62 </span>            :   const RTX_CODE code = GET_CODE (x);
+<span class="lineNum">      63 </span>            :   int i;
+<span class="lineNum">      64 </span>            :   const char *fmt;
+<span class="lineNum">      65 </span>            : 
+<span class="lineNum">      66 </span>            :   switch (code)
+<span class="lineNum">      67 </span>            :     {
+<span class="lineNum">      68 </span>            :     case REG:
+<span class="lineNum">      69 </span>            :     CASE_CONST_ANY:
+<span class="lineNum">      70 </span>            :     case SYMBOL_REF:
+<span class="lineNum">      71 </span>            :     case CODE_LABEL:
+<span class="lineNum">      72 </span>            :     case PC:
+<span class="lineNum">      73 </span>            :     case CC0:
+<span class="lineNum">      74 </span>            :     case SCRATCH:
+<span class="lineNum">      75 </span>            :       /* SCRATCH must be shared because they represent distinct values.  */
+<span class="lineNum">      76 </span>            :       return x;
+<span class="lineNum">      77 </span>            :     case CLOBBER:
+<span class="lineNum">      78 </span>            :       /* Share clobbers of hard registers (like cc0), but do not share pseudo reg
+<span class="lineNum">      79 </span>            :          clobbers or clobbers of hard registers that originated as pseudos.
+<span class="lineNum">      80 </span>            :          This is needed to allow safe register renaming.  */
+<span class="lineNum">      81 </span>            :       if (REG_P (XEXP (x, 0)) &amp;&amp; REGNO (XEXP (x, 0)) &lt; FIRST_PSEUDO_REGISTER
+<span class="lineNum">      82 </span>            :           &amp;&amp; ORIGINAL_REGNO (XEXP (x, 0)) == REGNO (XEXP (x, 0)))
+<span class="lineNum">      83 </span>            :         return x;
+<span class="lineNum">      84 </span>            :       break;
+<span class="lineNum">      85 </span>            : 
+<span class="lineNum">      86 </span>            :     case CONST:
+<span class="lineNum">      87 </span>            :       if (shared_const_p (x))
+<span class="lineNum">      88 </span>            :         return x;
+<span class="lineNum">      89 </span>            :       break;
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            :     case MEM:
+<span class="lineNum">      92 </span>            :       mem_mode = GET_MODE (x);
+<span class="lineNum">      93 </span>            :       break;
+<span class="lineNum">      94 </span>            : 
+<span class="lineNum">      95 </span>            :     case PRE_INC:
+<span class="lineNum">      96 </span>            :     case PRE_DEC:
+<span class="lineNum">      97 </span>            :       {
+<span class="lineNum">      98 </span>            :         gcc_assert (mem_mode != VOIDmode &amp;&amp; mem_mode != BLKmode);
+<span class="lineNum">      99 </span>            :         poly_int64 offset = GET_MODE_SIZE (mem_mode);
+<span class="lineNum">     100 </span>            :         if (code == PRE_DEC)
+<span class="lineNum">     101 </span>            :           offset = -offset;
+<span class="lineNum">     102 </span>            :         return gen_rtx_PLUS (GET_MODE (x),
+<span class="lineNum">     103 </span>            :                              cleanup_auto_inc_dec (XEXP (x, 0), mem_mode),
+<span class="lineNum">     104 </span>            :                              gen_int_mode (offset, GET_MODE (x)));
+<span class="lineNum">     105 </span>            :       }
+<span class="lineNum">     106 </span>            : 
+<span class="lineNum">     107 </span>            :     case POST_INC:
+<span class="lineNum">     108 </span>            :     case POST_DEC:
+<span class="lineNum">     109 </span>            :     case PRE_MODIFY:
+<span class="lineNum">     110 </span>            :     case POST_MODIFY:
+<span class="lineNum">     111 </span>            :       return cleanup_auto_inc_dec (code == PRE_MODIFY
+<span class="lineNum">     112 </span>            :                                    ? XEXP (x, 1) : XEXP (x, 0),
+<span class="lineNum">     113 </span>            :                                    mem_mode);
+<span class="lineNum">     114 </span>            : 
+<span class="lineNum">     115 </span>            :     default:
+<span class="lineNum">     116 </span>            :       break;
+<span class="lineNum">     117 </span>            :     }
+<span class="lineNum">     118 </span>            : 
+<span class="lineNum">     119 </span>            :   /* Copy the various flags, fields, and other information.  We assume
+<span class="lineNum">     120 </span>            :      that all fields need copying, and then clear the fields that should
+<span class="lineNum">     121 </span>            :      not be copied.  That is the sensible default behavior, and forces
+<span class="lineNum">     122 </span>            :      us to explicitly document why we are *not* copying a flag.  */
+<span class="lineNum">     123 </span>            :   x = shallow_copy_rtx (x);
+<span class="lineNum">     124 </span>            : 
+<span class="lineNum">     125 </span>            :   /* We do not copy FRAME_RELATED for INSNs.  */
+<span class="lineNum">     126 </span>            :   if (INSN_P (x))
+<span class="lineNum">     127 </span>            :     RTX_FLAG (x, frame_related) = 0;
+<span class="lineNum">     128 </span>            : 
+<span class="lineNum">     129 </span>            :   fmt = GET_RTX_FORMAT (code);
+<span class="lineNum">     130 </span>            :   for (i = GET_RTX_LENGTH (code) - 1; i &gt;= 0; i--)
+<span class="lineNum">     131 </span>            :     if (fmt[i] == 'e')
+<span class="lineNum">     132 </span>            :       XEXP (x, i) = cleanup_auto_inc_dec (XEXP (x, i), mem_mode);
+<span class="lineNum">     133 </span>            :     else if (fmt[i] == 'E' || fmt[i] == 'V')
+<span class="lineNum">     134 </span>            :       {
+<span class="lineNum">     135 </span>            :         int j;
+<span class="lineNum">     136 </span>            :         XVEC (x, i) = rtvec_alloc (XVECLEN (x, i));
+<span class="lineNum">     137 </span>            :         for (j = 0; j &lt; XVECLEN (x, i); j++)
+<span class="lineNum">     138 </span>            :           XVECEXP (x, i, j)
+<span class="lineNum">     139 </span>            :             = cleanup_auto_inc_dec (XVECEXP (src, i, j), mem_mode);
+<span class="lineNum">     140 </span>            :       }
+<span class="lineNum">     141 </span>            : 
+<span class="lineNum">     142 </span>            :   return x;
+<span class="lineNum">     143 </span>            : }
+<span class="lineNum">     144 </span>            : 
+<span class="lineNum">     145 </span>            : /* Auxiliary data structure for propagate_for_debug_stmt.  */
+<span class="lineNum">     146 </span>            : 
+<span class="lineNum">     147 </span>            : struct rtx_subst_pair
+<span class="lineNum">     148 </span>            : {
+<span class="lineNum">     149 </span>            :   rtx to;
+<span class="lineNum">     150 </span>            :   bool adjusted;
+<span class="lineNum">     151 </span>            :   rtx_insn *insn;
+<span class="lineNum">     152 </span>            : };
+<span class="lineNum">     153 </span>            : 
+<span class="lineNum">     154 </span>            : /* DATA points to an rtx_subst_pair.  Return the value that should be
+<span class="lineNum">     155 </span>            :    substituted.  */
+<a name="156"><span class="lineNum">     156 </span>            : </a>
+<span class="lineNum">     157 </span>            : static rtx
+<span class="lineNum">     158 </span><span class="lineCov">    1704320 : propagate_for_debug_subst (rtx from, const_rtx old_rtx, void *data)</span>
+<span class="lineNum">     159 </span>            : {
+<span class="lineNum">     160 </span><span class="lineCov">    1704320 :   struct rtx_subst_pair *pair = (struct rtx_subst_pair *)data;</span>
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span><span class="lineCov">    1704320 :   if (!rtx_equal_p (from, old_rtx))</span>
+<span class="lineNum">     163 </span>            :     return NULL_RTX;
+<span class="lineNum">     164 </span><span class="lineCov">      68025 :   if (!pair-&gt;adjusted)</span>
+<span class="lineNum">     165 </span>            :     {
+<span class="lineNum">     166 </span><span class="lineCov">      55200 :       pair-&gt;adjusted = true;</span>
+<span class="lineNum">     167 </span><span class="lineCov">      55200 :       pair-&gt;to = cleanup_auto_inc_dec (pair-&gt;to, VOIDmode);</span>
+<span class="lineNum">     168 </span><span class="lineCov">      55200 :       pair-&gt;to = make_compound_operation (pair-&gt;to, SET);</span>
+<span class="lineNum">     169 </span>            :       /* Avoid propagation from growing DEBUG_INSN expressions too much.  */
+<span class="lineNum">     170 </span><span class="lineCov">      55200 :       int cnt = 0;</span>
+<span class="lineNum">     171 </span><span class="lineCov">     110400 :       subrtx_iterator::array_type array;</span>
+<span class="lineNum">     172 </span><span class="lineCov">     228084 :       FOR_EACH_SUBRTX (iter, array, pair-&gt;to, ALL)</span>
+<span class="lineNum">     173 </span><span class="lineCov">     186728 :         if (REG_P (*iter) &amp;&amp; ++cnt &gt; 1)</span>
+<span class="lineNum">     174 </span>            :           {
+<span class="lineNum">     175 </span><span class="lineCov">      13844 :             rtx dval = make_debug_expr_from_rtl (old_rtx);</span>
+<span class="lineNum">     176 </span><span class="lineCov">      13844 :             rtx to = pair-&gt;to;</span>
+<span class="lineNum">     177 </span><span class="lineCov">      13844 :             if (volatile_insn_p (to))</span>
+<span class="lineNum">     178 </span><span class="lineNoCov">          0 :               to = gen_rtx_UNKNOWN_VAR_LOC ();</span>
+<span class="lineNum">     179 </span>            :             /* Emit a debug bind insn.  */
+<span class="lineNum">     180 </span><span class="lineCov">      13844 :             rtx bind</span>
+<span class="lineNum">     181 </span><span class="lineCov">      13844 :               = gen_rtx_VAR_LOCATION (GET_MODE (old_rtx),</span>
+<span class="lineNum">     182 </span>            :                                       DEBUG_EXPR_TREE_DECL (dval), to,
+<span class="lineNum">     183 </span>            :                                       VAR_INIT_STATUS_INITIALIZED);
+<span class="lineNum">     184 </span><span class="lineCov">      13844 :             rtx_insn *bind_insn = emit_debug_insn_before (bind, pair-&gt;insn);</span>
+<span class="lineNum">     185 </span><span class="lineCov">      13844 :             df_insn_rescan (bind_insn);</span>
+<span class="lineNum">     186 </span><span class="lineCov">      13844 :             pair-&gt;to = dval;</span>
+<span class="lineNum">     187 </span><span class="lineCov">      13844 :             break;</span>
+<span class="lineNum">     188 </span>            :           }
+<span class="lineNum">     189 </span><span class="lineCov">      55200 :       return pair-&gt;to;</span>
+<span class="lineNum">     190 </span>            :     }
+<span class="lineNum">     191 </span><span class="lineCov">      12825 :   return copy_rtx (pair-&gt;to);</span>
+<span class="lineNum">     192 </span>            : }
+<span class="lineNum">     193 </span>            : 
+<span class="lineNum">     194 </span>            : /* Replace all the occurrences of DEST with SRC in DEBUG_INSNs between INSN
+<span class="lineNum">     195 </span>            :    and LAST, not including INSN, but including LAST.  Also stop at the end
+<span class="lineNum">     196 </span>            :    of THIS_BASIC_BLOCK.  */
+<a name="197"><span class="lineNum">     197 </span>            : </a>
+<span class="lineNum">     198 </span>            : void
+<span class="lineNum">     199 </span><span class="lineCov">     970973 : propagate_for_debug (rtx_insn *insn, rtx_insn *last, rtx dest, rtx src,</span>
+<span class="lineNum">     200 </span>            :                      basic_block this_basic_block)
+<span class="lineNum">     201 </span>            : {
+<span class="lineNum">     202 </span><span class="lineCov">     970973 :   rtx_insn *next, *end = NEXT_INSN (BB_END (this_basic_block));</span>
+<span class="lineNum">     203 </span><span class="lineCov">     970973 :   rtx loc;</span>
+<span class="lineNum">     204 </span><span class="lineCov">     970973 :   rtx (*saved_rtl_hook_no_emit) (machine_mode, rtx);</span>
+<span class="lineNum">     205 </span>            : 
+<span class="lineNum">     206 </span><span class="lineCov">     970973 :   struct rtx_subst_pair p;</span>
+<span class="lineNum">     207 </span><span class="lineCov">     970973 :   p.to = src;</span>
+<span class="lineNum">     208 </span><span class="lineCov">     970973 :   p.adjusted = false;</span>
+<span class="lineNum">     209 </span><span class="lineCov">     970973 :   p.insn = NEXT_INSN (insn);</span>
+<span class="lineNum">     210 </span>            : 
+<span class="lineNum">     211 </span><span class="lineCov">     970973 :   next = NEXT_INSN (insn);</span>
+<span class="lineNum">     212 </span><span class="lineCov">     970973 :   last = NEXT_INSN (last);</span>
+<span class="lineNum">     213 </span><span class="lineCov">     970973 :   saved_rtl_hook_no_emit = rtl_hooks.gen_lowpart_no_emit;</span>
+<span class="lineNum">     214 </span><span class="lineCov">     970973 :   rtl_hooks.gen_lowpart_no_emit = gen_lowpart_for_debug;</span>
+<span class="lineNum">     215 </span><span class="lineCov">    4317637 :   while (next != last &amp;&amp; next != end)</span>
+<span class="lineNum">     216 </span>            :     {
+<span class="lineNum">     217 </span><span class="lineCov">    3346664 :       insn = next;</span>
+<span class="lineNum">     218 </span><span class="lineCov">    3346664 :       next = NEXT_INSN (insn);</span>
+<span class="lineNum">     219 </span><span class="lineCov">    3346664 :       if (DEBUG_BIND_INSN_P (insn))</span>
+<span class="lineNum">     220 </span>            :         {
+<span class="lineNum">     221 </span><span class="lineCov">    2034756 :           loc = simplify_replace_fn_rtx (INSN_VAR_LOCATION_LOC (insn),</span>
+<span class="lineNum">     222 </span>            :                                          dest, propagate_for_debug_subst, &amp;p);
+<span class="lineNum">     223 </span><span class="lineCov">    2034756 :           if (loc == INSN_VAR_LOCATION_LOC (insn))</span>
+<span class="lineNum">     224 </span>            :             continue;
+<span class="lineNum">     225 </span><span class="lineCov">      67822 :           if (volatile_insn_p (loc))</span>
+<span class="lineNum">     226 </span><span class="lineNoCov">          0 :             loc = gen_rtx_UNKNOWN_VAR_LOC ();</span>
+<span class="lineNum">     227 </span><span class="lineCov">     135644 :           INSN_VAR_LOCATION_LOC (insn) = loc;</span>
+<span class="lineNum">     228 </span><span class="lineCov">      67822 :           df_insn_rescan (insn);</span>
+<span class="lineNum">     229 </span>            :         }
+<span class="lineNum">     230 </span>            :     }
+<span class="lineNum">     231 </span><span class="lineCov">     970973 :   rtl_hooks.gen_lowpart_no_emit = saved_rtl_hook_no_emit;</span>
+<span class="lineNum">     232 </span><span class="lineCov">     970973 : }</span>
+<span class="lineNum">     233 </span>            : 
+<span class="lineNum">     234 </span>            : /* Initialize DEBUG to an empty list, and clear USED, if given.  */
+<a name="235"><span class="lineNum">     235 </span>            : </a>
+<span class="lineNum">     236 </span>            : void
+<span class="lineNum">     237 </span><span class="lineCov">    3860426 : dead_debug_global_init (struct dead_debug_global *debug, bitmap used)</span>
+<span class="lineNum">     238 </span>            : {
+<span class="lineNum">     239 </span><span class="lineCov">    3860426 :   debug-&gt;used = used;</span>
+<span class="lineNum">     240 </span><span class="lineCov">    3860426 :   debug-&gt;htab = NULL;</span>
+<span class="lineNum">     241 </span><span class="lineCov">    3860426 :   if (used)</span>
+<span class="lineNum">     242 </span><span class="lineNoCov">          0 :     bitmap_clear (used);</span>
+<span class="lineNum">     243 </span><span class="lineCov">    3860426 : }</span>
+<span class="lineNum">     244 </span>            : 
+<span class="lineNum">     245 </span>            : /* Initialize DEBUG to an empty list, and clear USED, if given.  Link
+<span class="lineNum">     246 </span>            :    back to GLOBAL, if given, and bring in used bits from it.  */
+<a name="247"><span class="lineNum">     247 </span>            : </a>
+<span class="lineNum">     248 </span>            : void
+<span class="lineNum">     249 </span><span class="lineCov">  180733095 : dead_debug_local_init (struct dead_debug_local *debug, bitmap used,</span>
+<span class="lineNum">     250 </span>            :                        struct dead_debug_global *global)
+<span class="lineNum">     251 </span>            : {
+<span class="lineNum">     252 </span><span class="lineCov">  180733095 :   if (!used &amp;&amp; global &amp;&amp; global-&gt;used)</span>
+<span class="lineNum">     253 </span><span class="lineCov">    1326495 :     used = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     254 </span>            : 
+<span class="lineNum">     255 </span><span class="lineCov">  180733095 :   debug-&gt;head = NULL;</span>
+<span class="lineNum">     256 </span><span class="lineCov">  180733095 :   debug-&gt;global = global;</span>
+<span class="lineNum">     257 </span><span class="lineCov">  180733095 :   debug-&gt;used = used;</span>
+<span class="lineNum">     258 </span><span class="lineCov">  180733095 :   debug-&gt;to_rescan = NULL;</span>
+<span class="lineNum">     259 </span>            : 
+<span class="lineNum">     260 </span><span class="lineCov">  180733095 :   if (used)</span>
+<span class="lineNum">     261 </span>            :     {
+<span class="lineNum">     262 </span><span class="lineCov">    1326495 :       if (global &amp;&amp; global-&gt;used)</span>
+<span class="lineNum">     263 </span><span class="lineCov">    1326495 :         bitmap_copy (used, global-&gt;used);</span>
+<span class="lineNum">     264 </span>            :       else
+<span class="lineNum">     265 </span><span class="lineNoCov">          0 :         bitmap_clear (used);</span>
+<span class="lineNum">     266 </span>            :     }
+<span class="lineNum">     267 </span><span class="lineCov">  180733095 : }</span>
+<span class="lineNum">     268 </span>            : 
+<span class="lineNum">     269 </span>            : /* Locate the entry for REG in GLOBAL-&gt;htab.  */
+<a name="270"><span class="lineNum">     270 </span>            : </a>
+<span class="lineNum">     271 </span>            : static dead_debug_global_entry *
+<span class="lineNum">     272 </span><span class="lineCov">     772573 : dead_debug_global_find (struct dead_debug_global *global, rtx reg)</span>
+<span class="lineNum">     273 </span>            : {
+<span class="lineNum">     274 </span><span class="lineCov">     772573 :   dead_debug_global_entry temp_entry;</span>
+<span class="lineNum">     275 </span><span class="lineCov">     772573 :   temp_entry.reg = reg;</span>
+<span class="lineNum">     276 </span>            : 
+<span class="lineNum">     277 </span><span class="lineCov">     772573 :   dead_debug_global_entry *entry = global-&gt;htab-&gt;find (&amp;temp_entry);</span>
+<span class="lineNum">     278 </span><span class="lineCov">     772573 :   gcc_checking_assert (entry &amp;&amp; entry-&gt;reg == temp_entry.reg);</span>
+<span class="lineNum">     279 </span>            : 
+<span class="lineNum">     280 </span><span class="lineCov">     772573 :   return entry;</span>
+<span class="lineNum">     281 </span>            : }
+<span class="lineNum">     282 </span>            : 
+<span class="lineNum">     283 </span>            : /* Insert an entry mapping REG to DTEMP in GLOBAL-&gt;htab.  */
+<a name="284"><span class="lineNum">     284 </span>            : </a>
+<span class="lineNum">     285 </span>            : static dead_debug_global_entry *
+<span class="lineNum">     286 </span><span class="lineCov">      77748 : dead_debug_global_insert (struct dead_debug_global *global, rtx reg, rtx dtemp)</span>
+<span class="lineNum">     287 </span>            : {
+<span class="lineNum">     288 </span><span class="lineCov">      77748 :   dead_debug_global_entry temp_entry;</span>
+<span class="lineNum">     289 </span><span class="lineCov">      77748 :   temp_entry.reg = reg;</span>
+<span class="lineNum">     290 </span><span class="lineCov">      77748 :   temp_entry.dtemp = dtemp;</span>
+<span class="lineNum">     291 </span>            : 
+<span class="lineNum">     292 </span><span class="lineCov">      77748 :   if (!global-&gt;htab)</span>
+<span class="lineNum">     293 </span><span class="lineCov">      40330 :     global-&gt;htab = new hash_table&lt;dead_debug_hash_descr&gt; (31);</span>
+<span class="lineNum">     294 </span>            : 
+<span class="lineNum">     295 </span><span class="lineCov">      77748 :   dead_debug_global_entry **slot = global-&gt;htab-&gt;find_slot (&amp;temp_entry,</span>
+<span class="lineNum">     296 </span>            :                                                             INSERT);
+<span class="lineNum">     297 </span><span class="lineCov">      77748 :   gcc_checking_assert (!*slot);</span>
+<span class="lineNum">     298 </span><span class="lineCov">      77748 :   *slot = XNEW (dead_debug_global_entry);</span>
+<span class="lineNum">     299 </span><span class="lineCov">      77748 :   **slot = temp_entry;</span>
+<span class="lineNum">     300 </span><span class="lineCov">      77748 :   return *slot;</span>
+<span class="lineNum">     301 </span>            : }
+<span class="lineNum">     302 </span>            : 
+<span class="lineNum">     303 </span>            : /* If UREGNO, referenced by USE, is a pseudo marked as used in GLOBAL,
+<span class="lineNum">     304 </span>            :    replace it with a USE of the debug temp recorded for it, and
+<span class="lineNum">     305 </span>            :    return TRUE.  Otherwise, just return FALSE.
+<span class="lineNum">     306 </span>            : 
+<span class="lineNum">     307 </span>            :    If PTO_RESCAN is given, instead of rescanning modified INSNs right
+<span class="lineNum">     308 </span>            :    away, add their UIDs to the bitmap, allocating one of *PTO_RESCAN
+<span class="lineNum">     309 </span>            :    is NULL.  */
+<a name="310"><span class="lineNum">     310 </span>            : </a>
+<span class="lineNum">     311 </span>            : static bool
+<span class="lineNum">     312 </span><span class="lineCov">     781889 : dead_debug_global_replace_temp (struct dead_debug_global *global,</span>
+<span class="lineNum">     313 </span>            :                                 df_ref use, unsigned int uregno,
+<span class="lineNum">     314 </span>            :                                 bitmap *pto_rescan)
+<span class="lineNum">     315 </span>            : {
+<span class="lineNum">     316 </span><span class="lineCov">     781889 :   if (!global || uregno &lt; FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     317 </span><span class="lineCov">     708601 :       || !global-&gt;used</span>
+<span class="lineNum">     318 </span><span class="lineCov">     595462 :       || !REG_P (*DF_REF_REAL_LOC (use))</span>
+<span class="lineNum">     319 </span><span class="lineCov">    1190892 :       || REGNO (*DF_REF_REAL_LOC (use)) != uregno</span>
+<span class="lineNum">     320 </span><span class="lineCov">    1377335 :       || !bitmap_bit_p (global-&gt;used, uregno))</span>
+<span class="lineNum">     321 </span><span class="lineCov">     246861 :     return false;</span>
+<span class="lineNum">     322 </span>            : 
+<span class="lineNum">     323 </span><span class="lineCov">     535028 :   dead_debug_global_entry *entry</span>
+<span class="lineNum">     324 </span><span class="lineCov">     535028 :     = dead_debug_global_find (global, *DF_REF_REAL_LOC (use));</span>
+<span class="lineNum">     325 </span><span class="lineCov">     535028 :   gcc_checking_assert (GET_CODE (entry-&gt;reg) == REG</span>
+<span class="lineNum">     326 </span>            :                        &amp;&amp; REGNO (entry-&gt;reg) == uregno);
+<span class="lineNum">     327 </span>            : 
+<span class="lineNum">     328 </span><span class="lineCov">     535028 :   if (!entry-&gt;dtemp)</span>
+<span class="lineNum">     329 </span>            :     return true;
+<span class="lineNum">     330 </span>            : 
+<span class="lineNum">     331 </span><span class="lineCov">     535026 :   *DF_REF_REAL_LOC (use) = entry-&gt;dtemp;</span>
+<span class="lineNum">     332 </span><span class="lineCov">     535026 :   if (!pto_rescan)</span>
+<span class="lineNum">     333 </span><span class="lineNoCov">          0 :     df_insn_rescan (DF_REF_INSN (use));</span>
+<span class="lineNum">     334 </span>            :   else
+<span class="lineNum">     335 </span>            :     {
+<span class="lineNum">     336 </span><span class="lineCov">     535026 :       if (!*pto_rescan)</span>
+<span class="lineNum">     337 </span><span class="lineNoCov">          0 :         *pto_rescan = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     338 </span><span class="lineCov">     535026 :       bitmap_set_bit (*pto_rescan, INSN_UID (DF_REF_INSN (use)));</span>
+<span class="lineNum">     339 </span>            :     }
+<span class="lineNum">     340 </span>            : 
+<span class="lineNum">     341 </span>            :   return true;
+<span class="lineNum">     342 </span>            : }
+<span class="lineNum">     343 </span>            : 
+<span class="lineNum">     344 </span>            : /* Reset all debug uses in HEAD, and clear DEBUG-&gt;to_rescan bits of
+<span class="lineNum">     345 </span>            :    each reset insn.  DEBUG is not otherwise modified.  If HEAD is
+<span class="lineNum">     346 </span>            :    DEBUG-&gt;head, DEBUG-&gt;head will be set to NULL at the end.
+<span class="lineNum">     347 </span>            :    Otherwise, entries from DEBUG-&gt;head that pertain to reset insns
+<span class="lineNum">     348 </span>            :    will be removed, and only then rescanned.  */
+<a name="349"><span class="lineNum">     349 </span>            : </a>
+<span class="lineNum">     350 </span>            : static void
+<span class="lineNum">     351 </span><span class="lineCov">  180734780 : dead_debug_reset_uses (struct dead_debug_local *debug,</span>
+<span class="lineNum">     352 </span>            :                        struct dead_debug_use *head)
+<span class="lineNum">     353 </span>            : {
+<span class="lineNum">     354 </span><span class="lineCov">  180734780 :   bool got_head = (debug-&gt;head == head);</span>
+<span class="lineNum">     355 </span><span class="lineCov">  180734780 :   bitmap rescan;</span>
+<span class="lineNum">     356 </span><span class="lineCov">  180734780 :   struct dead_debug_use **tailp = &amp;debug-&gt;head;</span>
+<span class="lineNum">     357 </span><span class="lineCov">  180734780 :   struct dead_debug_use *cur;</span>
+<span class="lineNum">     358 </span><span class="lineCov">  180734780 :   bitmap_iterator bi;</span>
+<span class="lineNum">     359 </span><span class="lineCov">  180734780 :   unsigned int uid;</span>
+<span class="lineNum">     360 </span>            : 
+<span class="lineNum">     361 </span><span class="lineCov">  180734780 :   if (got_head)</span>
+<span class="lineNum">     362 </span>            :     rescan = NULL;
+<span class="lineNum">     363 </span>            :   else
+<span class="lineNum">     364 </span><span class="lineCov">        834 :     rescan = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     365 </span>            : 
+<span class="lineNum">     366 </span><span class="lineCov">  180756292 :   while (head)</span>
+<span class="lineNum">     367 </span>            :     {
+<span class="lineNum">     368 </span><span class="lineCov">      21512 :       struct dead_debug_use *next = head-&gt;next;</span>
+<span class="lineNum">     369 </span><span class="lineCov">      21512 :       rtx_insn *insn;</span>
+<span class="lineNum">     370 </span>            : 
+<span class="lineNum">     371 </span><span class="lineCov">      21512 :       insn = DF_REF_INSN (head-&gt;use);</span>
+<span class="lineNum">     372 </span><span class="lineCov">      21512 :       if (!next || DF_REF_INSN (next-&gt;use) != insn)</span>
+<span class="lineNum">     373 </span>            :         {
+<span class="lineNum">     374 </span><span class="lineCov">      40914 :           INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();</span>
+<span class="lineNum">     375 </span><span class="lineCov">      20457 :           if (got_head)</span>
+<span class="lineNum">     376 </span><span class="lineCov">      19483 :             df_insn_rescan_debug_internal (insn);</span>
+<span class="lineNum">     377 </span>            :           else
+<span class="lineNum">     378 </span><span class="lineCov">        974 :             bitmap_set_bit (rescan, INSN_UID (insn));</span>
+<span class="lineNum">     379 </span><span class="lineCov">      20457 :           if (debug-&gt;to_rescan)</span>
+<span class="lineNum">     380 </span><span class="lineCov">        430 :             bitmap_clear_bit (debug-&gt;to_rescan, INSN_UID (insn));</span>
+<span class="lineNum">     381 </span>            :         }
+<span class="lineNum">     382 </span><span class="lineCov">      21512 :       XDELETE (head);</span>
+<span class="lineNum">     383 </span><span class="lineCov">      21512 :       head = next;</span>
+<span class="lineNum">     384 </span>            :     }
+<span class="lineNum">     385 </span>            : 
+<span class="lineNum">     386 </span><span class="lineCov">  180734780 :   if (got_head)</span>
+<span class="lineNum">     387 </span>            :     {
+<span class="lineNum">     388 </span><span class="lineCov">  180733946 :       debug-&gt;head = NULL;</span>
+<span class="lineNum">     389 </span><span class="lineCov">  180733946 :       return;</span>
+<span class="lineNum">     390 </span>            :     }
+<span class="lineNum">     391 </span>            : 
+<span class="lineNum">     392 </span><span class="lineCov">       1181 :   while ((cur = *tailp))</span>
+<span class="lineNum">     393 </span><span class="lineCov">        347 :     if (bitmap_bit_p (rescan, INSN_UID (DF_REF_INSN (cur-&gt;use))))</span>
+<span class="lineNum">     394 </span>            :       {
+<span class="lineNum">     395 </span><span class="lineCov">        274 :         *tailp = cur-&gt;next;</span>
+<span class="lineNum">     396 </span><span class="lineCov">        274 :         XDELETE (cur);</span>
+<span class="lineNum">     397 </span>            :       }
+<span class="lineNum">     398 </span>            :     else
+<span class="lineNum">     399 </span><span class="lineCov">         73 :       tailp = &amp;cur-&gt;next;</span>
+<span class="lineNum">     400 </span>            : 
+<span class="lineNum">     401 </span><span class="lineCov">       1808 :   EXECUTE_IF_SET_IN_BITMAP (rescan, 0, uid, bi)</span>
+<span class="lineNum">     402 </span>            :     {
+<span class="lineNum">     403 </span><span class="lineCov">        974 :       struct df_insn_info *insn_info = DF_INSN_UID_SAFE_GET (uid);</span>
+<span class="lineNum">     404 </span><span class="lineCov">        974 :       if (insn_info)</span>
+<span class="lineNum">     405 </span><span class="lineCov">        974 :         df_insn_rescan_debug_internal (insn_info-&gt;insn);</span>
+<span class="lineNum">     406 </span>            :     }
+<span class="lineNum">     407 </span>            : 
+<span class="lineNum">     408 </span><span class="lineCov">        834 :   BITMAP_FREE (rescan);</span>
+<span class="lineNum">     409 </span>            : }
+<span class="lineNum">     410 </span>            : 
+<span class="lineNum">     411 </span>            : /* Promote pending local uses of pseudos in DEBUG to global
+<span class="lineNum">     412 </span>            :    substitutions.  Uses of non-pseudos are left alone for
+<span class="lineNum">     413 </span>            :    resetting.  */
+<a name="414"><span class="lineNum">     414 </span>            : </a>
+<span class="lineNum">     415 </span>            : static void
+<span class="lineNum">     416 </span><span class="lineCov">   68622154 : dead_debug_promote_uses (struct dead_debug_local *debug)</span>
+<span class="lineNum">     417 </span>            : {
+<span class="lineNum">     418 </span><span class="lineCov">   68622154 :   for (struct dead_debug_use *head = debug-&gt;head, **headp = &amp;debug-&gt;head;</span>
+<span class="lineNum">     419 </span><span class="lineCov">   68703147 :        head; head = *headp)</span>
+<span class="lineNum">     420 </span>            :     {
+<span class="lineNum">     421 </span><span class="lineCov">      80993 :       rtx reg = *DF_REF_REAL_LOC (head-&gt;use);</span>
+<span class="lineNum">     422 </span><span class="lineCov">      80993 :       df_ref ref;</span>
+<span class="lineNum">     423 </span><span class="lineCov">      80993 :       dead_debug_global_entry *entry;</span>
+<span class="lineNum">     424 </span>            : 
+<span class="lineNum">     425 </span><span class="lineCov">      80993 :       if (GET_CODE (reg) != REG</span>
+<span class="lineNum">     426 </span><span class="lineCov">      80993 :           || REGNO (reg) &lt; FIRST_PSEUDO_REGISTER)</span>
+<span class="lineNum">     427 </span>            :         {
+<span class="lineNum">     428 </span><span class="lineCov">       3245 :           headp = &amp;head-&gt;next;</span>
+<span class="lineNum">     429 </span><span class="lineCov">       3245 :           continue;</span>
+<span class="lineNum">     430 </span>            :         }
+<span class="lineNum">     431 </span>            : 
+<span class="lineNum">     432 </span><span class="lineCov">      77748 :       if (!debug-&gt;global-&gt;used)</span>
+<span class="lineNum">     433 </span><span class="lineCov">      40330 :         debug-&gt;global-&gt;used = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     434 </span>            : 
+<span class="lineNum">     435 </span><span class="lineCov">     155496 :       bool added = bitmap_set_bit (debug-&gt;global-&gt;used, REGNO (reg));</span>
+<span class="lineNum">     436 </span><span class="lineCov">      77748 :       gcc_checking_assert (added);</span>
+<span class="lineNum">     437 </span>            : 
+<span class="lineNum">     438 </span><span class="lineCov">      77748 :       entry = dead_debug_global_insert (debug-&gt;global, reg,</span>
+<span class="lineNum">     439 </span>            :                                         make_debug_expr_from_rtl (reg));
+<span class="lineNum">     440 </span>            : 
+<span class="lineNum">     441 </span><span class="lineCov">      77748 :       gcc_checking_assert (entry-&gt;dtemp);</span>
+<span class="lineNum">     442 </span>            : 
+<span class="lineNum">     443 </span>            :       /* Tentatively remove the USE from the list.  */
+<span class="lineNum">     444 </span><span class="lineCov">      77748 :       *headp = head-&gt;next;</span>
+<span class="lineNum">     445 </span>            : 
+<span class="lineNum">     446 </span><span class="lineCov">      77748 :       if (!debug-&gt;to_rescan)</span>
+<span class="lineNum">     447 </span><span class="lineCov">      66256 :         debug-&gt;to_rescan = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     448 </span>            : 
+<span class="lineNum">     449 </span><span class="lineCov">    1089284 :       for (ref = DF_REG_USE_CHAIN (REGNO (reg)); ref;</span>
+<span class="lineNum">     450 </span><span class="lineCov">     933788 :            ref = DF_REF_NEXT_REG (ref))</span>
+<span class="lineNum">     451 </span><span class="lineCov">     933788 :         if (DEBUG_INSN_P (DF_REF_INSN (ref)))</span>
+<span class="lineNum">     452 </span>            :           {
+<span class="lineNum">     453 </span><span class="lineCov">    1070084 :             if (!dead_debug_global_replace_temp (debug-&gt;global, ref,</span>
+<span class="lineNum">     454 </span>            :                                                  REGNO (reg),
+<span class="lineNum">     455 </span>            :                                                  &amp;debug-&gt;to_rescan))
+<span class="lineNum">     456 </span>            :               {
+<span class="lineNum">     457 </span><span class="lineCov">         16 :                 rtx_insn *insn = DF_REF_INSN (ref);</span>
+<span class="lineNum">     458 </span><span class="lineCov">         32 :                 INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();</span>
+<span class="lineNum">     459 </span><span class="lineCov">         16 :                 bitmap_set_bit (debug-&gt;to_rescan, INSN_UID (insn));</span>
+<span class="lineNum">     460 </span>            :               }
+<span class="lineNum">     461 </span>            :           }
+<span class="lineNum">     462 </span>            : 
+<span class="lineNum">     463 </span><span class="lineCov">     282128 :       for (ref = DF_REG_DEF_CHAIN (REGNO (reg)); ref;</span>
+<span class="lineNum">     464 </span><span class="lineCov">     126632 :            ref = DF_REF_NEXT_REG (ref))</span>
+<span class="lineNum">     465 </span><span class="lineCov">     253264 :         if (!dead_debug_insert_temp (debug, REGNO (reg), DF_REF_INSN (ref),</span>
+<span class="lineNum">     466 </span>            :                                      DEBUG_TEMP_BEFORE_WITH_VALUE))
+<span class="lineNum">     467 </span>            :           {
+<span class="lineNum">     468 </span><span class="lineCov">        876 :             rtx bind;</span>
+<span class="lineNum">     469 </span><span class="lineCov">        876 :             bind = gen_rtx_VAR_LOCATION (GET_MODE (reg),</span>
+<span class="lineNum">     470 </span><span class="lineCov">        876 :                                          DEBUG_EXPR_TREE_DECL (entry-&gt;dtemp),</span>
+<span class="lineNum">     471 </span>            :                                          gen_rtx_UNKNOWN_VAR_LOC (),
+<span class="lineNum">     472 </span>            :                                          VAR_INIT_STATUS_INITIALIZED);
+<span class="lineNum">     473 </span><span class="lineCov">        876 :             rtx_insn *insn = emit_debug_insn_before (bind, DF_REF_INSN (ref));</span>
+<span class="lineNum">     474 </span><span class="lineCov">        876 :             bitmap_set_bit (debug-&gt;to_rescan, INSN_UID (insn));</span>
+<span class="lineNum">     475 </span>            :           }
+<span class="lineNum">     476 </span>            : 
+<span class="lineNum">     477 </span><span class="lineCov">      77748 :       entry-&gt;dtemp = NULL;</span>
+<span class="lineNum">     478 </span><span class="lineCov">      77748 :       XDELETE (head);</span>
+<span class="lineNum">     479 </span>            :     }
+<span class="lineNum">     480 </span><span class="lineCov">   68622154 : }</span>
+<span class="lineNum">     481 </span>            : 
+<span class="lineNum">     482 </span>            : /* Reset all debug insns with pending uses.  Release the bitmap in it,
+<span class="lineNum">     483 </span>            :    unless it is USED.  USED must be the same bitmap passed to
+<span class="lineNum">     484 </span>            :    dead_debug_local_init.  */
+<a name="485"><span class="lineNum">     485 </span>            : </a>
+<span class="lineNum">     486 </span>            : void
+<span class="lineNum">     487 </span><span class="lineCov">  180733095 : dead_debug_local_finish (struct dead_debug_local *debug, bitmap used)</span>
+<span class="lineNum">     488 </span>            : {
+<span class="lineNum">     489 </span><span class="lineCov">  180733095 :   if (debug-&gt;global)</span>
+<span class="lineNum">     490 </span><span class="lineCov">   68622154 :     dead_debug_promote_uses (debug);</span>
+<span class="lineNum">     491 </span>            : 
+<span class="lineNum">     492 </span><span class="lineCov">  180733095 :   if (debug-&gt;used != used)</span>
+<span class="lineNum">     493 </span><span class="lineCov">    1440607 :     BITMAP_FREE (debug-&gt;used);</span>
+<span class="lineNum">     494 </span>            : 
+<span class="lineNum">     495 </span><span class="lineCov">  180733095 :   dead_debug_reset_uses (debug, debug-&gt;head);</span>
+<span class="lineNum">     496 </span>            : 
+<span class="lineNum">     497 </span><span class="lineCov">  180733095 :   if (debug-&gt;to_rescan)</span>
+<span class="lineNum">     498 </span>            :     {
+<span class="lineNum">     499 </span><span class="lineCov">     118776 :       bitmap_iterator bi;</span>
+<span class="lineNum">     500 </span><span class="lineCov">     118776 :       unsigned int uid;</span>
+<span class="lineNum">     501 </span>            : 
+<span class="lineNum">     502 </span><span class="lineCov">     946303 :       EXECUTE_IF_SET_IN_BITMAP (debug-&gt;to_rescan, 0, uid, bi)</span>
+<span class="lineNum">     503 </span>            :         {
+<span class="lineNum">     504 </span><span class="lineCov">     827527 :           struct df_insn_info *insn_info = DF_INSN_UID_SAFE_GET (uid);</span>
+<span class="lineNum">     505 </span><span class="lineCov">     827527 :           if (insn_info)</span>
+<span class="lineNum">     506 </span><span class="lineCov">     827527 :             df_insn_rescan (insn_info-&gt;insn);</span>
+<span class="lineNum">     507 </span>            :         }
+<span class="lineNum">     508 </span><span class="lineCov">     118776 :       BITMAP_FREE (debug-&gt;to_rescan);</span>
+<span class="lineNum">     509 </span>            :     }
+<span class="lineNum">     510 </span><span class="lineCov">  180733095 : }</span>
+<span class="lineNum">     511 </span>            : 
+<span class="lineNum">     512 </span>            : /* Release GLOBAL-&gt;used unless it is the same as USED.  Release the
+<span class="lineNum">     513 </span>            :    mapping hash table if it was initialized.  */
+<a name="514"><span class="lineNum">     514 </span>            : </a>
+<span class="lineNum">     515 </span>            : void
+<span class="lineNum">     516 </span><span class="lineCov">    3860426 : dead_debug_global_finish (struct dead_debug_global *global, bitmap used)</span>
+<span class="lineNum">     517 </span>            : {
+<span class="lineNum">     518 </span><span class="lineCov">    3860426 :   if (global-&gt;used != used)</span>
+<span class="lineNum">     519 </span><span class="lineCov">      40330 :     BITMAP_FREE (global-&gt;used);</span>
+<span class="lineNum">     520 </span>            : 
+<span class="lineNum">     521 </span><span class="lineCov">    3860426 :   delete global-&gt;htab;</span>
+<span class="lineNum">     522 </span><span class="lineCov">    3860426 :   global-&gt;htab = NULL;</span>
+<span class="lineNum">     523 </span><span class="lineCov">    3860426 : }</span>
+<span class="lineNum">     524 </span>            : 
+<span class="lineNum">     525 </span>            : /* Add USE to DEBUG, or substitute it right away if it's a pseudo in
+<span class="lineNum">     526 </span>            :    the global substitution list.  USE must be a dead reference to
+<span class="lineNum">     527 </span>            :    UREGNO in a debug insn.  Create a bitmap for DEBUG as needed.  */
+<a name="528"><span class="lineNum">     528 </span>            : </a>
+<span class="lineNum">     529 </span>            : void
+<span class="lineNum">     530 </span><span class="lineCov">     246847 : dead_debug_add (struct dead_debug_local *debug, df_ref use, unsigned int uregno)</span>
+<span class="lineNum">     531 </span>            : {
+<span class="lineNum">     532 </span><span class="lineCov">     246847 :   if (dead_debug_global_replace_temp (debug-&gt;global, use, uregno,</span>
+<span class="lineNum">     533 </span>            :                                       &amp;debug-&gt;to_rescan))
+<span class="lineNum">     534 </span>            :     return;
+<span class="lineNum">     535 </span>            : 
+<span class="lineNum">     536 </span><span class="lineCov">     246845 :   struct dead_debug_use *newddu = XNEW (struct dead_debug_use);</span>
+<span class="lineNum">     537 </span>            : 
+<span class="lineNum">     538 </span><span class="lineCov">     246845 :   newddu-&gt;use = use;</span>
+<span class="lineNum">     539 </span><span class="lineCov">     246845 :   newddu-&gt;next = debug-&gt;head;</span>
+<span class="lineNum">     540 </span><span class="lineCov">     246845 :   debug-&gt;head = newddu;</span>
+<span class="lineNum">     541 </span>            : 
+<span class="lineNum">     542 </span><span class="lineCov">     246845 :   if (!debug-&gt;used)</span>
+<span class="lineNum">     543 </span><span class="lineCov">     114112 :     debug-&gt;used = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     544 </span>            : 
+<span class="lineNum">     545 </span>            :   /* ??? If we dealt with split multi-registers below, we should set
+<span class="lineNum">     546 </span>            :      all registers for the used mode in case of hardware
+<span class="lineNum">     547 </span>            :      registers.  */
+<span class="lineNum">     548 </span><span class="lineCov">     246845 :   bitmap_set_bit (debug-&gt;used, uregno);</span>
+<span class="lineNum">     549 </span>            : }
+<span class="lineNum">     550 </span>            : 
+<span class="lineNum">     551 </span>            : /* Like lowpart_subreg, but if a subreg is not valid for machine, force
+<span class="lineNum">     552 </span>            :    it anyway - for use in debug insns.  */
+<a name="553"><span class="lineNum">     553 </span>            : </a>
+<span class="lineNum">     554 </span>            : static rtx
+<span class="lineNum">     555 </span><span class="lineCov">        504 : debug_lowpart_subreg (machine_mode outer_mode, rtx expr,</span>
+<span class="lineNum">     556 </span>            :                       machine_mode inner_mode)
+<span class="lineNum">     557 </span>            : {
+<span class="lineNum">     558 </span><span class="lineCov">        504 :   if (inner_mode == VOIDmode)</span>
+<span class="lineNum">     559 </span><span class="lineNoCov">          0 :     inner_mode = GET_MODE (expr);</span>
+<span class="lineNum">     560 </span><span class="lineCov">        504 :   poly_int64 offset = subreg_lowpart_offset (outer_mode, inner_mode);</span>
+<span class="lineNum">     561 </span><span class="lineCov">       1008 :   rtx ret = simplify_gen_subreg (outer_mode, expr, inner_mode, offset);</span>
+<span class="lineNum">     562 </span><span class="lineCov">        504 :   if (ret)</span>
+<span class="lineNum">     563 </span>            :     return ret;
+<span class="lineNum">     564 </span><span class="lineNoCov">          0 :   return gen_rtx_raw_SUBREG (outer_mode, expr, offset);</span>
+<span class="lineNum">     565 </span>            : }
+<span class="lineNum">     566 </span>            : 
+<span class="lineNum">     567 </span>            : /* If UREGNO is referenced by any entry in DEBUG, emit a debug insn
+<span class="lineNum">     568 </span>            :    before or after INSN (depending on WHERE), that binds a (possibly
+<span class="lineNum">     569 </span>            :    global) debug temp to the widest-mode use of UREGNO, if WHERE is
+<span class="lineNum">     570 </span>            :    *_WITH_REG, or the value stored in UREGNO by INSN otherwise, and
+<span class="lineNum">     571 </span>            :    replace all uses of UREGNO in DEBUG with uses of the debug temp.
+<span class="lineNum">     572 </span>            :    INSN must be where UREGNO dies, if WHERE is *_BEFORE_*, or where it
+<span class="lineNum">     573 </span>            :    is set otherwise.  Return the number of debug insns emitted.  */
+<a name="574"><span class="lineNum">     574 </span>            : </a>
+<span class="lineNum">     575 </span>            : int
+<span class="lineNum">     576 </span><span class="lineCov">  497517662 : dead_debug_insert_temp (struct dead_debug_local *debug, unsigned int uregno,</span>
+<span class="lineNum">     577 </span>            :                         rtx_insn *insn, enum debug_temp_where where)
+<span class="lineNum">     578 </span>            : {
+<span class="lineNum">     579 </span><span class="lineCov">  497517662 :   struct dead_debug_use **tailp = &amp;debug-&gt;head;</span>
+<span class="lineNum">     580 </span><span class="lineCov">  497517662 :   struct dead_debug_use *cur;</span>
+<span class="lineNum">     581 </span><span class="lineCov">  497517662 :   struct dead_debug_use *uses = NULL;</span>
+<span class="lineNum">     582 </span><span class="lineCov">  497517662 :   struct dead_debug_use **usesp = &amp;uses;</span>
+<span class="lineNum">     583 </span><span class="lineCov">  497517662 :   rtx reg = NULL_RTX;</span>
+<span class="lineNum">     584 </span><span class="lineCov">  497517662 :   rtx breg;</span>
+<span class="lineNum">     585 </span><span class="lineCov">  497517662 :   rtx dval = NULL_RTX;</span>
+<span class="lineNum">     586 </span><span class="lineCov">  497517662 :   rtx bind;</span>
+<span class="lineNum">     587 </span><span class="lineCov">  497517662 :   bool global;</span>
+<span class="lineNum">     588 </span>            : 
+<span class="lineNum">     589 </span><span class="lineCov">  497517662 :   if (!debug-&gt;used)</span>
+<span class="lineNum">     590 </span>            :     return 0;
+<span class="lineNum">     591 </span>            : 
+<span class="lineNum">     592 </span><span class="lineCov">   34673572 :   global = (debug-&gt;global &amp;&amp; debug-&gt;global-&gt;used</span>
+<span class="lineNum">     593 </span><span class="lineCov">   68609918 :             &amp;&amp; bitmap_bit_p (debug-&gt;global-&gt;used, uregno));</span>
+<span class="lineNum">     594 </span>            : 
+<span class="lineNum">     595 </span><span class="lineCov">   34770527 :   if (!global &amp;&amp; !bitmap_clear_bit (debug-&gt;used, uregno))</span>
+<span class="lineNum">     596 </span>            :     return 0;
+<span class="lineNum">     597 </span>            : 
+<span class="lineNum">     598 </span>            :   /* Move all uses of uregno from debug-&gt;head to uses, setting mode to
+<span class="lineNum">     599 </span>            :      the widest referenced mode.  */
+<span class="lineNum">     600 </span><span class="lineCov">     616183 :   while ((cur = *tailp))</span>
+<span class="lineNum">     601 </span>            :     {
+<span class="lineNum">     602 </span><span class="lineCov">     291650 :       if (DF_REF_REGNO (cur-&gt;use) == uregno)</span>
+<span class="lineNum">     603 </span>            :         {
+<span class="lineNum">     604 </span>            :           /* If this loc has been changed e.g. to debug_expr already
+<span class="lineNum">     605 </span>            :              as part of a multi-register use, just drop it.  */
+<span class="lineNum">     606 </span><span class="lineCov">     148288 :           if (!REG_P (*DF_REF_REAL_LOC (cur-&gt;use)))</span>
+<span class="lineNum">     607 </span>            :             {
+<span class="lineNum">     608 </span><span class="lineCov">      30016 :               *tailp = cur-&gt;next;</span>
+<span class="lineNum">     609 </span><span class="lineCov">      30016 :               XDELETE (cur);</span>
+<span class="lineNum">     610 </span><span class="lineCov">      30016 :               continue;</span>
+<span class="lineNum">     611 </span>            :             }
+<span class="lineNum">     612 </span><span class="lineCov">     118272 :           *usesp = cur;</span>
+<span class="lineNum">     613 </span><span class="lineCov">     118272 :           usesp = &amp;cur-&gt;next;</span>
+<span class="lineNum">     614 </span><span class="lineCov">     118272 :           *tailp = cur-&gt;next;</span>
+<span class="lineNum">     615 </span><span class="lineCov">     118272 :           cur-&gt;next = NULL;</span>
+<span class="lineNum">     616 </span>            :           /* &quot;may&quot; rather than &quot;must&quot; because we want (for example)
+<span class="lineNum">     617 </span>            :              N V4SFs to win over plain V4SF even though N might be 1.  */
+<span class="lineNum">     618 </span><span class="lineCov">     118272 :           rtx candidate = *DF_REF_REAL_LOC (cur-&gt;use);</span>
+<span class="lineNum">     619 </span><span class="lineCov">     118272 :           if (!reg</span>
+<span class="lineNum">     620 </span><span class="lineCov">     149804 :               || maybe_lt (GET_MODE_BITSIZE (GET_MODE (reg)),</span>
+<span class="lineNum">     621 </span><span class="lineCov">      63064 :                            GET_MODE_BITSIZE (GET_MODE (candidate))))</span>
+<span class="lineNum">     622 </span>            :             reg = candidate;
+<span class="lineNum">     623 </span>            :         }
+<span class="lineNum">     624 </span>            :       else
+<span class="lineNum">     625 </span><span class="lineCov">     143362 :         tailp = &amp;(*tailp)-&gt;next;</span>
+<span class="lineNum">     626 </span>            :     }
+<span class="lineNum">     627 </span>            : 
+<span class="lineNum">     628 </span>            :   /* We may have dangling bits in debug-&gt;used for registers that were part
+<span class="lineNum">     629 </span>            :      of a multi-register use, one component of which has been reset.  */
+<span class="lineNum">     630 </span><span class="lineCov">     324533 :   if (reg == NULL)</span>
+<span class="lineNum">     631 </span>            :     {
+<span class="lineNum">     632 </span><span class="lineCov">     237793 :       gcc_checking_assert (!uses);</span>
+<span class="lineNum">     633 </span><span class="lineCov">     237793 :       if (!global)</span>
+<span class="lineNum">     634 </span>            :         return 0;
+<span class="lineNum">     635 </span>            :     }
+<span class="lineNum">     636 </span>            : 
+<span class="lineNum">     637 </span><span class="lineCov">     324285 :   if (global)</span>
+<span class="lineNum">     638 </span>            :     {
+<span class="lineNum">     639 </span><span class="lineCov">     237545 :       if (!reg)</span>
+<span class="lineNum">     640 </span><span class="lineCov">     237545 :         reg = regno_reg_rtx[uregno];</span>
+<span class="lineNum">     641 </span><span class="lineCov">     237545 :       dead_debug_global_entry *entry</span>
+<span class="lineNum">     642 </span><span class="lineCov">     237545 :         = dead_debug_global_find (debug-&gt;global, reg);</span>
+<span class="lineNum">     643 </span><span class="lineCov">     237545 :       gcc_checking_assert (entry-&gt;reg == reg);</span>
+<span class="lineNum">     644 </span><span class="lineCov">     237545 :       dval = entry-&gt;dtemp;</span>
+<span class="lineNum">     645 </span><span class="lineCov">     237545 :       if (!dval)</span>
+<span class="lineNum">     646 </span>            :         return 0;
+<span class="lineNum">     647 </span>            :     }
+<span class="lineNum">     648 </span>            : 
+<span class="lineNum">     649 </span><span class="lineCov">     213372 :   gcc_checking_assert (uses || global);</span>
+<span class="lineNum">     650 </span>            : 
+<span class="lineNum">     651 </span><span class="lineCov">     213372 :   breg = reg;</span>
+<span class="lineNum">     652 </span>            :   /* Recover the expression INSN stores in REG.  */
+<span class="lineNum">     653 </span><span class="lineCov">     213372 :   if (where == DEBUG_TEMP_BEFORE_WITH_VALUE)</span>
+<span class="lineNum">     654 </span>            :     {
+<span class="lineNum">     655 </span><span class="lineCov">     137351 :       rtx set = single_set (insn);</span>
+<span class="lineNum">     656 </span><span class="lineCov">     137351 :       rtx dest, src;</span>
+<span class="lineNum">     657 </span>            : 
+<span class="lineNum">     658 </span><span class="lineCov">     137351 :       if (set)</span>
+<span class="lineNum">     659 </span>            :         {
+<span class="lineNum">     660 </span><span class="lineCov">     136520 :           dest = SET_DEST (set);</span>
+<span class="lineNum">     661 </span><span class="lineCov">     136520 :           src = SET_SRC (set);</span>
+<span class="lineNum">     662 </span>            :           /* Lose if the REG-setting insn is a CALL.  */
+<span class="lineNum">     663 </span><span class="lineCov">     136520 :           if (GET_CODE (src) == CALL)</span>
+<span class="lineNum">     664 </span>            :             {
+<span class="lineNum">     665 </span><span class="lineNoCov">          0 :               while (uses)</span>
+<span class="lineNum">     666 </span>            :                 {
+<span class="lineNum">     667 </span><span class="lineNoCov">          0 :                   cur = uses-&gt;next;</span>
+<span class="lineNum">     668 </span><span class="lineNoCov">          0 :                   XDELETE (uses);</span>
+<span class="lineNum">     669 </span><span class="lineNoCov">          0 :                   uses = cur;</span>
+<span class="lineNum">     670 </span>            :                 }
+<span class="lineNum">     671 </span>            :               return 0;
+<span class="lineNum">     672 </span>            :             }
+<span class="lineNum">     673 </span>            :           /* Asm in DEBUG_INSN is never useful, we can't emit debug info for
+<span class="lineNum">     674 </span>            :              that.  And for volatile_insn_p, it is actually harmful
+<span class="lineNum">     675 </span>            :              - DEBUG_INSNs shouldn't have any side-effects.  */
+<span class="lineNum">     676 </span><span class="lineCov">     136520 :           else if (GET_CODE (src) == ASM_OPERANDS</span>
+<span class="lineNum">     677 </span><span class="lineCov">     136520 :                    || volatile_insn_p (src))</span>
+<span class="lineNum">     678 </span>            :             set = NULL_RTX;
+<span class="lineNum">     679 </span>            :         }
+<span class="lineNum">     680 </span>            : 
+<span class="lineNum">     681 </span>            :       /* ??? Should we try to extract it from a PARALLEL?  */
+<span class="lineNum">     682 </span><span class="lineCov">     137351 :       if (!set)</span>
+<span class="lineNum">     683 </span>            :         breg = NULL;
+<span class="lineNum">     684 </span>            :       /* Cool, it's the same REG, we can use SRC.  */
+<span class="lineNum">     685 </span><span class="lineCov">     136505 :       else if (dest == reg)</span>
+<span class="lineNum">     686 </span><span class="lineCov">     135178 :         breg = cleanup_auto_inc_dec (src, VOIDmode);</span>
+<span class="lineNum">     687 </span><span class="lineCov">       1327 :       else if (REG_P (dest))</span>
+<span class="lineNum">     688 </span>            :         {
+<span class="lineNum">     689 </span>            :           /* Hmm...  Something's fishy, we should be setting REG here.  */
+<span class="lineNum">     690 </span><span class="lineCov">       3123 :           if (REGNO (dest) != REGNO (reg))</span>
+<span class="lineNum">     691 </span>            :             breg = NULL;
+<span class="lineNum">     692 </span>            :           /* If we're not overwriting all the hardware registers that
+<span class="lineNum">     693 </span>            :              setting REG in its mode would, we won't know what to bind
+<span class="lineNum">     694 </span>            :              the debug temp to.  ??? We could bind the debug_expr to a
+<span class="lineNum">     695 </span>            :              CONCAT or PARALLEL with the split multi-registers, and
+<span class="lineNum">     696 </span>            :              replace them as we found the corresponding sets.  */
+<span class="lineNum">     697 </span><span class="lineCov">        723 :           else if (REG_NREGS (reg) != REG_NREGS (dest))</span>
+<span class="lineNum">     698 </span>            :             breg = NULL;
+<span class="lineNum">     699 </span>            :           /* Ok, it's the same (hardware) REG, but with a different
+<span class="lineNum">     700 </span>            :              mode, so SUBREG it.  */
+<span class="lineNum">     701 </span>            :           else
+<span class="lineNum">     702 </span><span class="lineCov">        284 :             breg = debug_lowpart_subreg (GET_MODE (reg),</span>
+<span class="lineNum">     703 </span>            :                                          cleanup_auto_inc_dec (src, VOIDmode),
+<span class="lineNum">     704 </span><span class="lineCov">        284 :                                          GET_MODE (dest));</span>
+<span class="lineNum">     705 </span>            :         }
+<span class="lineNum">     706 </span><span class="lineCov">        286 :       else if (GET_CODE (dest) == SUBREG)</span>
+<span class="lineNum">     707 </span>            :         {
+<span class="lineNum">     708 </span>            :           /* We should be setting REG here.  Lose.  */
+<span class="lineNum">     709 </span><span class="lineCov">        849 :           if (REGNO (SUBREG_REG (dest)) != REGNO (reg))</span>
+<span class="lineNum">     710 </span>            :             breg = NULL;
+<span class="lineNum">     711 </span>            :           /* Lose if we're setting something other than the lowpart of
+<span class="lineNum">     712 </span>            :              REG.  */
+<span class="lineNum">     713 </span><span class="lineCov">        283 :           else if (!subreg_lowpart_p (dest))</span>
+<span class="lineNum">     714 </span>            :             breg = NULL;
+<span class="lineNum">     715 </span>            :           /* If we're not overwriting all the hardware registers that
+<span class="lineNum">     716 </span>            :              setting REG in its mode would, we won't know what to bind
+<span class="lineNum">     717 </span>            :              the debug temp to.  */
+<span class="lineNum">     718 </span><span class="lineCov">        204 :           else if (REGNO (reg) &lt; FIRST_PSEUDO_REGISTER</span>
+<span class="lineNum">     719 </span><span class="lineCov">        204 :                    &amp;&amp; (REG_NREGS (reg)</span>
+<span class="lineNum">     720 </span><span class="lineNoCov">          0 :                        != hard_regno_nregs (REGNO (reg), GET_MODE (dest))))</span>
+<span class="lineNum">     721 </span>            :             breg = NULL;
+<span class="lineNum">     722 </span>            :           /* Yay, we can use SRC, just adjust its mode.  */
+<span class="lineNum">     723 </span>            :           else
+<span class="lineNum">     724 </span><span class="lineCov">        204 :             breg = debug_lowpart_subreg (GET_MODE (reg),</span>
+<span class="lineNum">     725 </span>            :                                          cleanup_auto_inc_dec (src, VOIDmode),
+<span class="lineNum">     726 </span><span class="lineCov">        204 :                                          GET_MODE (dest));</span>
+<span class="lineNum">     727 </span>            :         }
+<span class="lineNum">     728 </span>            :       /* Oh well, we're out of luck.  */
+<span class="lineNum">     729 </span>            :       else
+<span class="lineNum">     730 </span>            :         breg = NULL;
+<span class="lineNum">     731 </span>            : 
+<span class="lineNum">     732 </span>            :       /* We couldn't figure out the value stored in REG, so reset all
+<span class="lineNum">     733 </span>            :          of its pending debug uses.  */
+<span class="lineNum">     734 </span><span class="lineCov">     135666 :       if (!breg)</span>
+<span class="lineNum">     735 </span>            :         {
+<span class="lineNum">     736 </span><span class="lineCov">       1685 :           dead_debug_reset_uses (debug, uses);</span>
+<span class="lineNum">     737 </span><span class="lineCov">       1685 :           return 0;</span>
+<span class="lineNum">     738 </span>            :         }
+<span class="lineNum">     739 </span>            :     }
+<span class="lineNum">     740 </span>            : 
+<span class="lineNum">     741 </span>            :   /* If there's a single (debug) use of an otherwise unused REG, and
+<span class="lineNum">     742 </span>            :      the debug use is not part of a larger expression, then it
+<span class="lineNum">     743 </span>            :      probably doesn't make sense to introduce a new debug temp.  */
+<span class="lineNum">     744 </span><span class="lineCov">     211687 :   if (where == DEBUG_TEMP_AFTER_WITH_REG &amp;&amp; !uses-&gt;next)</span>
+<span class="lineNum">     745 </span>            :     {
+<span class="lineNum">     746 </span><span class="lineCov">      16969 :       rtx_insn *next = DF_REF_INSN (uses-&gt;use);</span>
+<span class="lineNum">     747 </span>            : 
+<span class="lineNum">     748 </span><span class="lineCov">      16969 :       if (DEBUG_INSN_P (next) &amp;&amp; reg == INSN_VAR_LOCATION_LOC (next))</span>
+<span class="lineNum">     749 </span>            :         {
+<span class="lineNum">     750 </span><span class="lineCov">      15294 :           XDELETE (uses);</span>
+<span class="lineNum">     751 </span><span class="lineCov">      15294 :           return 0;</span>
+<span class="lineNum">     752 </span>            :         }
+<span class="lineNum">     753 </span>            :     }
+<span class="lineNum">     754 </span>            : 
+<span class="lineNum">     755 </span><span class="lineCov">     196393 :   if (!global)</span>
+<span class="lineNum">     756 </span>            :     /* Create DEBUG_EXPR (and DEBUG_EXPR_DECL).  */
+<span class="lineNum">     757 </span><span class="lineCov">      70637 :     dval = make_debug_expr_from_rtl (reg);</span>
+<span class="lineNum">     758 </span>            : 
+<span class="lineNum">     759 </span>            :   /* Emit a debug bind insn before the insn in which reg dies.  */
+<span class="lineNum">     760 </span><span class="lineCov">     196393 :   bind = gen_rtx_VAR_LOCATION (GET_MODE (reg),</span>
+<span class="lineNum">     761 </span>            :                                DEBUG_EXPR_TREE_DECL (dval), breg,
+<span class="lineNum">     762 </span>            :                                VAR_INIT_STATUS_INITIALIZED);
+<span class="lineNum">     763 </span>            : 
+<span class="lineNum">     764 </span><span class="lineCov">     392786 :   if (where == DEBUG_TEMP_AFTER_WITH_REG</span>
+<span class="lineNum">     765 </span><span class="lineCov">     196393 :       || where == DEBUG_TEMP_AFTER_WITH_REG_FORCE)</span>
+<span class="lineNum">     766 </span><span class="lineCov">      52030 :     bind = emit_debug_insn_after (bind, insn);</span>
+<span class="lineNum">     767 </span>            :   else
+<span class="lineNum">     768 </span><span class="lineCov">     144363 :     bind = emit_debug_insn_before (bind, insn);</span>
+<span class="lineNum">     769 </span><span class="lineCov">     196393 :   if (debug-&gt;to_rescan == NULL)</span>
+<span class="lineNum">     770 </span><span class="lineCov">      52520 :     debug-&gt;to_rescan = BITMAP_ALLOC (NULL);</span>
+<span class="lineNum">     771 </span><span class="lineCov">     196393 :   bitmap_set_bit (debug-&gt;to_rescan, INSN_UID (bind));</span>
+<span class="lineNum">     772 </span>            : 
+<span class="lineNum">     773 </span>            :   /* Adjust all uses.  */
+<span class="lineNum">     774 </span><span class="lineCov">     298394 :   while ((cur = uses))</span>
+<span class="lineNum">     775 </span>            :     {
+<span class="lineNum">     776 </span><span class="lineCov">     102001 :       if (GET_MODE (*DF_REF_REAL_LOC (cur-&gt;use)) == GET_MODE (reg))</span>
+<span class="lineNum">     777 </span><span class="lineCov">     101985 :         *DF_REF_REAL_LOC (cur-&gt;use) = dval;</span>
+<span class="lineNum">     778 </span>            :       else
+<span class="lineNum">     779 </span><span class="lineNoCov">          0 :         *DF_REF_REAL_LOC (cur-&gt;use)</span>
+<span class="lineNum">     780 </span><span class="lineCov">         16 :           = debug_lowpart_subreg (GET_MODE (*DF_REF_REAL_LOC (cur-&gt;use)), dval,</span>
+<span class="lineNum">     781 </span><span class="lineCov">         16 :                                   GET_MODE (dval));</span>
+<span class="lineNum">     782 </span>            :       /* ??? Should we simplify subreg of subreg?  */
+<span class="lineNum">     783 </span><span class="lineCov">     102001 :       bitmap_set_bit (debug-&gt;to_rescan, INSN_UID (DF_REF_INSN (cur-&gt;use)));</span>
+<span class="lineNum">     784 </span><span class="lineCov">     102001 :       uses = cur-&gt;next;</span>
+<span class="lineNum">     785 </span><span class="lineCov">     102001 :       XDELETE (cur);</span>
+<span class="lineNum">     786 </span>            :     }
+<span class="lineNum">     787 </span>            : 
+<span class="lineNum">     788 </span>            :   return 1;
+<span class="lineNum">     789 </span>            : }
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.0</a></td></tr>
+  </table>
+  <br>
+<h3>LCOV profile is generated on x86_64 machine using following configure options: configure --disable-bootstrap --enable-coverage=opt --enable-languages=c,c++,fortran,go,jit,lto --enable-host-shared. GCC test suite is run with the built compiler.</h3></body></html>
